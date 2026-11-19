@@ -13,6 +13,7 @@ load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 class Settings:
     contact_email: str = ""
     nominatim_url: str = "https://nominatim.openstreetmap.org"
+    overpass_url: str = "https://overpass-api.de/api/interpreter"
     cors_origins: tuple[str, ...] = ("http://localhost:5173",)
     llm_provider: str = "none"
     llm_model: str = ""
@@ -28,6 +29,7 @@ def get_settings() -> Settings:
         nominatim_url=os.getenv(
             "GEOFATHOM_NOMINATIM_URL", "https://nominatim.openstreetmap.org"
         ).rstrip("/"),
+        overpass_url=os.getenv("GEOFATHOM_OVERPASS_URL", "https://overpass-api.de/api/interpreter").rstrip("/"),
         cors_origins=tuple(part.strip() for part in origins.split(",") if part.strip()),
         llm_provider=os.getenv("GEOFATHOM_LLM_PROVIDER", "none").lower(),
         llm_model=os.getenv("GEOFATHOM_LLM_MODEL", ""),

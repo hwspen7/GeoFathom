@@ -1,7 +1,7 @@
 """API for discovery, geodesic measurement, and optional language-model routing."""
 
 import logging
-from typing import Any
+from typing import Any, Literal
 
 import httpx
 from fastapi import FastAPI, HTTPException, Query
@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from .config import get_settings
+from .discovery import DiscoveryError, discover_features
 from .geo import GeometryError, measure_geometry
 from .geocoding import search_places
 from .intent import fallback_intent
@@ -30,6 +31,13 @@ class MeasureRequest(BaseModel):
     geometry: dict[str, Any]
 
 
+class DiscoverRequest(BaseModel):
+    bbox: tuple[float, float, float, float]
+    category: Literal["building", "landuse", "water"] = "building"
+    minimum_area_m2: float = Field(default=0, ge=0)
+    maximum_area_m2: float | None = Field(default=None, ge=0)
+
+
 class AssistantRequest(BaseModel):
     message: str = Field(min_length=2, max_length=500)
 
@@ -47,7 +55,7 @@ def capabilities() -> dict:
         "geojson_export": True,
         "llm_provider": settings.llm_provider if get_provider(settings) else None,
         "vision_segmentation": False,
-        "spatial_discovery": False,
+        "spatial_discovery": "bounded_osm",
         "imagery": "not configured",
     }
 
@@ -146,3 +154,23 @@ def segment_unavailable() -> dict:
             "An authorized imagery source and vision provider are required."
         ),
     )
+
+
+@app.post("/discover")
+async def discover(body: DiscoverRequest) -> dict:
+    """Find mapped OSM polygon ways within a tightly bounded viewport."""
+    try:
+        return await discover_features(
+            body.bbox,
+            body.category,
+            body.minimum_area_m2,
+            body.maximum_area_m2,
+            settings,
+        )
+    except DiscoveryError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except (httpx.HTTPError, ValueError) as error:
+        logger.warning("Spatial discovery provider failed: %s", error)
+        raise HTTPException(
+            status_code=503, detail="Spatial discovery provider unavailable. Try again later."
+        ) from error
