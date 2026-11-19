@@ -5,6 +5,7 @@ GeoFathom should remain a general geospatial intelligence environment.
 ## Supported foundation
 
 - Place/name search with multiple candidates
+- Bounded OpenStreetMap polygon search with area filters and category selection
 - Honest geometry availability
 - Map centering and boundary display
 - User-drawn polygon and line measurements

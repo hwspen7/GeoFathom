@@ -100,3 +100,14 @@ button:disabled { opacity: .45; cursor: not-allowed; }
   .map-hint { max-width: calc(100% - 32px); left: 12px; top: 12px; }
   .map-badge { display: none; }
 }
+
+.discovery-form { display: flex; flex-direction: column; gap: 9px; }
+.discovery-explainer { margin: 0 0 4px; font-size: 11px; color: #78889a; line-height: 1.5; }
+.discovery-form label { display: block; font-size: 10px; color: #687b90; font-weight: 700; }
+.discovery-form select,.discovery-form input { display: block; width: 100%; border: 1px solid #dfe5ec; border-radius: 8px; background: #fff; color: #304053; padding: 9px 10px; outline: none; font-size: 12px; }
+.discovery-form select:focus,.discovery-form input:focus { border-color: #7da8ec; }
+.area-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.area-fields label { margin-bottom: 7px; }
+.discovery-submit { display: flex; justify-content: center; align-items: center; gap: 8px; border: 0; background: #255db3; color: #fff; border-radius: 9px; padding: 11px 10px; font-size: 12px; font-weight: 700; }
+.discovery-caution { margin: 0; color: #a0aab6; font-size: 10px; line-height: 1.5; }
+.discovery-error { margin: 0; color: #ba4b4b; font-size: 11px; }

@@ -84,3 +84,28 @@ export function measureGeometry(geometry: GeoJSON.Geometry): Promise<Measurement
 export function getCapabilities(): Promise<Capabilities> {
   return request<Capabilities>('/capabilities');
 }
+
+
+export interface DiscoveryRequest {
+  bbox: [number, number, number, number];
+  category: 'building' | 'landuse' | 'water';
+  minimum_area_m2: number;
+  maximum_area_m2: number | null;
+}
+
+export interface DiscoveryResponse {
+  results: Place[];
+  checked: number;
+  truncated: boolean;
+  warning: string;
+  category: string;
+  source: string;
+}
+
+export function discoverFeatures(body: DiscoveryRequest): Promise<DiscoveryResponse> {
+  return request<DiscoveryResponse>('/discover', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}

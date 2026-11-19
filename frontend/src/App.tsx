@@ -10,6 +10,8 @@ import {
   type Capabilities, type Measurement, type Place,
 } from './api';
 import MapCanvas, { type FocusPoint } from './MapCanvas';
+import DiscoveryPanel from './DiscoveryPanel';
+import type { DiscoveryResponse } from './api';
 
 type Position = [number, number];
 type DrawingMode = 'polygon' | 'line' | null;
@@ -26,6 +28,8 @@ export default function App() {
   const [measurement, setMeasurement] = useState<Measurement | null>(null);
   const [drawingMode, setDrawingMode] = useState<DrawingMode>(null);
   const [vertices, setVertices] = useState<Position[]>([]);
+  const [viewport, setViewport] = useState<[number, number, number, number] | null>(null);
+  const [discovered, setDiscovered] = useState<Place[]>([]);
   const [focus, setFocus] = useState<FocusPoint | null>(null);
   const [message, setMessage] = useState('Search a place or draw a shape directly on the map.');
   const [error, setError] = useState('');
@@ -122,6 +126,7 @@ export default function App() {
     setSelectedPlace(null);
     setMeasurement(null);
     setCandidates([]);
+    setDiscovered([]);
     setError('');
     setMessage(next === 'polygon'
       ? 'Click at least three corners on the map, then finish the polygon.'
@@ -158,6 +163,7 @@ export default function App() {
     setVertices([]);
     setSelectedPlace(null);
     setCandidates([]);
+    setDiscovered([]);
     setError('');
     setMessage('Workspace cleared. Search or draw to get started.');
   }
@@ -247,6 +253,21 @@ export default function App() {
             )}
           </section>
 
+          <section className="panel-section">
+            <div className="section-heading"><Search size={16} /><span>Find areas by size</span><span className="section-pill">Spatial query</span></div>
+            <DiscoveryPanel viewport={viewport} busy={busy} onFound={(result: DiscoveryResponse) => {
+              setDiscovered(result.results);
+              setCandidates(result.results);
+              setSelectedPlace(null);
+              setGeometry(null);
+              setMeasurement(null);
+              setMessage(result.results.length
+                ? 'Found ' + result.results.length + ' mapped features. ' + result.warning
+                : 'No mapped features matched the filter. ' + result.warning);
+              setError('');
+            }} />
+          </section>
+
           {candidates.length > 0 && (
             <section className="panel-section">
               <div className="section-heading"><MapPin size={16} /><span>Search results</span><span className="result-count">{candidates.length}</span></div>
@@ -307,6 +328,8 @@ export default function App() {
           <MapCanvas
             selected={geometry} drawingMode={drawingMode} vertices={vertices}
             focus={focus} satellite={satellite}
+            discovered={discovered.map(place => place.geometry).filter((item): item is GeoJSON.Geometry => item !== null)}
+            onViewportChange={setViewport}
             onMapClick={position => setVertices(value => [...value, position])}
           />
           <div className="map-hint"><MousePointer2 size={15} /> {drawingMode ? 'Click to add points, then Finish' : 'Pan, zoom, or choose a result'}</div>

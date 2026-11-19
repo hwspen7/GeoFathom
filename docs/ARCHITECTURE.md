@@ -6,7 +6,7 @@ GeoFathom is a geospatial platform rather than a model-specific demo or an airpo
 
 - **Workspace:** React + TypeScript + MapLibre GL; direct place lookup, an optional natural-language input, candidate selection, polygon/line drawing, geodesic result display, and GeoJSON export.
 - **API:** FastAPI; validates geographic requests and returns machine-readable results and capabilities.
-- **Discovery:** Geocoding currently uses OSM Nominatim. The next data-source abstraction can add Overture, regional gazetteers, feature indexes and local PostGIS without modifying map views.
+- **Discovery:** Geocoding uses OSM Nominatim, and constrained polygon discovery uses OSM Overpass. The next data-source abstraction can add Overture, regional gazetteers, feature indexes and local PostGIS without modifying map views.
 - **Geospatial computation:** Shapely validates geometry, PyProj/PROJ performs WGS84 ellipsoidal measurement. The AI model never supplies calculated area values.
 - **AI intent:** A local Ollama model or an OpenAI-compatible server may normalize an instruction into a structured intent. The no-model fallback is deterministic. No model is a source of boundary truth.
 - **Vision:** Explicit provider protocol, not yet implemented. Segmentation must use licensed imagery, georeferencing and accuracy metadata. Missing capability is reported with HTTP 501.
@@ -32,7 +32,7 @@ Place candidates are not guaranteed matches. A name lookup is not evidence of a 
 
 **Vision providers:** implement VisionProvider and return georeferenced geometry, imagery acquisition date, license, confidence, CRS and quality flags. Never treat a pixel polygon as geographic geometry without image georeferencing.
 
-**Feature discovery:** integrate a spatial index and query plan that supports attribute filters, bounding boxes, proximity, class labels and area ranges. A global unnamed-area query requires bounded search space and indexed features; do not attempt a worldwide raster scan per user query.
+**Feature discovery:** integrate a spatial index and query plan that supports attribute filters, bounding boxes, proximity, class labels and area ranges. The current /discover endpoint supports a narrow bbox and a capped subset of OSM way polygons for buildings, land use and water. It is not exhaustive, ignores multipolygon relations and must not be interpreted as a complete parcel inventory. A global unnamed-area query requires a spatial index; do not attempt a worldwide raster scan per user query.
 
 **Analysis:** introduce versioned internal operation schemas only where necessary for compatibility, not public marketing release labels. Possible operators include buffer, intersect, union, coverage, comparisons, temporal overlays, terrain and visibility.
 

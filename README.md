@@ -5,14 +5,15 @@
 ## What works
 
 - Search geographic places through OpenStreetMap Nominatim, with source attribution and honest boundary availability.
+- Discover mapped buildings, land-use polygons, and water areas by geodesic area inside a bounded map viewport (OpenStreetMap Overpass).
 - Display map results and candidate locations on an interactive map.
 - Calculate geodesic area, perimeter, and length from GeoJSON using PyProj and Shapely.
 - Draw, edit by restarting a drawing, measure, and export polygons as GeoJSON.
 - Interpret natural-language location requests using an optional Ollama or OpenAI-compatible local model.
-- Run without an LLM: direct place search and polygon measurement remain available.
+- Run without an LLM: direct place search, bounded spatial discovery, and polygon measurement remain available.
 - Discover service capabilities and health via explicit API endpoints.
 
-**Not yet implemented:** automated satellite-image segmentation, verified land ownership or zoning, global parcel discovery, and guaranteed precision for missing boundaries. A vision-provider contract exposes this limitation rather than fabricating results.
+**Not yet implemented:** automated satellite-image segmentation, verified land ownership or zoning, unbounded global parcel discovery, and guaranteed precision for missing boundaries. A vision-provider contract exposes this limitation rather than fabricating results.
 
 ## Quick start
 

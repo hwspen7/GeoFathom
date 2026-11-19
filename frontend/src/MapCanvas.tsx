@@ -17,6 +17,8 @@ interface Props {
   focus: FocusPoint | null;
   satellite: boolean;
   onMapClick: (position: Position) => void;
+  onViewportChange: (bbox: [number, number, number, number]) => void;
+  discovered: GeoJSON.Geometry[];
 }
 
 const satelliteURL = import.meta.env.VITE_SATELLITE_TILES_URL;
@@ -56,8 +58,9 @@ function mapStyle(): StyleSpecification {
 function featureCollection(
   selected: GeoJSON.Geometry | null,
   vertices: Position[],
+  discovered: GeoJSON.Geometry[],
 ): GeoJSON.FeatureCollection {
-  const features: GeoJSON.Feature[] = [];
+  const features: GeoJSON.Feature[] = discovered.map(geometry => ({ type: 'Feature', properties: { role: 'candidate' }, geometry }));
   if (selected) {
     features.push({ type: 'Feature', properties: { role: 'selected' }, geometry: selected });
   }
@@ -88,14 +91,16 @@ function featureCollection(
 }
 
 export default function MapCanvas({
-  selected, drawingMode, vertices, focus, satellite, onMapClick,
+  selected, drawingMode, vertices, focus, satellite, onMapClick, onViewportChange, discovered,
 }: Props) {
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const clickRef = useRef(onMapClick);
+  const viewportRef = useRef(onViewportChange);
   const drawRef = useRef(drawingMode);
   const [ready, setReady] = useState(false);
   clickRef.current = onMapClick;
+  viewportRef.current = onViewportChange;
   drawRef.current = drawingMode;
 
   useEffect(() => {
@@ -109,6 +114,11 @@ export default function MapCanvas({
     });
     map.addControl(new maplibregl.NavigationControl({ showCompass: true }), 'bottom-right');
     map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left');
+    function reportViewport() {
+      const extent = map.getBounds();
+      viewportRef.current([extent.getWest(), extent.getSouth(), extent.getEast(), extent.getNorth()]);
+    }
+    map.on('moveend', reportViewport);
     map.on('click', (event) => {
       if (drawRef.current) clickRef.current([event.lngLat.lng, event.lngLat.lat]);
     });
@@ -136,6 +146,7 @@ export default function MapCanvas({
         },
       });
       setReady(true);
+      reportViewport();
     });
     mapRef.current = map;
     return () => {
@@ -148,8 +159,8 @@ export default function MapCanvas({
   useEffect(() => {
     const map = mapRef.current;
     if (!ready || !map) return;
-    (map.getSource('workspace') as GeoJSONSource).setData(featureCollection(selected, vertices));
-  }, [selected, vertices, ready]);
+    (map.getSource('workspace') as GeoJSONSource).setData(featureCollection(selected, vertices, discovered));
+  }, [selected, vertices, discovered, ready]);
 
   useEffect(() => {
     const map = mapRef.current;

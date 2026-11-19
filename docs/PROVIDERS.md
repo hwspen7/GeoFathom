@@ -12,7 +12,7 @@ Set these environment variables before launching the API:
 
 The installed Qwen 9B checkpoint can be used if its tag and Ollama runtime match. GeoFathom does not assume a particular 9B checkpoint is present or downloaded.
 
-The intent model performs only bounded classification and place-name extraction. It can select locate or discover operations. Discover currently reports an unavailable indexed-search capability rather than generating made-up map polygons.
+The intent model performs only bounded classification and place-name extraction. It can select locate or discover operations. The assistant reports that unbounded natural-language area discovery is not available. The separate /discover endpoint supports bounded, explicitly incomplete OpenStreetMap polygon searches.
 
 ## OpenAI-compatible local servers
 
@@ -30,6 +30,8 @@ Search uses Nominatim through /search. Configure GEOFATHOM_CONTACT_EMAIL for a r
 A result can be:
 - mapped: a polygon or line exists in the returned dataset, subject to validation.
 - location_only: a placemark exists but no usable boundary was returned.
+
+Bounded area discovery uses a capped public Overpass way query. Zoom into a small neighborhood, choose building, landuse or water, and filter by square meters. It does not cover every OSM relation or unmapped feature.
 
 Displayed area measurements use mapped geometry, not the display bounding box. A bounding box is only used to zoom the map.
 
