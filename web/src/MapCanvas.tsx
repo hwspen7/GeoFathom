@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import maplibregl, { type GeoJSONSource, type StyleSpecification } from 'maplibre-gl';
+import maplibregl, { type GeoJSONSource, type MapMouseEvent, type StyleSpecification } from 'maplibre-gl';
 
 import { rasterPreviewUrl, type RasterAsset } from './api';
+import {
+  addVertex, moveVertex, removeVertex, shiftGeometry, snapPixels,
+  verticesOf, type GeometryPath, type Position, type ShapeMode,
+} from './editing';
 
-type Position = [number, number];
-type DrawingMode = 'polygon' | 'line' | null;
 export interface FocusPoint {
   longitude: number;
   latitude: number;
@@ -12,9 +14,18 @@ export interface FocusPoint {
   key: number;
 }
 
+export interface MapLayerFeature {
+  id: string;
+  geometry: GeoJSON.Geometry;
+  layer_id: string;
+  color: string;
+  visible: boolean;
+  locked: boolean;
+}
+
 interface Props {
   selected: GeoJSON.Geometry | null;
-  drawingMode: DrawingMode;
+  drawingMode: ShapeMode;
   vertices: Position[];
   focus: FocusPoint | null;
   satellite: boolean;
@@ -24,6 +35,14 @@ interface Props {
   imageLayer: RasterAsset | null;
   traceMode: boolean;
   onTraceClick: (position: Position) => void;
+  editing: boolean;
+  moving: boolean;
+  snapping: boolean;
+  selectedLocked: boolean;
+  layerFeatures: MapLayerFeature[];
+  onGeometryPreview: (geometry: GeoJSON.Geometry) => void;
+  onGeometryCommit: (geometry: GeoJSON.Geometry) => void;
+  onSelectSavedFeature: (id: string) => void;
 }
 
 const satelliteURL = import.meta.env.VITE_SATELLITE_TILES_URL;
@@ -45,15 +64,11 @@ function mapStyle(): StyleSpecification {
   };
   if (satelliteURL) {
     style.sources.satellite = {
-      type: 'raster',
-      tiles: [satelliteURL],
-      tileSize: 256,
+      type: 'raster', tiles: [satelliteURL], tileSize: 256,
       attribution: satelliteAttribution,
     };
     style.layers.push({
-      id: 'satellite',
-      type: 'raster',
-      source: 'satellite',
+      id: 'satellite', type: 'raster', source: 'satellite',
       layout: { visibility: 'none' },
     });
   }
@@ -64,104 +79,283 @@ function featureCollection(
   selected: GeoJSON.Geometry | null,
   vertices: Position[],
   discovered: GeoJSON.Geometry[],
+  layerFeatures: MapLayerFeature[],
+  editing: boolean,
 ): GeoJSON.FeatureCollection {
-  const features: GeoJSON.Feature[] = discovered.map(geometry => ({ type: 'Feature', properties: { role: 'candidate' }, geometry }));
-  if (selected) {
-    features.push({ type: 'Feature', properties: { role: 'selected' }, geometry: selected });
+  const features: GeoJSON.Feature[] = [];
+  for (const saved of layerFeatures) {
+    if (!saved.visible) continue;
+    features.push({
+      type: 'Feature', geometry: saved.geometry,
+      properties: { role: 'saved', id: saved.id, color: saved.color,
+                    locked: saved.locked, layer_id: saved.layer_id },
+    });
   }
+  for (const geometry of discovered) {
+    features.push({
+      type: 'Feature', properties: { role: 'candidate', color: '#9d8b4a' }, geometry,
+    });
+  }
+  if (selected) {
+    features.push({
+      type: 'Feature', properties: { role: 'selected', color: '#2563eb' },
+      geometry: selected,
+    });
+  }
+
   if (vertices.length >= 3) {
     features.push({
-      type: 'Feature',
-      properties: { role: 'drawing' },
-      geometry: {
-        type: 'Polygon',
-        coordinates: [[...vertices, vertices[0]]],
-      },
+      type: 'Feature', properties: { role: 'drawing', color: '#ec8b2c' },
+      geometry: { type: 'Polygon', coordinates: [[...vertices, vertices[0]]] },
     });
   } else if (vertices.length >= 2) {
     features.push({
-      type: 'Feature',
-      properties: { role: 'drawing' },
+      type: 'Feature', properties: { role: 'drawing', color: '#ec8b2c' },
       geometry: { type: 'LineString', coordinates: vertices },
     });
   }
   for (const position of vertices) {
     features.push({
-      type: 'Feature',
-      properties: { role: 'vertex' },
+      type: 'Feature', properties: { role: 'draw-vertex' },
       geometry: { type: 'Point', coordinates: position },
     });
+  }
+  if (editing && selected) {
+    for (const node of verticesOf(selected)) {
+      features.push({
+        type: 'Feature',
+        properties: {
+          role: node.midpoint ? 'edit-midpoint' : 'edit-vertex',
+          polygon: node.path.polygon,
+          ring: node.path.ring,
+          vertex: node.path.vertex,
+        },
+        geometry: { type: 'Point', coordinates: node.point },
+      });
+    }
   }
   return { type: 'FeatureCollection', features };
 }
 
+type Drag = {
+  start: Position;
+  original: GeoJSON.Geometry;
+  last: GeoJSON.Geometry;
+  path: GeometryPath | null;
+  kind: 'vertex' | 'feature';
+};
+
 export default function MapCanvas({
-  selected, drawingMode, vertices, focus, satellite, onMapClick, onViewportChange, discovered,
-  imageLayer, traceMode, onTraceClick,
+  selected, drawingMode, vertices, focus, satellite, onMapClick,
+  onViewportChange, discovered, imageLayer, traceMode, onTraceClick,
+  editing, moving, snapping, selectedLocked, layerFeatures,
+  onGeometryPreview, onGeometryCommit, onSelectSavedFeature,
 }: Props) {
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
-  const clickRef = useRef(onMapClick);
-  const traceClickRef = useRef(onTraceClick);
-  const traceRef = useRef(traceMode);
-  const viewportRef = useRef(onViewportChange);
-  const drawRef = useRef(drawingMode);
+  const eventRef = useRef({
+    selected, drawingMode, traceMode, editing, moving, snapping, selectedLocked,
+    layerFeatures, onMapClick, onTraceClick, onViewportChange,
+    onGeometryPreview, onGeometryCommit, onSelectSavedFeature,
+  });
+  const drag = useRef<Drag | null>(null);
   const [ready, setReady] = useState(false);
-  clickRef.current = onMapClick;
-  traceClickRef.current = onTraceClick;
-  traceRef.current = traceMode;
-  viewportRef.current = onViewportChange;
-  drawRef.current = drawingMode;
+  eventRef.current = {
+    selected, drawingMode, traceMode, editing, moving, snapping, selectedLocked,
+    layerFeatures, onMapClick, onTraceClick, onViewportChange,
+    onGeometryPreview, onGeometryCommit, onSelectSavedFeature,
+  };
 
   useEffect(() => {
     if (!container.current) return;
     const map = new maplibregl.Map({
-      container: container.current,
-      style: mapStyle(),
-      center: [0, 22],
-      zoom: 2.1,
-      attributionControl: false,
+      container: container.current, style: mapStyle(), center: [0, 22],
+      zoom: 2.1, attributionControl: false,
     });
     map.addControl(new maplibregl.NavigationControl({ showCompass: true }), 'bottom-right');
     map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left');
-    function reportViewport() {
+
+    function bounds() {
       const extent = map.getBounds();
-      viewportRef.current([extent.getWest(), extent.getSouth(), extent.getEast(), extent.getNorth()]);
+      eventRef.current.onViewportChange([
+        extent.getWest(), extent.getSouth(), extent.getEast(), extent.getNorth(),
+      ]);
     }
-    map.on('moveend', reportViewport);
-    map.on('click', (event) => {
-      if (traceRef.current) traceClickRef.current([event.lngLat.lng, event.lngLat.lat]);
-      else if (drawRef.current) clickRef.current([event.lngLat.lng, event.lngLat.lat]);
-    });
+    function coordinates(event: MapMouseEvent): Position {
+      return [event.lngLat.lng, event.lngLat.lat];
+    }
+    function hits(event: MapMouseEvent) {
+      if (!map.getLayer('workspace-points')) return [];
+      return map.queryRenderedFeatures(event.point, {
+        layers: ['workspace-points', 'workspace-lines', 'workspace-fill'],
+      });
+    }
+    function nodePath(props: GeoJSON.GeoJsonProperties): GeometryPath {
+      return {
+        polygon: Number(props?.polygon || 0),
+        ring: Number(props?.ring || 0),
+        vertex: Number(props?.vertex || 0),
+      };
+    }
+    function beginDrag(event: MapMouseEvent) {
+      const state = eventRef.current;
+      if (!state.editing || state.selectedLocked || !state.selected) return;
+      const features = hits(event);
+      const handle = features.find(f => f.properties?.role === 'edit-vertex'
+                                   || f.properties?.role === 'edit-midpoint');
+      let first = state.selected;
+      let path: GeometryPath | null = null;
+      let kind: Drag['kind'] | null = null;
+      if (handle) {
+        path = nodePath(handle.properties);
+        if (handle.properties?.role === 'edit-midpoint') {
+          first = addVertex(first, path, coordinates(event));
+          path = { ...path, vertex: path.vertex + 1 };
+          state.onGeometryPreview(first);
+        }
+        kind = 'vertex';
+      } else if (
+        state.moving && features.some(f => f.properties?.role === 'selected')
+      ) {
+        kind = 'feature';
+      }
+      if (!kind) return;
+      drag.current = { original: first, last: first, path, kind, start: coordinates(event) };
+      map.dragPan.disable();
+      map.getCanvas().style.cursor = 'grabbing';
+      event.preventDefault();
+    }
+    function snapAt(point: Position, movingPath: GeometryPath | null): Position {
+      const state = eventRef.current;
+      if (!state.snapping) return point;
+      const targets: Position[] = [];
+      for (const feature of state.layerFeatures) {
+        if (feature.visible) {
+          targets.push(...verticesOf(feature.geometry).filter(n => !n.midpoint).map(n => n.point));
+        }
+      }
+      if (state.selected) {
+        targets.push(...verticesOf(state.selected).filter(n =>
+          !n.midpoint && !(movingPath &&
+            n.path.polygon === movingPath.polygon &&
+            n.path.ring === movingPath.ring &&
+            n.path.vertex === movingPath.vertex)).map(n => n.point));
+      }
+      return snapPixels(point, targets, position => {
+        const pixel = map.project(position as maplibregl.LngLatLike);
+        return [pixel.x, pixel.y];
+      });
+    }
+    function dragging(event: MapMouseEvent) {
+      const current = drag.current;
+      if (!current) return;
+      const coordinate = coordinates(event);
+      let changed: GeoJSON.Geometry;
+      if (current.kind === 'feature') {
+        changed = shiftGeometry(current.original,
+          coordinate[0] - current.start[0], coordinate[1] - current.start[1]);
+      } else {
+        changed = moveVertex(current.original, current.path!, snapAt(coordinate, current.path));
+      }
+      current.last = changed;
+      eventRef.current.onGeometryPreview(changed);
+    }
+    function finishDrag() {
+      const current = drag.current;
+      if (!current) return;
+      drag.current = null;
+      map.dragPan.enable();
+      map.getCanvas().style.cursor = 'crosshair';
+      eventRef.current.onGeometryCommit(current.last);
+    }
+    function click(event: MapMouseEvent) {
+      const state = eventRef.current;
+      if (drag.current) return;
+      if (state.traceMode) state.onTraceClick(coordinates(event));
+      else if (state.drawingMode) state.onMapClick(snapAt(coordinates(event), null));
+      else {
+        const feature = hits(event).find(f => f.properties?.role === 'saved');
+        if (feature?.properties?.id) state.onSelectSavedFeature(String(feature.properties.id));
+      }
+    }
+    function removeByRightClick(event: MapMouseEvent) {
+      const state = eventRef.current;
+      if (!state.editing || state.selectedLocked || !state.selected) return;
+      const feature = hits(event).find(f => f.properties?.role === 'edit-vertex');
+      if (!feature) return;
+      event.preventDefault();
+      try {
+        state.onGeometryCommit(removeVertex(state.selected, nodePath(feature.properties)));
+      } catch { /* The minimum ring size is enforced by the edit toolbar. */ }
+    }
+    function insertByDoubleClick(event: MapMouseEvent) {
+      const state = eventRef.current;
+      if (!state.editing || state.selectedLocked || !state.selected) return;
+      const choices = verticesOf(state.selected).filter(p => p.midpoint);
+      if (!choices.length) return;
+      const clickPoint = event.point;
+      let best = Infinity;
+      let chosen: typeof choices[0] | null = null;
+      for (const midpoint of choices) {
+        const projection = map.project(midpoint.point as maplibregl.LngLatLike);
+        const distance = Math.hypot(clickPoint.x - projection.x, clickPoint.y - projection.y);
+        if (distance < best) { best = distance; chosen = midpoint; }
+      }
+      if (chosen && best < 22) {
+        event.preventDefault();
+        state.onGeometryCommit(addVertex(state.selected, chosen.path, coordinates(event)));
+      }
+    }
+
+    map.on('moveend', bounds);
+    map.on('click', click);
+    map.on('mousedown', beginDrag);
+    map.on('mousemove', dragging);
+    map.on('mouseup', finishDrag);
+    map.on('contextmenu', removeByRightClick);
+    map.on('dblclick', insertByDoubleClick);
     map.on('load', () => {
       map.addSource('workspace', {
-        type: 'geojson',
-        data: { type: 'FeatureCollection', features: [] },
+        type: 'geojson', data: { type: 'FeatureCollection', features: [] },
       });
       map.addLayer({
         id: 'workspace-fill', type: 'fill', source: 'workspace',
         filter: ['==', ['geometry-type'], 'Polygon'],
-        paint: { 'fill-color': '#3977e3', 'fill-opacity': 0.17 },
+        paint: {
+          'fill-color': ['coalesce', ['get', 'color'], '#2563eb'],
+          'fill-opacity': 0.17,
+        },
       });
       map.addLayer({
         id: 'workspace-lines', type: 'line', source: 'workspace',
-        filter: ['any', ['==', ['geometry-type'], 'Polygon'], ['==', ['geometry-type'], 'LineString']],
-        paint: { 'line-color': '#2563eb', 'line-width': 3, 'line-opacity': 0.95 },
+        filter: ['any', ['==', ['geometry-type'], 'Polygon'],
+                        ['==', ['geometry-type'], 'LineString']],
+        paint: {
+          'line-color': ['coalesce', ['get', 'color'], '#2563eb'],
+          'line-width': 3, 'line-opacity': 0.95,
+        },
       });
       map.addLayer({
         id: 'workspace-points', type: 'circle', source: 'workspace',
         filter: ['==', ['geometry-type'], 'Point'],
         paint: {
-          'circle-color': '#ffffff', 'circle-radius': 6,
-          'circle-stroke-color': '#2563eb', 'circle-stroke-width': 3,
+          'circle-color': [
+            'case', ['==', ['get', 'role'], 'edit-midpoint'], '#c9e5ff', '#ffffff',
+          ],
+          'circle-radius': [
+            'case', ['==', ['get', 'role'], 'edit-midpoint'], 4, 6,
+          ],
+          'circle-stroke-color': '#2563eb', 'circle-stroke-width': 2,
         },
       });
       setReady(true);
-      reportViewport();
+      bounds();
     });
     mapRef.current = map;
     return () => {
-      setReady(false);
+      map.off('mousemove', dragging);
+      map.off('mouseup', finishDrag);
+      map.dragPan.enable();
       mapRef.current = null;
       map.remove();
     };
@@ -170,15 +364,16 @@ export default function MapCanvas({
   useEffect(() => {
     const map = mapRef.current;
     if (!ready || !map) return;
-    (map.getSource('workspace') as GeoJSONSource).setData(featureCollection(selected, vertices, discovered));
-  }, [selected, vertices, discovered, ready]);
+    (map.getSource('workspace') as GeoJSONSource).setData(
+      featureCollection(selected, vertices, discovered, layerFeatures, editing),
+    );
+  }, [selected, vertices, discovered, layerFeatures, editing, ready]);
 
   useEffect(() => {
     const map = mapRef.current;
     if (!ready || !map || !focus) return;
-    const bounds = focus.bbox;
-    if (bounds && bounds[0] < bounds[2] && bounds[1] < bounds[3]) {
-      map.fitBounds([[bounds[0], bounds[1]], [bounds[2], bounds[3]]], {
+    if (focus.bbox && focus.bbox[0] < focus.bbox[2] && focus.bbox[1] < focus.bbox[3]) {
+      map.fitBounds([[focus.bbox[0], focus.bbox[1]], [focus.bbox[2], focus.bbox[3]]], {
         padding: 70, maxZoom: 16, duration: 950,
       });
     } else {
@@ -200,24 +395,22 @@ export default function MapCanvas({
     if (map.getSource('imported-imagery')) map.removeSource('imported-imagery');
     if (imageLayer) {
       map.addSource('imported-imagery', {
-        type: 'image',
-        url: rasterPreviewUrl(imageLayer),
+        type: 'image', url: rasterPreviewUrl(imageLayer),
         coordinates: imageLayer.corners,
       });
       map.addLayer({
-        id: 'imported-imagery',
-        type: 'raster',
-        source: 'imported-imagery',
+        id: 'imported-imagery', type: 'raster', source: 'imported-imagery',
         paint: { 'raster-opacity': 0.88, 'raster-fade-duration': 0 },
       }, 'workspace-fill');
     }
   }, [imageLayer, ready]);
 
   useEffect(() => {
-    if (mapRef.current) {
-      mapRef.current.getCanvas().style.cursor = drawingMode || traceMode ? 'crosshair' : '';
-    }
-  }, [drawingMode, traceMode, ready]);
+    const map = mapRef.current;
+    if (!map) return;
+    map.doubleClickZoom[editing ? 'disable' : 'enable']();
+    map.getCanvas().style.cursor = drawingMode || traceMode || editing ? 'crosshair' : '';
+  }, [editing, drawingMode, traceMode, ready]);
 
   return <div aria-label="Interactive geospatial map" className="map-canvas" ref={container} />;
 }
