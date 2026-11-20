@@ -20,7 +20,7 @@ struct Index {
     std::vector<std::size_t> order;
     std::vector<Node> nodes;
 };
-bool finite(double a) noexcept { return std::isfinite(a); }
+bool finite_number(double a) noexcept { return std::isfinite(a); }
 double dist_rect(double x,double y,const Node& n) noexcept {
     const double dx=x<n.minx?n.minx-x:(x>n.maxx?x-n.maxx:0.0);
     const double dy=y<n.miny?n.miny-y:(y>n.maxy?y-n.maxy:0.0);
@@ -72,7 +72,7 @@ extern "C" GEOFATHOM_API void* gf_spatial_index_build(
         for(std::size_t i=0;i<count;++i) {
             const double ax=segment_xyxy[i*4],ay=segment_xyxy[i*4+1];
             const double bx=segment_xyxy[i*4+2],by=segment_xyxy[i*4+3];
-            if(!finite(ax)||!finite(ay)||!finite(bx)||!finite(by)) {
+            if(!finite_number(ax)||!finite_number(ay)||!finite_number(bx)||!finite_number(by)) {
                 delete index;return nullptr;
             }
             index->segments.push_back({
@@ -91,7 +91,7 @@ extern "C" GEOFATHOM_API void* gf_spatial_index_build(
 extern "C" GEOFATHOM_API int gf_spatial_index_query(
     const void* handle,double x,double y,double tolerance,
     double* output) noexcept {
-    if(!handle || !output || !finite(x) || !finite(y) || !finite(tolerance)
+    if(!handle || !output || !finite_number(x) || !finite_number(y) || !finite_number(tolerance)
        || tolerance<0) return -1;
     const Index& index=*static_cast<const Index*>(handle);
     if(index.nodes.empty()) return -1;
