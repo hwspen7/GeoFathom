@@ -86,5 +86,15 @@ int main() {
         assert(out[3]==i);
     }
     gf_spatial_index_destroy(large);
+    // 10% eastward elevation grade corresponds to atan(0.1) ~ 5.71 degrees.
+    std::vector<float> heights(100);
+    std::vector<unsigned char> coverage(100,1);
+    for(int y=0;y<10;++y) for(int x=0;x<10;++x)
+        heights[y*10+x]=static_cast<float>(x);
+    double terrain[4]={};
+    assert(gf_dem_gradient(heights.data(),coverage.data(),10,10,10,10,terrain)==1);
+    assert(terrain[0]>5.70 && terrain[0]<5.72);
+    assert(terrain[2]==64);
+    assert(gf_dem_gradient(nullptr,coverage.data(),10,10,10,10,terrain)==-1);
     return 0;
-}
+

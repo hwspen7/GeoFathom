@@ -59,3 +59,12 @@ GEOFATHOM_API int gf_spatial_index_query(
     double* out_xydistance_segmentindex) noexcept;
 GEOFATHOM_API void gf_spatial_index_destroy(void* handle) noexcept;
 }
+
+
+// Horn 3x3 terrain slope/aspect from meter-based raster cells.
+// Values outside mask or containing nonfinite elevation are discarded.
+// The result is [mean slope degrees, mean downhill aspect degrees or -1,
+// valid interior pixels, maximum slope degrees].
+extern "C" GEOFATHOM_API int gf_dem_gradient(
+    const float* elevation,const unsigned char* valid,int width,int height,
+    double pixel_width_m,double pixel_height_m,double* out4) noexcept;
