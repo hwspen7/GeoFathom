@@ -1,0 +1,1 @@
+"""GeoFathom places components."""

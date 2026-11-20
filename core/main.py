@@ -9,11 +9,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from .config import get_settings
-from .discovery import DiscoveryError, discover_features
-from .geo import GeometryError, measure_geometry
-from .geocoding import search_places
-from .intent import fallback_intent
-from .llm import get_provider
+from places.discovery import DiscoveryError, discover_features
+from geometry.measure import GeometryError, measure_geometry
+from places.geocoding import search_places
+from intelligence.intent import fallback_intent
+from intelligence.llm import get_provider
 
 logger = logging.getLogger("geofathom")
 settings = get_settings()

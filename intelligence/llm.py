@@ -5,7 +5,7 @@ from typing import Protocol
 
 import httpx
 
-from .config import Settings
+from core.config import Settings
 
 _SYSTEM = (
     "You are a geospatial intent parser. Respond ONLY with a JSON object with "

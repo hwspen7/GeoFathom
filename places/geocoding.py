@@ -7,7 +7,7 @@ from typing import Any
 
 import httpx
 
-from .config import Settings
+from core.config import Settings
 
 _cache: OrderedDict[str, tuple[float, list[dict[str, Any]]]] = OrderedDict()
 _lock = asyncio.Lock()

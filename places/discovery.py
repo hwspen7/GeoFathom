@@ -12,8 +12,8 @@ from typing import Any
 
 import httpx
 
-from .config import Settings
-from .geo import GeometryError, measure_geometry
+from core.config import Settings
+from geometry.measure import GeometryError, measure_geometry
 
 _FILTERS = {
     "building": '["building"]',
