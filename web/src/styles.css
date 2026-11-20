@@ -154,3 +154,14 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .model-editor label { display: block; }
 .model-editor .model-check { display: flex; align-items: center; gap: 8px; }
 .model-editor .model-check input { width: auto; margin: 0; }
+
+.raster-panel { display: flex; flex-direction: column; gap: 9px; }
+.raster-panel > input, .raster-panel select { width: 100%; border: 1px solid #dfe7f0; background: #fff; border-radius: 8px; padding: 9px 10px; font-size: 11px; color: #496079; }
+.raster-upload { position: relative; display: flex; align-items: center; justify-content: center; gap: 8px; color: #285e98; background: #f1f6fc; border: 1px solid #dae6f2; border-radius: 8px; padding: 10px; font-size: 11px; font-weight: 700; cursor: pointer; }
+.raster-upload input { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
+.raster-details { display: flex; gap: 6px; align-items: center; color: #75889d; font-size: 10px; }
+.raster-panel .area-fields select { margin-top: 7px; }
+.trace-tolerance { display: flex; flex-direction: column; gap: 5px; color: #65809b; font-size: 10px; }
+.trace-tolerance input { width: 100%; }
+.trace-toggle { display: flex; justify-content: center; align-items: center; gap: 8px; padding: 11px; color: #fff; border: none; background: #2a61ab; border-radius: 9px; font-size: 11px; font-weight: 700; }
+.trace-toggle.active { background: #d8e8fa; color: #25588f; border: 1px solid #6da1db; }

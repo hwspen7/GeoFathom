@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import maplibregl, { type GeoJSONSource, type StyleSpecification } from 'maplibre-gl';
 
+import { rasterPreviewUrl, type RasterAsset } from './api';
+
 type Position = [number, number];
 type DrawingMode = 'polygon' | 'line' | null;
 export interface FocusPoint {
@@ -19,6 +21,9 @@ interface Props {
   onMapClick: (position: Position) => void;
   onViewportChange: (bbox: [number, number, number, number]) => void;
   discovered: GeoJSON.Geometry[];
+  imageLayer: RasterAsset | null;
+  traceMode: boolean;
+  onTraceClick: (position: Position) => void;
 }
 
 const satelliteURL = import.meta.env.VITE_SATELLITE_TILES_URL;
@@ -92,14 +97,19 @@ function featureCollection(
 
 export default function MapCanvas({
   selected, drawingMode, vertices, focus, satellite, onMapClick, onViewportChange, discovered,
+  imageLayer, traceMode, onTraceClick,
 }: Props) {
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const clickRef = useRef(onMapClick);
+  const traceClickRef = useRef(onTraceClick);
+  const traceRef = useRef(traceMode);
   const viewportRef = useRef(onViewportChange);
   const drawRef = useRef(drawingMode);
   const [ready, setReady] = useState(false);
   clickRef.current = onMapClick;
+  traceClickRef.current = onTraceClick;
+  traceRef.current = traceMode;
   viewportRef.current = onViewportChange;
   drawRef.current = drawingMode;
 
@@ -120,7 +130,8 @@ export default function MapCanvas({
     }
     map.on('moveend', reportViewport);
     map.on('click', (event) => {
-      if (drawRef.current) clickRef.current([event.lngLat.lng, event.lngLat.lat]);
+      if (traceRef.current) traceClickRef.current([event.lngLat.lng, event.lngLat.lat]);
+      else if (drawRef.current) clickRef.current([event.lngLat.lng, event.lngLat.lat]);
     });
     map.on('load', () => {
       map.addSource('workspace', {
@@ -183,10 +194,30 @@ export default function MapCanvas({
   }, [satellite, ready]);
 
   useEffect(() => {
-    if (mapRef.current) {
-      mapRef.current.getCanvas().style.cursor = drawingMode ? 'crosshair' : '';
+    const map = mapRef.current;
+    if (!ready || !map) return;
+    if (map.getLayer('imported-imagery')) map.removeLayer('imported-imagery');
+    if (map.getSource('imported-imagery')) map.removeSource('imported-imagery');
+    if (imageLayer) {
+      map.addSource('imported-imagery', {
+        type: 'image',
+        url: rasterPreviewUrl(imageLayer),
+        coordinates: imageLayer.corners,
+      });
+      map.addLayer({
+        id: 'imported-imagery',
+        type: 'raster',
+        source: 'imported-imagery',
+        paint: { 'raster-opacity': 0.88, 'raster-fade-duration': 0 },
+      }, 'workspace-fill');
     }
-  }, [drawingMode, ready]);
+  }, [imageLayer, ready]);
+
+  useEffect(() => {
+    if (mapRef.current) {
+      mapRef.current.getCanvas().style.cursor = drawingMode || traceMode ? 'crosshair' : '';
+    }
+  }, [drawingMode, traceMode, ready]);
 
   return <div aria-label="Interactive geospatial map" className="map-canvas" ref={container} />;
 }

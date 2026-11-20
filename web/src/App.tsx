@@ -14,6 +14,8 @@ import DiscoveryPanel from './DiscoveryPanel';
 import type { DiscoveryResponse, StoredFeature } from './api';
 import ProjectsPanel from './ProjectsPanel';
 import ModelControls from './ModelControls';
+import RasterPanel, { type TraceSettings } from './RasterPanel';
+import { traceImagery, type RasterAsset } from './api';
 
 type Position = [number, number];
 type DrawingMode = 'polygon' | 'line' | null;
@@ -42,6 +44,12 @@ export default function App() {
   const [modelUsed, setModelUsed] = useState<boolean | null>(null);
   const [toolSteps, setToolSteps] = useState<string[]>([]);
   const [satellite, setSatellite] = useState(false);
+  const [imageLayer, setImageLayer] = useState<RasterAsset | null>(null);
+  const [traceMode, setTraceMode] = useState(false);
+  const [traceSettings, setTraceSettings] = useState<TraceSettings>({
+    method: 'color', tolerance: 20, window_size: 512,
+  });
+  const [geometrySource, setGeometrySource] = useState('');
 
   const satelliteAvailable = Boolean(import.meta.env.VITE_SATELLITE_TILES_URL);
 
@@ -52,6 +60,7 @@ export default function App() {
   async function selectPlace(place: Place) {
     setSelectedPlace(place);
     setDrawingMode(null);
+    setTraceMode(false);
     setVertices([]);
     setGeometry(
       place.geometry || {
@@ -60,6 +69,7 @@ export default function App() {
       },
     );
     setMeasurement(null);
+    setGeometrySource(place.source);
     setFocus({
       latitude: place.latitude,
       longitude: place.longitude,
@@ -134,6 +144,8 @@ export default function App() {
 
   function startDrawing(next: Exclude<DrawingMode, null>) {
     setDrawingMode(next);
+    setTraceMode(false);
+    setGeometrySource('User drawn');
     setVertices([]);
     setGeometry(null);
     setSelectedPlace(null);
@@ -173,11 +185,13 @@ export default function App() {
     setGeometry(null);
     setMeasurement(null);
     setDrawingMode(null);
+    setTraceMode(false);
     setVertices([]);
     setSelectedPlace(null);
     setCandidates([]);
     setDiscovered([]);
     setError('');
+    setGeometrySource('');
     setMessage('Workspace cleared. Search or draw to get started.');
   }
 
@@ -269,11 +283,35 @@ export default function App() {
           </section>
 
           <section className="panel-section">
+            <div className="section-heading"><Layers3 size={16} /><span>Georeferenced imagery</span></div>
+            <RasterPanel
+              asset={imageLayer}
+              onSelect={(asset) => {
+                setImageLayer(asset);
+                setTraceMode(false);
+                const [west, south, east, north] = asset.bbox;
+                setFocus({
+                  longitude: (west + east) / 2, latitude: (south + north) / 2,
+                  bbox: asset.bbox, key: Date.now(),
+                });
+                setMessage('Loaded georeferenced image ' + asset.name + '. Click automatic outline to select an object.');
+              }}
+              tracing={traceMode}
+              onTracing={(enabled) => {
+                setTraceMode(enabled);
+                if (enabled) { setDrawingMode(null); setVertices([]); }
+              }}
+              settings={traceSettings}
+              onSettings={setTraceSettings}
+            />
+          </section>
+
+          <section className="panel-section">
             <div className="section-heading"><Layers3 size={16} /><span>Projects & saved geometry</span></div>
             <ProjectsPanel
               geometry={geometry}
               featureName={selectedPlace?.name || 'Custom boundary'}
-              featureSource={selectedPlace?.source || 'User drawn'}
+              featureSource={geometrySource || selectedPlace?.source || 'User drawn'}
               onOpen={(feature: StoredFeature) => {
                 setGeometry(feature.geometry);
                 setMeasurement(feature.measurement);
@@ -368,11 +406,35 @@ export default function App() {
           <MapCanvas
             selected={geometry} drawingMode={drawingMode} vertices={vertices}
             focus={focus} satellite={satellite}
+            imageLayer={imageLayer} traceMode={traceMode}
+            onTraceClick={async ([longitude, latitude]) => {
+              if (!imageLayer || busy) return;
+              setBusy(true);
+              setError('');
+              try {
+                const result = await traceImagery({
+                  image_id: imageLayer.id, longitude, latitude,
+                  ...traceSettings,
+                });
+                setGeometry(result.geometry);
+                setMeasurement(result.measurement);
+                setSelectedPlace(null);
+                setCandidates([]);
+                setDiscovered([]);
+                setGeometrySource(imageLayer.provenance + ' · ' + result.engine);
+                setTraceMode(false);
+                setMessage(result.warning + ' (' + result.pixel_count + ' source pixels selected)');
+              } catch (failure) {
+                setError(failure instanceof Error ? failure.message : 'Automatic outline failed.');
+              } finally {
+                setBusy(false);
+              }
+            }}
             discovered={discovered.map(place => place.geometry).filter((item): item is GeoJSON.Geometry => item !== null)}
             onViewportChange={setViewport}
             onMapClick={position => setVertices(value => [...value, position])}
           />
-          <div className="map-hint"><MousePointer2 size={15} /> {drawingMode ? 'Click to add points, then Finish' : 'Pan, zoom, or choose a result'}</div>
+          <div className="map-hint"><MousePointer2 size={15} /> {traceMode ? 'Click an object in the imported image to trace it' : drawingMode ? 'Click to add points, then Finish' : 'Pan, zoom, or choose a result'}</div>
           <div className="map-badge"><span className="live-dot" /> WGS84 GEODESIC ENGINE</div>
         </div>
         <div className="bottom-bar">

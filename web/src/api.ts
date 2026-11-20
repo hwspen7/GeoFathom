@@ -236,3 +236,63 @@ export function selectDefaultModel(modelId: string, token: string): Promise<Mode
     body: JSON.stringify({ model_id: modelId }),
   });
 }
+
+
+export interface RasterAsset {
+  id: string;
+  name: string;
+  width: number;
+  height: number;
+  bands: number;
+  crs: string;
+  bbox: [number, number, number, number];
+  corners: [[number, number], [number, number], [number, number], [number, number]];
+  preview_url: string;
+  acquired_at: string | null;
+  provenance: string;
+}
+
+export interface RasterTrace {
+  image_id: string;
+  geometry: GeoJSON.Geometry;
+  measurement: Measurement;
+  provider: 'color' | 'sam2';
+  engine: string;
+  pixel_count: number;
+  confidence: number | null;
+  model_id: string | null;
+  boundary_status: string;
+  warning: string;
+  window_truncated: boolean;
+  source: string;
+}
+
+export async function listImagery(): Promise<RasterAsset[]> {
+  const response = await request<{ images: RasterAsset[] }>('/imagery');
+  return response.images;
+}
+
+export async function uploadImagery(file: File, adminToken: string): Promise<RasterAsset> {
+  const data = new FormData();
+  data.append('file', file);
+  return request<RasterAsset>('/imagery/upload', {
+    method: 'POST',
+    headers: { 'X-GeoFathom-Admin-Token': adminToken },
+    body: data,
+  });
+}
+
+export function traceImagery(body: {
+  image_id: string; longitude: number; latitude: number;
+  method: 'color' | 'sam2'; tolerance: number; window_size: number;
+}): Promise<RasterTrace> {
+  return request<RasterTrace>('/vision/trace', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+export function rasterPreviewUrl(asset: RasterAsset): string {
+  return API_URL + asset.preview_url;
+}
