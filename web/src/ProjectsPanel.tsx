@@ -10,10 +10,11 @@ interface Props {
   geometry: GeoJSON.Geometry | null;
   featureName: string;
   featureSource: string;
+  featureProperties: Record<string, unknown>;
   onOpen: (feature: StoredFeature) => void;
 }
 
-export default function ProjectsPanel({ geometry, featureName, featureSource, onOpen }: Props) {
+export default function ProjectsPanel({ geometry, featureName, featureSource, featureProperties, onOpen }: Props) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [selected, setSelected] = useState('');
   const [features, setFeatures] = useState<StoredFeature[]>([]);
@@ -67,7 +68,7 @@ export default function ProjectsPanel({ geometry, featureName, featureSource, on
     setWorking(true);
     setError('');
     try {
-      await saveProjectFeature(selected, featureName, geometry, featureSource);
+      await saveProjectFeature(selected, featureName, geometry, featureSource, featureProperties);
       setFeatures(await getProjectFeatures(selected));
       setInfo('Geographic feature saved to this project.');
     } catch (cause) {

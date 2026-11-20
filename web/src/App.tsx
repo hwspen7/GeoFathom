@@ -50,6 +50,7 @@ export default function App() {
     method: 'color', tolerance: 20, window_size: 512,
   });
   const [geometrySource, setGeometrySource] = useState('');
+  const [featureProperties, setFeatureProperties] = useState<Record<string, unknown>>({});
 
   const satelliteAvailable = Boolean(import.meta.env.VITE_SATELLITE_TILES_URL);
 
@@ -70,6 +71,7 @@ export default function App() {
     );
     setMeasurement(null);
     setGeometrySource(place.source);
+    setFeatureProperties({ source_type: 'mapped_openstreetmap', osm_id: place.osm_id, osm_type: place.osm_type });
     setFocus({
       latitude: place.latitude,
       longitude: place.longitude,
@@ -146,6 +148,7 @@ export default function App() {
     setDrawingMode(next);
     setTraceMode(false);
     setGeometrySource('User drawn');
+    setFeatureProperties({ source_type: 'user_drawn' });
     setVertices([]);
     setGeometry(null);
     setSelectedPlace(null);
@@ -192,6 +195,7 @@ export default function App() {
     setDiscovered([]);
     setError('');
     setGeometrySource('');
+    setFeatureProperties({});
     setMessage('Workspace cleared. Search or draw to get started.');
   }
 
@@ -203,7 +207,8 @@ export default function App() {
       properties: {
         name: selectedPlace?.name ?? 'Custom measurement',
         source: selectedPlace?.source ?? 'User-drawn geometry',
-        boundary_status: selectedPlace?.boundary_status ?? 'user_drawn',
+        boundary_status: selectedPlace?.boundary_status ?? (featureProperties.source_type === 'image_derived' ? 'estimated_from_imagery' : 'user_drawn'),
+        ...featureProperties,
         measured_using: 'WGS84 ellipsoidal geodesic',
       },
     };
@@ -313,9 +318,12 @@ export default function App() {
               geometry={geometry}
               featureName={selectedPlace?.name || 'Custom boundary'}
               featureSource={geometrySource || selectedPlace?.source || 'User drawn'}
+              featureProperties={featureProperties}
               onOpen={(feature: StoredFeature) => {
                 setGeometry(feature.geometry);
                 setMeasurement(feature.measurement);
+                setFeatureProperties(feature.properties);
+                setGeometrySource(feature.source);
                 setSelectedPlace(null);
                 setCandidates([]);
                 setDiscovered([]);
@@ -423,6 +431,21 @@ export default function App() {
                 setCandidates([]);
                 setDiscovered([]);
                 setGeometrySource(imageLayer.provenance + ' · ' + result.engine);
+                setFeatureProperties({
+                  source_type: 'image_derived',
+                  image_id: imageLayer.id,
+                  image_name: imageLayer.name,
+                  image_acquired_at: imageLayer.acquired_at,
+                  image_crs: imageLayer.crs,
+                  trace_method: result.provider,
+                  trace_engine: result.engine,
+                  trace_model_id: result.model_id,
+                  trace_pixel_count: result.pixel_count,
+                  trace_confidence: result.confidence,
+                  trace_window_truncated: result.window_truncated,
+                  trace_warning: result.warning,
+                  quality: 'requires_user_review',
+                });
                 setTraceMode(false);
                 setMessage(result.warning + ' (' + result.pixel_count + ' source pixels selected)');
               } catch (failure) {

@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+import os
+
 import numpy as np
 import pytest
 import rasterio
@@ -71,6 +73,8 @@ def test_python_and_cpp_segmentation_match():
     observed, engine = seeded_region(rgb, 12, 11, 10)
     assert np.array_equal(observed, expected)
     assert engine in {"cpp-seeded-region", "python-seeded-region"}
+    if os.getenv("GEOFATHOM_REQUIRE_NATIVE") == "1":
+        assert engine == "cpp-seeded-region"
 
 
 def test_image_upload_and_map_preview(geotiff):
@@ -98,6 +102,23 @@ def test_image_upload_and_map_preview(geotiff):
     assert traced.status_code == 200, traced.text
     assert traced.json()["pixel_count"] == 256
     assert traced.json()["measurement"]["area_m2"] > 200
+    project = client.post("/projects", json={"name": "Image outlines"}).json()
+    saved = client.post(f"/projects/{project['id']}/features", json={
+        "name": "Image-derived region",
+        "geometry": traced.json()["geometry"],
+        "source": traced.json()["source"],
+        "properties": {
+            "source_type": "image_derived",
+            "image_id": image["id"],
+            "trace_engine": traced.json()["engine"],
+            "quality": "requires_user_review",
+        },
+    })
+    assert saved.status_code == 201, saved.text
+    exported = client.get(f"/projects/{project['id']}/export").json()
+    props = exported["features"][0]["properties"]
+    assert props["image_id"] == image["id"]
+    assert props["quality"] == "requires_user_review"
 
 
 def test_explicit_sam_unavailable_and_invalid_raster(geotiff, tmp_path):
@@ -132,3 +153,23 @@ def test_raster_without_crs_rejected(tmp_path):
     from imagery.raster import RasterError
     with pytest.raises(RasterError):
         metadata(path)
+
+
+
+def test_projected_crs_is_transformed_before_geodesic_area(tmp_path):
+    from rasterio.warp import transform
+
+    path = tmp_path / "projected.tif"
+    raster = np.zeros((3, 64, 64), dtype=np.uint8)
+    raster[:, 12:36, 12:36] = np.array([190, 110, 62], dtype=np.uint8)[:, None, None]
+    affine = from_origin(13_400_000, 3_800_000, 2, 2)
+    with rasterio.open(path, "w", driver="GTiff", width=64, height=64, count=3,
+                       dtype="uint8", crs="EPSG:3857", transform=affine) as dst:
+        dst.write(raster)
+    x, y = affine @ (24.5, 24.5)
+    lons, lats = transform("EPSG:3857", "EPSG:4326", [x], [y])
+    result = trace_raster(path, "projected", lons[0], lats[0], "color", 8, 64)
+    assert result["pixel_count"] == 24 * 24
+    assert result["source_crs"] == "EPSG:3857"
+    assert result["geometry_crs"] == "EPSG:4326"
+    assert result["measurement"]["area_m2"] > 1000
