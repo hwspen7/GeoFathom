@@ -39,3 +39,6 @@ jobs:
       - name: Typecheck and build
         working-directory: web
         run: npm run build
+      - name: Unit test precision editor and survey geometry
+        working-directory: web
+        run: npm test
