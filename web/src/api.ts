@@ -477,3 +477,94 @@ export function saveFeatureBatch(projectId: string, features: Array<{
     body:JSON.stringify({features,layer_id:layerId || null}),
   });
 }
+
+
+export interface AttributeQuery {
+  field?: string | null;
+  operator?: 'contains' | 'equals' | 'gte' | 'lte' | 'exists';
+  value?: unknown;
+  limit?: number;
+  offset?: number;
+}
+export interface AttributeResult {
+  results: Array<{ id:string; name:string; source:string; properties:Record<string,unknown> }>;
+  total:number; fields:string[];
+}
+export function queryAttributes(projectId:string,filter:AttributeQuery):Promise<AttributeResult> {
+  return request('/projects/'+encodeURIComponent(projectId)+'/attributes/query',{
+    method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(filter),
+  });
+}
+export function saveAttributes(projectId:string,updates:Array<{
+  id:string;expected_revision:number;properties:Record<string,unknown>;
+}>):Promise<{count:number;atomic:boolean}> {
+  return request('/projects/'+encodeURIComponent(projectId)+'/attributes/batch',{
+    method:'PATCH',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({updates}),
+  });
+}
+export interface SharedTopologyPreview {
+  affected:Array<{id:string;name:string;revision:number;locked:boolean;valid:boolean;warning:string|null;geometry:GeoJSON.Geometry}>;
+  count:number;method:string;
+}
+export function previewTopology(projectId:string,oldPoint:[number,number],newPoint:[number,number]):Promise<SharedTopologyPreview> {
+  return request('/projects/'+encodeURIComponent(projectId)+'/topology/preview',{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({old:oldPoint,new:newPoint,tolerance_m:0.05}),
+  });
+}
+export function applyTopology(projectId:string,oldPoint:[number,number],newPoint:[number,number],
+  expected:Record<string,number>):Promise<{count:number;atomic:boolean}> {
+  return request('/projects/'+encodeURIComponent(projectId)+'/topology/move',{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({old:oldPoint,new:newPoint,expected_revisions:expected,tolerance_m:0.05}),
+  });
+}
+export function traceExisting(start:[number,number],end:[number,number],paths:[number,number][][]):Promise<EditResponse> {
+  return request('/edit/trace',{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({start,end,paths,tolerance_m:30}),
+  });
+}
+export interface TerrainResult {
+  elevation_min_m:number;elevation_max_m:number;elevation_mean_m:number;
+  elevation_relief_m:number;mean_slope_deg:number;mean_aspect_deg:number|null;
+  maximum_slope_deg:number;valid_pixels:number;engine:string;warning:string;
+}
+export function analyzeTerrain(imageId:string,geometry:GeoJSON.Geometry):Promise<TerrainResult> {
+  return request('/terrain/analyze',{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({image_id:imageId,geometry,vertical_unit:'meter'}),
+  });
+}
+export function terrainProfile(imageId:string,geometry:GeoJSON.Geometry):Promise<{
+  samples:Array<{distance_m:number;elevation_m:number|null}>;length_m:number;warning:string;
+}> {
+  return request('/terrain/profile',{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({image_id:imageId,geometry,samples:80}),
+  });
+}
+export async function importVectorFile(projectId:string,file:File,layerId?:string):Promise<{created:number}> {
+  const payload=new FormData();payload.append('file',file);
+  const url='/projects/'+encodeURIComponent(projectId)+'/vector/import'+
+    (layerId?'?layer_id='+encodeURIComponent(layerId):'');
+  return request(url,{method:'POST',body:payload});
+}
+export async function exportVectorFile(
+  projectId:string,format:'geojson'|'gpkg'|'kml'|'gpx'|'shapefile',
+):Promise<void> {
+  const response=await fetch(API_URL+'/projects/'+encodeURIComponent(projectId)+'/vector/export/'+format);
+  if(!response.ok) {
+    const error=await response.json() as {detail?:string};
+    throw new Error(error.detail || 'GIS export failed.');
+  }
+  const blob=await response.blob();
+  const filename=response.headers.get('Content-Disposition')?.match(/filename="([^"]+)"/)?.[1]
+    ?? 'geofathom-'+format;
+  const url=URL.createObjectURL(blob);
+  const link=document.createElement('a');
+  link.href=url;link.download=filename;document.body.appendChild(link);
+  link.click();link.remove();
+  window.setTimeout(()=>URL.revokeObjectURL(url),1500);
+}
