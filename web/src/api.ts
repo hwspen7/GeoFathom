@@ -72,11 +72,11 @@ export async function searchPlaces(query: string): Promise<Place[]> {
   return payload.results;
 }
 
-export function interpret(message: string, bbox?: [number, number, number, number] | null, profile: 'default' | 'analysis' = 'default'): Promise<AssistantResult> {
+export function interpret(message: string, bbox?: [number, number, number, number] | null, modelId: string = 'local-saluki'): Promise<AssistantResult> {
   return request<AssistantResult>('/assistant', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message, bbox: bbox || null, profile }),
+    body: JSON.stringify({ message, bbox: bbox || null, model_id: modelId }),
   });
 }
 
@@ -172,16 +172,67 @@ export function exportProject(projectId: string): Promise<GeoJSON.FeatureCollect
 export interface ModelProbe {
   status: 'ready';
   profile: 'default' | 'analysis';
+  model_id?: string | null;
   provider: string;
   model: string;
   live_call: boolean;
   intent: { action: string; query: string; explanation: string };
 }
 
-export function probeModel(profile: 'default' | 'analysis'): Promise<ModelProbe> {
+export function probeModel(modelId: string): Promise<ModelProbe> {
   return request<ModelProbe>('/models/probe', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ profile }),
+    body: JSON.stringify({ model_id: modelId }),
+  });
+}
+
+
+export type ModelProvider = 'ollama' | 'openai-compatible' | 'groq' | 'gemini';
+
+export interface ModelDefinition {
+  id: string;
+  name: string;
+  provider: ModelProvider;
+  model: string;
+  base_url: string;
+  credential_env: string;
+  enabled: boolean;
+  configured: boolean;
+  preset: boolean;
+}
+
+export type ModelDraft = Omit<ModelDefinition, 'configured' | 'preset'>;
+
+export interface ModelCatalog {
+  default_id: string;
+  models: ModelDefinition[];
+  note: string;
+}
+
+export function getModelCatalog(): Promise<ModelCatalog> {
+  return request<ModelCatalog>('/models/catalog');
+}
+
+export function saveModel(model: ModelDraft, token: string): Promise<ModelCatalog> {
+  return request<ModelCatalog>('/models/catalog/' + encodeURIComponent(model.id), {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', 'X-GeoFathom-Admin-Token': token },
+    body: JSON.stringify(model),
+  });
+}
+
+export function deleteModel(modelId: string, token: string): Promise<ModelCatalog> {
+  return request<ModelCatalog>('/models/catalog/' + encodeURIComponent(modelId), {
+    method: 'DELETE',
+    headers: { 'X-GeoFathom-Admin-Token': token },
+  });
+}
+
+export function selectDefaultModel(modelId: string, token: string): Promise<ModelCatalog> {
+  return request<ModelCatalog>('/models/selection', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', 'X-GeoFathom-Admin-Token': token },
+    body: JSON.stringify({ model_id: modelId }),
   });
 }

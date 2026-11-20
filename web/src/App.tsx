@@ -38,7 +38,7 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [capabilities, setCapabilities] = useState<Capabilities | null>(null);
   const [assistantQuery, setAssistantQuery] = useState('');
-  const [modelProfile, setModelProfile] = useState<'default' | 'analysis'>('default');
+  const [modelId, setModelId] = useState('local-saluki');
   const [modelUsed, setModelUsed] = useState<boolean | null>(null);
   const [toolSteps, setToolSteps] = useState<string[]>([]);
   const [satellite, setSatellite] = useState(false);
@@ -110,7 +110,7 @@ export default function App() {
     setError('');
     setAssistantQuery(query);
     try {
-      const answer = await interpret(query, viewport, modelProfile);
+      const answer = await interpret(query, viewport, modelId);
       setModelUsed(answer.model_used);
       setToolSteps((answer.steps || []).map(step => step.tool + ' · ' + step.status));
       setCandidates(answer.results);
@@ -231,12 +231,12 @@ export default function App() {
 
           <section className="panel-section">
             <div className="section-heading"><Sparkles size={16} /><span>Ask GeoFathom</span><span className="section-pill">Assistant</span></div>
-            <ModelControls capabilities={capabilities} profile={modelProfile} onChange={setModelProfile} />
+            <ModelControls modelId={modelId} onChange={setModelId} />
             <form onSubmit={runAssistant} className="prompt-form">
               <textarea aria-label="Ask the geospatial assistant" placeholder="Measure Shanghai Hongqiao Airport's mapped boundary…" value={prompt}
                 onChange={event => setPrompt(event.target.value)} maxLength={500} rows={3} />
               <div className="prompt-footer">
-                <span>{modelProfile === 'analysis' ? 'Multimodal model / safe fallback' : capabilities?.llm_provider ? 'Cloud AI / safe fallback' : 'Search interpreter'}</span>
+                <span>{modelUsed === null ? 'Selected model / GIS fallback' : modelUsed ? 'AI parsed the request' : 'GIS fallback interpretation'}</span>
                 <button type="submit" disabled={busy || prompt.trim().length < 2}>
                   <Send size={15} /> Run
                 </button>
