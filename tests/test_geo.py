@@ -1,8 +1,8 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from app.geo import GeometryError, measure_geometry
-from app.main import app
+from geometry.measure import GeometryError, measure_geometry
+from core.main import app
 
 client = TestClient(app)
 

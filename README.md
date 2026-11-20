@@ -20,17 +20,16 @@
 Requires Python 3.11+, Node.js 20+, and an internet connection for public map/geocoding data.
 
 ```bash
-cd backend
 python -m venv .venv
 # Activate the virtual environment, then:
 pip install -e ".[dev]"
-uvicorn app.main:app --reload
+uvicorn core.main:app --reload
 ```
 
 In another terminal:
 
 ```bash
-cd frontend
+cd web
 npm install
 npm run dev
 ```
@@ -40,7 +39,7 @@ Open http://localhost:5173. API docs are available at http://localhost:8000/docs
 Optional local Qwen (Ollama):
 
 ```bash
-# Configure in backend/.env or your shell (see backend/.env.example).
+# Configure in ./.env or your shell (see backend/.env.example).
 export GEOFATHOM_LLM_PROVIDER=ollama
 export GEOFATHOM_LLM_MODEL=qwen3.5:9b
 ```
@@ -50,8 +49,12 @@ The model name must match the one actually installed in Ollama. Without a config
 ## Project layout
 
 ```text
-backend/          FastAPI services, providers, geodesic calculations, tests
-frontend/         React, TypeScript, MapLibre interactive workspace
+core/             Service assembly and configuration
+geometry/         Geodesic and spatial calculations
+places/           Geographic search and feature discovery
+intelligence/     Interchangeable AI providers and intent processing
+tests/            Automated service and geometry tests
+web/              MapLibre and React interface
 docs/             Architecture, integration contracts, usage notes
 .github/workflows/ Checks for backend and frontend
 ```

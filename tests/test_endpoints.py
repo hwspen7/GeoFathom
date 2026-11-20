@@ -1,7 +1,7 @@
 from fastapi.testclient import TestClient
 
-from app.geocoding import _place
-from app.main import app
+from places.geocoding import _place
+from core.main import app
 
 client = TestClient(app)
 
@@ -41,7 +41,7 @@ def test_search_and_assistant_with_stubbed_geocoder(monkeypatch) -> None:
     async def fake_search(query, settings, limit=5):
         return [record]
 
-    monkeypatch.setattr("app.main.search_places", fake_search)
+    monkeypatch.setattr("core.main.search_places", fake_search)
     result = client.get("/search?q=Sample")
     assert result.status_code == 200
     assert result.json()["results"][0]["boundary_status"] == "location_only"

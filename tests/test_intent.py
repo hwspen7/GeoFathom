@@ -1,7 +1,7 @@
 import pytest
 
-from app.intent import fallback_intent
-from app.llm import _decode
+from intelligence.intent import fallback_intent
+from intelligence.llm import _decode
 
 
 def test_chinese_area_request() -> None:

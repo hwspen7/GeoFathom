@@ -1,7 +1,7 @@
 import pytest
 
-from app.config import Settings
-from app.discovery import DiscoveryError, _from_way, _validate_bounds, discover_features
+from core.config import Settings
+from places.discovery import DiscoveryError, _from_way, _validate_bounds, discover_features
 
 
 def sample_way():
@@ -43,7 +43,7 @@ async def test_filtering_uses_real_way_areas(monkeypatch):
     async def fake_query(bbox, category, settings):
         return [sample_way()]
 
-    monkeypatch.setattr("app.discovery._query_overpass", fake_query)
+    monkeypatch.setattr("places.discovery._query_overpass", fake_query)
     bbox = (0, 0, 0.01, 0.01)
     result = await discover_features(bbox, "building", 5000, None, Settings())
     assert len(result["results"]) == 1
