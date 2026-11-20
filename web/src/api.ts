@@ -324,3 +324,144 @@ export function searchPublicImagery(
     body: JSON.stringify({ bbox, collection, limit: 8 }),
   });
 }
+
+
+export type ShapeConstruction = 'polygon' | 'rectangle' | 'circle' | 'bearing';
+export type EditResponse = { geometry: GeoJSON.Geometry; measurement: Measurement };
+
+export function constructGeometry(body: {
+  mode: ShapeConstruction; vertices: [number, number][];
+  radius_m?: number; bearing_deg?: number; length_m?: number; segments?: number;
+}): Promise<EditResponse> {
+  return request<EditResponse>('/edit/construct', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+export function validateGeometry(geometry: GeoJSON.Geometry): Promise<{
+  valid: boolean; message: string; measurement: Measurement | null;
+}> {
+  return request('/edit/validate', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ geometry }),
+  });
+}
+
+export function editPair(
+  operation: 'hole' | 'split', polygon: GeoJSON.Geometry, other: GeoJSON.Geometry,
+): Promise<EditResponse & { features: EditResponse[] }> {
+  return request('/edit/' + operation, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ polygon, other }),
+  });
+}
+
+export function applyOverlay(
+  operation: 'union' | 'difference' | 'intersection',
+  left: GeoJSON.Geometry, right: GeoJSON.Geometry,
+): Promise<{ geometry: GeoJSON.Geometry | null; measurement: Measurement | null }> {
+  return request('/analysis/overlay', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ operation, left, right }),
+  });
+}
+
+export function moveMeasured(
+  geometry: GeoJSON.Geometry, bearing_deg: number, distance_m: number,
+): Promise<EditResponse> {
+  return request('/edit/move', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ geometry, bearing_deg, distance_m }),
+  });
+}
+
+export function simplifyVertices(
+  vertices: [number, number][], tolerance_m: number,
+): Promise<{ vertices: [number, number][]; retained: number; engine: string }> {
+  return request('/edit/simplify', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ vertices, tolerance_m }),
+  });
+}
+
+export interface GeoLayer {
+  id: string;
+  project_id: string;
+  name: string;
+  color: string;
+  visible: number;
+  locked: number;
+  z_index: number;
+}
+
+export interface WorkspaceFeature extends StoredFeature {
+  layer_id: string;
+  revision: number;
+}
+
+export interface GeoWorkspace {
+  layers: GeoLayer[];
+  features: WorkspaceFeature[];
+  total: number;
+}
+
+export interface FeatureRevision {
+  revision: number;
+  name: string;
+  geometry: GeoJSON.Geometry;
+  properties: Record<string, unknown>;
+  created_at: string;
+}
+export interface FeatureHistory {
+  feature_id: string;
+  current_revision: number;
+  versions: FeatureRevision[];
+}
+
+export function getWorkspace(projectId: string): Promise<GeoWorkspace> {
+  return request('/projects/' + encodeURIComponent(projectId) + '/workspace');
+}
+
+export function createLayer(projectId: string, name: string, color: string): Promise<GeoLayer> {
+  return request('/projects/' + encodeURIComponent(projectId) + '/layers', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, color }),
+  });
+}
+
+export function patchLayer(projectId: string, layerId: string, updates: Partial<{
+  name: string; color: string; visible: boolean; locked: boolean; z_index: number;
+}>): Promise<GeoLayer> {
+  return request('/projects/' + encodeURIComponent(projectId) + '/layers/' + encodeURIComponent(layerId), {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(updates),
+  });
+}
+
+export function updateProjectFeature(
+  projectId: string, featureId: string,
+  updates: { geometry?: GeoJSON.Geometry; name?: string; layer_id?: string;
+             properties?: Record<string, unknown>; expected_revision?: number },
+): Promise<WorkspaceFeature> {
+  return request('/projects/' + encodeURIComponent(projectId) + '/features/' + encodeURIComponent(featureId), {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(updates),
+  });
+}
+
+export function getFeatureHistory(projectId: string, featureId: string): Promise<FeatureHistory> {
+  return request('/projects/' + encodeURIComponent(projectId) + '/features/' + encodeURIComponent(featureId) + '/history');
+}
+
+export function restoreFeature(projectId: string, featureId: string, revision: number): Promise<WorkspaceFeature> {
+  return request('/projects/' + encodeURIComponent(projectId) + '/features/' + encodeURIComponent(featureId) + '/restore/' + revision, {
+    method: 'POST',
+  });
+}
+
+export function copyProjectFeature(projectId: string, featureId: string): Promise<StoredFeature> {
+  return request('/projects/' + encodeURIComponent(projectId) + '/features/' + encodeURIComponent(featureId) + '/copy', {
+    method: 'POST',
+  });
+}
