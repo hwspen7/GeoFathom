@@ -61,7 +61,7 @@ export default function App() {
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [selectedFeatureId, setSelectedFeatureId] = useState<string | null>(null);
   const [splitParts, setSplitParts] = useState<GeoJSON.Geometry[]>([]);
-  const [refreshToken, setRefreshToken] = useState(0);
+  const refreshToken = 0;
   const [preview, setPreview] = useState<ReturnType<typeof approximateMeasurement> | null>(null);
   const [areaUnit, setAreaUnit] = useState<'m2' | 'ha' | 'km2' | 'mu'>('m2');
   const timeline = useRef(new GeometryTimeline());
@@ -458,25 +458,46 @@ export default function App() {
           </section>
 
           <section className="panel-section">
-            <div className="section-heading"><Pencil size={16} /><span>Map tools</span></div>
-            <div className="tools-grid">
-              <button className={drawingMode === 'polygon' ? 'tool active' : 'tool'} onClick={() => startDrawing('polygon')}>
-                <Pencil size={17} /><span>Draw area</span>
-              </button>
-              <button className={drawingMode === 'line' ? 'tool active' : 'tool'} onClick={() => startDrawing('line')}>
-                <Ruler size={17} /><span>Draw line</span>
-              </button>
-            </div>
-            {drawingMode && (
-              <div className="drawing-actions">
-                <span><MousePointer2 size={14} /> {vertices.length} points</span>
-                <div>
-                  <button title="Undo last point" onClick={() => setVertices(value => value.slice(0, -1))} disabled={!vertices.length}><Undo2 size={16} /></button>
-                  <button title="Cancel drawing" onClick={() => { setDrawingMode(null); setVertices([]); }}><RotateCcw size={16} /></button>
-                  <button className="finish-button" onClick={finishDrawing}><Check size={15} /> Finish</button>
-                </div>
-              </div>
-            )}
+            <div className="section-heading"><Pencil size={16} /><span>Survey & geometry editor</span><span className="section-pill">Precision</span></div>
+            <SurveyTools
+              mode={drawingMode}
+              geometry={geometry}
+              points={vertices}
+              editing={editing}
+              moving={moving}
+              snapping={snapping}
+              canUndo={timeline.current.canUndo && historyPulse >= 0}
+              canRedo={timeline.current.canRedo && historyPulse >= 0}
+              saved={projectWorkspace?.features ?? []}
+              onStart={startDrawing}
+              onFinish={() => { void finishDrawing(); }}
+              onCancel={() => { setDrawingMode(null); setVertices([]); }}
+              onUndoPoint={() => setVertices(value => value.slice(0,-1))}
+              onUndo={() => applyHistory(timeline.current.undo())}
+              onRedo={() => applyHistory(timeline.current.redo())}
+              onEdit={(active, shouldMove) => {
+                if (selectedLocked) {
+                  setError('Unlock the feature layer before editing.');
+                } else {
+                  setEditing(active); setMoving(shouldMove);
+                  setDrawingMode(null); setVertices([]);
+                }
+              }}
+              onSnapping={setSnapping}
+              onAddPoint={point => {
+                if (drawingMode) setVertices(value => [...value, point]);
+                else setError('Select a drawing mode before adding precise coordinates.');
+              }}
+              onNumeric={(mode, body) => { void numericShape(mode, body); }}
+              onOverlay={(mode, featureId) => { void combineWith(mode,featureId); }}
+              onDuplicate={() => {
+                if (geometry) {
+                  setSelectedFeatureId(null);
+                  setGeometrySource('Copied from current geometry');
+                  void commitGeometry(shiftGeometry(geometry,0.00001,0.00001), 'Copied geometry (editable).');
+                }
+              }}
+            />
           </section>
 
           <section className="panel-section">
@@ -511,24 +532,14 @@ export default function App() {
               featureName={selectedPlace?.name || 'Custom boundary'}
               featureSource={geometrySource || selectedPlace?.source || 'User drawn'}
               featureProperties={featureProperties}
-              onOpen={(feature: StoredFeature) => {
-                setGeometry(feature.geometry);
-                setMeasurement(feature.measurement);
-                setFeatureProperties(feature.properties);
-                setGeometrySource(feature.source);
-                setSelectedPlace(null);
-                setCandidates([]);
-                setDiscovered([]);
-                setDrawingMode(null);
-                const [west, south, east, north] = feature.measurement.bounds;
-                setFocus({
-                  longitude: (west + east) / 2,
-                  latitude: (south + north) / 2,
-                  bbox: [west, south, east, north],
-                  key: Date.now(),
-                });
-                setMessage('Loaded saved feature: ' + feature.name + ' · ' + feature.source);
+              selectedFeatureId={selectedFeatureId}
+              splitParts={splitParts}
+              refreshToken={refreshToken}
+              onWorkspace={(data, id) => {
+                setProjectWorkspace(data);
+                setActiveProjectId(id);
               }}
+              onOpen={openStoredFeature}
             />
           </section>
 
@@ -540,6 +551,7 @@ export default function App() {
               setSelectedPlace(null);
               setGeometry(null);
               setMeasurement(null);
+              setSelectedFeatureId(null);
               setMessage(result.results.length
                 ? 'Found ' + result.results.length + ' mapped features. ' + result.warning
                 : 'No mapped features matched the filter. ' + result.warning);
@@ -581,6 +593,37 @@ export default function App() {
                   <p className="analysis-footnote">{measurement.method}. {measurement.note}</p>
                 </>
               )}
+              {(() => {
+                const temporary = preview ?? (
+                  drawingMode && vertices.length >= 2
+                    ? approximateMeasurement(vertices.length >= 3 && drawingMode !== 'line' && drawingMode !== 'split'
+                      ? { type: 'Polygon', coordinates: [[...vertices, vertices[0]]] }
+                      : { type: 'LineString', coordinates: vertices })
+                    : null
+                );
+                return temporary ? (
+                  <div className="metric preview">
+                    <span>Live estimate · final accuracy after Finish</span>
+                    <strong>{temporary.area_m2 !== null
+                      ? number(temporary.area_m2, 2) + ' m²'
+                      : number(temporary.length_m ?? 0, 2) + ' m'}</strong>
+                  </div>
+                ) : null;
+              })()}
+              {measurement?.area_m2 !== null && measurement?.area_m2 !== undefined && (
+                <div className="area-unit-picker">
+                  <label htmlFor="area-unit">Area unit</label>
+                  <select id="area-unit" value={areaUnit}
+                    onChange={event => setAreaUnit(event.target.value as typeof areaUnit)}>
+                    <option value="m2">Square meters</option>
+                    <option value="ha">Hectares</option>
+                    <option value="km2">Square kilometers</option>
+                    <option value="mu">Mu (亩)</option>
+                  </select>
+                  <strong>{number((measurement.area_m2 ?? 0) /
+                    (areaUnit === 'ha' ? 10000 : areaUnit === 'km2' ? 1000000 : areaUnit === 'mu' ? 2000 / 3 : 1),4)}</strong>
+                </div>
+              )}
               {selectedPlace && <p className="data-source">Data: {selectedPlace.source} · {selectedPlace.boundary_status === 'mapped' ? 'Mapped outline' : 'Coordinates only'}</p>}
               <div className="analysis-actions">
                 <button onClick={exportGeoJSON} disabled={!geometry}><Download size={15} /> Export GeoJSON</button>
@@ -606,6 +649,25 @@ export default function App() {
         <div className="map-wrap">
           <MapCanvas
             selected={geometry} drawingMode={drawingMode} vertices={vertices}
+            editing={editing} moving={moving} snapping={snapping}
+            selectedLocked={selectedLocked}
+            layerFeatures={(projectWorkspace?.features ?? []).map(feature => {
+              const layer = projectWorkspace?.layers.find(item => item.id === feature.layer_id);
+              return {
+                id: feature.id, layer_id: feature.layer_id, geometry: feature.geometry,
+                color: layer?.color ?? '#2563eb', visible: Boolean(layer?.visible),
+                locked: Boolean(layer?.locked),
+              };
+            })}
+            onGeometryPreview={next => {
+              setGeometry(next);
+              setPreview(approximateMeasurement(next));
+            }}
+            onGeometryCommit={next => { void commitGeometry(next); }}
+            onSelectSavedFeature={id => {
+              const feature = projectWorkspace?.features.find(item => item.id === id);
+              if (feature) openStoredFeature(feature);
+            }}
             focus={focus} satellite={satellite}
             imageLayer={imageLayer} traceMode={traceMode}
             onTraceClick={async ([longitude, latitude]) => {
@@ -618,6 +680,11 @@ export default function App() {
                   ...traceSettings,
                 });
                 setGeometry(result.geometry);
+                lastValid.current = structuredClone(result.geometry);
+                timeline.current.push(result.geometry);
+                setHistoryPulse(value => value + 1);
+                setSelectedFeatureId(null);
+                setEditing(false);
                 setMeasurement(result.measurement);
                 setSelectedPlace(null);
                 setCandidates([]);
@@ -648,9 +715,12 @@ export default function App() {
             }}
             discovered={discovered.map(place => place.geometry).filter((item): item is GeoJSON.Geometry => item !== null)}
             onViewportChange={setViewport}
-            onMapClick={position => setVertices(value => [...value, position])}
+            onMapClick={position => {
+              const max = ['rectangle','circle'].includes(drawingMode ?? '') ? 2 : 4000;
+              setVertices(value => value.length >= max ? value : [...value, position]);
+            }}
           />
-          <div className="map-hint"><MousePointer2 size={15} /> {traceMode ? 'Click an object in the imported image to trace it' : drawingMode ? 'Click to add points, then Finish' : 'Pan, zoom, or choose a result'}</div>
+          <div className="map-hint"><MousePointer2 size={15} /> {traceMode ? 'Click imported imagery to trace a region' : drawingMode ? 'Click corners, then Finish' : editing ? 'Drag handles or use Move. Right-click corner to delete.' : 'Pan, zoom, or choose a result'}</div>
           <div className="map-badge"><span className="live-dot" /> WGS84 GEODESIC ENGINE</div>
         </div>
         <div className="bottom-bar">
