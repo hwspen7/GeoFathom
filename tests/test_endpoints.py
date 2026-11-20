@@ -42,7 +42,7 @@ def test_search_and_assistant_with_stubbed_geocoder(monkeypatch) -> None:
         return [record]
 
     monkeypatch.setattr("places.routes.search_places", fake_search)
-    monkeypatch.setattr("intelligence.routes.search_places", fake_search)
+    monkeypatch.setattr("intelligence.agent.search_places", fake_search)
     result = client.get("/search?q=Sample")
     assert result.status_code == 200
     assert result.json()["results"][0]["boundary_status"] == "location_only"

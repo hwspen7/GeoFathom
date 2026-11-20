@@ -11,7 +11,8 @@ import {
 } from './api';
 import MapCanvas, { type FocusPoint } from './MapCanvas';
 import DiscoveryPanel from './DiscoveryPanel';
-import type { DiscoveryResponse } from './api';
+import type { DiscoveryResponse, StoredFeature } from './api';
+import ProjectsPanel from './ProjectsPanel';
 
 type Position = [number, number];
 type DrawingMode = 'polygon' | 'line' | null;
@@ -106,7 +107,7 @@ export default function App() {
     setError('');
     setAssistantQuery(query);
     try {
-      const answer = await interpret(query);
+      const answer = await interpret(query, viewport);
       setModelUsed(answer.model_used);
       setCandidates(answer.results);
       setMessage(answer.message);
@@ -222,7 +223,7 @@ export default function App() {
               <textarea aria-label="Ask the geospatial assistant" placeholder="Measure Shanghai Hongqiao Airport's mapped boundary…" value={prompt}
                 onChange={event => setPrompt(event.target.value)} maxLength={500} rows={3} />
               <div className="prompt-footer">
-                <span>{capabilities?.llm_provider ? 'Model: ' + capabilities.llm_provider : 'Search interpreter'}</span>
+                <span>{capabilities?.llm_provider ? 'Model: ' + (capabilities.llm_model || capabilities.llm_provider) : 'Search interpreter'}</span>
                 <button type="submit" disabled={busy || prompt.trim().length < 2}>
                   <Send size={15} /> Run
                 </button>
@@ -251,6 +252,31 @@ export default function App() {
                 </div>
               </div>
             )}
+          </section>
+
+          <section className="panel-section">
+            <div className="section-heading"><Layers3 size={16} /><span>Projects & saved geometry</span></div>
+            <ProjectsPanel
+              geometry={geometry}
+              featureName={selectedPlace?.name || 'Custom boundary'}
+              featureSource={selectedPlace?.source || 'User drawn'}
+              onOpen={(feature: StoredFeature) => {
+                setGeometry(feature.geometry);
+                setMeasurement(feature.measurement);
+                setSelectedPlace(null);
+                setCandidates([]);
+                setDiscovered([]);
+                setDrawingMode(null);
+                const [west, south, east, north] = feature.measurement.bounds;
+                setFocus({
+                  longitude: (west + east) / 2,
+                  latitude: (south + north) / 2,
+                  bbox: [west, south, east, north],
+                  key: Date.now(),
+                });
+                setMessage('Loaded saved feature: ' + feature.name + ' · ' + feature.source);
+              }}
+            />
           </section>
 
           <section className="panel-section">

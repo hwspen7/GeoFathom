@@ -111,3 +111,16 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .discovery-submit { display: flex; justify-content: center; align-items: center; gap: 8px; border: 0; background: #255db3; color: #fff; border-radius: 9px; padding: 11px 10px; font-size: 12px; font-weight: 700; }
 .discovery-caution { margin: 0; color: #a0aab6; font-size: 10px; line-height: 1.5; }
 .discovery-error { margin: 0; color: #ba4b4b; font-size: 11px; }
+
+.project-panel { display: flex; flex-direction: column; gap: 9px; }
+.project-create { display: flex; border: 1px solid #dfe5ec; border-radius: 9px; overflow: hidden; }
+.project-create input { flex: 1; min-width: 0; padding: 10px 11px; border: 0; outline: 0; font-size: 12px; }
+.project-create button { width: 38px; display: grid; place-items: center; border: 0; color: #315e98; background: #eef4fc; }
+.project-panel select { width: 100%; font-size: 12px; color: #455c75; padding: 9px; border: 1px solid #dee5ef; border-radius: 8px; background: #fff; }
+.project-actions { display: flex; gap: 7px; }
+.project-actions button { flex: 1; display: inline-flex; justify-content: center; align-items: center; gap: 6px; background: #f3f7fc; color: #41618d; border: 1px solid #e1e8f0; border-radius: 8px; padding: 10px; font-size: 11px; font-weight: 700; }
+.project-features { display: flex; flex-direction: column; max-height: 145px; overflow: auto; gap: 4px; }
+.project-features button { display: flex; align-items: center; gap: 8px; text-align: left; border: 1px solid #e6ecf4; background: white; border-radius: 7px; padding: 9px; color: #47617f; font-size: 11px; }
+.project-features button span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.project-hint,.project-info { margin: 0; font-size: 10px; line-height: 1.5; color: #95a1af; }
+.project-info { color: #327b5d; }
