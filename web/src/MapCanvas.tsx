@@ -305,7 +305,10 @@ export default function MapCanvas({
       let snapped: Position | null = null;
       const geoms = pathsOf(state.selected);
       for (const node of edges) {
-        const path = geoms[node.path.ring];
+        const index = state.selected?.type === 'MultiPolygon'
+          ? state.selected.coordinates.slice(0,node.path.polygon).reduce((sum,group) => sum+group.length,0) + node.path.ring
+          : node.path.ring;
+        const path = geoms[index];
         if (!path) continue;
         const first = path[node.path.vertex];
         const next = path[node.path.vertex + 1];

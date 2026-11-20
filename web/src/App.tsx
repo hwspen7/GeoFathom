@@ -12,7 +12,7 @@ import {
 import MapCanvas, { type FocusPoint } from './MapCanvas';
 import SurveyTools from './SurveyTools';
 import {
-  GeometryTimeline, approximateMeasurement, previewEdgeLengths, shiftGeometry, type Position, type ShapeMode,
+  GeometryTimeline, approximateMeasurement, previewEdgeLengths, type Position, type ShapeMode,
 } from './editing';
 import DiscoveryPanel from './DiscoveryPanel';
 import type { DiscoveryResponse, GeoWorkspace, WorkspaceFeature } from './api';
@@ -72,8 +72,8 @@ export default function App() {
   const selectedLocked = Boolean(selectedSaved &&
     projectWorkspace?.layers.find(layer => layer.id === selectedSaved.layer_id)?.locked);
 
-  async function commitGeometry(next: GeoJSON.Geometry, details = 'Geometry updated and validated.') {
-    if (selectedLocked) {
+  async function commitGeometry(next: GeoJSON.Geometry, details = 'Geometry updated and validated.', detached = false) {
+    if (selectedLocked && !detached) {
       setError('Unlock the selected layer before editing geometry.');
       return;
     }
@@ -249,14 +249,19 @@ export default function App() {
 
   function startDrawing(next: Exclude<ShapeMode, null>) {
     const operation = next === 'hole' || next === 'split';
+    if (selectedLocked && operation) { setError('Unlock this layer before changing its geometry.'); return; }
     if (operation && geometry?.type !== 'Polygon' && geometry?.type !== 'MultiPolygon') {
       setError('Select a polygon before cutting a hole or splitting it.');
       return;
     }
     setDrawingMode(next);
     setTraceMode(false);
-    setGeometrySource('User drawn');
-    setFeatureProperties({ source_type: 'user_drawn' });
+    if (!operation) {
+      setGeometrySource('User drawn');
+      setFeatureProperties({ source_type: 'user_drawn' });
+    } else {
+      setFeatureProperties(current => ({ ...current, last_operation: next }));
+    }
     setVertices([]);
     if (!operation) {
       setGeometry(null);
@@ -345,7 +350,7 @@ export default function App() {
       setSelectedFeatureId(null);
       setGeometrySource('Numeric geodesic construction');
       setFeatureProperties({ source_type:'numeric', mode });
-      await commitGeometry(created.geometry,'Precise construction created with PyProj.');
+      await commitGeometry(created.geometry,'Precise construction created with PyProj.',true);
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : 'Numeric construction failed.');
     } finally { setBusy(false); }
@@ -361,7 +366,7 @@ export default function App() {
       setSelectedFeatureId(null);
       setGeometrySource('Spatial overlay · ' + mode);
       setFeatureProperties({ source_type:'spatial_operation', operation:mode });
-      await commitGeometry(result.geometry, 'Spatial ' + mode + ' completed.');
+      await commitGeometry(result.geometry, 'Spatial ' + mode + ' completed.',true);
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : 'Spatial overlay failed.');
     } finally { setBusy(false); }
@@ -494,7 +499,7 @@ export default function App() {
                 if (geometry) {
                   setSelectedFeatureId(null);
                   setGeometrySource('Copied from current geometry');
-                  void commitGeometry(shiftGeometry(geometry,0.00001,0.00001), 'Copied geometry (editable).');
+                  void commitGeometry(structuredClone(geometry), 'Copied geometry. Save as a separate feature.',true);
                 }
               }}
             />
