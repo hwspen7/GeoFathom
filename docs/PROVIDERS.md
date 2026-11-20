@@ -12,8 +12,9 @@ Set these environment variables before launching the API:
 
 Saluki 27B is the preferred local default. Set the exact installed model
 tag as shown by `ollama list`; the example `saluki` is not guaranteed to
-exist on every machine. Other local models including Qwen 9B can be configured
-without changing the application. No weights are included in this repository.
+exist on every machine. For a larger alternative, evaluate Qwen3.5-35B-A3B, rather than maintaining
+an additional small-model configuration. The adapter does not assume any model
+is installed and accepts any compatible server tag. No weights are included in this repository.
 See [Models](MODELS.md) for GGUF and llama.cpp integration.
 
 The intent model performs only bounded classification and place-name extraction. It can select locate or discover operations. The assistant reports that unbounded natural-language area discovery is not available. The separate /discover endpoint supports bounded, explicitly incomplete OpenStreetMap polygon searches.

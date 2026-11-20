@@ -4,6 +4,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import get_settings
+from analysis.routes import router as analysis_router
+from storage.routes import router as storage_router
 from geometry.routes import router as geometry_router
 from geometry.topology import native_available
 from places.routes import router as places_router
@@ -22,6 +24,8 @@ app.add_middleware(
 app.include_router(geometry_router)
 app.include_router(places_router)
 app.include_router(intelligence_router)
+app.include_router(analysis_router)
+app.include_router(storage_router)
 
 
 @app.get("/health")
@@ -41,4 +45,6 @@ def capabilities() -> dict:
         "spatial_discovery": "bounded_osm",
         "imagery": "not configured",
         "native_geometry": native_available(),
+        "persistent_projects": True,
+        "spatial_analysis": ["buffer", "overlay", "compare", "distance"],
     }

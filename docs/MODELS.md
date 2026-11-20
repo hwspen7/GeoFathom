@@ -32,10 +32,11 @@ interpretation without fabricating any locations or measurements.
 
 ## Alternatives
 
-- Existing Qwen 9B: lower latency, smaller resource use, suitable for simple
-  intent normalization when thoroughly tested on local examples.
-- Full-precision or higher-quantized Qwen 27B variants: potentially stronger
-  complex reasoning, but significantly heavier memory and compute usage.
+- Qwen3.5-35B-A3B: larger mixture-of-experts option for complex tool planning.
+  Requires compatible serving, suitable quantization, and sufficient memory.
+  Model source: https://huggingface.co/Qwen/Qwen3.5-35B-A3B
+- Qwen3.5-27B: alternative dense model, depending on hardware budget.
+  Model source: https://huggingface.co/Qwen/Qwen3.5-27B
 - Any future tool-capable model: implement IntentProvider or configure an
   OpenAI-compatible endpoint, while keeping the API independent of weights.
 

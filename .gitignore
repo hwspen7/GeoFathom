@@ -33,3 +33,9 @@ build/
 *.dll
 *.pyd
 *.exe
+
+# Local project databases
+data/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
