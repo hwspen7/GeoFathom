@@ -174,9 +174,9 @@ def workspace(project_id):
 def update_feature(project_id,feature_id,geometry=None,name=None,properties=None,
                    layer_id=None,expected_revision=None):
     with _connect() as c:
+        _schema(c)
         c.execute("BEGIN IMMEDIATE")
         _required_project(c,project_id)
-        _schema(c)
         original=_feature(c,project_id,feature_id)
         existing_layer=_feature_layer(c,project_id,feature_id)
         target_layer=_layer(c,project_id,layer_id) if layer_id else existing_layer
