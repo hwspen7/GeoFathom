@@ -19,7 +19,7 @@ app.add_middleware(
     allow_origins=list(settings.cors_origins),
     allow_credentials=False,
     allow_methods=["GET", "POST"],
-    allow_headers=["Content-Type"],
+    allow_headers=["Content-Type", "X-GeoFathom-Admin-Token"],
 )
 app.include_router(geometry_router)
 app.include_router(places_router)

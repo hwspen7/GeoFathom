@@ -17,6 +17,7 @@ from places.discovery import DiscoveryError, discover_features
 from places.geocoding import search_places
 from .intent import fallback_intent
 from .llm import get_provider
+from .catalog import model_spec, provider_for_spec
 
 logger = logging.getLogger("geofathom.agent")
 
@@ -74,18 +75,22 @@ async def execute(
     message: str, settings: Settings,
     bbox: tuple[float, float, float, float] | None = None,
     profile: Literal["default", "analysis"] = "default",
+    model_id: str | None = None,
 ) -> dict[str, Any]:
     """Execute a small, auditable set of verified geographic operations."""
     intent = fallback_intent(message)
     model_used = False
     steps = []
-    provider = get_provider(settings, profile)
-    if profile == "analysis" and provider is None:
+    provider = (
+        provider_for_spec(model_spec(model_id), settings)
+        if model_id else get_provider(settings, profile)
+    )
+    if (model_id is not None or profile == "analysis") and provider is None:
         return {
             "intent": intent, "model_used": False, "results": [],
             "measurement": None, "steps": [],
             "status": "not_supported",
-            "message": "The advanced model is not configured. Set GEOFATHOM_ANALYSIS_MODEL first.",
+            "message": "The selected model is not configured. Check its API key, endpoint or enabled status.",
         }
     if provider:
         try:
@@ -93,7 +98,7 @@ async def execute(
             if parsed["query"]:
                 intent = parsed
                 model_used = True
-                steps.append(_trace("model_intent", "ok", profile))
+                steps.append(_trace("model_intent", "ok", model_id or profile))
         except (httpx.HTTPError, KeyError, ValueError, TypeError) as error:
             logger.warning("Model unavailable; using deterministic parser: %s", error)
             steps.append(_trace("model_intent", "fallback", "Deterministic interpretation"))

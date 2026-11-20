@@ -16,6 +16,7 @@ import httpx
 
 from core.config import get_settings
 from .llm import get_provider
+from .catalog import model_spec, provider_for_spec
 
 
 @dataclass(frozen=True)
@@ -43,12 +44,13 @@ def _matches(case: Case, result: dict) -> bool:
     return case.expected_name.casefold() in result["query"].casefold()
 
 
-async def evaluate(profile: Literal["default", "analysis"], max_cases: int = 6) -> dict:
+async def evaluate(profile: Literal["default", "analysis"], max_cases: int = 6, model_id: str | None = None) -> dict:
     """Run a fixed, non-private suite and return numeric correctness evidence."""
     if not 1 <= max_cases <= len(CASES):
         raise ValueError("max_cases must be between 1 and 6")
     settings = get_settings()
-    provider = get_provider(settings, profile)
+    provider = (provider_for_spec(model_spec(model_id), settings)
+                if model_id else get_provider(settings, profile))
     if provider is None:
         return {
             "status": "not_configured",
@@ -88,7 +90,8 @@ async def evaluate(profile: Literal["default", "analysis"], max_cases: int = 6) 
     return {
         "status": "complete",
         "profile": profile,
-        "model": settings.llm_model if profile == "default" else settings.analysis_model,
+        "model": model_spec(model_id).model if model_id else (
+            settings.llm_model if profile == "default" else settings.analysis_model),
         "cases": reports,
         "passed": count,
         "total": len(reports),
@@ -101,8 +104,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Evaluate configured geospatial AI provider on synthetic prompts.")
     parser.add_argument("--profile", choices=("default", "analysis"), default="default")
     parser.add_argument("--max-cases", type=int, default=6)
+    parser.add_argument("--model-id", default=None, help="Run any model from the user catalog.")
     args = parser.parse_args()
-    print(json.dumps(asyncio.run(evaluate(args.profile, args.max_cases)), indent=2))
+    print(json.dumps(asyncio.run(evaluate(args.profile, args.max_cases, args.model_id)), indent=2))
 
 
 if __name__ == "__main__":
