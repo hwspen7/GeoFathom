@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from .editing import construct, validate, snap, simplify, polygon_split, polygon_hole, move
+from .tracing import trace_along
 from .measure import GeometryError
 
 router = APIRouter(prefix="/edit", tags=["geometry-editor"])
@@ -85,3 +86,16 @@ def hole_geometry(body: PairBody) -> dict:
 @router.post("/move")
 def move_geometry(body: MoveBody) -> dict:
     return checked(lambda: move(body.geometry,body.bearing_deg,body.distance_m))
+
+
+
+class TraceBody(BaseModel):
+    start: list[float] = Field(min_length=2,max_length=2)
+    end: list[float] = Field(min_length=2,max_length=2)
+    paths: list[list[list[float]]] = Field(min_length=1,max_length=300)
+    tolerance_m: float = Field(default=30,gt=0,le=200)
+
+
+@router.post("/trace")
+def trace_existing_network(body:TraceBody)->dict:
+    return checked(lambda: trace_along(body.start,body.end,body.paths,body.tolerance_m))
