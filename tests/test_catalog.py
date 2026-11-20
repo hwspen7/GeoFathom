@@ -155,3 +155,17 @@ def test_disabled_model_cannot_be_selected():
     save_spec(spec)
     with pytest.raises(CatalogError):
         select_default("disabled-example")
+
+
+def test_browser_cors_allows_admin_configuration():
+    response = client.options(
+        "/models/catalog/custom-test",
+        headers={
+            "Origin": "http://localhost:5173",
+            "Access-Control-Request-Method": "PUT",
+            "Access-Control-Request-Headers": "x-geofathom-admin-token,content-type",
+        },
+    )
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "http://localhost:5173"
+    assert "PUT" in response.headers["access-control-allow-methods"]
