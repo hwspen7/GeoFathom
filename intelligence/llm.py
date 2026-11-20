@@ -53,18 +53,24 @@ class OpenAICompatibleProvider:
         headers = {}
         if self.settings.openai_api_key:
             headers["Authorization"] = f"Bearer {self.settings.openai_api_key}"
-        async with httpx.AsyncClient(timeout=40) as client:
+        payload = {
+            "model": self.settings.llm_model,
+            "messages": [
+                {"role": "system", "content": _SYSTEM},
+                {"role": "user", "content": message},
+            ],
+            "temperature": 0,
+        }
+        if self.settings.llm_provider == "groq":
+            # Groq GPT-OSS supports JSON object mode and constrained output.
+            payload["response_format"] = {"type": "json_object"}
+            payload["max_completion_tokens"] = 1024
+            payload["reasoning_effort"] = "low"
+        async with httpx.AsyncClient(timeout=40, follow_redirects=False) as client:
             response = await client.post(
                 f"{self.settings.openai_base_url}/chat/completions",
                 headers=headers,
-                json={
-                    "model": self.settings.llm_model,
-                    "messages": [
-                        {"role": "system", "content": _SYSTEM},
-                        {"role": "user", "content": message},
-                    ],
-                    "temperature": 0,
-                },
+                json=payload,
             )
             response.raise_for_status()
             return _decode(response.json()["choices"][0]["message"]["content"])
@@ -105,4 +111,20 @@ def get_provider(settings: Settings, profile: Literal['default', 'analysis'] = '
         return OllamaProvider(settings)
     if settings.llm_provider == "openai-compatible":
         return OpenAICompatibleProvider(settings)
+    if settings.llm_provider == "groq":
+        if not settings.groq_api_key:
+            return None
+        return OpenAICompatibleProvider(replace(
+            settings,
+            openai_base_url="https://api.groq.com/openai/v1",
+            openai_api_key=settings.groq_api_key,
+        ))
+    if settings.llm_provider == "gemini":
+        if not settings.gemini_api_key:
+            return None
+        return OpenAICompatibleProvider(replace(
+            settings,
+            openai_base_url="https://generativelanguage.googleapis.com/v1beta/openai",
+            openai_api_key=settings.gemini_api_key,
+        ))
     return None
