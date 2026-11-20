@@ -15,8 +15,8 @@ class Settings:
     nominatim_url: str = "https://nominatim.openstreetmap.org"
     overpass_url: str = "https://overpass-api.de/api/interpreter"
     cors_origins: tuple[str, ...] = ("http://localhost:5173",)
-    llm_provider: str = "none"
-    llm_model: str = ""
+    llm_provider: str = "ollama"
+    llm_model: str = "saluki"
     ollama_url: str = "http://localhost:11434"
     openai_base_url: str = "http://localhost:8001/v1"
     openai_api_key: str = ""
@@ -31,8 +31,8 @@ def get_settings() -> Settings:
         ).rstrip("/"),
         overpass_url=os.getenv("GEOFATHOM_OVERPASS_URL", "https://overpass-api.de/api/interpreter").rstrip("/"),
         cors_origins=tuple(part.strip() for part in origins.split(",") if part.strip()),
-        llm_provider=os.getenv("GEOFATHOM_LLM_PROVIDER", "none").lower(),
-        llm_model=os.getenv("GEOFATHOM_LLM_MODEL", ""),
+        llm_provider=os.getenv("GEOFATHOM_LLM_PROVIDER", "ollama").lower(),
+        llm_model=os.getenv("GEOFATHOM_LLM_MODEL", "saluki"),
         ollama_url=os.getenv("GEOFATHOM_OLLAMA_URL", "http://localhost:11434").rstrip("/"),
         openai_base_url=os.getenv(
             "GEOFATHOM_OPENAI_BASE_URL", "http://localhost:8001/v1"

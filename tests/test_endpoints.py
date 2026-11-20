@@ -41,7 +41,8 @@ def test_search_and_assistant_with_stubbed_geocoder(monkeypatch) -> None:
     async def fake_search(query, settings, limit=5):
         return [record]
 
-    monkeypatch.setattr("core.main.search_places", fake_search)
+    monkeypatch.setattr("places.routes.search_places", fake_search)
+    monkeypatch.setattr("intelligence.routes.search_places", fake_search)
     result = client.get("/search?q=Sample")
     assert result.status_code == 200
     assert result.json()["results"][0]["boundary_status"] == "location_only"
@@ -49,7 +50,7 @@ def test_search_and_assistant_with_stubbed_geocoder(monkeypatch) -> None:
     answer = client.post("/assistant", json={"message": "Find Sample"})
     assert answer.status_code == 200
     assert answer.json()["measurement"] is None
-    assert "no usable mapped boundary" in answer.json()["message"]
+    assert "without a usable mapped boundary" in answer.json()["message"]
 
 
 def test_spatial_discovery_does_not_fabricate_results() -> None:
