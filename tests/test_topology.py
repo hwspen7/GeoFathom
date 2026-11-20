@@ -42,3 +42,26 @@ def test_invalid_input_is_rejected():
 
 def test_native_capability_is_explicit():
     assert isinstance(native_available(), bool)
+
+import os
+from fastapi.testclient import TestClient
+from core.main import app
+
+
+def test_spatial_api_contains_and_bbox():
+    client = TestClient(app)
+    result = client.post(
+        "/spatial/contains",
+        json={"geometry": square(), "longitude": 1, "latitude": 1},
+    )
+    assert result.status_code == 200
+    assert result.json()["inside"] is True
+    assert client.post(
+        "/spatial/bbox-overlap",
+        json={"first": [0, 0, 1, 1], "second": [2, 2, 3, 3]},
+    ).json()["overlaps"] is False
+
+
+def test_native_is_loaded_in_compiled_ci():
+    if os.getenv("GEOFATHOM_REQUIRE_NATIVE") == "1":
+        assert native_available()

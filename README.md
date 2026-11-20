@@ -2,6 +2,16 @@
 
 **GeoFathom** is an extensible, local-first geospatial intelligence workspace. Search for places, examine authoritative or openly mapped geometries, draw and measure boundaries, and let an optional local language model coordinate searches. The platform is designed to grow into imagery segmentation, spatial discovery, terrain analysis, and change detection without binding its core to a single AI provider.
 
+## Runtime choices
+
+Default AI model: **locally served Saluki 27B** with provider `ollama` and
+a configurable model tag. The model is optional: geography, geometry and
+spatial discovery work without inference. See [Models](docs/MODELS.md).
+
+GeoFathom uses **Python for orchestration, GIS analysis and provider adapters**
+and **C++17 for optional performance-sensitive geometric topology**. The
+native module has a correctness-preserving Shapely/Python fallback.
+
 ## What works
 
 - Search geographic places through OpenStreetMap Nominatim, with source attribution and honest boundary availability.
@@ -11,6 +21,7 @@
 - Draw, edit by restarting a drawing, measure, and export polygons as GeoJSON.
 - Interpret natural-language location requests using an optional Ollama or OpenAI-compatible local model.
 - Run without an LLM: direct place search, bounded spatial discovery, and polygon measurement remain available.
+- Optional C++ native topology engine for point containment and bounding box overlap with Python fallbacks.
 - Discover service capabilities and health via explicit API endpoints.
 
 **Not yet implemented:** automated satellite-image segmentation, verified land ownership or zoning, unbounded global parcel discovery, and guaranteed precision for missing boundaries. A vision-provider contract exposes this limitation rather than fabricating results.
@@ -46,11 +57,25 @@ export GEOFATHOM_LLM_MODEL=qwen3.5:9b
 
 The model name must match the one actually installed in Ollama. Without a configured model, the interface uses safe deterministic search interpretation, not an imaginary AI response.
 
+## Compile the C++ geometry engine (optional)
+
+From the repository root:
+
+```powershell
+cmake -S . -B build/native
+cmake --build build/native --config Release
+ctest --test-dir build/native --build-config Release --output-on-failure
+```
+
+Python automatically uses the compiled library when available, otherwise it
+uses Shapely/Python. Geodesic area continues to use PyProj regardless of native
+availability.
+
 ## Project layout
 
 ```text
 core/             Service assembly and configuration
-geometry/         Geodesic and spatial calculations
+geometry/         Python geodesics, topology and C++ native kernels
 places/           Geographic search and feature discovery
 intelligence/     Interchangeable AI providers and intent processing
 tests/            Automated service and geometry tests

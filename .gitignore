@@ -25,3 +25,11 @@ dist/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Native build artifacts
+build/
+*.so
+*.dylib
+*.dll
+*.pyd
+*.exe

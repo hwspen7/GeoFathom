@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .config import get_settings
 from geometry.routes import router as geometry_router
+from geometry.topology import native_available
 from places.routes import router as places_router
 from intelligence.routes import router as intelligence_router
 from intelligence.llm import get_provider
@@ -39,5 +40,5 @@ def capabilities() -> dict:
         "vision_segmentation": False,
         "spatial_discovery": "bounded_osm",
         "imagery": "not configured",
-        "native_geometry": False,
+        "native_geometry": native_available(),
     }
