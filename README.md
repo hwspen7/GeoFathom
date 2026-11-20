@@ -4,12 +4,11 @@
 
 ## Runtime choices
 
-Default AI model: **Groq-hosted GPT-OSS 120B** on a rate-limited free API tier.
-Optional second model: **Gemini 3.8 Flash** with a separate free API allowance.
-No large cloud model weights run on your local GPU; the local RTX 4070 Ti SUPER
-can focus on geospatial/CV processing. Both providers require user-owned API
-keys. Saluki 27B remains an optional local alternative via Ollama.
-See [model setup](docs/MODELS.md).
+Three **editable example presets** are provided: local Saluki 27B (selected by
+default), Groq GPT-OSS 120B and Gemini 3.8 Flash. They are not a model
+whitelist or fixed deployment plan. Users can add, modify and select any
+compatible Ollama or OpenAI-compatible local/cloud model in the web UI,
+using a server-side model catalog. See [model configuration](docs/MODEL_CONFIGURATION.md).
 
 GeoFathom uses **Python for orchestration, GIS analysis and provider adapters**
 and **C++17 for optional performance-sensitive geometric topology**. The
@@ -22,7 +21,8 @@ native module has a correctness-preserving Shapely/Python fallback.
 - Display map results and candidate locations on an interactive map.
 - Calculate geodesic area, perimeter, and length from GeoJSON using PyProj and Shapely.
 - Draw, edit by restarting a drawing, measure, and export polygons as GeoJSON.
-- Execute geographically grounded natural-language tasks using GPT-OSS 120B, Gemini 3.8 Flash, or a configured local model, with explicit tool traces and viewport constraints.
+- Configure, add, edit and select local or cloud models through the workspace's model manager, without changing application code.
+- Execute geographically grounded natural-language tasks using the selected model, with explicit tool traces and viewport constraints.
 - Persist projects and GeoJSON features in local SQLite storage and reload them between sessions.
 - Run metric buffers, polygon overlays, area comparisons and WGS84 distance analyses through FastAPI.
 - Run without an LLM: direct place search, bounded spatial discovery, and polygon measurement remain available.
@@ -52,34 +52,33 @@ npm run dev
 
 Open http://localhost:5173. API docs are available at http://localhost:8000/docs.
 
-## Configure free cloud model APIs
+## Configure models (local or cloud)
 
-Copy `.env.example` to `.env` at repository root and set your own keys:
+Copy `.env.example` to `.env` at repository root. Model configuration editing
+requires a local administrator token, which is never committed to Git:
 
 ```ini
-GEOFATHOM_LLM_PROVIDER=groq
-GEOFATHOM_LLM_MODEL=openai/gpt-oss-120b
-GEOFATHOM_GROQ_API_KEY=your-groq-api-key
-
-GEOFATHOM_ANALYSIS_PROVIDER=gemini
-GEOFATHOM_ANALYSIS_MODEL=gemini-3.8-flash
-GEOFATHOM_GEMINI_API_KEY=your-gemini-api-key
+GEOFATHOM_MODEL_ADMIN_TOKEN=choose-a-long-random-token
+GEOFATHOM_GROQ_API_KEY=
+GEOFATHOM_GEMINI_API_KEY=
+# Example for any additional API provider:
+GEOFATHOM_MODEL_KEY_MY_PROVIDER=
 ```
 
-Create keys using [GroqCloud](https://console.groq.com/keys) and
-[Google AI Studio](https://aistudio.google.com/api-keys).
-No billing upgrade is required to attempt requests within each provider's
-available free-tier limits. Limits, model availability and data policies may
-change; review them in your own dashboard.
+In the web workspace, open **Ask GeoFathom → Manage models**. Enter the
+administrator token, then add/edit local or cloud models, choose a model,
+test the connection, and set a new default. Model names, tags and endpoints
+persist to `data/model-catalog.json` by default. Model secrets are not stored
+in this file, transmitted from the browser, or committed to Git.
 
-Never commit `.env`, put keys in the web frontend, or send secrets in support
-messages. When keys are absent, GeoFathom still provides non-AI GIS tools.
-`GET /models` reports configuration and `POST /models/probe` makes a small
-real API call to confirm access without contacting the geocoder.
-The web UI has a **Test API** control for this probe.
+Add remote API keys to the named variables in the server's `.env` and restart
+FastAPI. For local Ollama models, no API key is required. Both built-in cloud
+presets are optional and subject to their provider's free-tier constraints.
+See [Model configuration](docs/MODEL_CONFIGURATION.md) and
+[Models](docs/MODELS.md) for examples.
 
-For local inference instead, configure `GEOFATHOM_LLM_PROVIDER=ollama`
-and use the exact model tag installed on your machine. See [Models](docs/MODELS.md).
+The web UI's **Test API** uses `POST /models/probe`, which performs a real
+small model call. Plain GIS operations work even when no model is online.
 
 ### Windows PowerShell
 

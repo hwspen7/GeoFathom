@@ -1,10 +1,14 @@
 # Model providers and free API testing
 
-GeoFathom uses two independent AI profiles while retaining replaceable provider
-adapters. The language model interprets and plans a limited set of geographic
+GeoFathom includes a user-managed model catalog. The three presets (local
+Saluki 27B, Groq GPT-OSS 120B and Gemini 3.8 Flash) are editable examples,
+not a fixed set. The legacy two-profile API remains for compatibility but
+the web UI selects models by their persistent model IDs. New local and cloud
+models can be added through the web model manager. See
+[Model configuration](MODEL_CONFIGURATION.md). The language model interprets and plans a limited set of geographic
 actions. It does not provide authoritative geospatial coordinates or areas.
 
-## Default: GPT-OSS 120B via GroqCloud
+## Cloud preset: GPT-OSS 120B via GroqCloud
 
 - Provider key: `groq`
 - Model ID: `openai/gpt-oss-120b`
@@ -22,7 +26,7 @@ Sources:
 - https://console.groq.com/docs/tool-use/overview
 - https://console.groq.com/docs/openai
 
-## Second profile: Gemini 3.8 Flash via Google AI Studio
+## Cloud preset: Gemini 3.8 Flash via Google AI Studio
 
 - Provider key: `gemini`
 - Model ID: `gemini-3.8-flash`
@@ -42,11 +46,12 @@ Gemini's image understanding is not a pixel-accurate, geographically referenced
 segmentation engine. Reliable satellite tracing still requires licensed imagery
 and a dedicated CV and GIS pipeline.
 
-## Local model fallback
+## Local preset: Saluki 27B and other Ollama models
 
 If free-cloud quotas are exhausted or remote inference is inappropriate,
 configure your own Ollama or OpenAI-compatible local server.
-Saluki 27B can remain a local fallback, but it is **not** the default model.
+Saluki 27B is the initial selected model, but users may choose any other
+compatible local or cloud model and persist that preference.
 No weights or inference servers are installed by this repository.
 
 Example:
@@ -64,9 +69,11 @@ vision model depend on resolution, batch size, model checkpoint and precision.
 1. Copy `.env.example` to `.env` and set only the API keys you need.
 2. Start `uvicorn core.main:app --reload` from the repository root.
 3. Open `http://localhost:8000/docs` and call `GET /models`.
-4. Call `POST /models/probe` with `{"profile":"default"}` for Groq,
-   or `{"profile":"analysis"}` for Gemini.
-5. The endpoint returns `status=ready` only after a real API request gives
+4. Call `GET /models/catalog` for the editable model directory.
+5. Call `POST /models/probe` with `{"model_id":"local-saluki"}`,
+   `{"model_id":"cloud-groq"}` or `{"model_id":"cloud-gemini"}`.
+   You can also test any custom catalog model by its ID.
+6. The endpoint returns `status=ready` only after a real API request gives
    a valid geographic-intent JSON response. `configured=true` merely means
    credentials are present and is not a successful connectivity check.
 
