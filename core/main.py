@@ -8,6 +8,7 @@ from analysis.routes import router as analysis_router
 from storage.routes import router as storage_router
 from storage.workspace_routes import router as workspace_router
 from storage.topology_routes import router as topology_router
+from storage.attribute_routes import router as attribute_router
 from imagery.routes import router as imagery_router
 from vision.routes import router as vision_router
 from geometry.routes import router as geometry_router
@@ -34,6 +35,7 @@ app.include_router(analysis_router)
 app.include_router(storage_router)
 app.include_router(workspace_router)
 app.include_router(topology_router)
+app.include_router(attribute_router)
 app.include_router(imagery_router)
 app.include_router(vision_router)
 
