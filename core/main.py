@@ -9,6 +9,7 @@ from storage.routes import router as storage_router
 from imagery.routes import router as imagery_router
 from vision.routes import router as vision_router
 from geometry.routes import router as geometry_router
+from geometry.edit_routes import router as edit_router
 from geometry.topology import native_available
 from places.routes import router as places_router
 from intelligence.routes import router as intelligence_router
@@ -24,6 +25,7 @@ app.add_middleware(
     allow_headers=["Content-Type", "X-GeoFathom-Admin-Token"],
 )
 app.include_router(geometry_router)
+app.include_router(edit_router)
 app.include_router(places_router)
 app.include_router(intelligence_router)
 app.include_router(analysis_router)
