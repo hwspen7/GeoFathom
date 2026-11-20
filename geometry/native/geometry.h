@@ -32,3 +32,18 @@ extern "C" GEOFATHOM_API int gf_seeded_rgb_region(
     const unsigned char* rgb,
     int width, int height, int seed_x, int seed_y,
     int tolerance, unsigned char* out_mask) noexcept;
+
+
+// Native geometry editing kernels use a local projected XY metric coordinate
+// system, not longitude/latitude degrees. These functions never allocate memory
+// owned by the caller. A result of -1 means invalid input.
+extern "C" {
+GEOFATHOM_API int gf_snap_point(
+    const double* xy, std::size_t point_count, int closed,
+    double x, double y, double tolerance_m, double* out_xyz) noexcept;
+GEOFATHOM_API int gf_ring_self_intersects(
+    const double* xy, std::size_t point_count) noexcept;
+GEOFATHOM_API int gf_simplify_line(
+    const double* xy, std::size_t point_count, double tolerance_m,
+    std::size_t* out_indices) noexcept;
+}
