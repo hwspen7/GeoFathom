@@ -4,6 +4,11 @@ GeoFathom should remain a general geospatial intelligence environment.
 
 ## Supported foundation
 
+- MapLibre editable vertices, move, midpoint insertion/deletion, snapping and undo/redo
+- Rectangle/circle, polygon holes and splitting, boolean overlay, numeric coordinates
+- Persistent project layers with colors, visibility, locks, duplication and geometry revisions
+- Additional C++ performance kernels for snapping, topology and path simplification
+
 - Georeferenced GeoTIFF import, MapLibre image overlays and local imagery catalog
 - C++ seeded-color mask tracing with deterministic Python fallback
 - Optional SAM 2 promptable image segmentation with explicit installation

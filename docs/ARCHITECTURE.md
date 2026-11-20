@@ -18,6 +18,8 @@ GeoFathom is a geospatial platform rather than a model-specific demo or an airpo
 - `core/`: FastAPI application assembly and environment configuration.
 - `places/`: geocoding, bounded object search and related API routes.
 - `analysis/`: local metric buffers, polygon overlays and geodesic comparisons.
+- `geometry/editing.py`: precision vertex/snapping/shape construction with native kernels.
+- `storage/workspace.py`: GIS layers, geometric revision history and optimistic edits.
 - `imagery/`: GeoTIFF library, bounded raster reads, STAC metadata search.
 - `vision/`: raster mask prediction, polygonization and optional SAM 2 adapter.
 - `storage/`: transactional SQLite projects, geometry persistence, feature import/export.

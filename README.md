@@ -14,6 +14,16 @@ GeoFathom uses **Python for orchestration, GIS analysis and provider adapters**
 and **C++17 for optional performance-sensitive geometric topology**. The
 native module has a correctness-preserving Shapely/Python fallback.
 
+## Interactive precision surveying and editing
+
+The map now supports editable vertices, segment midpoint insertion, polygon
+movement, snapping, live approximate measurements, authoritative WGS84
+area/perimeter/distance, rectangles, geodesic circles, holes, polygon splits,
+boolean overlays, precise coordinate construction, multi-layer projects and
+versioned edits. The computational kernels are shared by Python + C++.
+See [Survey editor](docs/EDITOR.md) for controls, tested capabilities and
+limits.
+
 ## Georeferenced imagery and automatic outlines
 
 GeoFathom can now import a locally provided GeoTIFF, display the correctly
