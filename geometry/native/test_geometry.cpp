@@ -97,4 +97,4 @@ int main() {
     assert(terrain[2]==64);
     assert(gf_dem_gradient(nullptr,coverage.data(),10,10,10,10,terrain)==-1);
     return 0;
-
+}
