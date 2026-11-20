@@ -1,8 +1,8 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import {
-  ArrowRight, Check, Compass, Download, Globe2, Layers3, MapPin,
-  MousePointer2, Pencil, RotateCcw, Ruler, Search, Send, Sparkles,
-  Undo2, Wifi, WifiOff,
+  ArrowRight, Compass, Download, Globe2, Layers3, MapPin,
+  MousePointer2, Pencil, RotateCcw, Search, Send, Sparkles,
+  Wifi, WifiOff,
 } from 'lucide-react';
 
 import {
@@ -10,15 +10,18 @@ import {
   type Capabilities, type Measurement, type Place,
 } from './api';
 import MapCanvas, { type FocusPoint } from './MapCanvas';
+import SurveyTools from './SurveyTools';
+import {
+  GeometryTimeline, approximateMeasurement, shiftGeometry, type Position, type ShapeMode,
+} from './editing';
 import DiscoveryPanel from './DiscoveryPanel';
-import type { DiscoveryResponse, StoredFeature } from './api';
+import type { DiscoveryResponse, GeoWorkspace, WorkspaceFeature } from './api';
 import ProjectsPanel from './ProjectsPanel';
 import ModelControls from './ModelControls';
 import RasterPanel, { type TraceSettings } from './RasterPanel';
-import { traceImagery, type RasterAsset } from './api';
-
-type Position = [number, number];
-type DrawingMode = 'polygon' | 'line' | null;
+import {
+  applyOverlay, constructGeometry, editPair, traceImagery, type RasterAsset,
+} from './api';
 
 const number = (value: number, digits = 2) =>
   new Intl.NumberFormat('en-US', { maximumFractionDigits: digits }).format(value);
@@ -30,7 +33,7 @@ export default function App() {
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
   const [geometry, setGeometry] = useState<GeoJSON.Geometry | null>(null);
   const [measurement, setMeasurement] = useState<Measurement | null>(null);
-  const [drawingMode, setDrawingMode] = useState<DrawingMode>(null);
+  const [drawingMode, setDrawingMode] = useState<ShapeMode>(null);
   const [vertices, setVertices] = useState<Position[]>([]);
   const [viewport, setViewport] = useState<[number, number, number, number] | null>(null);
   const [discovered, setDiscovered] = useState<Place[]>([]);
@@ -51,6 +54,97 @@ export default function App() {
   });
   const [geometrySource, setGeometrySource] = useState('');
   const [featureProperties, setFeatureProperties] = useState<Record<string, unknown>>({});
+  const [editing, setEditing] = useState(false);
+  const [moving, setMoving] = useState(false);
+  const [snapping, setSnapping] = useState(true);
+  const [projectWorkspace, setProjectWorkspace] = useState<GeoWorkspace | null>(null);
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+  const [selectedFeatureId, setSelectedFeatureId] = useState<string | null>(null);
+  const [splitParts, setSplitParts] = useState<GeoJSON.Geometry[]>([]);
+  const [refreshToken, setRefreshToken] = useState(0);
+  const [preview, setPreview] = useState<ReturnType<typeof approximateMeasurement> | null>(null);
+  const [areaUnit, setAreaUnit] = useState<'m2' | 'ha' | 'km2' | 'mu'>('m2');
+  const timeline = useRef(new GeometryTimeline());
+  const lastValid = useRef<GeoJSON.Geometry | null>(null);
+  const [historyPulse, setHistoryPulse] = useState(0);
+
+  const selectedSaved = projectWorkspace?.features.find(item => item.id === selectedFeatureId);
+  const selectedLocked = Boolean(selectedSaved &&
+    projectWorkspace?.layers.find(layer => layer.id === selectedSaved.layer_id)?.locked);
+
+  async function commitGeometry(next: GeoJSON.Geometry, details = 'Geometry updated and validated.') {
+    if (selectedLocked) {
+      setError('Unlock the selected layer before editing geometry.');
+      return;
+    }
+    try {
+      const checked = await measureGeometry(next);
+      setGeometry(next);
+      setMeasurement(checked);
+      setPreview(null);
+      lastValid.current = structuredClone(next);
+      timeline.current.push(next);
+      setHistoryPulse(value => value + 1);
+      setError('');
+      setMessage(details);
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : 'Invalid geometry.');
+      setGeometry(lastValid.current);
+      setPreview(null);
+    }
+  }
+
+  function applyHistory(next: GeoJSON.Geometry | null) {
+    setGeometry(next);
+    lastValid.current = next ? structuredClone(next) : null;
+    setPreview(null);
+    setHistoryPulse(value => value + 1);
+    if (next) void measureGeometry(next).then(setMeasurement).catch(() => setMeasurement(null));
+    else setMeasurement(null);
+  }
+
+  function openStoredFeature(feature: WorkspaceFeature) {
+    setGeometry(feature.geometry);
+    lastValid.current = structuredClone(feature.geometry);
+    timeline.current.push(feature.geometry);
+    setHistoryPulse(value => value + 1);
+    setMeasurement(feature.measurement);
+    setFeatureProperties(feature.properties);
+    setGeometrySource(feature.source);
+    setSelectedFeatureId(feature.id);
+    setSelectedPlace(null);
+    setCandidates([]);
+    setDiscovered([]);
+    setSplitParts([]);
+    setDrawingMode(null);
+    setEditing(false);
+    setMoving(false);
+    const [west, south, east, north] = feature.measurement.bounds;
+    setFocus({
+      longitude: (west + east) / 2, latitude: (south + north) / 2,
+      bbox: [west, south, east, north], key: Date.now(),
+    });
+    setMessage('Loaded feature: ' + feature.name + ' · revision ' + feature.revision);
+  }
+
+  useEffect(() => {
+    function keydown(event: KeyboardEvent) {
+      if (event.target instanceof HTMLInputElement ||
+          event.target instanceof HTMLTextAreaElement ||
+          event.target instanceof HTMLSelectElement) return;
+      if (!(event.ctrlKey || event.metaKey)) return;
+      if (event.key.toLowerCase() === 'z') {
+        event.preventDefault();
+        applyHistory(event.shiftKey ? timeline.current.redo() : timeline.current.undo());
+      } else if (event.key.toLowerCase() === 'y') {
+        event.preventDefault();
+        applyHistory(timeline.current.redo());
+      }
+    }
+    window.addEventListener('keydown', keydown);
+    return () => window.removeEventListener('keydown', keydown);
+  }, []);
+
 
   const satelliteAvailable = Boolean(import.meta.env.VITE_SATELLITE_TILES_URL);
 
@@ -60,6 +154,10 @@ export default function App() {
 
   async function selectPlace(place: Place) {
     setSelectedPlace(place);
+    setSelectedFeatureId(null);
+    setEditing(false);
+    setMoving(false);
+    setSplitParts([]);
     setDrawingMode(null);
     setTraceMode(false);
     setVertices([]);
@@ -70,6 +168,11 @@ export default function App() {
       },
     );
     setMeasurement(null);
+    if (place.geometry) {
+      lastValid.current = structuredClone(place.geometry);
+      timeline.current.push(place.geometry);
+      setHistoryPulse(value => value + 1);
+    }
     setGeometrySource(place.source);
     setFeatureProperties({ source_type: 'mapped_openstreetmap', osm_id: place.osm_id, osm_type: place.osm_type });
     setFocus({
@@ -144,48 +247,137 @@ export default function App() {
     }
   }
 
-  function startDrawing(next: Exclude<DrawingMode, null>) {
+  function startDrawing(next: Exclude<ShapeMode, null>) {
+    const operation = next === 'hole' || next === 'split';
+    if (operation && geometry?.type !== 'Polygon' && geometry?.type !== 'MultiPolygon') {
+      setError('Select a polygon before cutting a hole or splitting it.');
+      return;
+    }
     setDrawingMode(next);
     setTraceMode(false);
     setGeometrySource('User drawn');
     setFeatureProperties({ source_type: 'user_drawn' });
     setVertices([]);
-    setGeometry(null);
+    if (!operation) {
+      setGeometry(null);
+      setSelectedFeatureId(null);
+      setMeasurement(null);
+      setSplitParts([]);
+    }
+    setEditing(false);
+    setMoving(false);
     setSelectedPlace(null);
-    setMeasurement(null);
     setCandidates([]);
     setDiscovered([]);
     setError('');
-    setMessage(next === 'polygon'
-      ? 'Click at least three corners on the map, then finish the polygon.'
-      : 'Click at least two points to trace a line, then finish.');
+    setMessage(['polygon', 'hole'].includes(next)
+      ? 'Click at least three corners, then Finish.'
+      : 'Click two or more points to define the geometry, then Finish.');
   }
 
   async function finishDrawing() {
     if (!drawingMode) return;
-    const minPoints = drawingMode === 'polygon' ? 3 : 2;
-    if (vertices.length < minPoints) {
-      setError('Add more points before finishing the drawing.');
+    const mode = drawingMode;
+    const required = ['polygon','hole'].includes(mode) ? 3 : 2;
+    if (vertices.length < required) {
+      setError('Add more points before finishing.');
       return;
     }
-    const result: GeoJSON.Geometry = drawingMode === 'polygon'
-      ? { type: 'Polygon', coordinates: [[...vertices, vertices[0]]] }
-      : { type: 'LineString', coordinates: vertices };
-    setError('');
+    setBusy(true); setError('');
     try {
-      const measured = await measureGeometry(result);
+      let result: GeoJSON.Geometry;
+      let measured: Measurement;
+      if (mode === 'polygon' || mode === 'rectangle' || mode === 'circle') {
+        let constructed;
+        if (mode === 'circle') {
+          const path = { type: 'LineString', coordinates: vertices.slice(0,2) } as GeoJSON.LineString;
+          const line = await measureGeometry(path);
+          constructed = await constructGeometry({
+            mode, vertices: vertices.slice(0,1), radius_m: line.length_m ?? 0,
+          });
+        } else {
+          constructed = await constructGeometry({
+            mode, vertices: mode === 'rectangle' ? vertices.slice(0,2) : vertices,
+          });
+        }
+        result = constructed.geometry; measured = constructed.measurement;
+      } else if (mode === 'line' || mode === 'split') {
+        result = { type: 'LineString', coordinates: vertices };
+        measured = await measureGeometry(result);
+      } else {
+        const constructed = await constructGeometry({ mode: 'polygon', vertices });
+        result = constructed.geometry; measured = constructed.measurement;
+      }
+      if (mode === 'hole' && geometry) {
+        const cut = await editPair('hole',geometry,result);
+        result = cut.geometry; measured = cut.measurement;
+      } else if (mode === 'split' && geometry) {
+        const divided = await editPair('split',geometry,result);
+        setSplitParts(divided.features.map(item => item.geometry));
+        setDiscovered([]);
+        result = divided.features[0].geometry;
+        measured = divided.features[0].measurement;
+        setSelectedFeatureId(null);
+      }
       setGeometry(result);
+      lastValid.current = structuredClone(result);
+      timeline.current.push(result);
+      setHistoryPulse(value => value + 1);
       setMeasurement(measured);
-      setDrawingMode(null);
-      setVertices([]);
-      setMessage('Measured your custom shape using WGS84 geodesic calculations.');
-    } catch (problem) {
-      setError(problem instanceof Error ? problem.message : 'Invalid geometry.');
-    }
+      setDrawingMode(null); setVertices([]); setPreview(null);
+      setMessage(mode === 'split'
+        ? 'Polygon divided. Save all pieces from Projects & saved geometry.'
+        : 'Drawing completed and measured on the WGS84 ellipsoid.');
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : 'Drawing failed.');
+    } finally { setBusy(false); }
   }
+
+  async function numericShape(mode: string, body: {
+    vertices: Position[]; radius_m?: number; bearing_deg?: number; length_m?: number;
+  }) {
+    setBusy(true); setError('');
+    try {
+      const created = await constructGeometry({
+        mode: mode as 'rectangle' | 'circle' | 'bearing',
+        ...body,
+      });
+      setSelectedFeatureId(null);
+      setGeometrySource('Numeric geodesic construction');
+      setFeatureProperties({ source_type:'numeric', mode });
+      await commitGeometry(created.geometry,'Precise construction created with PyProj.');
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : 'Numeric construction failed.');
+    } finally { setBusy(false); }
+  }
+
+  async function combineWith(mode: 'union' | 'difference' | 'intersection', featureId: string) {
+    const other = projectWorkspace?.features.find(item => item.id === featureId);
+    if (!geometry || !other) return;
+    setBusy(true); setError('');
+    try {
+      const result = await applyOverlay(mode, geometry, other.geometry);
+      if (!result.geometry) throw new Error('Operation produced no geographic area.');
+      setSelectedFeatureId(null);
+      setGeometrySource('Spatial overlay · ' + mode);
+      setFeatureProperties({ source_type:'spatial_operation', operation:mode });
+      await commitGeometry(result.geometry, 'Spatial ' + mode + ' completed.');
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : 'Spatial overlay failed.');
+    } finally { setBusy(false); }
+  }
+
 
   function clearWorkspace() {
     setGeometry(null);
+    lastValid.current = null;
+    timeline.current.push(null);
+    setHistoryPulse(value => value + 1);
+    setSelectedFeatureId(null);
+    setSplitParts([]);
+    setPreview(null);
+    setEditing(false);
+    setMoving(false);
     setMeasurement(null);
     setDrawingMode(null);
     setTraceMode(false);
