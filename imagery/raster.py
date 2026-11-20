@@ -41,7 +41,7 @@ def _check(src) -> None:
 def _corners(src) -> list[list[float]]:
     cols = [0, src.width, src.width, 0]
     rows = [0, 0, src.height, src.height]
-    coords = [src.transform * (col, row) for col, row in zip(cols, rows)]
+    coords = [src.transform @ (col, row) for col, row in zip(cols, rows)]
     lons, lats = transform(
         src.crs, "EPSG:4326",
         [p[0] for p in coords], [p[1] for p in coords],
@@ -126,7 +126,7 @@ def read_rgb_window(
         _check(src)
         cx, cy = transform("EPSG:4326", src.crs, [longitude], [latitude])
         inverse = ~src.transform
-        col_float, row_float = inverse * (cx[0], cy[0])
+        col_float, row_float = inverse @ (cx[0], cy[0])
         col, row = int(np.floor(col_float)), int(np.floor(row_float))
         if not (0 <= col < src.width and 0 <= row < src.height):
             raise RasterError("Clicked point is outside the georeferenced raster.")
