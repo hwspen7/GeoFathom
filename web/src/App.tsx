@@ -468,7 +468,7 @@ export default function App() {
               snapping={snapping}
               canUndo={timeline.current.canUndo && historyPulse >= 0}
               canRedo={timeline.current.canRedo && historyPulse >= 0}
-              saved={projectWorkspace?.features ?? []}
+              saved={activeProjectId ? projectWorkspace?.features ?? [] : []}
               onStart={startDrawing}
               onFinish={() => { void finishDrawing(); }}
               onCancel={() => { setDrawingMode(null); setVertices([]); }}
