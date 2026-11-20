@@ -171,3 +171,91 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .stac-results { max-height: 120px; overflow: auto; display: flex; flex-direction: column; gap: 5px; }
 .stac-item { display: flex; align-items: center; gap: 8px; justify-content: space-between; padding: 7px 9px; border: 1px solid #e8edf3; border-radius: 7px; background: #fff; font-size: 10px; color: #66798d; }
 .stac-item a { color: #34649e; text-decoration: none; }
+
+
+/* Professional surveying and topology editor */
+.survey-tools { display: flex; flex-direction: column; gap: 12px; }
+.survey-mode-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 7px; }
+.survey-mode-grid button {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 6px; min-height: 59px; padding: 9px 5px; border: 1px solid #dfe8f1;
+  border-radius: 9px; background: #fff; color: #45627f; font-size: 10px;
+  font-weight: 650; transition: background .15s,border-color .15s;
+}
+.survey-mode-grid button.active {
+  background: #e9f2ff; border-color: #6d9dde; color: #1e5aa8;
+}
+.survey-mode-grid button:disabled { opacity: .35; cursor: not-allowed; }
+.survey-mode-grid button:not(:disabled):hover { border-color: #6797d6; }
+.survey-action-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; }
+.survey-action-bar span { margin-right: auto; display: inline-flex; align-items: center; gap: 4px; font-size: 10px; color: #647b95; }
+.survey-action-bar button, .numeric-submit {
+  display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+  padding: 8px 10px; border: 1px solid #dbe5ef; border-radius: 8px;
+  background: #fff; color: #42638b; font-size: 10px; font-weight: 700;
+}
+.survey-action-bar button.active, .survey-action-bar button:hover:not(:disabled) {
+  color: #1d5ba5; border-color: #7ea9df; background: #edf5ff;
+}
+.survey-action-bar button:disabled { opacity: .4; }
+.survey-action-bar .finish-button, .numeric-submit {
+  background: #2765b9; border-color: #2765b9; color: #fff;
+}
+.survey-numeric, .survey-overlay {
+  display: flex; flex-direction: column; gap: 8px;
+  padding-top: 12px; border-top: 1px solid #e5ebf3;
+}
+.survey-numeric input, .survey-numeric select, .survey-overlay select {
+  width: 100%; padding: 10px 9px; background: #fff; color: #425e7a;
+  font-size: 11px; border: 1px solid #dce5ee; border-radius: 8px;
+}
+.survey-numeric .area-fields { margin: 0; }
+.survey-overlay .survey-action-bar { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); }
+.survey-overlay .survey-action-bar button { padding: 8px 2px; }
+.project-panel .layer-header {
+  display: flex; align-items: center; gap: 6px; padding-top: 8px; color: #546e89;
+  font-size: 11px; font-weight: 700;
+}
+.layer-row {
+  display: flex; gap: 2px; align-items: center; background: #f8fafe; border: 1px solid #e9eef4;
+  border-radius: 8px; padding: 3px;
+}
+.layer-row button {
+  display: grid; place-items: center; border: 0; background: transparent; padding: 6px;
+  color: #6c84a0; border-radius: 6px; font-size: 12px;
+}
+.layer-row button:hover { background: #e6f1ff; color: #3169ad; }
+.layer-row .layer-name {
+  flex: 1; display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; text-align: left; font-size: 11px; font-weight: 600;
+}
+.layer-row .layer-name.active { background: #e8f2ff; color: #2260ad; }
+.layer-row input[type=color] { border: 0; background: transparent; height: 27px; width: 28px; padding: 0; }
+.project-features button.active { border-color: #7ca8e8; background: #edf4ff; }
+.project-features button small { font-size: 9px; color: #8c9eb1; }
+.project-split-save {
+  border: 1px solid #9bbdea; background: #eaf3fe; color: #2860a8;
+  border-radius: 8px; font-weight: 700; padding: 10px; font-size: 11px;
+}
+.version-list { display: flex; flex-direction: column; gap: 5px; max-height: 155px; overflow: auto; }
+.version-list button {
+  text-align: left; display: flex; align-items: center; gap: 7px; border: 1px solid #e4ebf3;
+  background: #fff; border-radius: 7px; color: #55728f; font-size: 10px; padding: 8px;
+}
+.version-list button:hover:not(:disabled) { background: #edf6ff; }
+.version-list button:disabled { opacity: .45; }
+.area-unit-picker {
+  display: grid; grid-template-columns: 1fr auto; gap: 6px;
+  align-items: center; margin-top: 9px; padding: 9px; border-radius: 8px; background: #f5f8fc;
+}
+.area-unit-picker label { font-size: 10px; color: #6b7e94; }
+.area-unit-picker select {
+  grid-column: span 2; border: 1px solid #dae5ee; border-radius: 7px; padding: 6px 8px;
+  font-size: 10px; color: #49627d; background: #fff;
+}
+.area-unit-picker strong { grid-column: span 2; color: #255b9b; text-align: right; }
+.metric.preview { background: #fff8ee; padding: 10px; border-radius: 8px; border: 1px solid #f2dec4; }
+.metric.preview strong { color: #9b641e; }
+@media (max-width: 530px) {
+  .survey-mode-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+}
