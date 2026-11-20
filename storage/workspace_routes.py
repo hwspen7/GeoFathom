@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 from .database import StorageError
 from .workspace import (
-    add_layer, copy_feature, edit_layer, feature_history, layers,
+    add_in_layer, add_layer, copy_feature, edit_layer, feature_history, layers,
     remove_layer, restore_version, update_feature, workspace,
 )
 
@@ -100,3 +100,23 @@ def restore(project_id: str,feature_id: str,revision: int) -> dict:
 def copy(project_id: str,feature_id: str) -> dict:
     try: return copy_feature(project_id,feature_id)
     except StorageError as error: raise error_response(error) from error
+
+
+class NewFeature(BaseModel):
+    name: str = Field(default="Untitled feature",max_length=200)
+    geometry: dict[str, Any]
+    properties: dict[str, Any] = Field(default_factory=dict)
+    source: str = Field(default="User supplied",max_length=200)
+
+
+class BatchFeatures(BaseModel):
+    features: list[NewFeature] = Field(min_length=1,max_length=100)
+    layer_id: str | None = None
+
+
+@router.post("/{project_id}/features/batch",status_code=201)
+def add_features_batch(project_id: str,body: BatchFeatures) -> dict:
+    try:
+        return add_in_layer(project_id,[item.model_dump() for item in body.features],body.layer_id)
+    except StorageError as error:
+        raise error_response(error) from error

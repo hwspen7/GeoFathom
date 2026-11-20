@@ -5,7 +5,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from .workspace import add_in_layer, can_delete_feature
+from .workspace import add_in_layer, delete_feature_guarded
 
 from .database import (
     StorageError, add_features, create_project, delete_feature, delete_project,
@@ -108,8 +108,7 @@ def features(project_id: str, limit: int = Query(200, ge=1, le=200), offset: int
 @router.delete("/{project_id}/features/{feature_id}", status_code=204)
 def remove_feature(project_id: str, feature_id: str) -> None:
     try:
-        can_delete_feature(project_id, feature_id)
-        delete_feature(project_id, feature_id)
+        delete_feature_guarded(project_id, feature_id)
     except StorageError as error:
         raise _missing(error) from error
 

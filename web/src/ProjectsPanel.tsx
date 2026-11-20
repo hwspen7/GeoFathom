@@ -7,7 +7,7 @@ import {
 import {
   copyProjectFeature, createLayer, exportProject, getFeatureHistory, getProjects,
   getWorkspace, newProject, patchLayer, restoreFeature, saveProjectFeature,
-  updateProjectFeature, type GeoLayer, type GeoWorkspace, type Project,
+  saveFeatureBatch, updateProjectFeature, type GeoLayer, type GeoWorkspace, type Project,
   type WorkspaceFeature, type FeatureHistory,
 } from './api';
 
@@ -123,12 +123,11 @@ export default function ProjectsPanel({
   async function saveSplit() {
     if (!selected || splitParts.length < 2) return;
     await run(async () => {
-      for (const [index, part] of splitParts.entries()) {
-        await saveProjectFeature(
-          selected, featureName + ' – part ' + (index + 1), part,
-          featureSource, { ...featureProperties, operation: 'split' }, layerId || undefined,
-        );
-      }
+      await saveFeatureBatch(selected,splitParts.map((part,index) => ({
+        name: featureName + ' – part ' + (index+1),
+        geometry: part, source:featureSource,
+        properties:{...featureProperties,operation:'split'},
+      })),layerId || undefined);
       setInfo('Split polygons saved as independent features.');
     });
   }

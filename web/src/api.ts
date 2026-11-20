@@ -466,3 +466,14 @@ export function copyProjectFeature(projectId: string, featureId: string): Promis
     method: 'POST',
   });
 }
+
+
+export function saveFeatureBatch(projectId: string, features: Array<{
+  name: string; geometry: GeoJSON.Geometry; source: string;
+  properties: Record<string,unknown>;
+}>, layerId?: string): Promise<{results: WorkspaceFeature[];created: number}> {
+  return request('/projects/' + encodeURIComponent(projectId) + '/features/batch', {
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({features,layer_id:layerId || null}),
+  });
+}

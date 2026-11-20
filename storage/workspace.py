@@ -166,7 +166,8 @@ def workspace(project_id):
             "GROUP BY feature_id",
         )}
     for item in items["results"]:
-        item["layer_id"]=assignments.get(item["id"],all_layers[0]["id"])
+        fallback = next((entry["id"] for entry in all_layers if entry["name"] == _DEFAULT), all_layers[0]["id"])
+        item["layer_id"]=assignments.get(item["id"],fallback)
         item["revision"]=revisions.get(item["id"],0)
     return {"layers":all_layers,"features":items["results"],"total":items["total"]}
 
@@ -317,3 +318,15 @@ def copy_feature(project_id,feature_id):
         "properties":{**json.loads(original["properties"]),"copied_from":feature_id},
         "source":original["source"],
     }],layer["id"])["results"][0]
+
+def delete_feature_guarded(project_id, feature_id):
+    """Check the layer lock and delete the feature in the same transaction."""
+    with _connect() as c:
+        _schema(c)
+        c.execute("BEGIN IMMEDIATE")
+        _required_project(c, project_id)
+        _feature(c, project_id, feature_id)
+        if _feature_layer(c, project_id, feature_id)["locked"]:
+            raise StorageError("The feature layer is locked.")
+        c.execute("DELETE FROM features WHERE id=? AND project_id=?", (feature_id, project_id))
+        c.execute("UPDATE projects SET updated_at=? WHERE id=?", (_now(), project_id))

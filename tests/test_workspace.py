@@ -95,3 +95,38 @@ def test_bad_layer_and_geometry_rejected():
     }).status_code==422
     assert client.get(root+"/workspace").json()["features"][0]["revision"]==0
     assert client.patch(root+"/features/"+fid,json={"layer_id":"missing"}).status_code==404
+
+
+
+def test_split_batch_is_atomic_on_invalid_geometry():
+    root,fid=setup()
+    suffix=root.removeprefix("/projects/")
+    valid={"name":"Valid","geometry":polygon(),"source":"Test"}
+    bad={"name":"Invalid","geometry":{"type":"Polygon","coordinates":[[[0,0],[1,1],[1,0],[0,1],[0,0]]]},"source":"Test"}
+    failed=client.post(root+"/features/batch",json={"features":[valid,bad]})
+    assert failed.status_code==422
+    assert client.get(root+"/workspace").json()["total"]==1
+    saved=client.post(root+"/features/batch",json={"features":[valid,valid]})
+    assert saved.status_code==201,saved.text
+    assert saved.json()["created"]==2
+    assert client.get(root+"/workspace").json()["total"]==3
+
+
+def test_layer_lock_prevents_deletion_without_time_of_check_gap():
+    root,fid=setup()
+    lid=client.get(root+"/layers").json()[0]["id"]
+    assert client.patch(root+"/layers/"+lid,json={"locked":True}).status_code==200
+    assert client.delete(root+"/features/"+fid).status_code==422
+    assert client.get(root+"/workspace").json()["total"]==1
+    assert client.patch(root+"/layers/"+lid,json={"locked":False}).status_code==200
+    assert client.delete(root+"/features/"+fid).status_code==204
+    assert client.get(root+"/workspace").json()["total"]==0
+
+
+def test_existing_feature_layer_is_stable_after_layer_reordering():
+    root,fid=setup()
+    original=client.get(root+"/workspace").json()["features"][0]["layer_id"]
+    new=client.post(root+"/layers",json={"name":"Above","color":"#ff8800"}).json()
+    assert client.patch(root+"/layers/"+new["id"],json={"z_index":-100}).status_code==200
+    updated=client.get(root+"/workspace").json()["features"][0]
+    assert updated["layer_id"]==original
