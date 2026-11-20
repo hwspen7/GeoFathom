@@ -47,3 +47,15 @@ GEOFATHOM_API int gf_simplify_line(
     const double* xy, std::size_t point_count, double tolerance_m,
     std::size_t* out_indices) noexcept;
 }
+
+
+// Immutable BVH spatial index of metric XY segments for high-volume queries.
+// The owner must call gf_spatial_index_destroy exactly once after queries.
+extern "C" {
+GEOFATHOM_API void* gf_spatial_index_build(
+    const double* segment_xyxy, std::size_t count) noexcept;
+GEOFATHOM_API int gf_spatial_index_query(
+    const void* handle, double x, double y, double tolerance_m,
+    double* out_xydistance_segmentindex) noexcept;
+GEOFATHOM_API void gf_spatial_index_destroy(void* handle) noexcept;
+}

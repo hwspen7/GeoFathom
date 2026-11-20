@@ -3,7 +3,7 @@ project(GeoFathomNative LANGUAGES CXX)
 
 include(CTest)
 
-add_library(geofathom_native SHARED geometry/native/geometry.cpp geometry/native/mask.cpp geometry/native/editor.cpp)
+add_library(geofathom_native SHARED geometry/native/geometry.cpp geometry/native/mask.cpp geometry/native/editor.cpp geometry/native/spatial.cpp)
 target_compile_features(geofathom_native PUBLIC cxx_std_17)
 target_include_directories(geofathom_native PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/geometry/native)
 set_target_properties(geofathom_native PROPERTIES

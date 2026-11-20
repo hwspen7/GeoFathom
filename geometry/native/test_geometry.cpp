@@ -63,5 +63,28 @@ int main() {
     assert(gf_simplify_line(zigzag,4,0.001,corners) == 4);
     assert(gf_ring_self_intersects(square,0) == -1);
     assert(gf_snap_point(square,4,1,0,0,-1,nearest) == -1);
+    // The BVH must return the same nearest segment as brute force.
+    constexpr double parts[] = {0,0,10,0, 10,0,10,10, 10,10,0,10, 0,10,0,0};
+    void* idx=gf_spatial_index_build(parts,4);
+    assert(idx);
+    double out[4] = {};
+    assert(gf_spatial_index_query(idx,5,0.1,1,out)==1);
+    assert(out[0]==5 && out[1]==0 && out[3]==0);
+    assert(gf_spatial_index_query(idx,200,200,1,out)==0);
+    assert(gf_spatial_index_query(idx,5,0,-1,out)==-1);
+    gf_spatial_index_destroy(idx);
+    std::vector<double> many;
+    for(int i=0;i<100000;++i) {
+        many.push_back(i*10.0);many.push_back(0.0);
+        many.push_back(i*10.0);many.push_back(100.0);
+    }
+    void* large=gf_spatial_index_build(many.data(),100000);
+    assert(large);
+    for(int q=0;q<200;++q) {
+        const int i=100+q*333;
+        assert(gf_spatial_index_query(large,i*10.0+0.2,44,2,out)==1);
+        assert(out[3]==i);
+    }
+    gf_spatial_index_destroy(large);
     return 0;
-}
+
