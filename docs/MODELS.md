@@ -52,3 +52,20 @@ real local prompts: bilingual place aliases, identical names in different
 cities, impossible spatial queries, requested area filters, missing boundaries,
 structured JSON compliance and refusal to fabricate coordinates.
 Measure tool selection accuracy and error recovery, not just generic chat scores.
+
+## Advanced model profile
+
+A second model is explicitly opt-in. Deploy a suitable quantized
+Qwen3.5-35B-A3B checkpoint under your chosen inference server, then configure:
+
+    GEOFATHOM_ANALYSIS_PROVIDER=openai-compatible
+    GEOFATHOM_ANALYSIS_MODEL=Qwen3.5-35B-A3B
+    GEOFATHOM_ANALYSIS_BASE_URL=http://127.0.0.1:8081/v1
+
+Alternatively, use `GEOFATHOM_ANALYSIS_PROVIDER=ollama` and
+`GEOFATHOM_ANALYSIS_OLLAMA_URL`. Model tags are installation-specific.
+
+The `/models` endpoint reports which profiles are configured. This is
+not a guarantee that either serving process is online or that the requested
+quantization fits GPU memory. The FastAPI assistant accepts
+`profile: "default" | "analysis"`. No commercial API is required.

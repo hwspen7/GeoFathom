@@ -4,6 +4,10 @@ GeoFathom should remain a general geospatial intelligence environment.
 
 ## Supported foundation
 
+- Persistent projects with SQLite and GeoJSON import/export
+- Metric buffer, overlay, area comparison and geodesic distance API
+- Saluki default model with optional larger reasoning profile
+- Auditable AI tool execution for bounded area searches
 - Place/name search with multiple candidates
 - Bounded OpenStreetMap polygon search with area filters and category selection
 - Honest geometry availability
@@ -17,7 +21,7 @@ GeoFathom should remain a general geospatial intelligence environment.
 ## Next engineering goals
 
 - Provider registry with search fallback, per-provider policy and provenance
-- Persistent projects, geometry editing and undo/redo
+- Collaborative project access, feature versioning and robust undo/redo
 - Geospatial feature index (PostGIS or equivalent) for area/radius/shape queries
 - Vector feature import from GeoJSON, Shapefile and GeoPackage
 - Georeferenced raster upload with tiled rendering

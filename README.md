@@ -19,12 +19,14 @@ native module has a correctness-preserving Shapely/Python fallback.
 - Display map results and candidate locations on an interactive map.
 - Calculate geodesic area, perimeter, and length from GeoJSON using PyProj and Shapely.
 - Draw, edit by restarting a drawing, measure, and export polygons as GeoJSON.
-- Interpret natural-language location requests using an optional Ollama or OpenAI-compatible local model.
+- Execute geographically grounded natural-language tasks using Saluki or a configured advanced model, with explicit tool traces and viewport constraints.
+- Persist projects and GeoJSON features in local SQLite storage and reload them between sessions.
+- Run metric buffers, polygon overlays, area comparisons and WGS84 distance analyses through FastAPI.
 - Run without an LLM: direct place search, bounded spatial discovery, and polygon measurement remain available.
 - Optional C++ native topology engine for point containment and bounding box overlap with Python fallbacks.
 - Discover service capabilities and health via explicit API endpoints.
 
-**Not yet implemented:** automated satellite-image segmentation, verified land ownership or zoning, unbounded global parcel discovery, and guaranteed precision for missing boundaries. A vision-provider contract exposes this limitation rather than fabricating results.
+**Not yet implemented:** automated satellite-image segmentation, verified land ownership or zoning, unbounded global parcel discovery, and guaranteed precision for missing boundaries. The AI runtime currently executes named-place lookup and bounded area search, not arbitrary multi-tool autonomous planning. A vision-provider contract exposes this limitation rather than fabricating results.
 
 ## Quick start
 
@@ -55,7 +57,7 @@ export GEOFATHOM_LLM_PROVIDER=ollama
 export GEOFATHOM_LLM_MODEL=saluki
 ```
 
-The model tag must match the one shown by `ollama list`. If Saluki is
+The optional advanced profile can use **Qwen3.5-35B-A3B** through a separately configured OpenAI-compatible or Ollama server. See `/models` and `docs/MODELS.md`. The model tag must match the one shown by `ollama list`. If Saluki is
 configured but unavailable, the assistant falls back to rule-based search
 interpretation; no coordinates or measurements are invented. See the
 [model setup guide](docs/MODELS.md).
@@ -101,7 +103,9 @@ core/             Service assembly and configuration
 geometry/         Python geodesics, topology and C++ native kernels
 places/           Geographic search and feature discovery
 intelligence/     Interchangeable AI providers and intent processing
-tests/            Automated service and geometry tests
+analysis/         Spatial buffer, overlay and comparison operations
+storage/          Persistent SQLite projects and GeoJSON features
+tests/            Automated service, storage and geospatial tests
 web/              MapLibre and React interface
 docs/             Architecture, integration contracts, usage notes
 .github/workflows/ Python, C++ and web checks

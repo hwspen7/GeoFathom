@@ -41,6 +41,7 @@ export interface Capabilities {
   geojson_export: boolean;
   llm_provider: string | null;
   llm_model?: string | null;
+  analysis_model?: string | null;
   persistent_projects?: boolean;
   spatial_analysis?: string[];
   vision_segmentation: boolean;
@@ -68,11 +69,11 @@ export async function searchPlaces(query: string): Promise<Place[]> {
   return payload.results;
 }
 
-export function interpret(message: string, bbox?: [number, number, number, number] | null): Promise<AssistantResult> {
+export function interpret(message: string, bbox?: [number, number, number, number] | null, profile: 'default' | 'analysis' = 'default'): Promise<AssistantResult> {
   return request<AssistantResult>('/assistant', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message, bbox: bbox || null }),
+    body: JSON.stringify({ message, bbox: bbox || null, profile }),
   });
 }
 

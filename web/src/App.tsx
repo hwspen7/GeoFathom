@@ -37,6 +37,7 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [capabilities, setCapabilities] = useState<Capabilities | null>(null);
   const [assistantQuery, setAssistantQuery] = useState('');
+  const [modelProfile, setModelProfile] = useState<'default' | 'analysis'>('default');
   const [modelUsed, setModelUsed] = useState<boolean | null>(null);
   const [satellite, setSatellite] = useState(false);
 
@@ -107,7 +108,7 @@ export default function App() {
     setError('');
     setAssistantQuery(query);
     try {
-      const answer = await interpret(query, viewport);
+      const answer = await interpret(query, viewport, modelProfile);
       setModelUsed(answer.model_used);
       setCandidates(answer.results);
       setMessage(answer.message);
@@ -219,11 +220,15 @@ export default function App() {
 
           <section className="panel-section">
             <div className="section-heading"><Sparkles size={16} /><span>Ask GeoFathom</span><span className="section-pill">Assistant</span></div>
+            <div className="model-switch">
+              <button type="button" className={modelProfile === 'default' ? 'selected' : ''} onClick={() => setModelProfile('default')}>{capabilities?.llm_model || 'Saluki 27B'}</button>
+              {capabilities?.analysis_model && <button type="button" className={modelProfile === 'analysis' ? 'selected' : ''} onClick={() => setModelProfile('analysis')}>{capabilities.analysis_model}</button>}
+            </div>
             <form onSubmit={runAssistant} className="prompt-form">
               <textarea aria-label="Ask the geospatial assistant" placeholder="Measure Shanghai Hongqiao Airport's mapped boundary…" value={prompt}
                 onChange={event => setPrompt(event.target.value)} maxLength={500} rows={3} />
               <div className="prompt-footer">
-                <span>{capabilities?.llm_provider ? 'Model: ' + (capabilities.llm_model || capabilities.llm_provider) : 'Search interpreter'}</span>
+                <span>{modelProfile === 'analysis' ? 'Advanced reasoning' : capabilities?.llm_provider ? 'Local AI / safe fallback' : 'Search interpreter'}</span>
                 <button type="submit" disabled={busy || prompt.trim().length < 2}>
                   <Send size={15} /> Run
                 </button>

@@ -14,8 +14,10 @@ GeoFathom is a geospatial platform rather than a model-specific demo or an airpo
 
 ## Functional repository structure
 
-- `core/`: service composition and environment configuration.
+- `core/`: FastAPI application assembly and environment configuration.
 - `places/`: geocoding, bounded object search and related API routes.
+- `analysis/`: local metric buffers, polygon overlays and geodesic comparisons.
+- `storage/`: transactional SQLite projects, geometry persistence, feature import/export.
 - `geometry/`: geometry validation, geodesic measurements, spatial routes and native C++ kernels.
 - `intelligence/`: local model adapters, intent extraction, vision interfaces and orchestration routes.
 - `web/`: separately compiled React and MapLibre interface.
@@ -41,7 +43,7 @@ Place candidates are not guaranteed matches. A name lookup is not evidence of a 
 
 **Search providers:** implement a shared candidate result with id, name, lon/lat, bbox, geometry and source. Use an explicit confidence/evidence field when integrating new sources.
 
-**AI providers:** implement the IntentProvider protocol. A replacement model returns structured, bounded actions and delegates facts to tools. Avoid API- or model-specific logic elsewhere.
+**AI providers:** Saluki is the default profile and Qwen3.5-35B-A3B may be configured as an advanced profile. The executor records tool traces, uses viewport-bounded area search, and must not invent coordinates. Implement the IntentProvider protocol. A replacement model returns structured, bounded actions and delegates facts to tools. Avoid API- or model-specific logic elsewhere.
 
 **Vision providers:** implement VisionProvider and return georeferenced geometry, imagery acquisition date, license, confidence, CRS and quality flags. Never treat a pixel polygon as geographic geometry without image georeferencing.
 
@@ -57,6 +59,21 @@ Place candidates are not guaranteed matches. A name lookup is not evidence of a 
 - Polygon rings must be topologically valid. Invalid or self-intersecting input is rejected, not silently repaired.
 - The Nominatim public search service has shared capacity limits. This starter enforces a best-effort per-process throttle and caches requests, but multiple workers or public traffic need a coordinated limiter or owned provider.
 - The application must not infer land legality, property ownership, or engineering suitability from imagery alone.
+
+## FastAPI service boundaries
+
+The FastAPI application in `core/main.py` assembles independent routers
+from `places/routes.py`, `geometry/routes.py`, `analysis/routes.py`,
+`storage/routes.py` and `intelligence/routes.py`.
+Projects and saved features persist to a configurable SQLite database
+(default `data/geofathom.sqlite`), while area and distance operators remain
+stateless. Data contracts use standard GeoJSON WGS84 geometry.
+
+The `/assistant` endpoint accepts an optional map viewport. Named places
+are resolved through a geocoding tool, with area measurements calculated by
+the geometry engine. Bounded searches use real feature geometries through
+Overpass. More complex actions are explicitly marked unsupported rather
+than being interpreted as completed.
 
 ## Security and deployment
 
