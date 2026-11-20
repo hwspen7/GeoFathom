@@ -1,71 +1,93 @@
-# AI model selection
+# Model providers and free API testing
 
-GeoFathom has no proprietary model dependency. Its parser and tool dispatcher
-can use any local OpenAI-compatible or Ollama model capable of returning short
-structured JSON. Geospatial truth always comes from data and GIS algorithms.
+GeoFathom uses two independent AI profiles while retaining replaceable provider
+adapters. The language model interprets and plans a limited set of geographic
+actions. It does not provide authoritative geospatial coordinates or areas.
 
-## Preferred local model: Saluki 27B
+## Default: GPT-OSS 120B via GroqCloud
 
-Saluki 27B is an approximately 7.89 GB mixed-IQ2 GGUF release derived from
-Qwen3.8-27B. The publisher emphasizes tool calling, but its public benchmarks
-are limited. Quantization trades some accuracy for cost and smaller VRAM use.
-Treat predictions as untrusted intent proposals and validate every action.
+- Provider key: `groq`
+- Model ID: `openai/gpt-oss-120b`
+- Endpoint: `https://api.groq.com/openai/v1/chat/completions`
+- Key: `GEOFATHOM_GROQ_API_KEY` (or `GROQ_API_KEY`)
+- Purpose: natural-language interpretation and geospatial tool dispatch
 
-Reference: https://huggingface.co/ConwayResearch/Underdog-Saluki-27B-1.0
+Official Groq free plan limits depend on the account. The November 2026
+published base table lists 30 requests/minute, 1,000 requests/day and
+200,000 tokens/day for GPT-OSS 120B. These are rate limits, not a promise of
+unrestricted use. View current limits in GroqCloud.
 
-**Ollama**: Set GEOFATHOM_LLM_PROVIDER=ollama,
-GEOFATHOM_LLM_MODEL=saluki, and GEOFATHOM_OLLAMA_URL=http://localhost:11434.
-The `saluki` tag is an example local alias; check `ollama list` and set
-the precise installed tag. GeoFathom neither downloads nor assumes model
-weights are installed.
+Sources:
+- https://console.groq.com/docs/rate-limits
+- https://console.groq.com/docs/tool-use/overview
+- https://console.groq.com/docs/openai
 
-**llama.cpp**: Host your locally available GGUF with a compatible version of
-`llama-server` and the appropriate Qwen chat template, then set
-GEOFATHOM_LLM_PROVIDER=openai-compatible,
-GEOFATHOM_OPENAI_BASE_URL=http://127.0.0.1:8080/v1,
-and GEOFATHOM_LLM_MODEL to the identifier exposed by the server.
+## Second profile: Gemini 3.8 Flash via Google AI Studio
 
-**No AI**: Set GEOFATHOM_LLM_PROVIDER=none and
-GEOFATHOM_LLM_MODEL= to keep deterministic geographic lookup available.
-If the configured model cannot be reached, the service uses rule-based
-interpretation without fabricating any locations or measurements.
+- Provider key: `gemini`
+- Model ID: `gemini-3.8-flash`
+- OpenAI-compatible endpoint:
+  `https://generativelanguage.googleapis.com/v1beta/openai/chat/completions`
+- Key: `GEOFATHOM_GEMINI_API_KEY` (or `GEMINI_API_KEY`)
+- Purpose: second tool-planning candidate and future multimodal analysis
 
-## Alternatives
+Google currently lists free-of-charge standard input and output for Gemini 3.8
+Flash on its free tier. Quotas vary by project and can change. The free tier
+can use content to improve Google's products according to its pricing terms.
+Do not send confidential project data without first reviewing this policy.
 
-- Qwen3.5-35B-A3B: larger mixture-of-experts option for complex tool planning.
-  Requires compatible serving, suitable quantization, and sufficient memory.
-  Model source: https://huggingface.co/Qwen/Qwen3.5-35B-A3B
-- Qwen3.5-27B: alternative dense model, depending on hardware budget.
-  Model source: https://huggingface.co/Qwen/Qwen3.5-27B
-- Any future tool-capable model: implement IntentProvider or configure an
-  OpenAI-compatible endpoint, while keeping the API independent of weights.
+Source: https://ai.google.dev/gemini-api/docs/pricing
 
-Saluki's optional vision projector provides image understanding; it is NOT a
-pixel-accurate satellite segmentation engine. Automated polygon tracing still
-requires a properly licensed imagery provider, georeferencing and a dedicated
-vision adapter.
+Gemini's image understanding is not a pixel-accurate, geographically referenced
+segmentation engine. Reliable satellite tracing still requires licensed imagery
+and a dedicated CV and GIS pipeline.
 
-## Acceptance checks
+## Local model fallback
 
-Before selecting a model as the sole tool dispatcher, validate it against
-real local prompts: bilingual place aliases, identical names in different
-cities, impossible spatial queries, requested area filters, missing boundaries,
-structured JSON compliance and refusal to fabricate coordinates.
-Measure tool selection accuracy and error recovery, not just generic chat scores.
+If free-cloud quotas are exhausted or remote inference is inappropriate,
+configure your own Ollama or OpenAI-compatible local server.
+Saluki 27B can remain a local fallback, but it is **not** the default model.
+No weights or inference servers are installed by this repository.
 
-## Advanced model profile
+Example:
 
-A second model is explicitly opt-in. Deploy a suitable quantized
-Qwen3.5-35B-A3B checkpoint under your chosen inference server, then configure:
+    GEOFATHOM_LLM_PROVIDER=ollama
+    GEOFATHOM_LLM_MODEL=<actual Ollama tag>
+    GEOFATHOM_OLLAMA_URL=http://localhost:11434
 
-    GEOFATHOM_ANALYSIS_PROVIDER=openai-compatible
-    GEOFATHOM_ANALYSIS_MODEL=Qwen3.5-35B-A3B
-    GEOFATHOM_ANALYSIS_BASE_URL=http://127.0.0.1:8081/v1
+The RTX 4070 Ti SUPER 16 GB is adequate for the development workstation and
+many optimized vision workloads, but memory requirements for a particular
+vision model depend on resolution, batch size, model checkpoint and precision.
 
-Alternatively, use `GEOFATHOM_ANALYSIS_PROVIDER=ollama` and
-`GEOFATHOM_ANALYSIS_OLLAMA_URL`. Model tags are installation-specific.
+## Live testing
 
-The `/models` endpoint reports which profiles are configured. This is
-not a guarantee that either serving process is online or that the requested
-quantization fits GPU memory. The FastAPI assistant accepts
-`profile: "default" | "analysis"`. No commercial API is required.
+1. Copy `.env.example` to `.env` and set only the API keys you need.
+2. Start `uvicorn core.main:app --reload` from the repository root.
+3. Open `http://localhost:8000/docs` and call `GET /models`.
+4. Call `POST /models/probe` with `{"profile":"default"}` for Groq,
+   or `{"profile":"analysis"}` for Gemini.
+5. The endpoint returns `status=ready` only after a real API request gives
+   a valid geographic-intent JSON response. `configured=true` merely means
+   credentials are present and is not a successful connectivity check.
+
+Model-specific errors do not reveal API keys to the client. HTTP 409 means
+missing configuration, HTTP 429 means quota exhaustion, and HTTP 502 means
+a failed remote request or invalid response.
+
+The application never automatically sends a user's request from one cloud
+provider to the other without the user selecting the second profile. When no
+model is usable, ordinary GIS operations remain available.
+
+## Model evaluation and reproducibility
+
+Run an optional benchmark suite using:
+`python -m intelligence.benchmark --profile default` or
+`python -m intelligence.benchmark --profile analysis`.
+
+It uses only synthetic test prompts and records matching intent accuracy,
+latency and any provider errors. It makes real billable/rate-limited API calls,
+so run it only when you intend to consume your available quota.
+No secret, chat history or geographic dataset is included in the benchmark.
+
+The interface contract accepts future providers as long as they produce a
+validated `locate` or `discover` action and non-fabricated target query.

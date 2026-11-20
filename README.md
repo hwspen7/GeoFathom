@@ -4,9 +4,12 @@
 
 ## Runtime choices
 
-Default AI model: **locally served Saluki 27B** with provider `ollama` and
-a configurable model tag. The model is optional: geography, geometry and
-spatial discovery work without inference. See [Models](docs/MODELS.md).
+Default AI model: **Groq-hosted GPT-OSS 120B** on a rate-limited free API tier.
+Optional second model: **Gemini 3.8 Flash** with a separate free API allowance.
+No large cloud model weights run on your local GPU; the local RTX 4070 Ti SUPER
+can focus on geospatial/CV processing. Both providers require user-owned API
+keys. Saluki 27B remains an optional local alternative via Ollama.
+See [model setup](docs/MODELS.md).
 
 GeoFathom uses **Python for orchestration, GIS analysis and provider adapters**
 and **C++17 for optional performance-sensitive geometric topology**. The
@@ -19,7 +22,7 @@ native module has a correctness-preserving Shapely/Python fallback.
 - Display map results and candidate locations on an interactive map.
 - Calculate geodesic area, perimeter, and length from GeoJSON using PyProj and Shapely.
 - Draw, edit by restarting a drawing, measure, and export polygons as GeoJSON.
-- Execute geographically grounded natural-language tasks using Saluki or a configured advanced model, with explicit tool traces and viewport constraints.
+- Execute geographically grounded natural-language tasks using GPT-OSS 120B, Gemini 3.8 Flash, or a configured local model, with explicit tool traces and viewport constraints.
 - Persist projects and GeoJSON features in local SQLite storage and reload them between sessions.
 - Run metric buffers, polygon overlays, area comparisons and WGS84 distance analyses through FastAPI.
 - Run without an LLM: direct place search, bounded spatial discovery, and polygon measurement remain available.
@@ -49,18 +52,34 @@ npm run dev
 
 Open http://localhost:5173. API docs are available at http://localhost:8000/docs.
 
-Optional local Saluki (Ollama):
+## Configure free cloud model APIs
 
-```bash
-# Configure in .env or your shell (see .env.example).
-export GEOFATHOM_LLM_PROVIDER=ollama
-export GEOFATHOM_LLM_MODEL=saluki
+Copy `.env.example` to `.env` at repository root and set your own keys:
+
+```ini
+GEOFATHOM_LLM_PROVIDER=groq
+GEOFATHOM_LLM_MODEL=openai/gpt-oss-120b
+GEOFATHOM_GROQ_API_KEY=your-groq-api-key
+
+GEOFATHOM_ANALYSIS_PROVIDER=gemini
+GEOFATHOM_ANALYSIS_MODEL=gemini-3.8-flash
+GEOFATHOM_GEMINI_API_KEY=your-gemini-api-key
 ```
 
-The optional advanced profile can use **Qwen3.5-35B-A3B** through a separately configured OpenAI-compatible or Ollama server. See `/models` and `docs/MODELS.md`. The model tag must match the one shown by `ollama list`. If Saluki is
-configured but unavailable, the assistant falls back to rule-based search
-interpretation; no coordinates or measurements are invented. See the
-[model setup guide](docs/MODELS.md).
+Create keys using [GroqCloud](https://console.groq.com/keys) and
+[Google AI Studio](https://aistudio.google.com/api-keys).
+No billing upgrade is required to attempt requests within each provider's
+available free-tier limits. Limits, model availability and data policies may
+change; review them in your own dashboard.
+
+Never commit `.env`, put keys in the web frontend, or send secrets in support
+messages. When keys are absent, GeoFathom still provides non-AI GIS tools.
+`GET /models` reports configuration and `POST /models/probe` makes a small
+real API call to confirm access without contacting the geocoder.
+The web UI has a **Test API** control for this probe.
+
+For local inference instead, configure `GEOFATHOM_LLM_PROVIDER=ollama`
+and use the exact model tag installed on your machine. See [Models](docs/MODELS.md).
 
 ### Windows PowerShell
 

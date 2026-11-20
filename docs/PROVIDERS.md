@@ -2,20 +2,22 @@
 
 GeoFathom separates intelligence, map data, imagery and spatial mathematics.
 
+## Cloud model defaults
+
+The first AI profile calls GroqCloud's GPT-OSS 120B endpoint using
+`GEOFATHOM_GROQ_API_KEY`. The optional second profile calls Google's Gemini
+3.8 Flash endpoint using `GEOFATHOM_GEMINI_API_KEY`. Keys are read only on
+the FastAPI server and never returned by an API response.
+
+Both use OpenAI-compatible chat-completions requests with a validated JSON
+intent response. See [Models](MODELS.md) for configuration, quota and privacy
+policies.
+
 ## Local model through Ollama
 
-Set these environment variables before launching the API:
-
-    GEOFATHOM_LLM_PROVIDER=ollama
-    GEOFATHOM_LLM_MODEL=<installed model tag>
-    GEOFATHOM_OLLAMA_URL=http://localhost:11434
-
-Saluki 27B is the preferred local default. Set the exact installed model
-tag as shown by `ollama list`; the example `saluki` is not guaranteed to
-exist on every machine. For a larger alternative, evaluate Qwen3.5-35B-A3B, rather than maintaining
-an additional small-model configuration. The adapter does not assume any model
-is installed and accepts any compatible server tag. No weights are included in this repository.
-See [Models](MODELS.md) for GGUF and llama.cpp integration.
+Change `GEOFATHOM_LLM_PROVIDER=ollama`, set `GEOFATHOM_LLM_MODEL` to your
+installed model tag and set `GEOFATHOM_OLLAMA_URL` to the local endpoint.
+No model weights are included in this repository.
 
 The intent model performs only bounded classification and place-name extraction. It can select locate or discover operations. The assistant reports that unbounded natural-language area discovery is not available. The separate /discover endpoint supports bounded, explicitly incomplete OpenStreetMap polygon searches.
 

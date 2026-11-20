@@ -44,15 +44,15 @@ export default function ModelControls({ capabilities, profile, onChange }: Props
     <div className="model-settings">
       <div className="model-switch">
         <button type="button" className={profile === 'default' ? 'selected' : ''} onClick={() => select('default')}>
-          GPT-OSS 120B
+          {capabilities?.llm_model || 'GPT-OSS 120B'}
         </button>
         <button type="button" className={profile === 'analysis' ? 'selected' : ''} onClick={() => select('analysis')}>
-          Gemini 3.8 Flash
+          {capabilities?.analysis_model || 'Gemini 3.8 Flash'}
         </button>
       </div>
       <div className="model-status">
         {configured
-          ? <span><Cloud size={13} /> API key configured (not yet checked)</span>
+          ? <span><Cloud size={13} /> Model configured (not yet checked)</span>
           : <span><KeyRound size={13} /> Add API key to server .env</span>}
         <button type="button" onClick={() => void test()} disabled={!configured || testing}>
           <Activity size={13} /> {testing ? 'Checking…' : 'Test API'}

@@ -8,7 +8,7 @@ GeoFathom is a geospatial platform rather than a model-specific demo or an airpo
 - **API:** FastAPI; validates geographic requests and returns machine-readable results and capabilities.
 - **Discovery:** Geocoding uses OSM Nominatim, and constrained polygon discovery uses OSM Overpass. The next data-source abstraction can add Overture, regional gazetteers, feature indexes and local PostGIS without modifying map views.
 - **Geospatial computation:** The `geometry/` package validates shapes and calculates WGS84 geodesic area using Shapely and PyProj/PROJ. Optional C++17 kernels accelerate point-in-ring and bounding-box operations, with a Python fallback. The AI model never supplies calculated area values.
-- **AI intent:** A local Ollama model or an OpenAI-compatible server may normalize an instruction into a structured intent. The no-model fallback is deterministic. No model is a source of boundary truth.
+- **AI intent:** Groq GPT-OSS 120B is the default remote profile, Gemini 3.8 Flash is the optional second profile, and local Ollama/OpenAI-compatible adapters remain supported. Models normalize natural-language instructions into a validated intent. The no-model fallback is deterministic. No model is a source of boundary truth.
 - **Vision:** Explicit provider protocol, not yet implemented. Segmentation must use licensed imagery, georeferencing and accuracy metadata. Missing capability is reported with HTTP 501.
 - **Data contract:** GeoJSON in EPSG:4326 coordinates (longitude, latitude), a provenance string, a boundary-status indicator, and measurement metadata.
 
@@ -43,7 +43,7 @@ Place candidates are not guaranteed matches. A name lookup is not evidence of a 
 
 **Search providers:** implement a shared candidate result with id, name, lon/lat, bbox, geometry and source. Use an explicit confidence/evidence field when integrating new sources.
 
-**AI providers:** Saluki is the default profile and Qwen3.5-35B-A3B may be configured as an advanced profile. The executor records tool traces, uses viewport-bounded area search, and must not invent coordinates. Implement the IntentProvider protocol. A replacement model returns structured, bounded actions and delegates facts to tools. Avoid API- or model-specific logic elsewhere.
+**AI providers:** Groq GPT-OSS 120B is the default and Gemini 3.8 Flash is the alternative. Local providers may be selected by configuration. The executor records tool traces, uses viewport-bounded area search, and must not invent coordinates. Implement the IntentProvider protocol. A replacement model returns structured, bounded actions and delegates facts to tools. Avoid API- or model-specific logic elsewhere.
 
 **Vision providers:** implement VisionProvider and return georeferenced geometry, imagery acquisition date, license, confidence, CRS and quality flags. Never treat a pixel polygon as geographic geometry without image georeferencing.
 
