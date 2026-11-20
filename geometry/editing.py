@@ -169,7 +169,8 @@ def move(geometry,bearing_deg,distance_m):
     if not math.isfinite(bearing_deg) or not math.isfinite(distance_m) or not 0 <= distance_m <= 100000:
         raise GeometryError("Move distance must be 0–100 km and heading finite.")
     def shift(x,y,z=None):
-        xx,yy,_=GEOD.fwd(x,y,bearing_deg,distance_m)
+        import numpy as np
+        xx,yy,_=GEOD.fwd(x,y,np.full_like(x,bearing_deg),np.full_like(x,distance_m))
         return (xx,yy) if z is None else (xx,yy,z)
     out=mapping(transform(shift,shape(geometry)))
     return {"geometry":out,"measurement":measure_geometry(out)}

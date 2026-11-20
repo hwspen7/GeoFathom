@@ -79,7 +79,7 @@ extern "C" int gf_snap_point(
             kind = 1;
         }
     }
-    const std::size_t edges = closed ? count : count - 1;
+    const std::size_t edges = kind == 0 ? (closed ? count : count - 1) : 0;
     for (std::size_t i=0; i<edges; ++i) {
         const Point current = projected(click,point_at(xy,i),point_at(xy,(i+1)%count));
         const double distance = squared_distance(click,current);
