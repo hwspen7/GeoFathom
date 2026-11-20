@@ -13,6 +13,7 @@ import MapCanvas, { type FocusPoint } from './MapCanvas';
 import DiscoveryPanel from './DiscoveryPanel';
 import type { DiscoveryResponse, StoredFeature } from './api';
 import ProjectsPanel from './ProjectsPanel';
+import ModelControls from './ModelControls';
 
 type Position = [number, number];
 type DrawingMode = 'polygon' | 'line' | null;
@@ -230,15 +231,12 @@ export default function App() {
 
           <section className="panel-section">
             <div className="section-heading"><Sparkles size={16} /><span>Ask GeoFathom</span><span className="section-pill">Assistant</span></div>
-            <div className="model-switch">
-              <button type="button" className={modelProfile === 'default' ? 'selected' : ''} onClick={() => setModelProfile('default')}>{capabilities?.llm_model || 'Saluki 27B'}</button>
-              {capabilities?.analysis_model && <button type="button" className={modelProfile === 'analysis' ? 'selected' : ''} onClick={() => setModelProfile('analysis')}>{capabilities.analysis_model}</button>}
-            </div>
+            <ModelControls capabilities={capabilities} profile={modelProfile} onChange={setModelProfile} />
             <form onSubmit={runAssistant} className="prompt-form">
               <textarea aria-label="Ask the geospatial assistant" placeholder="Measure Shanghai Hongqiao Airport's mapped boundary…" value={prompt}
                 onChange={event => setPrompt(event.target.value)} maxLength={500} rows={3} />
               <div className="prompt-footer">
-                <span>{modelProfile === 'analysis' ? 'Advanced reasoning' : capabilities?.llm_provider ? 'Local AI / safe fallback' : 'Search interpreter'}</span>
+                <span>{modelProfile === 'analysis' ? 'Multimodal model / safe fallback' : capabilities?.llm_provider ? 'Cloud AI / safe fallback' : 'Search interpreter'}</span>
                 <button type="submit" disabled={busy || prompt.trim().length < 2}>
                   <Send size={15} /> Run
                 </button>

@@ -42,6 +42,8 @@ export interface Capabilities {
   geojson_export: boolean;
   llm_provider: string | null;
   llm_model?: string | null;
+  llm_configured?: boolean;
+  analysis_configured?: boolean;
   analysis_model?: string | null;
   persistent_projects?: boolean;
   spatial_analysis?: string[];
@@ -165,4 +167,21 @@ export function saveProjectFeature(projectId: string, name: string, geometry: Ge
 
 export function exportProject(projectId: string): Promise<GeoJSON.FeatureCollection> {
   return request<GeoJSON.FeatureCollection>('/projects/' + encodeURIComponent(projectId) + '/export');
+}
+
+export interface ModelProbe {
+  status: 'ready';
+  profile: 'default' | 'analysis';
+  provider: string;
+  model: string;
+  live_call: boolean;
+  intent: { action: string; query: string; explanation: string };
+}
+
+export function probeModel(profile: 'default' | 'analysis'): Promise<ModelProbe> {
+  return request<ModelProbe>('/models/probe', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ profile }),
+  });
 }

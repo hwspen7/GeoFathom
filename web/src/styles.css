@@ -131,3 +131,11 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 
 .tool-trace { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; padding: 9px 10px; border: 1px solid #dfe9f3; border-radius: 8px; background: #f9fbfe; color: #6b819c; font-size: 10px; line-height: 1.4; }
 .tool-trace strong { color: #47627f; font-size: 10px; }
+
+.model-settings { margin-bottom: 10px; }
+.model-status { display: flex; justify-content: space-between; align-items: center; gap: 6px; color: #667f9a; font-size: 10px; }
+.model-status span { display: flex; align-items: center; gap: 5px; }
+.model-status button { display: flex; align-items: center; gap: 4px; border: 1px solid #dae5f0; background: #fff; color: #315b91; border-radius: 7px; padding: 7px 8px; font-size: 10px; white-space: nowrap; }
+.model-test-ready,.model-test-error { font-size: 10px; line-height: 1.4; margin: 8px 0 0; }
+.model-test-ready { color: #287154; }
+.model-test-error { color: #b34747; }
