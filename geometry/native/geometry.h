@@ -23,3 +23,12 @@ GEOFATHOM_API int gf_bbox_overlaps(
     const double* first,
     const double* second) noexcept;
 }
+
+// Segments a 4-connected region around the seed using a fixed RGB tolerance.
+// Pixels are interleaved RGB888, and the destination is width * height bytes.
+// Returns the number of selected pixels, or -1 on invalid inputs/failure.
+// This deterministic color algorithm is not a semantic AI segmentation model.
+extern "C" GEOFATHOM_API int gf_seeded_rgb_region(
+    const unsigned char* rgb,
+    int width, int height, int seed_x, int seed_y,
+    int tolerance, unsigned char* out_mask) noexcept;
