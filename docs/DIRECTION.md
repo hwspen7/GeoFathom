@@ -6,7 +6,7 @@ GeoFathom should remain a general geospatial intelligence environment.
 
 - Persistent projects with SQLite and GeoJSON import/export
 - Metric buffer, overlay, area comparison and geodesic distance API
-- Saluki default model with optional larger reasoning profile
+- Groq GPT-OSS 120B as the default free-tier cloud model
 - Auditable AI tool execution for bounded area searches
 - Place/name search with multiple candidates
 - Bounded OpenStreetMap polygon search with area filters and category selection
@@ -14,7 +14,9 @@ GeoFathom should remain a general geospatial intelligence environment.
 - Map centering and boundary display
 - User-drawn polygon and line measurements
 - GeoJSON export
-- Saluki 27B as the preferred swappable local intent model
+- Gemini 3.8 Flash as the optional free-tier multimodal model
+- Saluki retained only as an optional local inference adapter
+- API connectivity probe and synthetic cross-provider intent benchmark
 - Native C++ topology with a Python fallback for geographic queries
 - Explicit capability discovery and basic API tests
 
