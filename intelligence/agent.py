@@ -7,7 +7,7 @@ preserves data provenance and can return an explicit unable-to-execute status.
 
 import logging
 import re
-from typing import Any
+from typing import Any, Literal
 
 import httpx
 
@@ -73,19 +73,27 @@ def _trace(tool: str, status: str, details: str) -> dict:
 async def execute(
     message: str, settings: Settings,
     bbox: tuple[float, float, float, float] | None = None,
+    profile: Literal["default", "analysis"] = "default",
 ) -> dict[str, Any]:
     """Execute a small, auditable set of verified geographic operations."""
     intent = fallback_intent(message)
     model_used = False
     steps = []
-    provider = get_provider(settings)
+    provider = get_provider(settings, profile)
+    if profile == "analysis" and provider is None:
+        return {
+            "intent": intent, "model_used": False, "results": [],
+            "measurement": None, "steps": [],
+            "status": "not_supported",
+            "message": "The advanced model is not configured. Set GEOFATHOM_ANALYSIS_MODEL first.",
+        }
     if provider:
         try:
             parsed = await provider.parse(message)
             if parsed["query"]:
                 intent = parsed
                 model_used = True
-                steps.append(_trace("model_intent", "ok", settings.llm_provider))
+                steps.append(_trace("model_intent", "ok", profile))
         except (httpx.HTTPError, KeyError, ValueError, TypeError) as error:
             logger.warning("Model unavailable; using deterministic parser: %s", error)
             steps.append(_trace("model_intent", "fallback", "Deterministic interpretation"))

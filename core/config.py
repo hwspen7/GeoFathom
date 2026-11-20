@@ -20,6 +20,10 @@ class Settings:
     ollama_url: str = "http://localhost:11434"
     openai_base_url: str = "http://localhost:8001/v1"
     openai_api_key: str = ""
+    analysis_provider: str = "none"
+    analysis_model: str = ""
+    analysis_base_url: str = "http://localhost:8081/v1"
+    analysis_ollama_url: str = "http://localhost:11434"
 
 
 def get_settings() -> Settings:
@@ -38,4 +42,8 @@ def get_settings() -> Settings:
             "GEOFATHOM_OPENAI_BASE_URL", "http://localhost:8001/v1"
         ).rstrip("/"),
         openai_api_key=os.getenv("GEOFATHOM_OPENAI_API_KEY", ""),
+        analysis_provider=os.getenv("GEOFATHOM_ANALYSIS_PROVIDER", "none").lower(),
+        analysis_model=os.getenv("GEOFATHOM_ANALYSIS_MODEL", ""),
+        analysis_base_url=os.getenv("GEOFATHOM_ANALYSIS_BASE_URL", "http://localhost:8081/v1").rstrip("/"),
+        analysis_ollama_url=os.getenv("GEOFATHOM_ANALYSIS_OLLAMA_URL", "http://localhost:11434").rstrip("/"),
     )

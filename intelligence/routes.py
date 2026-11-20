@@ -1,6 +1,7 @@
 """FastAPI AI execution, task traces and unconfigured vision adapters."""
 
 import logging
+from typing import Literal
 
 import httpx
 from fastapi import APIRouter, HTTPException
@@ -17,18 +18,41 @@ settings = get_settings()
 class AssistantRequest(BaseModel):
     message: str = Field(min_length=2, max_length=500)
     bbox: tuple[float, float, float, float] | None = None
+    profile: Literal['default', 'analysis'] = 'default'
 
 
 @router.post("/assistant")
 async def assistant(body: AssistantRequest) -> dict:
     try:
-        return await execute(body.message, settings, body.bbox)
+        return await execute(body.message, settings, body.bbox, body.profile)
     except (httpx.HTTPError, ValueError) as error:
         logger.warning("Geo search provider unavailable: %s", error)
         raise HTTPException(
             status_code=503,
             detail="The geographic search provider is unavailable. Retry later.",
         ) from error
+
+
+@router.get("/models")
+def models() -> dict:
+    return {
+        "default": {
+            "provider": settings.llm_provider,
+            "model": settings.llm_model,
+            "configured": get_model("default"),
+        },
+        "analysis": {
+            "provider": settings.analysis_provider,
+            "model": settings.analysis_model or None,
+            "configured": get_model("analysis"),
+        },
+        "note": "Configured does not mean running. Model weights are not shipped by GeoFathom.",
+    }
+
+
+def get_model(profile: Literal["default", "analysis"]) -> bool:
+    from .llm import get_provider
+    return get_provider(settings, profile) is not None
 
 
 @router.get("/assistant/tools")

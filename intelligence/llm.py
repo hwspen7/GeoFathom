@@ -1,7 +1,8 @@
 """Interchangeable local and OpenAI-compatible intent providers."""
 
 import json
-from typing import Protocol
+from dataclasses import replace
+from typing import Literal, Protocol
 
 import httpx
 
@@ -87,7 +88,17 @@ def _decode(value: str) -> dict:
     }
 
 
-def get_provider(settings: Settings) -> IntentProvider | None:
+def get_provider(settings: Settings, profile: Literal['default', 'analysis'] = 'default') -> IntentProvider | None:
+    if profile == 'analysis':
+        if not settings.analysis_model or settings.analysis_provider == 'none':
+            return None
+        settings = replace(
+            settings,
+            llm_provider=settings.analysis_provider,
+            llm_model=settings.analysis_model,
+            openai_base_url=settings.analysis_base_url,
+            ollama_url=settings.analysis_ollama_url,
+        )
     if not settings.llm_model:
         return None
     if settings.llm_provider == "ollama":

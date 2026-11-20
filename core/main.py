@@ -41,6 +41,7 @@ def capabilities() -> dict:
         "geojson_export": True,
         "llm_provider": settings.llm_provider if get_provider(settings) else None,
         "llm_model": settings.llm_model if get_provider(settings) else None,
+        "analysis_model": settings.analysis_model if get_provider(settings, "analysis") else None,
         "vision_segmentation": False,
         "spatial_discovery": "bounded_osm",
         "imagery": "not configured",
