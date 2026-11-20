@@ -21,6 +21,9 @@ jobs:
           cmake -S . -B build/native -DCMAKE_BUILD_TYPE=Release
           cmake --build build/native --config Release --parallel
           ctest --test-dir build/native --build-config Release --output-on-failure
+          cmake -S . -B build/native-debug -DCMAKE_BUILD_TYPE=Debug
+          cmake --build build/native-debug --config Debug --parallel
+          ctest --test-dir build/native-debug --build-config Debug --output-on-failure
       - name: Run Python tests with native library
         env:
           GEOFATHOM_REQUIRE_NATIVE: '1'

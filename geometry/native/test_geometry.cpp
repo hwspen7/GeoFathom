@@ -1,5 +1,9 @@
 #include "geometry.h"
 
+// Run C++ assertions in Release builds too; CTest must never give false greens.
+#ifdef NDEBUG
+#undef NDEBUG
+#endif
 #include <cassert>
 #include <iostream>
 #include <vector>
@@ -53,5 +57,11 @@ int main() {
     std::size_t kept[5] = {};
     assert(gf_simplify_line(polyline,5,0.01,kept) == 2);
     assert(kept[0] == 0 && kept[1] == 4);
+    // RDP preserves non-collinear corners, not just endpoints.
+    constexpr double zigzag[] = {0,0, 5,0, 5,5, 10,5};
+    std::size_t corners[4] = {};
+    assert(gf_simplify_line(zigzag,4,0.001,corners) == 4);
+    assert(gf_ring_self_intersects(square,0) == -1);
+    assert(gf_snap_point(square,4,1,0,0,-1,nearest) == -1);
     return 0;
 }
