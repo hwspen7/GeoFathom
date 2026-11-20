@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 from core.config import get_settings
 from .agent import execute
 from .llm import get_provider
+from vision.sam import sam_enabled
 from .catalog import (CatalogError, ModelSpec, list_public, model_spec,
                       provider_for_spec, require_admin, remove_spec, save_spec,
                       select_default)
@@ -180,7 +181,8 @@ def available_tools() -> dict:
             {"name": "measure_geometry", "capability": "geodesic_measurement", "ready": True},
             {"name": "discover_features", "capability": "bounded_area_search", "ready": True},
             {"name": "spatial_analysis", "capability": "buffer_overlay_compare", "ready": True},
-            {"name": "satellite_segmentation", "capability": "vision", "ready": False},
+            {"name": "image_color_trace", "capability": "georeferenced_raster_outline", "ready": True},
+            {"name": "satellite_segmentation", "capability": "vision", "ready": sam_enabled()},
         ],
         "safety": "Coordinates and geographic measurements always come from tools, not the model.",
     }

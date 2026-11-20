@@ -53,7 +53,9 @@ def test_invalid_geometries_are_rejected(geometry: dict) -> None:
 def test_api_measure_and_capabilities() -> None:
     assert client.get("/health").json()["status"] == "ok"
     features = client.get("/capabilities").json()
-    assert features["vision_segmentation"] == "color_trace_and_optional_sam2"
+    assert features["vision_segmentation"] is True
+    assert "color" in features["vision_methods"]
+    assert features["imagery"] == "local_geotiff_and_public_stac_metadata"
     assert features["geodesic_measurement"] is True
     response = client.post("/measure", json={"geometry": rectangle()})
     assert response.status_code == 200

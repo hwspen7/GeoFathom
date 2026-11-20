@@ -22,6 +22,7 @@ client = TestClient(app)
 @pytest.fixture(autouse=True)
 def isolated_imagery(monkeypatch, tmp_path):
     monkeypatch.setenv("GEOFATHOM_IMAGERY_DIR", str(tmp_path / "imagery"))
+    monkeypatch.setenv("GEOFATHOM_DATABASE_PATH", str(tmp_path / "projects.sqlite"))
     monkeypatch.setenv("GEOFATHOM_MODEL_ADMIN_TOKEN", "test-imagery-admin")
 
 

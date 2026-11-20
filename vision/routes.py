@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
 from imagery.raster import RasterError
+from geometry.topology import _native
 from imagery.store import image_file
 from .sam import VisionUnavailable, sam_enabled
 from .trace import trace_raster
@@ -30,7 +31,7 @@ class TraceRequest(BaseModel):
 def vision_capabilities() -> dict:
     return {
         "color_trace": True,
-        "color_native_acceleration": True,
+        "color_native_acceleration": bool(_native() and hasattr(_native(), "gf_seeded_rgb_region")),
         "sam2_configured": sam_enabled(),
         "sam2_model": os.getenv("GEOFATHOM_SAM2_MODEL_ID", "facebook/sam2.1-hiera-small"),
         "requires_georeferenced_raster": True,
