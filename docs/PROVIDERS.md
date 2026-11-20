@@ -10,7 +10,11 @@ Set these environment variables before launching the API:
     GEOFATHOM_LLM_MODEL=<installed model tag>
     GEOFATHOM_OLLAMA_URL=http://localhost:11434
 
-The installed Qwen 9B checkpoint can be used if its tag and Ollama runtime match. GeoFathom does not assume a particular 9B checkpoint is present or downloaded.
+Saluki 27B is the preferred local default. Set the exact installed model
+tag as shown by `ollama list`; the example `saluki` is not guaranteed to
+exist on every machine. Other local models including Qwen 9B can be configured
+without changing the application. No weights are included in this repository.
+See [Models](MODELS.md) for GGUF and llama.cpp integration.
 
 The intent model performs only bounded classification and place-name extraction. It can select locate or discover operations. The assistant reports that unbounded natural-language area discovery is not available. The separate /discover endpoint supports bounded, explicitly incomplete OpenStreetMap polygon searches.
 
@@ -18,10 +22,10 @@ The intent model performs only bounded classification and place-name extraction.
 
     GEOFATHOM_LLM_PROVIDER=openai-compatible
     GEOFATHOM_LLM_MODEL=<served model name>
-    GEOFATHOM_OPENAI_BASE_URL=http://localhost:8001/v1
+    GEOFATHOM_OPENAI_BASE_URL=http://localhost:8080/v1
     GEOFATHOM_OPENAI_API_KEY=
 
-These adapters can later be extended with hosted models. Do not put secrets in source control.
+This adapter also supports local llama.cpp servers. These adapters can later be extended with hosted models. Do not put secrets in source control.
 
 ## Geospatial data
 
@@ -67,5 +71,9 @@ Ask the assistant:
     curl -X POST http://localhost:8000/assistant \
       -H "Content-Type: application/json" \
       -d '{"message":"Measure Hongqiao Airport area"}'
+
+Native geometry endpoints are `/spatial/contains` and
+`/spatial/bbox-overlap`. They use C++ when compiled kernels are available
+and fall back to Python/Shapely otherwise.
 
 An HTTP 501 response from /vision/segment explicitly means no imagery segmentation provider is installed.

@@ -7,10 +7,23 @@ GeoFathom is a geospatial platform rather than a model-specific demo or an airpo
 - **Workspace:** React + TypeScript + MapLibre GL; direct place lookup, an optional natural-language input, candidate selection, polygon/line drawing, geodesic result display, and GeoJSON export.
 - **API:** FastAPI; validates geographic requests and returns machine-readable results and capabilities.
 - **Discovery:** Geocoding uses OSM Nominatim, and constrained polygon discovery uses OSM Overpass. The next data-source abstraction can add Overture, regional gazetteers, feature indexes and local PostGIS without modifying map views.
-- **Geospatial computation:** Shapely validates geometry, PyProj/PROJ performs WGS84 ellipsoidal measurement. The AI model never supplies calculated area values.
+- **Geospatial computation:** The `geometry/` package validates shapes and calculates WGS84 geodesic area using Shapely and PyProj/PROJ. Optional C++17 kernels accelerate point-in-ring and bounding-box operations, with a Python fallback. The AI model never supplies calculated area values.
 - **AI intent:** A local Ollama model or an OpenAI-compatible server may normalize an instruction into a structured intent. The no-model fallback is deterministic. No model is a source of boundary truth.
 - **Vision:** Explicit provider protocol, not yet implemented. Segmentation must use licensed imagery, georeferencing and accuracy metadata. Missing capability is reported with HTTP 501.
 - **Data contract:** GeoJSON in EPSG:4326 coordinates (longitude, latitude), a provenance string, a boundary-status indicator, and measurement metadata.
+
+## Functional repository structure
+
+- `core/`: service composition and environment configuration.
+- `places/`: geocoding, bounded object search and related API routes.
+- `geometry/`: geometry validation, geodesic measurements, spatial routes and native C++ kernels.
+- `intelligence/`: local model adapters, intent extraction, vision interfaces and orchestration routes.
+- `web/`: separately compiled React and MapLibre interface.
+- `tests/`: integration tests and GIS regression tests.
+- `docs/`: architecture and model contracts.
+
+Source files stay within two folders beneath the project root, including
+native C++ sources in `geometry/native/`.
 
 ## Data flow
 
@@ -22,7 +35,7 @@ GeoFathom is a geospatial platform rather than a model-specific demo or an airpo
 6. The user can draw a different shape and measure it independently.
 7. Export preserves geometry and a basic source label.
 
-Place candidates are not guaranteed matches. A name lookup is not evidence of a property boundary, airport perimeter, ownership or zoning. If a result provides only a point, the frontend shows a point and asks the user to draw a boundary.
+Place candidates are not guaranteed matches. A name lookup is not evidence of a property boundary, airport perimeter, ownership or zoning. If a result provides only a point, the web workspace shows a point and asks the user to draw a boundary.
 
 ## Extension points
 

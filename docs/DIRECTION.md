@@ -10,7 +10,8 @@ GeoFathom should remain a general geospatial intelligence environment.
 - Map centering and boundary display
 - User-drawn polygon and line measurements
 - GeoJSON export
-- Optional local model for instruction normalization
+- Saluki 27B as the preferred swappable local intent model
+- Native C++ topology with a Python fallback for geographic queries
 - Explicit capability discovery and basic API tests
 
 ## Next engineering goals

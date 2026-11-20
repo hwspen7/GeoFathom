@@ -47,15 +47,38 @@ npm run dev
 
 Open http://localhost:5173. API docs are available at http://localhost:8000/docs.
 
-Optional local Qwen (Ollama):
+Optional local Saluki (Ollama):
 
 ```bash
-# Configure in ./.env or your shell (see backend/.env.example).
+# Configure in .env or your shell (see .env.example).
 export GEOFATHOM_LLM_PROVIDER=ollama
-export GEOFATHOM_LLM_MODEL=qwen3.5:9b
+export GEOFATHOM_LLM_MODEL=saluki
 ```
 
-The model name must match the one actually installed in Ollama. Without a configured model, the interface uses safe deterministic search interpretation, not an imaginary AI response.
+The model tag must match the one shown by `ollama list`. If Saluki is
+configured but unavailable, the assistant falls back to rule-based search
+interpretation; no coordinates or measurements are invented. See the
+[model setup guide](docs/MODELS.md).
+
+### Windows PowerShell
+
+From the repository root:
+
+```powershell
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -e ".[dev]"
+Copy-Item .env.example .env
+uvicorn core.main:app --reload
+```
+
+Start the interface in a second PowerShell terminal:
+
+```powershell
+cd web
+npm install
+npm run dev
+```
 
 ## Compile the C++ geometry engine (optional)
 
@@ -81,7 +104,7 @@ intelligence/     Interchangeable AI providers and intent processing
 tests/            Automated service and geometry tests
 web/              MapLibre and React interface
 docs/             Architecture, integration contracts, usage notes
-.github/workflows/ Checks for backend and frontend
+.github/workflows/ Python, C++ and web checks
 ```
 
 ## Principles
