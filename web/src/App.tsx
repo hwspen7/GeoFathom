@@ -39,6 +39,7 @@ export default function App() {
   const [assistantQuery, setAssistantQuery] = useState('');
   const [modelProfile, setModelProfile] = useState<'default' | 'analysis'>('default');
   const [modelUsed, setModelUsed] = useState<boolean | null>(null);
+  const [toolSteps, setToolSteps] = useState<string[]>([]);
   const [satellite, setSatellite] = useState(false);
 
   const satelliteAvailable = Boolean(import.meta.env.VITE_SATELLITE_TILES_URL);
@@ -110,10 +111,19 @@ export default function App() {
     try {
       const answer = await interpret(query, viewport, modelProfile);
       setModelUsed(answer.model_used);
+      setToolSteps((answer.steps || []).map(step => step.tool + ' · ' + step.status));
       setCandidates(answer.results);
       setMessage(answer.message);
-      if (answer.results.length) await selectPlace(answer.results[0]);
-      if (answer.results.length > 1) setMessage(answer.message + ' Select the correct candidate.');
+      if (answer.intent.action === 'discover') {
+        setDiscovered(answer.results);
+        setSelectedPlace(null);
+        setGeometry(null);
+        setMeasurement(null);
+      } else {
+        setDiscovered([]);
+        if (answer.results.length) await selectPlace(answer.results[0]);
+        if (answer.results.length > 1) setMessage(answer.message + ' Select the correct candidate.');
+      }
     } catch (problem) {
       setError(problem instanceof Error ? problem.message : 'Assistant request failed.');
     } finally {
@@ -235,6 +245,7 @@ export default function App() {
               </div>
             </form>
             {assistantQuery && <div className="last-prompt">“{assistantQuery}” <span>{modelUsed ? 'AI parsed' : 'Rules parsed'}</span></div>}
+            {toolSteps.length > 0 && <div className="tool-trace"><strong>Execution trace</strong><span>{toolSteps.join(' → ')}</span></div>}
           </section>
 
           <section className="panel-section">

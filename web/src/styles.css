@@ -128,3 +128,6 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .model-switch { display: flex; gap: 5px; padding: 4px; border-radius: 9px; background: #f3f6fa; margin-bottom: 9px; overflow: auto; }
 .model-switch button { flex: 1; min-width: 85px; white-space: nowrap; border: none; border-radius: 7px; color: #738397; font-size: 10px; padding: 8px; background: transparent; }
 .model-switch button.selected { background: #fff; color: #285896; box-shadow: 0 1px 5px #dce5ed; font-weight: 700; }
+
+.tool-trace { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; padding: 9px 10px; border: 1px solid #dfe9f3; border-radius: 8px; background: #f9fbfe; color: #6b819c; font-size: 10px; line-height: 1.4; }
+.tool-trace strong { color: #47627f; font-size: 10px; }

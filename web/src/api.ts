@@ -33,6 +33,7 @@ export interface AssistantResult {
   model_used: boolean;
   results: Place[];
   measurement: Measurement | null;
+  steps?: Array<{ tool: string; status: string; details: string }>;
 }
 
 export interface Capabilities {
