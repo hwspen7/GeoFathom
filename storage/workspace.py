@@ -10,7 +10,7 @@ import re
 from uuid import uuid4
 
 from geometry.measure import GeometryError, measure_geometry
-from .database import StorageError, _connect, _now, _required_project, add_features, list_features
+from .database import StorageError, _connect, _now, _required_project, _record_feature, list_features
 
 _HEX = re.compile(r"^#[0-9A-Fa-f]{6}$")
 _DEFAULT = "Measurements"
@@ -49,7 +49,7 @@ def _schema(conn):
 
 def _default(conn, project_id):
     row = conn.execute(
-        "SELECT * FROM geo_layers WHERE project_id=? ORDER BY z_index,id LIMIT 1",
+        "SELECT * FROM geo_layers WHERE project_id=? ORDER BY created_at,id LIMIT 1",
         (project_id,),
     ).fetchone()
     if row:
@@ -237,12 +237,15 @@ def feature_history(project_id,feature_id):
                 "versions":[{"revision":0,"name":original["name"],
                             "geometry":json.loads(original["geometry"]),
                             "properties":json.loads(original["properties"]),
-                            "created_at":original["created_at"]}]}
+                            "created_at":original["created_at"],
+                            "measurement":measure_geometry(json.loads(original["geometry"]))}]}
     return {"feature_id":feature_id,"current_revision":rows[0]["revision"],
             "versions":[{"revision":row["revision"],"name":row["name"],
                          "geometry":json.loads(row["geometry"]),
                          "properties":json.loads(row["properties"]),
-                         "created_at":row["created_at"]} for row in rows]}
+                         "created_at":row["created_at"],
+                         "measurement":measure_geometry(json.loads(row["geometry"]))}
+                        for row in rows]}
 
 
 def restore_version(project_id,feature_id,revision):
@@ -257,6 +260,50 @@ def restore_version(project_id,feature_id,revision):
     )
 
 
+def add_in_layer(project_id, inputs, layer_id=None):
+    """Create and assign features atomically, respecting lock state."""
+    if not 1 <= len(inputs) <= 100:
+        raise StorageError("Submit between 1 and 100 geographic features.")
+    with _connect() as c:
+        _schema(c)
+        c.execute("BEGIN IMMEDIATE")
+        _required_project(c,project_id)
+        target=_layer(c,project_id,layer_id or _default(c,project_id))
+        if target["locked"]: raise StorageError("The target layer is locked.")
+        results=[]
+        for item in inputs:
+            props=item.get("properties",{})
+            if not isinstance(props,dict) or len(json.dumps(props,allow_nan=False))>100000:
+                raise StorageError("Feature properties must be a bounded JSON object.")
+            try:
+                new=_record_feature(
+                    c,project_id,item.get("geometry"),
+                    str(item.get("name") or "Untitled feature").strip()[:200],
+                    str(item.get("source") or "User supplied").strip()[:200],
+                    props,
+                )
+            except (GeometryError,TypeError,ValueError) as error:
+                raise StorageError(str(error)) from error
+            c.execute(
+                "INSERT INTO geo_layer_members(project_id,feature_id,layer_id) VALUES(?,?,?)",
+                (project_id,new["id"],target["id"]),
+            )
+            new["layer_id"]=target["id"]
+            new["revision"]=0
+            results.append(new)
+        c.execute("UPDATE projects SET updated_at=? WHERE id=?",(_now(),project_id))
+        return {"results":results,"created":len(results)}
+
+
+def can_delete_feature(project_id,feature_id):
+    with _connect() as c:
+        _required_project(c,project_id)
+        _schema(c)
+        _feature(c,project_id,feature_id)
+        if _feature_layer(c,project_id,feature_id)["locked"]:
+            raise StorageError("The feature layer is locked.")
+
+
 def copy_feature(project_id,feature_id):
     with _connect() as c:
         _required_project(c,project_id)
@@ -264,11 +311,9 @@ def copy_feature(project_id,feature_id):
         original=_feature(c,project_id,feature_id)
         layer=_feature_layer(c,project_id,feature_id)
         if layer["locked"]: raise StorageError("The selected feature layer is locked.")
-    result=add_features(project_id,[{
+    return add_in_layer(project_id,[{
         "name":original["name"]+" copy",
         "geometry":json.loads(original["geometry"]),
         "properties":{**json.loads(original["properties"]),"copied_from":feature_id},
         "source":original["source"],
-    }])["results"][0]
-    update_feature(project_id,result["id"],layer_id=layer["id"])
-    return result
+    }],layer["id"])["results"][0]

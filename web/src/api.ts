@@ -157,11 +157,11 @@ export async function getProjectFeatures(projectId: string): Promise<StoredFeatu
   return response.results;
 }
 
-export function saveProjectFeature(projectId: string, name: string, geometry: GeoJSON.Geometry, source: string, properties: Record<string, unknown> = {}): Promise<StoredFeature> {
+export function saveProjectFeature(projectId: string, name: string, geometry: GeoJSON.Geometry, source: string, properties: Record<string, unknown> = {}, layerId?: string): Promise<StoredFeature> {
   return request<StoredFeature>('/projects/' + encodeURIComponent(projectId) + '/features', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, geometry, source, properties }),
+    body: JSON.stringify({ name, geometry, source, properties, layer_id: layerId || null }),
   });
 }
 

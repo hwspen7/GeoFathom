@@ -110,9 +110,8 @@ export default function ProjectsPanel({
       } else {
         if (activeLayer?.locked) throw new Error('Unlock the target layer before saving.');
         const saved = await saveProjectFeature(
-          selected, featureName, geometry, featureSource, featureProperties,
+          selected, featureName, geometry, featureSource, featureProperties, layerId || undefined,
         );
-        if (layerId) await updateProjectFeature(selected, saved.id, { layer_id: layerId });
         const latest = await getWorkspace(selected);
         const opened = latest.features.find(item => item.id === saved.id);
         if (opened) onOpen(opened);
@@ -127,7 +126,7 @@ export default function ProjectsPanel({
       for (const [index, part] of splitParts.entries()) {
         const saved = await saveProjectFeature(
           selected, featureName + ' – part ' + (index + 1), part,
-          featureSource, { ...featureProperties, operation: 'split' },
+          featureSource, { ...featureProperties, operation: 'split' }, layerId || undefined,
         );
         if (layerId) await updateProjectFeature(selected, saved.id, { layer_id: layerId });
       }

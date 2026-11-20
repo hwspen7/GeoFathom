@@ -5,6 +5,8 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from .workspace import add_in_layer, can_delete_feature
+
 from .database import (
     StorageError, add_features, create_project, delete_feature, delete_project,
     export_project, get_project, list_features, list_projects,
@@ -23,6 +25,7 @@ class FeatureCreate(BaseModel):
     geometry: dict[str, Any]
     properties: dict[str, Any] = Field(default_factory=dict)
     source: str = Field(default="User supplied", max_length=200)
+    layer_id: str | None = None
 
 
 class ImportRequest(BaseModel):
@@ -66,7 +69,7 @@ def remove_project(project_id: str) -> None:
 @router.post("/{project_id}/features", status_code=201)
 def create_feature(project_id: str, body: FeatureCreate) -> dict:
     try:
-        return add_features(project_id, [body.model_dump()])["results"][0]
+        return add_in_layer(project_id, [body.model_dump()], body.layer_id)["results"][0]
     except StorageError as error:
         raise _missing(error) from error
 
@@ -89,7 +92,7 @@ def import_geojson(project_id: str, body: ImportRequest) -> dict:
             "properties": properties,
         })
     try:
-        return add_features(project_id, incoming)
+        return add_in_layer(project_id, incoming)
     except StorageError as error:
         raise _missing(error) from error
 
@@ -105,6 +108,7 @@ def features(project_id: str, limit: int = Query(200, ge=1, le=200), offset: int
 @router.delete("/{project_id}/features/{feature_id}", status_code=204)
 def remove_feature(project_id: str, feature_id: str) -> None:
     try:
+        can_delete_feature(project_id, feature_id)
         delete_feature(project_id, feature_id)
     except StorageError as error:
         raise _missing(error) from error
