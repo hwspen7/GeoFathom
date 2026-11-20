@@ -159,7 +159,7 @@ class DefaultModelRequest(BaseModel):
     model_id: str = Field(min_length=2, max_length=63)
 
 
-@router.put("/models/catalog/default")
+@router.put("/models/selection")
 def change_default(
     body: DefaultModelRequest,
     token: str | None = Header(default=None, alias="X-GeoFathom-Admin-Token"),
