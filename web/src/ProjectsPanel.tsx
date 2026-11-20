@@ -124,7 +124,7 @@ export default function ProjectsPanel({
     if (!selected || splitParts.length < 2) return;
     await run(async () => {
       for (const [index, part] of splitParts.entries()) {
-        const saved = await saveProjectFeature(
+        await saveProjectFeature(
           selected, featureName + ' – part ' + (index + 1), part,
           featureSource, { ...featureProperties, operation: 'split' }, layerId || undefined,
         );
