@@ -183,3 +183,50 @@ export class GeometryTimeline {
 function copyNullable(value: GeoJSON.Geometry | null): GeoJSON.Geometry | null {
   return value === null ? null : copyGeometry(value);
 }
+
+
+export function pathsOf(geometry: GeoJSON.Geometry): Position[][] {
+  if (geometry.type === 'Polygon') return geometry.coordinates as Position[][];
+  if (geometry.type === 'MultiPolygon') return geometry.coordinates.flat() as Position[][];
+  if (geometry.type === 'LineString') return [geometry.coordinates as Position[]];
+  if (geometry.type === 'MultiLineString') return geometry.coordinates as Position[][];
+  return [];
+}
+
+export function snapToPaths(
+  coordinate: Position, paths: Position[][], project: (point: Position) => Position,
+  tolerance = 12,
+): { position: Position; kind: 'vertex' | 'edge' | 'none' } {
+  const click = project(coordinate);
+  let nearest = coordinate, best = tolerance, kind: 'vertex' | 'edge' | 'none' = 'none';
+  // Vertex priority means a corner stays a corner when near a line segment.
+  for (const path of paths) {
+    for (const vertex of path) {
+      const px = project(vertex);
+      const distance = Math.hypot(click[0] - px[0], click[1] - px[1]);
+      if (distance < best) { best = distance; nearest = vertex; kind = 'vertex'; }
+    }
+  }
+  if (kind === 'vertex') return { position: nearest, kind };
+  for (const path of paths) {
+    for (let i = 0; i + 1 < path.length; i++) {
+      const start = project(path[i]), end = project(path[i + 1]);
+      const dx = end[0] - start[0], dy = end[1] - start[1];
+      const len = dx * dx + dy * dy;
+      if (len === 0) continue;
+      const fraction = Math.max(0, Math.min(1,
+        ((click[0] - start[0]) * dx + (click[1] - start[1]) * dy) / len));
+      const distance = Math.hypot(click[0] - start[0] - dx * fraction,
+                                  click[1] - start[1] - dy * fraction);
+      if (distance < best) {
+        best = distance;
+        nearest = [
+          path[i][0] + (path[i + 1][0] - path[i][0]) * fraction,
+          path[i][1] + (path[i + 1][1] - path[i][1]) * fraction,
+        ];
+        kind = 'edge';
+      }
+    }
+  }
+  return { position: nearest, kind };
+}

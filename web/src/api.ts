@@ -412,6 +412,7 @@ export interface FeatureRevision {
   geometry: GeoJSON.Geometry;
   properties: Record<string, unknown>;
   created_at: string;
+  measurement?: Measurement;
 }
 export interface FeatureHistory {
   feature_id: string;

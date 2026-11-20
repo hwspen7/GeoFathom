@@ -3,7 +3,7 @@ import maplibregl, { type GeoJSONSource, type MapMouseEvent, type StyleSpecifica
 
 import { rasterPreviewUrl, type RasterAsset } from './api';
 import {
-  addVertex, moveVertex, removeVertex, shiftGeometry, snapPixels,
+  addVertex, moveVertex, removeVertex, shiftGeometry, snapToPaths, pathsOf,
   verticesOf, type GeometryPath, type Position, type ShapeMode,
 } from './editing';
 
@@ -78,6 +78,7 @@ function mapStyle(): StyleSpecification {
 function featureCollection(
   selected: GeoJSON.Geometry | null,
   vertices: Position[],
+  drawingMode: ShapeMode,
   discovered: GeoJSON.Geometry[],
   layerFeatures: MapLayerFeature[],
   editing: boolean,
@@ -103,7 +104,7 @@ function featureCollection(
     });
   }
 
-  if (vertices.length >= 3) {
+  if (vertices.length >= 3 && drawingMode !== 'line' && drawingMode !== 'split') {
     features.push({
       type: 'Feature', properties: { role: 'drawing', color: '#ec8b2c' },
       geometry: { type: 'Polygon', coordinates: [[...vertices, vertices[0]]] },
@@ -228,23 +229,28 @@ export default function MapCanvas({
     function snapAt(point: Position, movingPath: GeometryPath | null): Position {
       const state = eventRef.current;
       if (!state.snapping) return point;
-      const targets: Position[] = [];
+      const paths: Position[][] = [];
       for (const feature of state.layerFeatures) {
-        if (feature.visible) {
-          targets.push(...verticesOf(feature.geometry).filter(n => !n.midpoint).map(n => n.point));
-        }
+        if (feature.visible) paths.push(...pathsOf(feature.geometry));
       }
       if (state.selected) {
-        targets.push(...verticesOf(state.selected).filter(n =>
-          !n.midpoint && !(movingPath &&
-            n.path.polygon === movingPath.polygon &&
-            n.path.ring === movingPath.ring &&
-            n.path.vertex === movingPath.vertex)).map(n => n.point));
+        for (const path of pathsOf(state.selected)) {
+          // Avoid magnetizing an actively dragged vertex to its own old
+          // coordinate, but preserve the other corners and edge snap targets.
+          paths.push(path.filter(candidate => {
+            if (!movingPath) return true;
+            const old = verticesOf(state.selected!).find(node =>
+              !node.midpoint && node.path.polygon === movingPath.polygon &&
+              node.path.ring === movingPath.ring &&
+              node.path.vertex === movingPath.vertex);
+            return !old || candidate[0] !== old.point[0] || candidate[1] !== old.point[1];
+          }));
+        }
       }
-      return snapPixels(point, targets, position => {
+      return snapToPaths(point, paths, position => {
         const pixel = map.project(position as maplibregl.LngLatLike);
         return [pixel.x, pixel.y];
-      });
+      }).position;
     }
     function dragging(event: MapMouseEvent) {
       const current = drag.current;
@@ -273,7 +279,7 @@ export default function MapCanvas({
       if (drag.current) return;
       if (state.traceMode) state.onTraceClick(coordinates(event));
       else if (state.drawingMode) state.onMapClick(snapAt(coordinates(event), null));
-      else {
+      else if (!state.editing) {
         const feature = hits(event).find(f => f.properties?.role === 'saved');
         if (feature?.properties?.id) state.onSelectSavedFeature(String(feature.properties.id));
       }
@@ -291,19 +297,37 @@ export default function MapCanvas({
     function insertByDoubleClick(event: MapMouseEvent) {
       const state = eventRef.current;
       if (!state.editing || state.selectedLocked || !state.selected) return;
-      const choices = verticesOf(state.selected).filter(p => p.midpoint);
-      if (!choices.length) return;
-      const clickPoint = event.point;
-      let best = Infinity;
-      let chosen: typeof choices[0] | null = null;
-      for (const midpoint of choices) {
-        const projection = map.project(midpoint.point as maplibregl.LngLatLike);
-        const distance = Math.hypot(clickPoint.x - projection.x, clickPoint.y - projection.y);
-        if (distance < best) { best = distance; chosen = midpoint; }
+      const edges = verticesOf(state.selected).filter(p => p.midpoint);
+      if (!edges.length) return;
+      const pixel = event.point;
+      let distance = 10;
+      let selectedPath: GeometryPath | null = null;
+      let snapped: Position | null = null;
+      const geoms = pathsOf(state.selected);
+      for (const node of edges) {
+        const path = geoms[node.path.ring];
+        if (!path) continue;
+        const first = path[node.path.vertex];
+        const next = path[node.path.vertex + 1];
+        if (!first || !next) continue;
+        const a = map.project(first as maplibregl.LngLatLike);
+        const b = map.project(next as maplibregl.LngLatLike);
+        const dx = b.x - a.x, dy = b.y - a.y;
+        const length = dx * dx + dy * dy;
+        if (!length) continue;
+        const t = Math.max(0, Math.min(1,
+          ((pixel.x - a.x) * dx + (pixel.y - a.y) * dy) / length));
+        const close = Math.hypot(pixel.x - a.x - dx * t,pixel.y - a.y - dy * t);
+        if (close < distance) {
+          distance = close;
+          selectedPath = node.path;
+          snapped = [first[0] + (next[0] - first[0]) * t,
+                     first[1] + (next[1] - first[1]) * t];
+        }
       }
-      if (chosen && best < 22) {
+      if (selectedPath && snapped) {
         event.preventDefault();
-        state.onGeometryCommit(addVertex(state.selected, chosen.path, coordinates(event)));
+        state.onGeometryCommit(addVertex(state.selected, selectedPath, snapped));
       }
     }
 
@@ -365,9 +389,9 @@ export default function MapCanvas({
     const map = mapRef.current;
     if (!ready || !map) return;
     (map.getSource('workspace') as GeoJSONSource).setData(
-      featureCollection(selected, vertices, discovered, layerFeatures, editing),
+      featureCollection(selected, vertices, drawingMode, discovered, layerFeatures, editing),
     );
-  }, [selected, vertices, discovered, layerFeatures, editing, ready]);
+  }, [selected, vertices, drawingMode, discovered, layerFeatures, editing, ready]);
 
   useEffect(() => {
     const map = mapRef.current;

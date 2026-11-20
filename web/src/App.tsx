@@ -651,7 +651,11 @@ export default function App() {
             selected={geometry} drawingMode={drawingMode} vertices={vertices}
             editing={editing} moving={moving} snapping={snapping}
             selectedLocked={selectedLocked}
-            layerFeatures={(projectWorkspace?.features ?? []).map(feature => {
+            layerFeatures={[...(projectWorkspace?.features ?? [])].sort((a,b) => {
+              const aIndex=projectWorkspace?.layers.find(layer=>layer.id===a.layer_id)?.z_index ?? 0;
+              const bIndex=projectWorkspace?.layers.find(layer=>layer.id===b.layer_id)?.z_index ?? 0;
+              return aIndex-bIndex;
+            }).map(feature => {
               const layer = projectWorkspace?.layers.find(item => item.id === feature.layer_id);
               return {
                 id: feature.id, layer_id: feature.layer_id, geometry: feature.geometry,
@@ -713,7 +717,7 @@ export default function App() {
                 setBusy(false);
               }
             }}
-            discovered={discovered.map(place => place.geometry).filter((item): item is GeoJSON.Geometry => item !== null)}
+            discovered={[...discovered.map(place => place.geometry).filter((item): item is GeoJSON.Geometry => item !== null), ...splitParts.slice(1)]}
             onViewportChange={setViewport}
             onMapClick={position => {
               const max = ['rectangle','circle'].includes(drawingMode ?? '') ? 2 : 4000;

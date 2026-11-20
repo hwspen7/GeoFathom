@@ -1,8 +1,10 @@
 import { describe, expect, test } from 'vitest';
 import {
   GeometryTimeline, addVertex, approximateMeasurement, moveVertex,
-  removeVertex, shiftGeometry, snapPixels, verticesOf,
+  removeVertex, shiftGeometry, snapPixels, snapToPaths, verticesOf,
 } from './editing';
+
+import type { Position } from './editing';
 
 const box: GeoJSON.Polygon = {
   type: 'Polygon',
@@ -84,4 +86,12 @@ describe('P0/P2 undo, redo and history', () => {
     timeline.push(shiftGeometry(box,0.1,0.1));
     expect(timeline.canRedo).toBe(false);
   });
+});
+
+
+test('snap to an existing edge when no vertex is within tolerance', () => {
+  const path:Position[][]=[[[0,0],[100,0],[100,100]]];
+  const out=snapToPaths([50,3],path,point=>point,8);
+  expect(out.kind).toBe('edge');
+  expect(out.position).toEqual([50,0]);
 });

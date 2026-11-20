@@ -128,7 +128,6 @@ export default function ProjectsPanel({
           selected, featureName + ' – part ' + (index + 1), part,
           featureSource, { ...featureProperties, operation: 'split' }, layerId || undefined,
         );
-        if (layerId) await updateProjectFeature(selected, saved.id, { layer_id: layerId });
       }
       setInfo('Split polygons saved as independent features.');
     });
@@ -274,6 +273,7 @@ export default function ProjectsPanel({
                       disabled={busy || locked || item.revision === history.current_revision}>
                       <RotateCcw size={12}/>
                       Revision {item.revision} · {new Date(item.created_at).toLocaleString()}
+                      {item.measurement?.area_m2 != null ? ' · ' + item.measurement.area_m2.toFixed(2) + ' m²' : ''}
                     </button>
                   ))}
                 </div>
