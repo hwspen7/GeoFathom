@@ -1,14 +1,18 @@
 """Local GeoTIFF ingest and georeferenced preview endpoints."""
 
 import os
+from datetime import date
 import tempfile
 
 from fastapi import APIRouter, File, Header, HTTPException, UploadFile
+import httpx
+from pydantic import BaseModel, Field
 from fastapi.responses import Response
 from starlette.concurrency import run_in_threadpool
 
 from intelligence.catalog import require_admin
 from .raster import RasterError, preview_png
+from .stac import CatalogSearchError, search_stac
 from .store import describe, image_file, imagery_dir, list_images, store_upload
 
 router = APIRouter(prefix="/imagery", tags=["imagery"])
@@ -74,3 +78,24 @@ async def upload_image(
         await file.close()
         if os.path.exists(temporary):
             os.unlink(temporary)
+
+
+
+class CatalogSearchRequest(BaseModel):
+    bbox: tuple[float, float, float, float]
+    collection: str = "sentinel-2-l2a"
+    limit: int = Field(default=8, ge=1, le=12)
+    start_date: date | None = None
+    end_date: date | None = None
+
+
+@router.post("/catalog/search")
+async def public_imagery_search(body: CatalogSearchRequest) -> dict:
+    try:
+        return await search_stac(
+            body.bbox, body.collection, body.limit, body.start_date, body.end_date,
+        )
+    except CatalogSearchError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except (httpx.HTTPError, ValueError) as error:
+        raise HTTPException(status_code=503, detail="Public imagery catalog is unavailable.") from error
