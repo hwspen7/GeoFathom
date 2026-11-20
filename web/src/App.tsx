@@ -12,7 +12,7 @@ import {
 import MapCanvas, { type FocusPoint } from './MapCanvas';
 import SurveyTools from './SurveyTools';
 import {
-  GeometryTimeline, approximateMeasurement, shiftGeometry, type Position, type ShapeMode,
+  GeometryTimeline, approximateMeasurement, previewEdgeLengths, shiftGeometry, type Position, type ShapeMode,
 } from './editing';
 import DiscoveryPanel from './DiscoveryPanel';
 import type { DiscoveryResponse, GeoWorkspace, WorkspaceFeature } from './api';
@@ -623,6 +623,16 @@ export default function App() {
                   <strong>{number((measurement.area_m2 ?? 0) /
                     (areaUnit === 'ha' ? 10000 : areaUnit === 'km2' ? 1000000 : areaUnit === 'mu' ? 2000 / 3 : 1),4)}</strong>
                 </div>
+              )}
+              {geometry && ['Polygon','MultiPolygon','LineString','MultiLineString'].includes(geometry.type) && (
+                <details className="edge-measurements">
+                  <summary>Edge lengths · {previewEdgeLengths(geometry).total} segments</summary>
+                  <div>
+                    {previewEdgeLengths(geometry).edges.map((edge, index) =>
+                      <div key={index}><span>{edge.label}</span><strong>~ {number(edge.length_m,2)} m</strong></div>)}
+                  </div>
+                  <p className="project-hint">Live spherical preview. Final area/perimeter is calculated on the WGS84 ellipsoid.</p>
+                </details>
               )}
               {selectedPlace && <p className="data-source">Data: {selectedPlace.source} · {selectedPlace.boundary_status === 'mapped' ? 'Mapped outline' : 'Coordinates only'}</p>}
               <div className="analysis-actions">

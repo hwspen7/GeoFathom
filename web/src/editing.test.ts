@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import {
   GeometryTimeline, addVertex, approximateMeasurement, moveVertex,
-  removeVertex, shiftGeometry, snapPixels, snapToPaths, verticesOf,
+  removeVertex, shiftGeometry, snapPixels, snapToPaths, verticesOf, previewEdgeLengths,
 } from './editing';
 
 import type { Position } from './editing';
@@ -94,4 +94,13 @@ test('snap to an existing edge when no vertex is within tolerance', () => {
   const out=snapToPaths([50,3],path,point=>point,8);
   expect(out.kind).toBe('edge');
   expect(out.position).toEqual([50,0]);
+});
+
+
+test('P0 live edge-length labels enumerate every polygon edge', () => {
+  const measured = previewEdgeLengths(box);
+  expect(measured.edges).toHaveLength(4);
+  expect(measured.edges[0].length_m).toBeGreaterThan(1000);
+  expect(measured.edges[0].length_m).toBeLessThan(1200);
+  expect(previewEdgeLengths(box,2).total).toBe(4);
 });

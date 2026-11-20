@@ -230,3 +230,27 @@ export function snapToPaths(
   }
   return { position: nearest, kind };
 }
+
+
+export function previewEdgeLengths(geometry: GeoJSON.Geometry, limit = 30): {
+  edges: Array<{ label: string; length_m: number }>; total: number;
+} {
+  const radius = 6371008.8, degrees = Math.PI / 180;
+  const paths = pathsOf(geometry);
+  const total = paths.reduce((sum, path) => sum + Math.max(0,path.length - 1), 0);
+  const edges: Array<{ label: string; length_m: number }> = [];
+  for (const [ringIndex, path] of paths.entries()) {
+    for (let i = 0; i + 1 < path.length; i++) {
+      if (edges.length >= limit) return { edges, total };
+      const a=path[i],b=path[i+1];
+      const longitude=(b[0]-a[0])*degrees;
+      const latitude=(b[1]-a[1])*degrees;
+      const factor=Math.cos(((a[1]+b[1])/2)*degrees);
+      edges.push({
+        label: 'Ring '+(ringIndex+1)+' · edge '+(i+1),
+        length_m: radius*Math.hypot(longitude*factor,latitude),
+      });
+    }
+  }
+  return { edges, total };
+}
