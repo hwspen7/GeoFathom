@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { Activity, Check, KeyRound, Pencil, Plus, Settings2, Trash2 } from 'lucide-react';
+import { Activity, Check, Pencil, Plus, Settings2, Trash2 } from 'lucide-react';
 
 import {
   deleteModel, getModelCatalog, probeModel, saveModel, selectDefaultModel,
