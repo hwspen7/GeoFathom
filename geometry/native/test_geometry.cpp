@@ -87,4 +87,4 @@ int main() {
     }
     gf_spatial_index_destroy(large);
     return 0;
-
+}
