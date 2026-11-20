@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstring>
+#include <cstdlib>
 #include <vector>
 
 extern "C" int gf_seeded_rgb_region(

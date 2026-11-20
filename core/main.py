@@ -6,6 +6,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from .config import get_settings
 from analysis.routes import router as analysis_router
 from storage.routes import router as storage_router
+from imagery.routes import router as imagery_router
+from vision.routes import router as vision_router
 from geometry.routes import router as geometry_router
 from geometry.topology import native_available
 from places.routes import router as places_router
@@ -26,6 +28,8 @@ app.include_router(places_router)
 app.include_router(intelligence_router)
 app.include_router(analysis_router)
 app.include_router(storage_router)
+app.include_router(imagery_router)
+app.include_router(vision_router)
 
 
 @app.get("/health")
@@ -44,7 +48,8 @@ def capabilities() -> dict:
         "llm_configured": get_provider(settings) is not None,
         "analysis_model": settings.analysis_model if settings.analysis_provider != "none" else None,
         "analysis_configured": get_provider(settings, "analysis") is not None,
-        "vision_segmentation": False,
+        "vision_segmentation": "color_trace_and_optional_sam2",
+        "georeferenced_imagery": True,
         "spatial_discovery": "bounded_osm",
         "imagery": "not configured",
         "native_geometry": native_available(),

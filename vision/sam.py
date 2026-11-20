@@ -36,9 +36,8 @@ def _predictor():
 
 def sam_mask(image: np.ndarray, seed_x: int, seed_y: int) -> tuple[np.ndarray, float, str]:
     """Infer a click-conditioned mask on the supplied RGB window."""
-    import torch
-
     predictor = _predictor()
+    import torch
     with torch.inference_mode(), torch.autocast("cuda", dtype=torch.bfloat16):
         predictor.set_image(image)
         masks, scores, _ = predictor.predict(
