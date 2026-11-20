@@ -296,3 +296,31 @@ export function traceImagery(body: {
 export function rasterPreviewUrl(asset: RasterAsset): string {
   return API_URL + asset.preview_url;
 }
+
+
+export interface StacItem {
+  id: string;
+  collection: string;
+  datetime: string | null;
+  cloud_cover: number | null;
+  bbox: number[] | null;
+  catalog_url: string | null;
+  source: string;
+}
+
+export interface StacSearchResult {
+  items: StacItem[];
+  count: number;
+  warning: string;
+}
+
+export function searchPublicImagery(
+  bbox: [number, number, number, number],
+  collection = 'sentinel-2-l2a',
+): Promise<StacSearchResult> {
+  return request<StacSearchResult>('/imagery/catalog/search', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ bbox, collection, limit: 8 }),
+  });
+}

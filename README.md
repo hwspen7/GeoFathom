@@ -14,6 +14,28 @@ GeoFathom uses **Python for orchestration, GIS analysis and provider adapters**
 and **C++17 for optional performance-sensitive geometric topology**. The
 native module has a correctness-preserving Shapely/Python fallback.
 
+## Georeferenced imagery and automatic outlines
+
+GeoFathom can now import a locally provided GeoTIFF, display the correctly
+located raster in MapLibre, and trace a clicked image region into a WGS84
+GeoJSON polygon with an actual geodesic area. The default seeded-color method
+runs in C++ when available and falls back to Python. Optional SAM 2 click
+segmentation is supported after separate model installation.
+
+Public satellite scene *metadata* can be searched using a bounded STAC
+catalog query; actual imagery must still be obtained and imported with
+appropriate usage rights. This avoids silently downloading arbitrary huge
+or restricted raster assets.
+
+To try the workflow without outside datasets, run:
+
+```bash
+python examples/create_demo.py
+```
+
+Then upload `data/synthetic_trace_demo.tif` from the web workspace.
+See [Imagery and tracing](docs/IMAGERY.md) for setup and limitations.
+
 ## What works
 
 - Search geographic places through OpenStreetMap Nominatim, with source attribution and honest boundary availability.
@@ -29,7 +51,7 @@ native module has a correctness-preserving Shapely/Python fallback.
 - Optional C++ native topology engine for point containment and bounding box overlap with Python fallbacks.
 - Discover service capabilities and health via explicit API endpoints.
 
-**Not yet implemented:** automated satellite-image segmentation, verified land ownership or zoning, unbounded global parcel discovery, and guaranteed precision for missing boundaries. The AI runtime currently executes named-place lookup and bounded area search, not arbitrary multi-tool autonomous planning. A vision-provider contract exposes this limitation rather than fabricating results.
+**Not yet implemented:** guaranteed semantic object recognition, verified land ownership or zoning, unbounded global parcel discovery, and precision guarantees for image-derived boundaries. Optional SAM 2 is supported but must be installed and configured separately. The AI runtime currently executes named-place lookup and bounded area search, not arbitrary multi-tool autonomous planning. A vision-provider contract exposes this limitation rather than fabricating results.
 
 ## Quick start
 
@@ -119,6 +141,8 @@ availability.
 ```text
 core/             Service assembly and configuration
 geometry/         Python geodesics, topology and C++ native kernels
+imagery/          GeoTIFF ingest, georeferencing, preview and public STAC search
+vision/           Segmentation, mask vectorization and optional local SAM 2
 places/           Geographic search and feature discovery
 intelligence/     Interchangeable AI providers and intent processing
 analysis/         Spatial buffer, overlay and comparison operations

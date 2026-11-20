@@ -2,7 +2,7 @@ import { useEffect, useState, type ChangeEvent } from 'react';
 import { FileImage, MousePointer2, UploadCloud } from 'lucide-react';
 
 import {
-  listImagery, uploadImagery, type RasterAsset,
+  listImagery, searchPublicImagery, uploadImagery, type RasterAsset, type StacItem,
 } from './api';
 
 export interface TraceSettings {
@@ -18,15 +18,18 @@ interface Props {
   onTracing: (value: boolean) => void;
   settings: TraceSettings;
   onSettings: (value: TraceSettings) => void;
+  viewport: [number, number, number, number] | null;
 }
 
 export default function RasterPanel({
-  asset, onSelect, tracing, onTracing, settings, onSettings,
+  asset, onSelect, tracing, onTracing, settings, onSettings, viewport,
 }: Props) {
   const [assets, setAssets] = useState<RasterAsset[]>([]);
   const [token, setToken] = useState('');
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
+  const [catalogItems, setCatalogItems] = useState<StacItem[]>([]);
+  const [searching, setSearching] = useState(false);
 
   useEffect(() => {
     listImagery().then(setAssets).catch(() => setError('Imagery library unavailable.'));
@@ -50,6 +53,21 @@ export default function RasterPanel({
       setError(failure instanceof Error ? failure.message : 'Raster import failed.');
     } finally {
       setUploading(false);
+    }
+  }
+
+  async function searchCatalog() {
+    if (!viewport) return;
+    setError('');
+    setSearching(true);
+    try {
+      const result = await searchPublicImagery(viewport);
+      setCatalogItems(result.items);
+      if (result.items.length === 0) setError('No catalog scenes found. Adjust map bounds or date.');
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Public catalog search failed.');
+    } finally {
+      setSearching(false);
     }
   }
 
@@ -112,6 +130,22 @@ export default function RasterPanel({
           <p className="project-hint">The outline is an image-derived estimate, not a surveyed or legally verified boundary. Regions extending past the analysis window are flagged.</p>
         </>
       )}
+      <div className="stac-search">
+        <button type="button" onClick={() => void searchCatalog()} disabled={!viewport || searching}>
+          {searching ? 'Searching catalog…' : 'Find public satellite scenes in map view'}
+        </button>
+        <p className="project-hint">Public STAC metadata only. Open a scene to inspect source and usage terms. Trace requires a georeferenced GeoTIFF imported above.</p>
+        {catalogItems.length > 0 && (
+          <div className="stac-results">
+            {catalogItems.map(item => (
+              <div key={item.id} className="stac-item">
+                <span>{item.datetime ? new Date(item.datetime).toLocaleDateString() : 'Date unknown'} · Cloud {item.cloud_cover ?? '—'}%</span>
+                {item.catalog_url && <a href={item.catalog_url} target="_blank" rel="noopener noreferrer">Catalog item</a>}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
       {error && <p className="discovery-error">{error}</p>}
     </div>
   );

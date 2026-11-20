@@ -9,7 +9,8 @@ GeoFathom is a geospatial platform rather than a model-specific demo or an airpo
 - **Discovery:** Geocoding uses OSM Nominatim, and constrained polygon discovery uses OSM Overpass. The next data-source abstraction can add Overture, regional gazetteers, feature indexes and local PostGIS without modifying map views.
 - **Geospatial computation:** The `geometry/` package validates shapes and calculates WGS84 geodesic area using Shapely and PyProj/PROJ. Optional C++17 kernels accelerate point-in-ring and bounding-box operations, with a Python fallback. The AI model never supplies calculated area values.
 - **AI intent:** A persisted user-managed model catalog selects among arbitrary compatible local and cloud models. Three editable example presets include local Saluki, Groq GPT-OSS and Gemini Flash. Local Ollama/OpenAI-compatible adapters remain supported. Models normalize natural-language instructions into a validated intent. The no-model fallback is deterministic. No model is a source of boundary truth.
-- **Vision:** Explicit provider protocol, not yet implemented. Segmentation must use licensed imagery, georeferencing and accuracy metadata. Missing capability is reported with HTTP 501.
+- **Imagery:** GeoTIFF ingestion, metadata, bounded image preview and STAC metadata search use Python/Rasterio and validated file storage.
+- **Vision:** Deterministic C++ seeded-color region mask and Python GIS polygonization work today. Optional SAM 2 provides click-conditioned semantic segmentation after user installation. All predicted outlines retain image-derived provenance.
 - **Data contract:** GeoJSON in EPSG:4326 coordinates (longitude, latitude), a provenance string, a boundary-status indicator, and measurement metadata.
 
 ## Functional repository structure
@@ -17,6 +18,8 @@ GeoFathom is a geospatial platform rather than a model-specific demo or an airpo
 - `core/`: FastAPI application assembly and environment configuration.
 - `places/`: geocoding, bounded object search and related API routes.
 - `analysis/`: local metric buffers, polygon overlays and geodesic comparisons.
+- `imagery/`: GeoTIFF library, bounded raster reads, STAC metadata search.
+- `vision/`: raster mask prediction, polygonization and optional SAM 2 adapter.
 - `storage/`: transactional SQLite projects, geometry persistence, feature import/export.
 - `geometry/`: geometry validation, geodesic measurements, spatial routes and native C++ kernels.
 - `intelligence/`: local model adapters, intent extraction, vision interfaces and orchestration routes.

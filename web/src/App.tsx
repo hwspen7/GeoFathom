@@ -303,6 +303,7 @@ export default function App() {
               }}
               settings={traceSettings}
               onSettings={setTraceSettings}
+              viewport={viewport}
             />
           </section>
 

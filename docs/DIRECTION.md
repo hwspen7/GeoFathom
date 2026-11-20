@@ -4,6 +4,12 @@ GeoFathom should remain a general geospatial intelligence environment.
 
 ## Supported foundation
 
+- Georeferenced GeoTIFF import, MapLibre image overlays and local imagery catalog
+- C++ seeded-color mask tracing with deterministic Python fallback
+- Optional SAM 2 promptable image segmentation with explicit installation
+- Pixel-to-WGS84 polygon conversion and geodesic area measurement
+- Public STAC imagery metadata search limited to a bounded region
+
 - Persistent projects with SQLite and GeoJSON import/export
 - Metric buffer, overlay, area comparison and geodesic distance API
 - Groq GPT-OSS 120B as the default free-tier cloud model
