@@ -63,10 +63,33 @@ def construct(mode, vertices, radius_m=None, bearing_deg=None, length_m=None, se
 
 
 def validate(geometry):
+    """Fast C++ ring-intersection screen, followed by Shapely topology validation."""
+    lib=_native()
+    if (lib is not None and hasattr(lib,"gf_ring_self_intersects")
+            and isinstance(geometry,dict) and geometry.get("type")=="Polygon"):
+        fn=lib.gf_ring_self_intersects
+        fn.argtypes=[ctypes.POINTER(ctypes.c_double),ctypes.c_size_t]
+        fn.restype=ctypes.c_int
+        try:
+            for ring in geometry.get("coordinates",[]):
+                pts=[coordinate(p) for p in ring]
+                if len(pts)>1 and pts[0]==pts[-1]: pts.pop()
+                if not 3<=len(pts)<=4096: continue
+                fw,_=projection(pts[0])
+                xy=[fw.transform(*p) for p in pts]
+                arr=(ctypes.c_double*(len(pts)*2))(*(v for p in xy for v in p))
+                crossing=fn(arr,len(pts))
+                if crossing==1:
+                    return {"valid":False,"measurement":None,
+                            "message":"Ring has crossing edges (native topology check).",
+                            "engine":"cpp+shapely"}
+        except (GeometryError,ValueError,TypeError,KeyError):
+            pass
     try:
-        return {"valid":True,"measurement":measure_geometry(geometry),"message":"Geometry is valid."}
+        return {"valid":True,"measurement":measure_geometry(geometry),
+                "message":"Geometry is valid.","engine":"shapely"}
     except GeometryError as error:
-        return {"valid":False,"measurement":None,"message":str(error)}
+        return {"valid":False,"measurement":None,"message":str(error),"engine":"shapely"}
 
 
 def snap(coordinate_pair, paths, tolerance_m):
