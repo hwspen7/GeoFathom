@@ -12,6 +12,7 @@ import {
 import MapCanvas, { type FocusPoint } from './MapCanvas';
 import SurveyTools from './SurveyTools';
 import ProfessionalPanel from './ProfessionalPanel';
+import SpatialToolsPanel from './SpatialToolsPanel';
 import { featureColor, legendEntries, DEFAULT_LAYER_STYLE } from './labels';
 import ImageCorrectionPanel, { type PromptMode } from './ImageCorrectionPanel';
 import {
@@ -19,7 +20,7 @@ import {
   singleMovedVertex, type Position, type ShapeMode,
 } from './editing';
 import DiscoveryPanel from './DiscoveryPanel';
-import type { DiscoveryResponse, GeoWorkspace, WorkspaceFeature } from './api';
+import type { DiscoveryResponse, GeoWorkspace, WorkspaceFeature, QualityIssue } from './api';
 import ProjectsPanel from './ProjectsPanel';
 import ModelControls from './ModelControls';
 import RasterPanel, { type TraceSettings } from './RasterPanel';
@@ -76,6 +77,10 @@ export default function App() {
     projectId:string;layerId:string;text:string;
   }|null>(null);
   const [showLegend,setShowLegend] = useState(true);
+  const [selectionBoxMode,setSelectionBoxMode]=useState(false);
+  const [selectionBox,setSelectionBox]=useState<[number,number,number,number]|null>(null);
+  const [spatialSelected,setSpatialSelected]=useState<string[]>([]);
+  const [qualityIssues,setQualityIssues]=useState<QualityIssue[]>([]);
   const [linked,setLinked] = useState(false);
   const [pendingShared,setPendingShared] = useState<{
     preview:SharedTopologyPreview;old:[number,number];next:[number,number];
@@ -424,6 +429,8 @@ export default function App() {
   function clearWorkspace() {
     setGeometry(null);
     setPendingAnnotation(null);
+    setSelectionBoxMode(false);setSelectionBox(null);
+    setSpatialSelected([]);setQualityIssues([]);
     setPromptMode(null);setPositivePoints([]);setNegativePoints([]);setBoxPoints([]);
     setPendingShared(null);
     lastValid.current = null;
@@ -709,6 +716,33 @@ export default function App() {
           </section>
 
           <section className="panel-section">
+            <div className="section-heading"><Layers3 size={16}/><span>GIS selection, QA & print layout</span></div>
+            <SpatialToolsPanel
+              projectId={activeProjectId}
+              geometry={geometry}
+              viewport={viewport}
+              selectedIds={spatialSelected}
+              onSelected={setSpatialSelected}
+              boxMode={selectionBoxMode}
+              onBoxMode={active=>{
+                setSelectionBoxMode(active);
+                if(active){
+                  setDrawingMode(null);setEditing(false);
+                  setMoving(false);setTraceMode(false);setPromptMode(null);
+                  setPendingAnnotation(null);
+                }
+              }}
+              box={selectionBox}
+              onBox={setSelectionBox}
+              onIssues={setQualityIssues}
+              onOpen={id=>{
+                const item=projectWorkspace?.features.find(f=>f.id===id);
+                if(item)openStoredFeature(item);
+              }}
+            />
+          </section>
+
+          <section className="panel-section">
             <div className="section-heading"><Search size={16} /><span>Find areas by size</span><span className="section-pill">Spatial query</span></div>
             <DiscoveryPanel viewport={viewport} busy={busy} onFound={(result: DiscoveryResponse) => {
               setDiscovered(result.results);
@@ -864,6 +898,13 @@ export default function App() {
             imageLayer={imageLayer} traceMode={traceMode||promptMode!==null}
             promptPositive={positivePoints} promptNegative={negativePoints}
             promptBox={boxPoints}
+            selectionBoxMode={selectionBoxMode}
+            onSelectionBox={box=>{
+              setSelectionBox(box);setSelectionBoxMode(false);
+              setMessage('Selection rectangle ready. Choose a spatial relation and select matches.');
+            }}
+            selectedIds={spatialSelected}
+            qualityIssues={qualityIssues.map(issue=>issue.geometry)}
             onTraceClick={async ([longitude, latitude]) => {
               if (promptMode!==null) {
                 const location:Position=[longitude,latitude];
