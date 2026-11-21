@@ -176,3 +176,28 @@ def test_projected_crs_is_transformed_before_geodesic_area(tmp_path):
     assert result["source_crs"] == "EPSG:3857"
     assert result["geometry_crs"] == "EPSG:4326"
     assert result["measurement"]["area_m2"] > 1000
+
+
+def test_local_cog_import_preserves_overviews_and_source_checksum(tmp_path,monkeypatch):
+    from imagery.cli import import_local_image
+    from imagery.store import image_file
+    import hashlib
+    source=tmp_path/"source-cog.tif"
+    with rasterio.open(
+        source,"w",driver="GTiff",width=256,height=256,count=4,
+        dtype="uint8",crs="EPSG:4326",
+        transform=from_origin(20,30,.00001,.00001),
+        tiled=True,blockxsize=128,blockysize=128,compress="deflate",
+    ) as dataset:
+        dataset.write(np.full((4,256,256),99,dtype=np.uint8))
+        dataset.build_overviews([2,4],rasterio.enums.Resampling.average)
+    item=import_local_image(source,"Source COG")
+    assert item["name"]=="Source COG"
+    assert item["is_tiled"] is True
+    assert item["block_shapes"][0]==[128,128]
+    assert item["overviews"]==[2,4]
+    assert item["sha256"]==hashlib.sha256(source.read_bytes()).hexdigest()
+    assert image_file(item["id"]).read_bytes()==source.read_bytes()
+    assert metadata(source)["block_shapes"][0]==[128,128]
+    with pytest.raises(Exception,match="already inside"):
+        import_local_image(image_file(item["id"]))

@@ -51,22 +51,23 @@ def _manifest(identifier):
     bands = info.get("bands", [1, 2, 3])
     size = info.get("tile_size", 256)
     scale = info.get("input_scale", 255.0)
-    mean = info.get("mean", [0, 0, 0])
-    std = info.get("std", [1, 1, 1])
+    mean = info.get("mean", [0] * len(bands) if isinstance(bands,list) else [])
+    std = info.get("std", [1] * len(bands) if isinstance(bands,list) else [])
     if (not isinstance(classes, list) or not 2 <= len(classes) <= 32 or
         any(not isinstance(x, str) or not x or len(x) > 64 for x in classes) or
-        not isinstance(bands, list) or len(bands) != 3 or
+        not isinstance(bands, list) or not 1 <= len(bands) <= 20 or
         any(type(b) is not int or not 1 <= b <= 20 for b in bands) or
-        len(set(bands)) != 3 or type(size) is not int or size not in (128, 256, 512)):
+        len(set(bands)) != len(bands) or type(size) is not int
+        or size not in (128, 256, 512)):
         raise RasterError("Model requires class names, three bands and a supported tile size.")
     if (not isinstance(scale, (float, int)) or not math.isfinite(scale)
         or not 0 < scale <= 65535):
         raise RasterError("Model input scale must be a positive finite number.")
     for values in (mean, std):
-        if (not isinstance(values, list) or len(values) != 3 or
+        if (not isinstance(values, list) or len(values) != len(bands) or
             any(not isinstance(x, (float, int)) or isinstance(x, bool)
                 or not math.isfinite(x) for x in values)):
-            raise RasterError("Model normalization requires three finite values.")
+            raise RasterError("Model normalization must match selected input bands.")
     if any(x <= 0 for x in std):
         raise RasterError("Model normalization standard deviations must be positive.")
     return {
@@ -125,8 +126,9 @@ def _predict_tile(tensor, config, device):
     classes = len(config["classes"])
     # Budget model input/output tensors before allocating native sessions.
     # It does not bound all ONNX Runtime activations or GPU driver memory.
-    expected_bytes = size * size * (3 + classes + 4) * 4
-    if (tensor.shape != (1, 3, size, size) or tensor.dtype != np.float32
+    channels = len(config.get("bands", [1, 2, 3]))
+    expected_bytes = size * size * (channels + classes + 4) * 4
+    if (tensor.shape != (1, channels, size, size) or tensor.dtype != np.float32
             or expected_bytes > tensor_budget_mb() * 1024 * 1024):
         raise RasterError("Model tile exceeds the configured tensor memory budget.")
     state = path.stat()
@@ -205,7 +207,7 @@ def semantic_segmentation(path: Path, image_id: str, model_id: str,
             # pixels are neutral in model input space and never vectorized.
             normalized = (np.nan_to_num(tile, nan=0.0) /
                           config["input_scale"] - mean) / std
-            padded = np.zeros((1, 3, size, size), dtype=np.float32)
+            padded = np.zeros((1, len(config["bands"]), size, size), dtype=np.float32)
             padded[0, :, :bottom-row, :right-col] = normalized
             predicted, scores = _predict_tile(padded, config, device)
             accepted = scores[:bottom-row, :right-col] >= minimum_confidence

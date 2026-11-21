@@ -166,3 +166,15 @@ scale/performance guarantees.
   and configured model weights and CUDA hardware are available.
 - `benchmarks/native_pipeline.py`: repeatable per-hardware native vs
   NumPy spectral and batched BVH throughput observations.
+
+## Additional native, storage and imagery interface checks
+
+- `tests/test_storage_engine.py`: schema migration happens once, new
+  connections retain functional R-tree triggers, and legacy spatial
+  records are backfilled.
+- `tests/test_geoai.py`: four-band ONNX manifest validation and dynamic
+  NCHW tensor channels without deploying real weights.
+- `tests/test_imagery.py`: operator-only local tiled GeoTIFF/COG import,
+  overview and block metadata, checksums and immutability.
+- `web/e2e/professional.spec.ts`: background job polling returns only
+  result metadata; the browser fetches full GeoJSON from the job detail.

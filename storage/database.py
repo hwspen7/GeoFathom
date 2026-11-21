@@ -43,9 +43,15 @@ def _connect() -> Iterator[sqlite3.Connection]:
     connection.execute("PRAGMA foreign_keys = ON")
     connection.execute("PRAGMA busy_timeout = 5000")
     try:
-        connection.execute("PRAGMA journal_mode = WAL")
-        connection.executescript(
-            """
+        # user_version=1 means the base schema, R-tree and triggers were
+        # installed. Avoid expensive DDL and feature-count scans on every
+        # short-lived read connection. Version 0 databases are migrated.
+        from .paging import register_rtree_functions,prepare_rtree
+        register_rtree_functions(connection)
+        if connection.execute("PRAGMA user_version").fetchone()[0] < 1:
+            connection.execute("PRAGMA journal_mode = WAL")
+            connection.executescript(
+                """
             CREATE TABLE IF NOT EXISTS projects (
                 id TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
@@ -63,12 +69,10 @@ def _connect() -> Iterator[sqlite3.Connection]:
                 created_at TEXT NOT NULL
             );
             CREATE INDEX IF NOT EXISTS features_project_id_idx ON features(project_id);
-            """
-        )
-        # Keep spatial-index SQLite UDFs registered on every writer connection;
-        # INSERT/UPDATE triggers call them even outside spatial queries.
-        from .paging import prepare_rtree
-        prepare_rtree(connection)
+                """
+            )
+            prepare_rtree(connection)
+            connection.execute("PRAGMA user_version = 1")
         yield connection
         connection.commit()
     except Exception:

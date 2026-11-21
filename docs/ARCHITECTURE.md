@@ -113,3 +113,17 @@ ONNX session cache and bounds concurrent model inference without replacing
 the existing Python/C++ raster and geometry ownership boundaries.
 `geometry.spatial.SegmentIndex` serializes query and close across threads
 to protect its immutable native BVH handle.
+
+## Database and local imagery interfaces
+
+Base SQLite schema initialization uses a database-level `user_version`
+marker. Geometry UDFs are registered for each fresh connection to keep
+feature R-tree triggers working, but R-tree backfill and DDL are not
+repeated for every API read. Disk-backed job result JSON is independent
+of job status polling.
+
+The local operator-only `imagery.cli` path supports copied georeferenced
+GeoTIFF/COG data without exposing arbitrary remote filesystem import to
+the HTTP API; Rasterio surfaces tiling, source block layout and overviews.
+Multi-channel ONNX model preprocessing uses manifest-defined spectral
+bands and normalization for up to 20 channels.

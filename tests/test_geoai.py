@@ -188,3 +188,37 @@ def test_onnx_output_contract_rejects_wrong_shape(monkeypatch,tmp_path):
     monkeypatch.setattr(sem,"_session",lambda *args:Fake())
     with pytest.raises(RasterError,match="Model output"):
         _predict_tile(np.zeros((1,3,128,128),dtype=np.float32),config,"cpu")
+
+
+def test_multispectral_onnx_manifest_and_nchw_tensor_layout(monkeypatch,tmp_path):
+    import vision.semantic as semantic
+    root=tmp_path/"vision-models"
+    root.mkdir()
+    (root/"fourband.onnx").write_bytes(b"mocked-weights")
+    (root/"fourband.json").write_text(json.dumps({
+        "classes":["background","vegetation"],
+        "bands":[4,3,2,1],"tile_size":128,
+        "input_scale":200,
+        "mean":[0,0,0,0],"std":[1,1,1,1],
+    }))
+    config=semantic._manifest("fourband")
+    assert config["bands"]==[4,3,2,1]
+    seen=[]
+    def fake(tensor,manifest,device):
+        seen.append((tensor.shape,tensor.dtype,device))
+        labels=np.zeros((128,128),dtype=np.uint8)
+        labels[16:32,16:32]=1
+        return labels,np.ones((128,128),dtype=np.float32)
+    monkeypatch.setattr(semantic,"_predict_tile",fake)
+    source=raster(tmp_path,"multispectral.tif")
+    result=semantic.semantic_segmentation(
+        source,"image","fourband",.5,64)
+    assert seen==[((1,4,128,128),np.dtype("float32"),"cpu")]
+    assert result["classified_pixels"]==16*16
+    assert result["features"][0]["properties"]["class_name"]=="vegetation"
+    (root/"bad.onnx").write_bytes(b"x")
+    (root/"bad.json").write_text(json.dumps({
+        "classes":["background","vegetation"],"bands":[4,4,2,1],
+    }))
+    with pytest.raises(RasterError,match="bands"):
+        semantic._manifest("bad")

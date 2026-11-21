@@ -17,16 +17,24 @@ def _bbox_json(data:str)->tuple:
     return value.bounds
 
 
+def register_rtree_functions(conn:sqlite3.Connection)->None:
+    """Register geometry UDFs on each fresh connection before any write."""
+    if conn.in_transaction:
+        # Replacing SQLite UDFs inside a running write transaction is invalid.
+        raise StorageError("Spatial functions must be registered before writes.")
+    for index,name in enumerate(("geo_minx","geo_miny","geo_maxx","geo_maxy")):
+        conn.create_function(name,1,lambda data,i=index:_bbox_json(data)[i],
+                             deterministic=True)
+
+
 def prepare_rtree(conn:sqlite3.Connection)->None:
-    # Register on every connection: SQLite triggers invoke this UDF when
-    # geometry is changed by any of the existing project edit pathways.
-    # _connect() already installs the UDFs before yielding the connection.
-    # Recreating a SQLite UDF after an active write (e.g. index rebuild)
-    # raises sqlite3.OperationalError: Error creating function.
+    """Create/update spatial triggers and rebuild missing index rows.
+
+    This is deliberately an explicit maintenance operation; the fast
+    connection path initializes it once using the SQLite user_version marker.
+    """
     if not conn.in_transaction:
-        for index,name in enumerate(("geo_minx","geo_miny","geo_maxx","geo_maxy")):
-            conn.create_function(name,1,lambda data,i=index:_bbox_json(data)[i],
-                                 deterministic=True)
+        register_rtree_functions(conn)
     conn.executescript("""
     CREATE VIRTUAL TABLE IF NOT EXISTS feature_bounds USING rtree(
       feature_rowid,minx,maxx,miny,maxy
@@ -83,7 +91,6 @@ def bounding_candidates(project_id,bbox,layer_ids=None,visible_only=False,
         _required_project(conn,project_id)
         _schema(conn)
         _default(conn,project_id)
-        prepare_rtree(conn)
         if layer_ids:
             # Authorization: each layer id must belong to this project.
             allowed={row["id"] for row in conn.execute(
@@ -137,7 +144,6 @@ def page_features(project_id,bbox,limit=250,offset=0,layer_ids=None,
     with _connect() as conn:
         _required_project(conn,project_id)
         _schema(conn);_default(conn,project_id)
-        prepare_rtree(conn)
         if layer_ids:
             actual={r["id"] for r in conn.execute(
                 "SELECT id FROM geo_layers WHERE project_id=?",(project_id,))}

@@ -148,3 +148,14 @@ Performance measurements are available through
 The measurements are environment-specific and exclude GDAL I/O and GPU
 transfer; do not treat synthetic microbenchmark speedup as proof of whole
 pipeline performance.
+
+## SQLite connection initialization
+
+The local SQLite base schema and R-tree backfill now run only when
+`PRAGMA user_version` indicates an uninitialized or legacy database.
+Each new connection still registers the geometry UDFs needed by SQLite
+spatial triggers, but repeated API reads no longer execute schema DDL
+and full-table index-count comparisons. Explicit index rebuild still uses
+`prepare_rtree`. External direct writes that bypass/destroy the triggers
+need an explicit rebuild; multiple processes still require a shared
+job lease coordinator before production multi-worker deployment.

@@ -110,7 +110,13 @@ test('P2 jobs and optional backend status work without configuring cloud service
   const jobs=await page.request.get(API+'/projects/'+id+'/jobs');
   const list=await jobs.json();
   expect(list.jobs[0].status).toBe('completed');
-  expect(list.jobs[0].result.type).toBe('FeatureCollection');
+  expect(list.jobs[0].has_result).toBe(true);
+  // Polling returns metadata only; retrieve the stored GeoJSON once by ID.
+  expect(list.jobs[0].result).toBeNull();
+  const detail=await page.request.get(
+    API+'/projects/'+id+'/jobs/'+list.jobs[0].id);
+  expect(detail.ok()).toBeTruthy();
+  expect((await detail.json()).result.type).toBe('FeatureCollection');
   await page.locator('details').filter({hasText:'Spatial database & indexed viewport'})
     .locator('summary').click();
   await expect(page.getByLabel('PostGIS status')).toContainText(/Not configured|Configured, offline|Connected/);

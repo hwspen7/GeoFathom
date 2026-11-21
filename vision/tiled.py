@@ -386,7 +386,7 @@ def semantic_segmentation_tiled(path: Path, image_id: str,
         # Model logits may require far more memory than spectral masks.
         # Account for output class channels as well as the input tensor.
         bytes_needed = (plan.tile_size * plan.tile_size *
-                        (3 + len(config["classes"]) + 4) * 4)
+                        (len(config["bands"]) + len(config["classes"]) + 4) * 4)
         if bytes_needed > memory_mb * 1024 * 1024:
             raise RasterError("Model output tensors exceed the per-tile memory allowance.")
         crs = str(src.crs)
@@ -411,7 +411,8 @@ def semantic_segmentation_tiled(path: Path, image_id: str,
                     normalized = (
                         np.nan_to_num(raw, nan=0., posinf=0., neginf=0.) /
                         config["input_scale"] - mean) / std
-                    tensor = np.zeros((1, 3, plan.tile_size, plan.tile_size),
+                    tensor = np.zeros((1, len(config["bands"]), plan.tile_size,
+                                       plan.tile_size),
                                       dtype=np.float32)
                     tensor[0, :, :rows, :cols] = normalized
                     labels, confidence = _predict_tile(tensor, config, device)

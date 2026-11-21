@@ -197,3 +197,25 @@ budgets. A configured temporary directory is removed after completion or
 failure. Disk free-space checks are local preflights, not a distributed
 disk reservation. The backend still needs a multi-process coordinator for
 cross-process leases and global quotas.
+
+## Multi-band model contract and local COG imports
+
+ONNX vision models may now declare **1–20 unique input band indexes**
+instead of assuming all images are RGB. Manifest normalization `mean`
+and `std` arrays must have the same length as `bands`; the model
+input tensor is `[1,band_count,tile_size,tile_size]`.
+Classes remain limited to 2–32, with class zero as background.
+This permits multispectral preprocessing without claiming universal
+sensor interoperability or trained model accuracy.
+
+For local high-resolution GeoTIFF/COG files larger than the HTTP 64 MiB
+limit, an operator can use:
+
+```bash
+python -m imagery.cli /data/scene-cog.tif --name "Scene"
+```
+
+The importer validates GDAL georeferencing, copies into the local
+managed imagery catalog and computes SHA-256 provenance. It does not
+fetch arbitrary external URLs and does not implement STAC range-request
+streaming or a full virtual raster mosaic engine.

@@ -246,3 +246,18 @@ BVH supports concurrent reader leases, bounded traversal stacks and direct
 NumPy double buffers. Optional million-segment, CUDA model and hardware
 throughput acceptance are documented in
 [the native engine guide](docs/NATIVE_ENGINE.md).
+
+## Local COG / large GeoTIFF import
+
+A server operator can import existing tiled GeoTIFF/COG files up to 8 GiB
+without using the 64 MB browser upload endpoint:
+
+```bash
+python -m imagery.cli /path/to/large-scene.tif --name "Satellite source"
+```
+
+The CLI validates georeferencing and format, checks destination disk
+capacity, copies the file into the managed imagery catalog and computes a
+SHA-256 source checksum. It accepts **only a local filesystem path** and is
+not exposed as an arbitrary remote URL import endpoint. Image metadata
+displays source block shape, overview levels and tiled layout.
