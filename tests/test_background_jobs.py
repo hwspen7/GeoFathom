@@ -97,7 +97,7 @@ def test_admin_required_for_powerful_jobs():
     },headers={"X-GeoFathom-Admin-Token":"admin-for-test"})
     assert authorized.status_code==202,authorized.text
     job=finished(root,authorized.json()["id"])
-    assert job["status"]=="completed",job
+    assert job["status"]=="completed",job.get("error")
     assert job["result"]["indexed_features"]==0
 
 
