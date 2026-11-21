@@ -14,6 +14,20 @@ GeoFathom uses **Python for orchestration, GIS analysis and provider adapters**
 and **C++17 for optional performance-sensitive geometric topology**. The
 native module has a correctness-preserving Shapely/Python fallback.
 
+## Advanced professional GIS tools
+
+The workspace additionally includes linked topological boundary previews and
+atomic shared-node edits, tracing between two existing vector-network clicks,
+filterable and bulk-editable attribute tables, KML/GPX/Shapefile ZIP/GeoPackage
+interchange, local DEM slope/aspect and elevation profiles, and optional local
+SAM 2 positive/negative/box mask refinement. Native C++ BVH acceleration
+supports large nearest-edge queries, with a viewport spatial index in the
+browser. See [Advanced GIS workflows](docs/ADVANCED_GIS.md).
+
+CI includes Linux C++/Python/Web checks, Chromium Playwright UI tests and
+Windows MSVC validation. Optional local CUDA segmentation still requires
+your own GPU and model installation.
+
 ## Interactive precision surveying and editing
 
 The map now supports editable vertices, segment midpoint insertion, polygon

@@ -83,3 +83,19 @@ than being interpreted as completed.
 ## Security and deployment
 
 The example is intended for local development. Do not expose the unprotected API directly on the public internet. Add authentication, request quotas, telemetry, environment-specific CORS, persistent caching, safe model endpoints and centralized request rate limiting before production deployment.
+
+
+### Extended GIS capabilities
+
+- \`geometry/spatial.py\` and \`geometry/native/spatial.cpp\`: C++ BVH metric
+  segment indexing used by GIS network tracing and large snapping workloads.
+- \`geometry/tracing.py\`: noded vector network shortest connected paths.
+- \`storage/topology.py\`: preview and atomic multi-feature shared-node edits.
+- \`storage/attributes.py\`: bounded searchable attributes and versioned bulk edits.
+- \`storage/vectorio.py\`: GDAL/OGR interchange and CRS transformation.
+- \`terrain/\` and \`geometry/native/terrain.cpp\`: projected DEM analysis and
+  native slope/aspect calculations.
+- \`vision/refine.py\`: optional local SAM 2 georeferenced correction prompts.
+- \`web/src/spatialIndex.ts\`: pixel-space cache for interactive snapping;
+  separate from C++ service-side spatial indexing.
+- \`web/e2e/\`: real Playwright Chromium GIS workspace integration tests.

@@ -116,3 +116,8 @@ does not replace manual browser pointer and touch-device acceptance tests.
 - [Shapely split operation](https://shapely.readthedocs.io/en/stable/reference/shapely.split.html)
 - [Shapely geometry overlays](https://shapely.readthedocs.io/en/latest/set_operations.html)
 - [PyProj Geod](https://pyproj4.github.io/pyproj/stable/api/geod.html)
+
+
+See also [Advanced GIS workflows](ADVANCED_GIS.md) for linked topology,
+vector tracing, attribute tables, GDAL import/export, terrain analytics,
+SAM 2 refinement and browser performance tests.

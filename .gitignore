@@ -39,3 +39,9 @@ data/
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
+
+# Playwright browser tests
+web/test-results/
+web/playwright-report/
+web/blob-report/
+data/e2e-geofathom.sqlite*

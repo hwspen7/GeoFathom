@@ -265,3 +265,47 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .edge-measurements > div { max-height: 150px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
 .edge-measurements > div > div { display: flex; justify-content: space-between; gap: 8px; color: #667e96; font-size: 10px; }
 .edge-measurements strong { color: #375e8e; }
+
+
+/* Connected professional GIS panels */
+.professional-panel { display:flex;flex-direction:column;gap:8px; }
+.professional-panel details { border:1px solid #e3ebf4;border-radius:10px;
+  background:#f9fbfe; padding:9px; }
+.professional-panel details > summary { display:flex;align-items:center;gap:7px;
+  color:#456787;font-size:11px;font-weight:750;cursor:pointer; }
+.professional-form { margin-top:10px;display:flex;flex-direction:column;gap:8px; }
+.professional-form input,.professional-form select {
+  min-width:0;width:100%;border:1px solid #dce6ef;border-radius:7px;
+  background:#fff;color:#42617e;font-size:11px;padding:9px;
+}
+.professional-form button { border:1px solid #cbddee;border-radius:8px;
+  background:#eaf3ff;color:#255d9d;padding:9px;display:flex;
+  justify-content:center;align-items:center;gap:7px;font-size:11px;font-weight:700; }
+.professional-form button:disabled { opacity:.45;cursor:not-allowed; }
+.professional-form strong { color:#496884;font-size:11px; }
+.professional-form .area-fields { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px; }
+.attribute-table-scroll { margin-top:10px;max-height:215px;overflow:auto;
+  background:#fff;border:1px solid #e1e8f0;border-radius:8px; }
+.attribute-table { border-collapse:collapse;width:100%;font-size:10px; }
+.attribute-table th,.attribute-table td { padding:8px;border-bottom:1px solid #eef2f6;
+  text-align:left;white-space:nowrap;color:#536f8b; }
+.attribute-table th { font-size:9px;text-transform:uppercase;background:#f2f6fb;
+  color:#6f8299;position:sticky;top:0; }
+.attribute-table input { accent-color:#2771c0; }
+.attribute-open { color:#245fa7;border:none;background:transparent;font:inherit; }
+.terrain-metrics { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:7px;border-radius:8px;padding:9px;background:#fff;border:1px solid #e0e8ef; }
+.terrain-metrics > div { display:flex;flex-direction:column;gap:4px; }
+.terrain-metrics span,.terrain-metrics small { color:#72859c;font-size:10px; }
+.terrain-metrics strong { color:#305e95;font-size:12px; }
+.terrain-metrics small { grid-column:span 2; }
+.terrain-profile { display:flex;flex-direction:column;gap:5px;color:#687d92;font-size:10px; }
+.terrain-profile svg { max-width:100%;height:100px;background:#fff;
+  border:1px solid #e3eaf1;border-radius:7px; }
+.linked-preview { background:#f6fbff;border:1px solid #bbd4ed;border-radius:9px;
+  padding:12px;color:#50718e;display:flex;flex-direction:column;gap:7px;font-size:11px; }
+.linked-preview strong { color:#1e5c9d; }
+.linked-vertex-toggle { display:flex;align-items:center;gap:7px;
+  font-weight:650;font-size:10px;color:#58728e; }
+.image-review { display:flex;flex-direction:column;gap:9px;margin-top:12px;
+  padding-top:12px;border-top:1px solid #e4ebf3; }
