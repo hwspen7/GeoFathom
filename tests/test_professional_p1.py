@@ -113,7 +113,7 @@ def test_advanced_label_and_graduated_styles_are_revisioned():
     {"labels":{"placement":"expression"}},
     {"labels":{"prefix":"x"*25}},
     {"symbol":{"graduated_breaks":[10,8]}},
-    {"symbol":{"graduated_breaks":[0,float("inf")]}},
+    {"symbol":{"graduated_breaks":[0,0]}},
     {"symbol":{"graduated_colors":["#gggggg"]}},
     {"symbol":{"graduated_breaks":[5],"graduated_colors":["#aabbcc"]}},
     {"symbol":{"graduated_method":"arbitrary-js"}},

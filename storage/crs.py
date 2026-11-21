@@ -5,6 +5,7 @@ Project CRS affects coordinate readouts, analysis requests and projected
 grids. The app never pretends that changing CRS reprojects the tile canvas.
 """
 from pyproj import CRS,Transformer
+from pyproj.exceptions import CRSError
 from storage.database import StorageError,_connect,_now,_required_project
 
 def _epsg(text):
@@ -16,7 +17,7 @@ def _epsg(text):
         if not authority or authority[0]!="EPSG":
             raise ValueError("Expected EPSG authority")
         return f"EPSG:{authority[1]}"
-    except (ValueError,TypeError) as error:
+    except (CRSError,ValueError,TypeError) as error:
         raise StorageError("Unknown or unsupported EPSG coordinate system.") from error
 
 def _table(c):
