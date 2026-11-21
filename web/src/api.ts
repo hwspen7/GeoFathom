@@ -393,6 +393,8 @@ export interface GeoLayer {
   visible: number;
   locked: number;
   z_index: number;
+  style: LayerStyle;
+  style_revision: number;
 }
 
 export interface WorkspaceFeature extends StoredFeature {
@@ -581,5 +583,49 @@ export function refineRaster(body:{
   return request('/vision/refine',{
     method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify(body),
+  });
+}
+
+
+export interface LabelStyle {
+  enabled:boolean;
+  field:string;
+  font_size:number;
+  text_color:string;
+  halo_color:string;
+  halo_width:number;
+  min_zoom:number;
+  max_zoom:number;
+  allow_overlap:boolean;
+}
+export interface SymbolStyle {
+  fill_opacity:number;
+  line_width:number;
+  point_radius:number;
+  stroke_color:string;
+}
+export interface LayerStyle {
+  labels:LabelStyle;
+  symbol:SymbolStyle;
+}
+export function patchLayerStyle(
+  projectId:string,layerId:string,changes:{
+    labels?:Partial<LabelStyle>;
+    symbol?:Partial<SymbolStyle>;
+    expected_revision?:number;
+  },
+):Promise<GeoLayer> {
+  return request('/projects/'+encodeURIComponent(projectId)+
+    '/layers/'+encodeURIComponent(layerId)+'/style',{
+      method:'PATCH',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(changes),
+    });
+}
+export function addMapAnnotation(
+  projectId:string,text:string,position:[number,number],layerId?:string,
+):Promise<WorkspaceFeature>{
+  return request('/projects/'+encodeURIComponent(projectId)+'/annotations',{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({text,position,layer_id:layerId||null}),
   });
 }
