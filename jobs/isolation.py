@@ -7,6 +7,9 @@ SQLite lease remains authoritative. GPU VRAM is monitored separately.
 import multiprocessing
 import os
 import time
+import json
+from tempfile import TemporaryDirectory
+from pathlib import Path
 
 from storage.database import StorageError
 
@@ -21,7 +24,10 @@ def _limit(name,default,minimum,maximum):
     return value
 
 
-def _child_entry(send,path,uid,owner,kind,project_id,payload):
+def _child_entry(send,path,uid,owner,kind,project_id,payload,scratch):
+    # The parent owns the directory, including after forced termination.
+    os.environ['GEOFATHOM_SNAPSHOT_DIR']=scratch
+    os.environ['GEOFATHOM_RASTER_TEMP_DIR']=scratch
     # Explicitly set the database context in the spawned interpreter.
     from storage.database import job_database_override
     from jobs import queue
@@ -32,10 +38,20 @@ def _child_entry(send,path,uid,owner,kind,project_id,payload):
     state=queue._ACTIVE_PROGRESS.set({
         "value":10,"checked":clock.monotonic(),"committed":clock.monotonic()})
     try:
+        from .resources import configure_child
+        from sqlite3 import connect
+        with __import__("contextlib").closing(connect(path,timeout=5)) as db:
+            row=db.execute("""SELECT name FROM gis_job_slots WHERE owner=?
+                AND name LIKE 'compute:%'""",(owner,)).fetchone()
+        configure_child(int(row[0].split(":")[1]) if row else 0)
         outcome=queue._execute(kind,project_id,payload)
-        send.send(("ok",outcome))
+        # Use bounded JSON IPC rather than unbounded pickled application results.
+        data=json.dumps({"status":"ok","result":outcome},allow_nan=False).encode("utf-8")
+        if len(data)>5_000_100:
+            raise StorageError("GIS job output exceeded 5 MB; narrow the query.")
+        send.send_bytes(data)
     except Exception as error:
-        send.send(("error",str(error)[:250]))
+        send.send_bytes(json.dumps({"status":"error","error":str(error)[:250]}).encode("utf-8"))
     finally:
         queue._ACTIVE_PROGRESS.reset(state)
         queue._ACTIVE_OWNER.reset(lease)
@@ -53,7 +69,25 @@ def _terminate(process):
         process.join(timeout=3)
 
 
+def _read_result(receive):
+    try:
+        message=json.loads(receive.recv_bytes(maxlength=5_000_100))
+    except (EOFError,OSError,ValueError) as error:
+        raise RuntimeError("Raster subprocess IPC closed or returned invalid data.") from error
+    if message["status"]!="ok":
+        raise RuntimeError(message["error"])
+    return message["result"]
+
+
 def run_isolated(path,uid,owner,kind,project_id,payload,lost):
+    root=os.getenv("GEOFATHOM_SNAPSHOT_DIR") or os.getenv("GEOFATHOM_RASTER_TEMP_DIR")
+    if root:
+        Path(root).mkdir(parents=True,exist_ok=True)
+    with TemporaryDirectory(prefix="geofathom-worker-",dir=root) as scratch:
+        return _run_isolated(path,uid,owner,kind,project_id,payload,lost,scratch)
+
+
+def _run_isolated(path,uid,owner,kind,project_id,payload,lost,scratch):
     """Execute a raster task in a monitored child process; return its result."""
     try:
         import psutil
@@ -65,30 +99,27 @@ def run_isolated(path,uid,owner,kind,project_id,payload,lost):
     receive,send=context.Pipe(duplex=False)
     process=context.Process(
         target=_child_entry,
-        args=(send,path,uid,owner,kind,project_id,payload),
+        args=(send,path,uid,owner,kind,project_id,payload,scratch),
         daemon=False)
     started=time.monotonic()
-    process.start()
-    send.close()
     try:
-        monitor=psutil.Process(process.pid)
+        process.start()
+        send.close()
+        try:
+            monitor=psutil.Process(process.pid)
+        except psutil.NoSuchProcess as error:
+            raise RuntimeError("Raster subprocess exited before monitoring.") from error
         while True:
             if lost.is_set():
                 raise RuntimeError("Worker lease lost during raster processing.")
             if time.monotonic()-started > timeout:
                 raise RuntimeError("Raster processing exceeded the wall-time budget.")
             if receive.poll(.15):
-                tag,result=receive.recv()
-                if tag=="error":
-                    raise RuntimeError(result)
-                return result
+                return _read_result(receive)
             if not process.is_alive():
                 # Check for a late IPC write, then report any native crash.
                 if receive.poll(.05):
-                    tag,result=receive.recv()
-                    if tag=="ok":
-                        return result
-                    raise RuntimeError(result)
+                    return _read_result(receive)
                 raise RuntimeError(f"Raster subprocess exited without a result ({process.exitcode}).")
             try:
                 if monitor.memory_info().rss > rss_mb*1024*1024:
@@ -108,5 +139,9 @@ def run_isolated(path,uid,owner,kind,project_id,payload,lost):
             finally:
                 connection.close()
     finally:
-        _terminate(process)
+        if process.pid is not None:
+            _terminate(process)
+            process.join(timeout=3)
+            process.close()
+        send.close()
         receive.close()

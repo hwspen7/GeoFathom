@@ -93,3 +93,46 @@ GEOFATHOM_API int gf_spectral_change(
     const float* after_index, const unsigned char* after_valid,
     std::size_t count, float threshold, unsigned char* out_class) noexcept;
 }
+
+// Bounded reusable CPU workers; the caller must destroy the handle only
+// after all calls finish. Each run has disjoint output pixel ranges.
+extern "C" {
+GEOFATHOM_API void* gf_cpu_runtime_create(unsigned threads) noexcept;
+GEOFATHOM_API void gf_cpu_runtime_destroy(void* runtime) noexcept;
+GEOFATHOM_API int gf_cpu_runtime_index(void* runtime,const float* a,
+    const float* b,const unsigned char* valid,std::size_t n,float* output,
+    unsigned char* mask) noexcept;
+GEOFATHOM_API int gf_cpu_runtime_change(void* runtime,const float* a,
+    const unsigned char* av,const float* b,const unsigned char* bv,
+    std::size_t n,float threshold,unsigned char* output) noexcept;
+}
+
+// Optional CUDA runtime: only exported by the CUDA-enabled library.
+#ifdef GEOFATHOM_NATIVE_CUDA
+extern "C" {
+GEOFATHOM_API void* gf_cuda_runtime_create(std::size_t n,int device) noexcept;
+GEOFATHOM_API void gf_cuda_runtime_destroy(void* g) noexcept;
+GEOFATHOM_API int gf_cuda_runtime_index(void* g,const float* a,const float* b,
+    const unsigned char* v,std::size_t n,float* out,unsigned char* mask) noexcept;
+GEOFATHOM_API int gf_cuda_runtime_change(void* g,const float* a,const unsigned char* av,
+    const float* b,const unsigned char* bv,std::size_t n,float t,unsigned char* mask) noexcept;
+GEOFATHOM_API int gf_cuda_runtime_paired_change(void* handle,
+    const float* old_a,const float* old_b,const unsigned char* old_v,
+    const float* new_a,const float* new_b,const unsigned char* new_v,
+    std::size_t n,float threshold,unsigned char* labels,unsigned char* valid) noexcept;
+}
+#endif
+
+// Exact horizontal and vertical label-edge count; bounded uint8 input.
+extern "C" GEOFATHOM_API int gf_mask_transitions(const unsigned char* data,
+    std::size_t width,std::size_t height) noexcept;
+
+// Explicit aligned scratch-buffer leases. Never destroy during concurrent calls.
+#include <cstdint>
+extern "C" {
+GEOFATHOM_API void* gf_buffer_pool_create(std::size_t budget) noexcept;
+GEOFATHOM_API int gf_buffer_pool_acquire(void* p,std::size_t bytes,std::uint64_t* lease,void** data) noexcept;
+GEOFATHOM_API int gf_buffer_pool_release(void* p,std::uint64_t lease) noexcept;
+GEOFATHOM_API int gf_buffer_pool_stats(void* p,std::size_t* out) noexcept;
+GEOFATHOM_API int gf_buffer_pool_destroy(void* p) noexcept;
+}

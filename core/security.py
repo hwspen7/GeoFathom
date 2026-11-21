@@ -1,10 +1,12 @@
 """Opt-in API authentication boundary and request telemetry for deployments.
 
 By default the API is local-first, not a multi-tenant service. Required mode
-protects ALL data routes with a single operator key. Individual project RBAC
-and public hosting require a separate identity provider and authorization.
+protects all data routes with an operator key or a scoped, revocable user token.
+Public hosting still requires TLS and a hardened deployment boundary.
 """
 import hmac
+import json
+from .metrics import observe
 import logging
 import os
 import time
@@ -13,6 +15,7 @@ from uuid import uuid4
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
 
 _LOGGER=logging.getLogger("geofathom.access")
 
@@ -46,7 +49,16 @@ def _authorized(request,mode):
         auth=request.headers.get("authorization","")
         if auth.startswith("Bearer "):
             token=auth[7:]
-    if not token or not hmac.compare_digest(token,expected):
+    if token and hmac.compare_digest(token.encode(),expected.encode()):
+        return None
+    from .access import authenticate,permits
+    principal=authenticate(token)
+    if principal:
+        request.state.principal=principal
+        if permits(principal,request.method,request.url.path):
+            return None
+        return JSONResponse(status_code=403,content={"detail":"Project permission denied."})
+    if principal is None:
         return JSONResponse(status_code=401,content={
             "detail":"Valid API credentials are required."},
             headers={"WWW-Authenticate":"Bearer"})
@@ -60,7 +72,7 @@ class APIBoundaryMiddleware(BaseHTTPMiddleware):
         response=None
         try:
             mode=os.getenv("GEOFATHOM_AUTH_MODE","local").lower()
-            rejected=_authorized(request,mode)
+            rejected=await run_in_threadpool(_authorized,request,mode)
             response=rejected if rejected is not None else await call_next(request)
             return response
         finally:
@@ -70,7 +82,9 @@ class APIBoundaryMiddleware(BaseHTTPMiddleware):
                 response.headers["X-Process-Time-ms"]=str(elapsed)
                 response.headers["Cache-Control"]=(
                     response.headers.get("Cache-Control","no-store"))
-            _LOGGER.info(
-                "http request_id=%s method=%s route=%s status=%s elapsed_ms=%.2f",
-                request_id,request.method,request.url.path,
-                response.status_code if response is not None else 500,elapsed)
+            status=response.status_code if response is not None else 500
+            observe(status,elapsed)
+            # Encode control characters and do not log credentials.
+            _LOGGER.info(json.dumps({"event":"http_request","request_id":request_id,
+                "method":request.method,"path":request.url.path[:256],
+                "status":status,"elapsed_ms":elapsed},separators=(",",":")))

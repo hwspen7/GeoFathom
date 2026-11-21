@@ -15,7 +15,7 @@ jobs:
         with:
           python-version: '3.11'
       - name: Install API and test dependencies
-        run: python -m pip install -e ".[dev]"
+        run: python -m pip install -c requirements/linux.lock -e ".[dev,vision]" "onnx>=1.16,<2"
       - name: Build native geometry kernels
         run: |
           cmake -S . -B build/native -DCMAKE_BUILD_TYPE=Release
@@ -29,12 +29,33 @@ jobs:
           cmake -S . -B build/native-sanitized -DCMAKE_BUILD_TYPE=Debug -DGEOFATHOM_NATIVE_SANITIZERS=ON
           cmake --build build/native-sanitized --config Debug --parallel
           ctest --test-dir build/native-sanitized --build-config Debug --output-on-failure
+      - name: Native thread sanitizer
+        run: |
+          sudo sysctl -w vm.mmap_rnd_bits=28
+          cmake -S . -B build/native-tsan -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS="-fsanitize=thread -fno-omit-frame-pointer" -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=thread -no-pie" -DCMAKE_SHARED_LINKER_FLAGS="-fsanitize=thread"
+          cmake --build build/native-tsan --parallel
+          TSAN_OPTIONS=halt_on_error=1 ctest --test-dir build/native-tsan --output-on-failure
+      - name: Mutation fuzzing under ASan and UBSan
+        run: |
+          mkdir -p build/fuzz
+          clang++ -std=c++17 -g -O1 -fno-omit-frame-pointer -fsanitize=fuzzer,address,undefined geometry/native/fuzz_spectral.cpp geometry/native/spectral.cpp geometry/native/transitions.cpp -o build/fuzz/spectral
+          build/fuzz/spectral -runs=20000 -max_len=4096 -timeout=3
       - name: Run Python tests with native library
         env:
           GEOFATHOM_REQUIRE_NATIVE: '1'
           GEOFATHOM_STRESS_8K: '1'
+          GEOFATHOM_STRESS_16K: '1'
           GEOFATHOM_STRESS_MILLION_SEGMENTS: '1'
-        run: python -m pytest -q --cov=geometry --cov=storage --cov=terrain --cov=vision --cov-report=term-missing --cov-report=xml:coverage.xml
+          GEOFATHOM_REQUIRE_REAL_ONNX: '1'
+        run: python -m pytest -q --cov=geometry --cov=storage --cov=terrain --cov=vision --cov=jobs --cov=core --cov=imagery --cov-report=term-missing --cov-report=xml:coverage.xml
+      - name: Native compute soak and performance smoke gate
+        run: python benchmarks/soak.py --seconds 10 --output native-soak.json
+      - name: Upload native soak result
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-soak
+          path: native-soak.json
       - name: Upload code coverage report
         uses: actions/upload-artifact@v4
         if: always()
@@ -52,7 +73,7 @@ jobs:
           node-version: '22'
       - name: Install web dependencies
         working-directory: web
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
       - name: Typecheck and build
         working-directory: web
         run: npm run build
@@ -70,13 +91,13 @@ jobs:
         with:
           python-version: '3.11'
       - name: Install GIS API
-        run: python -m pip install -e ".[dev]"
+        run: python -m pip install -c requirements/linux.lock -e ".[dev]"
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
       - name: Install web and Playwright test dependencies
         working-directory: web
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
       - name: Install Chromium and system dependencies
         working-directory: web
         run: npx playwright install --with-deps chromium
@@ -100,7 +121,7 @@ jobs:
         with:
           python-version: '3.11'
       - name: Install Windows GIS and test dependencies
-        run: python -m pip install -e ".[dev]"
+        run: python -m pip install -c requirements/windows.lock -e ".[dev]"
       - name: Compile native C++ kernels with MSVC
         run: |
           cmake -S . -B build/native -A x64
@@ -137,6 +158,6 @@ jobs:
         with:
           python-version: '3.11'
       - name: Install PostGIS integration dependencies
-        run: python -m pip install -e ".[dev,postgis]"
+        run: python -m pip install -c requirements/postgis.lock -e ".[dev,postgis]"
       - name: Test real PostGIS sync, GiST indexed query and revision
-        run: python -m pytest -v tests/test_postgis.py
+        run: python -m pytest -v tests/test_postgis.py tests/test_distributed.py

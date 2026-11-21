@@ -17,7 +17,7 @@ from shapely.geometry import shape, mapping
 from shapely.validation import make_valid
 
 from geometry.measure import measure_geometry, GeometryError
-from geometry.spectral import normalized_difference, classify_change
+from geometry.spectral import normalized_difference, classify_change, paired_change
 from imagery.raster import RasterError, _check
 
 MAX_SIDE = 768
@@ -171,13 +171,9 @@ def spectral_change(before_path: Path, after_path: Path,
             before.tags().get("ACQUISITION_DATE") or before.tags().get("TIFFTAG_DATETIME"),
             after.tags().get("ACQUISITION_DATE") or after.tags().get("TIFFTAG_DATETIME"),
         ]
-    old_index, ov, old_engine = _ratio(old[0], old[1], old_valid)
-    new_index, nv, new_engine = _ratio(new[0], new[1], new_valid)
-    both = ov & nv
+    labels,both,change_engine,index_engines=paired_change(old,old_valid,new,new_valid,threshold)
     if not both.any():
         raise RasterError("The dated rasters have no valid overlapping pixels.")
-    labels, change_engine = classify_change(
-        old_index, ov, new_index, nv, threshold)
     features, truncated = _vector_features(
         labels, affine, crs, {1: "index_gain", 2: "index_loss"})
     for feature in features:
@@ -189,7 +185,7 @@ def spectral_change(before_path: Path, after_path: Path,
     return {"type": "FeatureCollection", "features": features,
             "analysis": "spectral_change",
             "engine": "rasterio-warped-vrt+" + change_engine,
-            "index_engines": [old_engine, new_engine],
+            "index_engines": index_engines,
             "provider": "deterministic", "model_id": None,
             "source_images": [before_id, after_id], "acquired_at": dates,
             "source_crs": crs, "geometry_crs": "EPSG:4326",

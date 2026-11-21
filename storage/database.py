@@ -73,6 +73,8 @@ def _connect() -> Iterator[sqlite3.Connection]:
             )
             prepare_rtree(connection)
             connection.execute("PRAGMA user_version = 1")
+        from .migrations import migrate
+        migrate(connection)
         yield connection
         connection.commit()
     except Exception:
@@ -104,12 +106,15 @@ def create_project(name: str, description: str = "") -> dict:
     return record
 
 
-def list_projects(limit: int = 100, offset: int = 0) -> dict:
+def list_projects(limit: int = 100, offset: int = 0, user_id=None) -> dict:
+    # Membership filtering occurs inside SQL before pagination.
+    where=" WHERE id IN (SELECT project_id FROM project_access WHERE user_id=?)" if user_id else ""
+    args=(user_id,) if user_id else ()
     with _connect() as connection:
-        total = connection.execute("SELECT count(*) FROM projects").fetchone()[0]
+        total = connection.execute("SELECT count(*) FROM projects"+where,args).fetchone()[0]
         rows = connection.execute(
-            "SELECT * FROM projects ORDER BY updated_at DESC, id DESC LIMIT ? OFFSET ?",
-            (limit, offset),
+            "SELECT * FROM projects"+where+" ORDER BY updated_at DESC, id DESC LIMIT ? OFFSET ?",
+            (*args,limit,offset),
         ).fetchall()
     return {"results": [dict(row) for row in rows], "total": total}
 

@@ -36,10 +36,10 @@ def run_worker(poll=1.,stop=None,max_workers=2):
                 _schema(connection)
                 recover_expired(connection)
                 if len(running)<max_workers:
-                    pending=[r[0] for r in connection.execute(
+                    queued=[r[0] for r in connection.execute(
                         """SELECT id FROM gis_jobs WHERE status='queued'
-                        AND cancel_requested=0 ORDER BY created_at,id LIMIT ?""",
-                        (max_workers-len(running),)).fetchall()]
+                        AND cancel_requested=0 ORDER BY created_at,id LIMIT 32""").fetchall()]
+                    pending=[uid for uid in queued if uid not in running][:max_workers-len(running)]
                 else:
                     pending=[]
             for uid in pending:

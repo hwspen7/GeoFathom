@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from .workspace import add_in_layer, delete_feature_guarded
@@ -46,8 +46,9 @@ def create(body: ProjectCreate) -> dict:
 
 
 @router.get("")
-def all_projects(limit: int = Query(100, ge=1, le=100), offset: int = Query(0, ge=0)) -> dict:
-    return list_projects(limit, offset)
+def all_projects(request: Request,limit: int = Query(100, ge=1, le=100), offset: int = Query(0, ge=0)) -> dict:
+    principal=getattr(request.state,"principal",None)
+    return list_projects(limit,offset,principal["id"] if principal else None)
 
 
 @router.get("/{project_id}")

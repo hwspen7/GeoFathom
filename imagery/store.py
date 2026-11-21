@@ -40,7 +40,8 @@ def image_file(identifier: str) -> Path:
             raise ValueError("Non-canonical identifier.")
     except (ValueError, TypeError) as error:
         raise RasterError("Invalid imagery ID.") from error
-    path = imagery_dir() / f"{uid}.tif"
+    from storage.snapshots import image_override
+    path = image_override(uid) or imagery_dir() / f"{uid}.tif"
     if not path.is_file():
         raise FileNotFoundError("Image not found.")
     return path

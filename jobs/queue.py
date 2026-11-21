@@ -150,6 +150,7 @@ def queue_job(project_id,kind,payload):
     with _connect() as c:
         c.execute("BEGIN IMMEDIATE")
         _required_project(c,project_id);_schema(c)
+        recover_expired(c)
         active=c.execute("""SELECT count(*) FROM gis_jobs
            WHERE status IN ('queued','running')""").fetchone()[0]
         if active>=32:raise StorageError("Local background job queue is full.")
@@ -218,13 +219,37 @@ def cancel_job(project_id,job_id):
 
 
 def _execute(kind,project_id,payload):
+    if kind in {"spectral_index","spectral_change","semantic_segmentation"}:
+        from storage.snapshots import analysis_snapshot
+        with analysis_snapshot(kind,payload) as provenance:
+            if os.getenv("GEOFATHOM_DISTRIBUTED_DSN"):
+                from .distributed import dispatch
+                outcome=dispatch(kind,payload,provenance,_progress)
+                provenance["execution"]="postgresql-remote"
+            else:
+                if os.getenv("GEOFATHOM_VERSION_DIR"):
+                    from storage.versions import archive_inputs
+                    archive_inputs(os.environ["GEOFATHOM_VERSION_DIR"],provenance)
+                    provenance["version_archive"]=True
+                outcome=_execute_impl(kind,project_id,payload)
+            provenance["analysis_engine"]=outcome.get("engine")
+            if kind=="semantic_segmentation":
+                provenance["model_id"]=payload["model_id"]
+                provenance["model_sha256"]=provenance["model_files_sha256"][payload["model_id"]+".onnx"]
+            outcome["provenance"]=provenance
+            return outcome
+    return _execute_impl(kind,project_id,payload)
+
+
+def _execute_impl(kind,project_id,payload):
     if kind=="stac_ndvi":
         from imagery.remote import run_stac_ndvi
         return run_stac_ndvi(payload["collection"],payload["item_id"],
             payload.get("threshold",.25),payload.get("max_side",4096),
             payload.get("tile_size",256),
             payload.get("max_pixels",16_777_216),
-            payload.get("memory_mb",32),progress=_progress)
+            payload.get("memory_mb",32),progress=_progress,
+            provider=payload.get("provider","earth-search"))
     if kind in {"spectral_index","spectral_change","semantic_segmentation"}:
         from imagery.store import image_file
         from vision.geoai import spectral_index, spectral_change
@@ -325,7 +350,7 @@ def _lease_heartbeat(uid,path,owner,stop,lost):
 def _worker(uid,path):
     from storage.database import job_database_override
     token=job_database_override.set(path)
-    owner=PROCESS_ID+":"+uid
+    owner=PROCESS_ID+":"+uid+":"+str(uuid4())
     acquired=False
     stop=Event()
     lost=Event()
@@ -338,6 +363,7 @@ def _worker(uid,path):
             with _connect() as c:
                 c.execute("BEGIN IMMEDIATE")
                 _schema(c)
+                recover_expired(c)
                 row=claim(c,uid,owner)
                 if row is None:
                     status=c.execute("SELECT status FROM gis_jobs WHERE id=?",
@@ -348,7 +374,13 @@ def _worker(uid,path):
             if row is not None:
                 acquired=True
                 break
-            if not pending or time.monotonic()>=deadline:
+            if not pending:
+                return
+            if time.monotonic()>=deadline:
+                # The external scheduler polls queued rows; the embedded
+                # executor must explicitly resubmit an unclaimed job.
+                if os.getenv("GEOFATHOM_EXTERNAL_WORKER")!="1":
+                    _POOL.submit(_worker,uid,path)
                 return
             time.sleep(.2)
         project_id=row["project_id"]
@@ -376,21 +408,6 @@ def _worker(uid,path):
                 _ACTIVE_OWNER.reset(owner_token)
                 _ACTIVE_PROGRESS.reset(progress_token)
                 _ACTIVE_JOB.reset(active_token)
-            if (kind in {"spectral_index","spectral_change","semantic_segmentation"}
-                    and isinstance(outcome,dict)):
-                from imagery.store import image_file,file_sha256
-                source_ids=outcome.get("source_images",[])
-                source_hashes={identifier:file_sha256(image_file(identifier))
-                               for identifier in source_ids}
-                provenance={"source_sha256":source_hashes,
-                            "analysis_engine":outcome.get("engine"),
-                            "task_kind":kind}
-                if kind=="semantic_segmentation":
-                    from vision.semantic import _manifest
-                    model=_manifest(payload["model_id"])
-                    provenance["model_sha256"]=file_sha256(model["model_path"])
-                    provenance["model_id"]=payload["model_id"]
-                outcome["provenance"]=provenance
             result=json.dumps(outcome,allow_nan=False)
             result_bytes=len(result.encode("utf-8"))
             if result_bytes>5_000_000:

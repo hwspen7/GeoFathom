@@ -28,7 +28,7 @@ def test_schema_initializes_once_but_bbox_triggers_work_on_new_connections(
             "geometry":{"type":"Point","coordinates":list(position)},
         }])
     with _connect() as connection:
-        assert connection.execute("PRAGMA user_version").fetchone()[0]==1
+        assert connection.execute("PRAGMA user_version").fetchone()[0]==2
         assert connection.execute(
             "SELECT count(*) FROM feature_bounds").fetchone()[0]==3
         assert connection.execute(
@@ -58,8 +58,27 @@ def test_existing_legacy_schema_is_backfilled_exactly_once(monkeypatch,tmp_path)
             json.dumps({"type":"Point","coordinates":[10.,20.]}),
             "{}","user","now"))
     with _connect() as connection:
-        assert connection.execute("PRAGMA user_version").fetchone()[0]==1
+        assert connection.execute("PRAGMA user_version").fetchone()[0]==2
         assert connection.execute("SELECT count(*) FROM feature_bounds").fetchone()[0]==1
     with _connect() as connection:
         row=connection.execute("SELECT minx,maxy FROM feature_bounds").fetchone()
         assert tuple(row)==(10.,20.)
+
+def test_numbered_migration_and_future_version_rejection(tmp_path,monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    path=tmp_path/"migration.sqlite"
+    monkeypatch.setenv("GEOFATHOM_DATABASE_PATH",str(path))
+    create_project("Old")
+    with sqlite3.connect(path) as db:
+        db.execute("PRAGMA user_version=1")
+    def open_version(_):
+        with _connect() as db:
+            return db.execute("PRAGMA user_version").fetchone()[0]
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        assert list(pool.map(open_version,range(8)))==[2]*8
+    with sqlite3.connect(path) as db:
+        assert db.execute("SELECT count(*) FROM gf_migrations WHERE version=2").fetchone()[0]==1
+        db.execute("PRAGMA user_version=999")
+    with pytest.raises(RuntimeError,match="newer"):
+        with _connect():
+            pass

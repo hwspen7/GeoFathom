@@ -15,10 +15,15 @@ from rasterio.windows import Window
 from vision.tiled import spectral_index_tiled
 
 
-@pytest.mark.parametrize("width", [4096, 8192])
-def test_full_resolution_4k_and_optional_8k(tmp_path,width):
+@pytest.mark.parametrize("width", [4096, 8192, 16384])
+def test_full_resolution_4k_8k_and_optional_16k(tmp_path,width,monkeypatch):
     if width==8192 and os.getenv("GEOFATHOM_STRESS_8K")!="1":
         pytest.skip("Explicit opt-in required for resource-intensive 8K acceptance.")
+    if width==16384:
+        if os.getenv("GEOFATHOM_STRESS_16K")!="1":
+            pytest.skip("Explicit opt-in required for 16K acceptance.")
+        monkeypatch.setenv("GEOFATHOM_RASTER_MAX_PIXELS",str(width*width))
+        monkeypatch.setenv("GEOFATHOM_RASTER_SCRATCH_MB","1024")
     path=tmp_path / f"{width}.tif"
     height=width
     band=np.full((4,256,width),50,dtype=np.uint8)
