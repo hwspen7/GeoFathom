@@ -629,3 +629,13 @@ export function addMapAnnotation(
     body:JSON.stringify({text,position,layer_id:layerId||null}),
   });
 }
+
+
+export async function deleteProjectFeature(projectId:string,featureId:string):Promise<void> {
+  const response=await fetch(API_URL+'/projects/'+encodeURIComponent(projectId)+
+    '/features/'+encodeURIComponent(featureId),{method:'DELETE'});
+  if(!response.ok){
+    const error=await response.json() as {detail?:string};
+    throw new Error(error.detail||'Could not delete the selected map feature.');
+  }
+}

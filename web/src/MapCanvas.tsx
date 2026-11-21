@@ -487,6 +487,7 @@ export default function MapCanvas({
           'text-halo-width':['coalesce',['get','labelHaloWidth'],1.5],
         },
       });
+      container.current?.setAttribute('data-label-layer-ready','true');
       setReady(true);
       bounds();
     });

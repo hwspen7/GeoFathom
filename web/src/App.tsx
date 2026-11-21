@@ -682,6 +682,7 @@ export default function App() {
                 setActiveProjectId(id);
               }}
               onOpen={openStoredFeature}
+              onFeatureDeleted={clearWorkspace}
               onPlaceAnnotation={(projectId,layerId,text)=>{
                 setPendingAnnotation({projectId,layerId,text});
                 setDrawingMode(null);setTraceMode(false);setPromptMode(null);

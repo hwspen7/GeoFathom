@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 
 import {
-  copyProjectFeature, createLayer, exportProject, getFeatureHistory, getProjects,
+  copyProjectFeature, createLayer, deleteProjectFeature, exportProject, getFeatureHistory, getProjects,
   getWorkspace, newProject, patchLayer, restoreFeature, saveProjectFeature,
   saveFeatureBatch, patchLayerStyle, updateProjectFeature, type GeoLayer, type GeoWorkspace, type Project,
   type WorkspaceFeature, type FeatureHistory,
@@ -22,11 +22,12 @@ interface Props {
   onOpen: (feature: WorkspaceFeature) => void;
   onWorkspace: (workspace: GeoWorkspace | null, projectId: string | null) => void;
   onPlaceAnnotation: (projectId:string,layerId:string,text:string)=>void;
+  onFeatureDeleted:()=>void;
 }
 
 export default function ProjectsPanel({
   geometry, featureName, featureSource, featureProperties, selectedFeatureId,
-  splitParts, refreshToken, onOpen, onWorkspace, onPlaceAnnotation,
+  splitParts, refreshToken, onOpen, onWorkspace, onPlaceAnnotation, onFeatureDeleted,
 }: Props) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [selected, setSelected] = useState('');
@@ -35,6 +36,7 @@ export default function ProjectsPanel({
   const [draftName, setDraftName] = useState('');
   const [layerName, setLayerName] = useState('');
   const [noteText,setNoteText] = useState('');
+  const [noteEditText,setNoteEditText] = useState('');
   const [history, setHistory] = useState<FeatureHistory | null>(null);
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
@@ -72,6 +74,12 @@ export default function ProjectsPanel({
       .then(setHistory).catch(() => setHistory(null));
   }, [selected, selectedFeatureId, refreshToken]);
 
+  useEffect(()=>{
+    const feature=workspace?.features.find(item=>item.id===selectedFeatureId);
+    setNoteEditText(feature?.properties.annotation===true?
+      String(feature.properties.annotation_text||''):'');
+  },[workspace,selectedFeatureId]);
+  
   const activeLayer = workspace?.layers.find(l => l.id === layerId);
   const current = workspace?.features.find(f => f.id === selectedFeatureId);
   const locked = Boolean(current &&
@@ -186,6 +194,31 @@ export default function ProjectsPanel({
     onPlaceAnnotation(selected,activeLayer.id,noteText.trim());
     setNoteText('');
     setInfo('Click the map to place your note.');
+  }
+
+  async function saveNoteText(event:FormEvent<HTMLFormElement>){
+    event.preventDefault();
+    if(!selected||!current||locked||!noteEditText.trim())return;
+    await run(async()=>{
+      const text=noteEditText.trim();
+      const updated=await updateProjectFeature(selected,current.id,{
+        name:text.slice(0,80),
+        properties:{...current.properties,annotation:true,annotation_text:text},
+        expected_revision:current.revision,
+      });
+      onOpen(updated);
+      setInfo('Annotation text saved as a new revision.');
+    });
+  }
+
+  async function deleteSelected(){
+    if(!selected||!current||locked)return;
+    if(!window.confirm('Delete this feature from the project?'))return;
+    await run(async()=>{
+      await deleteProjectFeature(selected,current.id);
+      onFeatureDeleted();
+      setInfo('Feature deleted.');
+    });
   }
 
   async function duplicate() {
@@ -390,6 +423,17 @@ export default function ProjectsPanel({
 
           {current && (
             <>
+              {current.properties.annotation===true&&(
+                <form className="project-create" onSubmit={event=>void saveNoteText(event)}>
+                  <input aria-label="Edit selected map note"
+                    maxLength={120} value={noteEditText}
+                    onChange={event=>setNoteEditText(event.target.value)}/>
+                  <button type="submit" aria-label="Save map note text"
+                    disabled={busy||locked||!noteEditText.trim()}>
+                    <Save size={14}/>
+                  </button>
+                </form>
+              )}
               <div className="project-actions">
                 <button onClick={() => void duplicate()} disabled={busy || locked}>
                   <Copy size={13}/> Duplicate
@@ -398,6 +442,8 @@ export default function ProjectsPanel({
                   if (history) setHistory(null);
                   else if (selected) void getFeatureHistory(selected, current.id).then(setHistory);
                 }}><History size={13}/> Versions</button>
+                <button aria-label="Delete selected map feature"
+                  onClick={()=>void deleteSelected()} disabled={busy||locked}>Delete</button>
               </div>
               {history && (
                 <div className="version-list">
