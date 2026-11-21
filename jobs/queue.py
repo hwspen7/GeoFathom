@@ -222,7 +222,16 @@ def _execute(kind,project_id,payload):
     if kind in {"spectral_index","spectral_change","semantic_segmentation"}:
         from storage.snapshots import analysis_snapshot
         with analysis_snapshot(kind,payload) as provenance:
-            outcome=_execute_impl(kind,project_id,payload)
+            if os.getenv("GEOFATHOM_DISTRIBUTED_DSN"):
+                from .distributed import dispatch
+                outcome=dispatch(kind,payload,provenance,_progress)
+                provenance["execution"]="postgresql-remote"
+            else:
+                if os.getenv("GEOFATHOM_VERSION_DIR"):
+                    from storage.versions import archive_inputs
+                    archive_inputs(os.environ["GEOFATHOM_VERSION_DIR"],provenance)
+                    provenance["version_archive"]=True
+                outcome=_execute_impl(kind,project_id,payload)
             provenance["analysis_engine"]=outcome.get("engine")
             if kind=="semantic_segmentation":
                 provenance["model_id"]=payload["model_id"]

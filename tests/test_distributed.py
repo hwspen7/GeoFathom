@@ -1,0 +1,73 @@
+"""Live PostgreSQL ownership fencing and isolated raster computation."""
+import os,time
+from concurrent.futures import ThreadPoolExecutor
+from uuid import uuid4
+import numpy as np
+import pytest
+import rasterio
+from rasterio.transform import from_origin
+from jobs.distributed import Broker,worker_once,dispatch
+from storage.snapshots import analysis_snapshot
+
+pytestmark=pytest.mark.skipif(not os.getenv("GEOFATHOM_TEST_POSTGIS_DSN"),
+                              reason="Live PostgreSQL service not configured.")
+
+@pytest.fixture
+def broker(monkeypatch):
+    dsn=os.environ["GEOFATHOM_TEST_POSTGIS_DSN"]
+    monkeypatch.setenv("GEOFATHOM_DISTRIBUTED_DSN",dsn)
+    name="test-"+uuid4().hex
+    monkeypatch.setenv("GEOFATHOM_DISTRIBUTED_QUEUE",name)
+    obj=Broker(dsn,name)
+    yield obj
+    with obj.connect() as conn:
+        conn.execute("DELETE FROM gf_distributed_jobs WHERE queue=%s",(name,))
+
+def test_live_broker_claim_fencing_node_capacity_and_expiration(broker):
+    uid,client=broker.submit({"kind":"spectral_index"})
+    uid2,client2=broker.submit({"kind":"spectral_index"})
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        claims=list(pool.map(lambda _:broker.claim("same-node"),range(6)))
+    active=[x for x in claims if x is not None]
+    assert len(active)==1
+    other=broker.claim("other-node")
+    assert other and {active[0][0],other[0]}=={uid,uid2}
+    claimed,owner,_=active[0]
+    assert not broker.finish(claimed,"stale",result={"bad":True})
+    assert broker.finish(claimed,owner,result={"good":True})
+    token=client if claimed==uid else client2
+    assert broker.poll(claimed,token)["result"]=={"good":True}
+    with broker.connect() as c:
+        c.execute("UPDATE gf_distributed_jobs SET worker_until=now()-interval '1 second' WHERE id=%s",(other[0],))
+    assert not broker.heartbeat(other[0],other[1])
+    assert not broker.finish(other[0],other[1],result={"bad":True})
+    assert broker.poll(other[0],client if other[0]==uid else client2)["status"]=="interrupted"
+
+def test_distributed_real_raster_pipeline(broker,tmp_path,monkeypatch):
+    root=tmp_path/"catalog";root.mkdir()
+    archive=tmp_path/"versions";archive.mkdir()
+    monkeypatch.setenv("GEOFATHOM_IMAGERY_DIR",str(root))
+    monkeypatch.setenv("GEOFATHOM_VERSION_DIR",str(archive))
+    uid=str(uuid4())
+    path=root/(uid+".tif")
+    data=np.stack([np.full((128,128),200,np.uint8),np.full((128,128),50,np.uint8)])
+    with rasterio.open(path,"w",driver="GTiff",width=128,height=128,count=2,
+        dtype="uint8",crs="EPSG:4326",transform=from_origin(10,30,.00001,.00001)) as ds:
+        ds.write(data)
+    payload={"image_id":uid,"first_band":1,"second_band":2,"index":"ndvi",
+             "threshold":.3,"full_resolution":True,"tile_size":64}
+    def submit():
+        with analysis_snapshot("spectral_index",payload) as provenance:
+            return dispatch("spectral_index",payload,provenance,lambda _:None)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        future=pool.submit(submit)
+        until=time.monotonic()+20
+        while not future.done() and time.monotonic()<until:
+            if worker_once(broker,"test-node",archive):
+                break
+            time.sleep(.1)
+        result=future.result(timeout=20)
+    assert result["classified_pixels"]==128*128
+    assert result["valid_pixels"]==128*128
+    assert len(result["features"])==1
+    assert len(list(archive.glob("*/*")))==1

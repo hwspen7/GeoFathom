@@ -145,4 +145,4 @@ jobs:
       - name: Install PostGIS integration dependencies
         run: python -m pip install -e ".[dev,postgis]"
       - name: Test real PostGIS sync, GiST indexed query and revision
-        run: python -m pytest -v tests/test_postgis.py
+        run: python -m pytest -v tests/test_postgis.py tests/test_distributed.py
