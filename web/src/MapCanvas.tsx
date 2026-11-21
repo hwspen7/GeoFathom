@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import maplibregl, { type GeoJSONSource, type MapMouseEvent, type StyleSpecification } from 'maplibre-gl';
 
-import { rasterPreviewUrl, type RasterAsset } from './api';
+import { rasterPreviewUrl, protectedRasterPreview, type RasterAsset } from './api';
 import { PixelSnapIndex } from './spatialIndex';
 import { featureLabel } from './labels';
 import type { ExternalTile } from './DataServicesPanel';
@@ -847,18 +847,36 @@ export default function MapCanvas({
   useEffect(() => {
     const map = mapRef.current;
     if (!ready || !map) return;
+    let cancelled = false;
+    let blobUrl: string | null = null;
     if (map.getLayer('imported-imagery')) map.removeLayer('imported-imagery');
     if (map.getSource('imported-imagery')) map.removeSource('imported-imagery');
-    if (imageLayer) {
+    function add(url: string) {
+      if (!map || cancelled || !imageLayer) return;
+      if (map.getSource('imported-imagery')) return;
       map.addSource('imported-imagery', {
-        type: 'image', url: rasterPreviewUrl(imageLayer),
-        coordinates: imageLayer.corners,
+        type: 'image', url, coordinates: imageLayer.corners,
       });
       map.addLayer({
         id: 'imported-imagery', type: 'raster', source: 'imported-imagery',
         paint: { 'raster-opacity': 0.88, 'raster-fade-duration': 0 },
       }, 'workspace-fill');
     }
+    if (imageLayer) {
+      if (window.sessionStorage.getItem('geofathom-api-token')) {
+        protectedRasterPreview(imageLayer).then(url => {
+          if (cancelled) { URL.revokeObjectURL(url); return; }
+          blobUrl = url;
+          add(url);
+        }).catch(() => {});
+      } else {
+        add(rasterPreviewUrl(imageLayer));
+      }
+    }
+    return () => {
+      cancelled = true;
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
+    };
   }, [imageLayer, ready]);
 
   useEffect(() => {

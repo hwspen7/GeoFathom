@@ -173,3 +173,51 @@ CI now also sets `GEOFATHOM_STRESS_MILLION_SEGMENTS=1` in the
 Linux native/Python acceptance run, so the 1,000,000-segment BVH build
 and 10,000 batched nearest-neighbor queries are exercised on a real
 GitHub runner, with no fixed speedup threshold.
+
+## Durable job leases and process isolation
+
+SQLite now atomically claims queued rows, stores a unique worker ID and a
+30-second lease, and refreshes that lease from an independent heartbeat.
+Recovery interrupts *only* expired owners, never live workers from another
+process. Results and terminal states are committed only by the current
+lease owner. Expired workers cannot publish stale results. Raster/inference
+slots are shared in SQLite, so all processes on the same host and database
+observe the same slot limits. Queued tasks may be claimed by the optional
+`python -m jobs.worker` polling service; stale work is marked interrupted
+rather than automatically replaying side effects.
+
+Long-running full-resolution raster tasks use an isolated spawned Python
+subprocess by default. The parent monitors CPU RSS, wall time, database
+cancellation and worker ownership; it can terminate the process if a
+constraint fails. The child inherits the SQLite job context and streams
+progress through the same job table. CPU RSS is not GPU VRAM, and memory
+limits are enforced through sampled process memory, not hardware cgroups.
+Defaults: 2048 MiB maximum subprocess CPU RSS, 900-second wall time,
+one shared raster slot and one shared inference slot.
+
+The SQLite schema migration adds lease metadata to existing jobs without
+discarding them. A separate offline maintenance command uses SQLite's
+online backup API for WAL-consistent snapshots, audits file SHA-256, and
+reconciles partially missing R-tree entries. Terminal job retention can
+be pruned separately; backup retention is operator-managed.
+
+**Deployment boundary:** the multi-process design coordinates processes
+sharing a *local* SQLite file. It is not a distributed queue across
+networked hosts; run PostgreSQL plus an external broker for that class of
+deployment. Authentication is opt-in shared-key protection, not individual
+user role management.
+
+### Hardware-dependent verification
+
+Run the local GPU acceptance with a real CUDA-enabled ONNX Runtime and
+operator-installed model weights:
+
+```bash
+python benchmarks/gpu_acceptance.py --model example_model --runs 100
+```
+
+The default expected GPU identifier is **RTX 4070 Ti SUPER**. Adjust
+`GEOFATHOM_GPU_EXPECTED_NAME` only if using a different test machine.
+The script reports warmup, repeated inference latency, CPU RSS, observed
+total-device GPU memory, and actual device model. It is not a zero-copy
+guarantee, nor is a unit-test mock a CUDA validation result.

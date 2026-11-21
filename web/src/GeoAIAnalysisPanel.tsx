@@ -1,7 +1,7 @@
 import {useEffect,useRef,useState} from 'react';
 import {BrainCircuit,Database,Layers3} from 'lucide-react';
 import {
-  getGISJobs,getVisionModels,listImagery,queueGISJob,saveFeatureBatch,
+  getGISJob,getVisionModels,listImagery,queueGISJob,saveFeatureBatch,
   type GISJob,type GISJobKind,type GeoAIResult,type RasterAsset,
   type VisionModels,
 } from './api';
@@ -13,7 +13,7 @@ interface Props {
   onSaved:()=>void;
 }
 type Operation=Extract<GISJobKind,
-  'spectral_index'|'spectral_change'|'semantic_segmentation'>;
+  'spectral_index'|'spectral_change'|'semantic_segmentation'|'stac_ndvi'>;
 
 function resultOf(job:GISJob|null):GeoAIResult|null{
   if(job?.status!=='completed'||!job.result||typeof job.result!=='object')return null;
@@ -24,6 +24,9 @@ function resultOf(job:GISJob|null):GeoAIResult|null{
 
 export default function GeoAIAnalysisPanel(p:Props){
   const [operation,setOperation]=useState<Operation>('spectral_index');
+  const [stacCollection,setStacCollection]=useState('sentinel-2-c1-l2a');
+  const [stacItemId,setStacItemId]=useState('');
+  const [stacSide,setStacSide]=useState(4096);
   const [images,setImages]=useState<RasterAsset[]>([]);
   const [models,setModels]=useState<VisionModels|null>(null);
   const [modelId,setModelId]=useState('');
@@ -67,10 +70,13 @@ export default function GeoAIAnalysisPanel(p:Props){
     const projectId=p.projectId;
     let active=true;
     const timer=window.setInterval(()=>{
-      getGISJobs(projectId).then(response=>{
-        if(active&&currentProject.current===projectId){
-          const latest=response.jobs.find(item=>item.id===job.id);
-          if(latest)setJob(latest);
+      getGISJob(projectId,job.id,false).then(async latest=>{
+        if(!active||currentProject.current!==projectId)return;
+        if(latest.status==='completed'&&latest.has_result){
+          const result=await getGISJob(projectId,job.id,true);
+          if(active&&currentProject.current===projectId)setJob(result);
+        }else if(active&&currentProject.current===projectId){
+          setJob(latest);
         }
       }).catch(()=>{});
     },1250);
@@ -81,11 +87,18 @@ export default function GeoAIAnalysisPanel(p:Props){
 
   async function submit(){
     const projectId=p.projectId;
-    if(!projectId||!p.image)throw new Error('Select a project and georeferenced image.');
-    const payload:Record<string,unknown>={
-      image_id:p.image.id,max_side:maxSide,
-    };
-    if(operation==='semantic_segmentation'){
+    if(!projectId)throw new Error('Select a project.');
+    if(operation!=='stac_ndvi'&&!p.image)
+      throw new Error('Select a georeferenced image.');
+    const payload:Record<string,unknown>=operation==='stac_ndvi'?
+      {collection:stacCollection,item_id:stacItemId,
+       threshold,max_side:stacSide,tile_size:tileSize,
+       max_pixels:maxPixels,memory_mb:memoryBudget,full_resolution:true}:
+      {image_id:p.image!.id,max_side:maxSide};
+    if(operation==='stac_ndvi'){
+      if(!/^[A-Za-z0-9_-]{8,140}$/.test(stacItemId))
+        throw new Error('Provide a valid Earth Search STAC scene identifier.');
+    }else if(operation==='semantic_segmentation'){
       if(!modelId)throw new Error('Install and select a configured ONNX model.');
       payload.model_id=modelId;
       payload.minimum_confidence=confidence;
@@ -97,7 +110,7 @@ export default function GeoAIAnalysisPanel(p:Props){
     }else{
       if(!Number.isInteger(firstBand)||!Number.isInteger(secondBand)||
          firstBand===secondBand||firstBand<1||secondBand<1||
-         firstBand>p.image.bands||secondBand>p.image.bands)
+         firstBand>p.image!.bands||secondBand>p.image!.bands)
         throw new Error('Choose two different bands that exist in the source image.');
       payload.first_band=firstBand;
       payload.second_band=secondBand;
@@ -110,7 +123,7 @@ export default function GeoAIAnalysisPanel(p:Props){
       }
       if(operation==='spectral_index')payload.index=index;
       else{
-        if(!afterImageId||afterImageId===p.image.id)
+        if(!afterImageId||afterImageId===p.image!.id)
           throw new Error('Choose a different second date image.');
         payload.after_image_id=afterImageId;
       }
@@ -174,10 +187,40 @@ export default function GeoAIAnalysisPanel(p:Props){
           <option value="spectral_index">Spectral index regions (NDVI / NDWI)</option>
           <option value="spectral_change">Two-date spectral change</option>
           <option value="semantic_segmentation">ONNX semantic segmentation</option>
+          <option value="stac_ndvi">Remote STAC/COG NDVI with SCL cloud masking</option>
         </select>
         <p className="project-hint">Current image: {p.image?.name||'None selected'} ·
           {p.image?.bands??0} bands. Select an image and project first.</p>
-        {operation!=='semantic_segmentation'?<>
+        {operation==='stac_ndvi'?<>
+          <label>Earth Search collection
+            <select aria-label="Remote STAC collection"
+              value={stacCollection} onChange={e=>setStacCollection(e.target.value)}>
+              <option value="sentinel-2-c1-l2a">Sentinel-2 C1 L2A</option>
+              <option value="sentinel-2-l2a">Sentinel-2 L2A</option>
+            </select>
+          </label>
+          <label>STAC scene identifier
+            <input aria-label="Remote STAC item identifier"
+              value={stacItemId} onChange={e=>setStacItemId(e.target.value)}
+              placeholder="Scene ID from public STAC search"/>
+          </label>
+          <label>Maximum remote processing dimension
+            <select aria-label="Remote STAC processing resolution"
+              value={stacSide} onChange={e=>setStacSide(Number(e.target.value))}>
+              <option value={2048}>2048 px</option>
+              <option value={4096}>4096 px</option>
+              <option value={8192}>8192 px</option>
+            </select>
+          </label>
+          <label>NDVI threshold
+            <input aria-label="Remote NDVI threshold" type="number" step=".05"
+              min={-0.99} max={0.99} value={threshold}
+              onChange={e=>setThreshold(Number(e.target.value))}/>
+          </label>
+          <p className="project-hint">Public COG range requests and Sentinel-2
+            scene-classification masking; source resolution may be reduced
+            to satisfy the configured pixel budget.</p>
+        </>:operation!=='semantic_segmentation'?<>
           {operation==='spectral_index'&&
             <select aria-label="Spectral index" value={index} onChange={event=>{
               const next=event.target.value as 'ndvi'|'ndwi';
@@ -229,13 +272,13 @@ export default function GeoAIAnalysisPanel(p:Props){
             model weights and class/band metadata must be provisioned on the server.
             No model is silently downloaded.</p>
         </>}
-        {<label><input type="checkbox"
+        {operation!=='stac_ndvi'&&<label><input type="checkbox"
             aria-label="Process full image at native pixel resolution"
             checked={fullResolution} onChange={e=>setFullResolution(e.target.checked)}/>
             Full-resolution streamed analysis
           </label>}
-        {fullResolution?<>
-          <p className="project-hint">Process every source pixel using bounded
+        {(fullResolution||operation==='stac_ndvi')?<>
+          <p className="project-hint">Process selected pixels using bounded
             raster windows, a temporary disk-backed mask and seamless
             polygonization. Large images are limited by the configured pixel
             budget and source image size.</p>
@@ -266,7 +309,7 @@ export default function GeoAIAnalysisPanel(p:Props){
               <option value={67108864}>67.1 million (8K²)</option>
             </select>
           </label>
-        </>:<label>Maximum processing dimension
+        </>:operation!=='stac_ndvi'&&<label>Maximum processing dimension
           <select aria-label="GeoAI processing resolution" value={maxSide}
             onChange={e=>setMaxSide(Number(e.target.value))}>
             <option value={256}>256 px</option><option value={512}>512 px</option>
@@ -276,7 +319,9 @@ export default function GeoAIAnalysisPanel(p:Props){
         <input aria-label="GeoAI administration token" type="password"
           autoComplete="off" placeholder="Server administration token"
           value={token} onChange={e=>setToken(e.target.value)}/>
-        <button disabled={!p.projectId||!p.image||!token||processing||
+        <button disabled={!p.projectId||
+          (operation!=='stac_ndvi'&&!p.image)||
+          (operation==='stac_ndvi'&&!stacItemId)||!token||processing||
           (operation==='semantic_segmentation'&&!modelId)}
           onClick={()=>void run(submit)}>Run georeferenced analysis</button>
         {job&&<div className="raster-details" aria-label="GeoAI task status">

@@ -4,6 +4,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import get_settings
+from .security import APIBoundaryMiddleware
+from .health import router as health_router
 from analysis.routes import router as analysis_router
 from analysis.pro_routes import router as spatial_workflow_router
 from analysis.classification_routes import router as classification_router, project_router as graduated_project_router
@@ -30,13 +32,18 @@ from intelligence.llm import get_provider
 
 settings = get_settings()
 app = FastAPI(title="GeoFathom", description="Local-first geospatial intelligence")
+# Add auth before CORS so CORS remains the outer middleware and browser
+# clients can receive correctly labeled access-denied responses.
+app.add_middleware(APIBoundaryMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=list(settings.cors_origins),
     allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
-    allow_headers=["Content-Type", "X-GeoFathom-Admin-Token"],
+    allow_headers=["Content-Type", "Authorization", "X-GeoFathom-API-Key",
+                   "X-GeoFathom-Admin-Token"],
 )
+app.include_router(health_router)
 app.include_router(geometry_router)
 app.include_router(edit_router)
 app.include_router(places_router)

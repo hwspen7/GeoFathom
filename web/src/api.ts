@@ -52,8 +52,17 @@ export interface Capabilities {
   imagery: string;
 }
 
+export function setApiAccessToken(token: string): void {
+  if (token) window.sessionStorage.setItem('geofathom-api-token', token);
+  else window.sessionStorage.removeItem('geofathom-api-token');
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(API_URL + path, init);
+  const headers = new Headers(init?.headers);
+  const key = typeof window !== 'undefined'
+    ? window.sessionStorage.getItem('geofathom-api-token') : null;
+  if (key) headers.set('X-GeoFathom-API-Key', key);
+  const response = await fetch(API_URL + path, {...init, headers});
   if (!response.ok) {
     let detail = 'Request failed';
     try {
@@ -295,6 +304,16 @@ export function traceImagery(body: {
 
 export function rasterPreviewUrl(asset: RasterAsset): string {
   return API_URL + asset.preview_url;
+}
+
+/** Fetch protected imagery with the session credential; caller revokes blob URL. */
+export async function protectedRasterPreview(asset: RasterAsset): Promise<string> {
+  const key = window.sessionStorage.getItem('geofathom-api-token');
+  const headers = new Headers();
+  if (key) headers.set('X-GeoFathom-API-Key', key);
+  const response = await fetch(rasterPreviewUrl(asset), {headers});
+  if (!response.ok) throw new Error('The image preview requires server access.');
+  return URL.createObjectURL(await response.blob());
 }
 
 
@@ -887,13 +906,19 @@ export function getVisionModels():Promise<VisionModels>{
 
 export type GISJobKind='topology_qa'|'spatial_select'|'export_geojson'|
   'postgis_sync'|'rebuild_index'|'spectral_index'|'spectral_change'|
-  'semantic_segmentation';
+  'semantic_segmentation'|'stac_ndvi';
 export interface GISJob {
   id:string;project_id:string;kind:GISJobKind;
   status:'queued'|'running'|'completed'|'failed'|'cancelled'|'interrupted';
   progress:number;error:string|null;
   payload:Record<string,unknown>;result:unknown;
   cancel_requested:boolean;created_at:string;updated_at:string;
+  has_result?:boolean;
+}
+export function getGISJob(projectId:string,id:string,
+  includeResult=true):Promise<GISJob>{
+  return request('/projects/'+encodeURIComponent(projectId)+'/jobs/'+
+    encodeURIComponent(id)+'?include_result='+String(includeResult));
 }
 export function getGISJobs(projectId:string):Promise<{jobs:GISJob[]}>{
   return request('/projects/'+encodeURIComponent(projectId)+'/jobs');
@@ -911,8 +936,11 @@ export function cancelGISJob(projectId:string,id:string):Promise<GISJob>{
     encodeURIComponent(id)+'/cancel',{method:'POST'});
 }
 export async function downloadGISJob(projectId:string,id:string):Promise<void>{
+  const headers = new Headers();
+  const access = window.sessionStorage.getItem('geofathom-api-token');
+  if (access) headers.set('X-GeoFathom-API-Key', access);
   const response=await fetch(API_URL+'/projects/'+encodeURIComponent(projectId)+
-    '/jobs/'+encodeURIComponent(id)+'/download');
+    '/jobs/'+encodeURIComponent(id)+'/download',{headers});
   if(!response.ok)throw new Error('Completed GeoJSON export job required.');
   const url=URL.createObjectURL(await response.blob());
   try{

@@ -187,3 +187,24 @@ CI now also sets `GEOFATHOM_STRESS_MILLION_SEGMENTS=1` in the
 Linux native/Python acceptance run, so the 1,000,000-segment BVH build
 and 10,000 batched nearest-neighbor queries are exercised on a real
 GitHub runner, with no fixed speedup threshold.
+
+## Cross-process, security, remote imagery and GPU acceptance
+
+- `tests/test_job_leases.py`: atomic claims, live-vs-expired lease recovery,
+  raster and model slots, ownership fencing, history retention, and external
+  polling-worker execution.
+- `tests/test_isolation.py`: spawned child-process IPC, owner preservation
+  and resource configuration validation; full GeoTIFF background analysis
+  continues through the existing integration test.
+- `tests/test_api_security.py`: loopback-only local mode, enforced token
+  for all project APIs, fail-closed configuration, and CORS preflight.
+- `tests/test_remote_cog.py`: vetted HTTPS host/asset contract, STAC
+  metadata bounds, mocked remote COG windows and SCL cloud exclusion.
+- `tests/test_model_evaluation.py`: confusion-matrix correctness, labelled
+  multiband grid alignment, SHA-256 attribution and cloud-exclusion metrics.
+- `tests/test_maintenance.py`: SQLite online backup, partial R-tree loss
+  detection and operator repair.
+- `benchmarks/gpu_acceptance.py`: real RTX 4070 Ti SUPER memory and
+  throughput sampling is **operator-only** until weights and actual hardware
+  are provided. GPU and real annotation validation must not be marked
+  successful based only on mocked CI results.

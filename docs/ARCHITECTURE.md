@@ -127,3 +127,25 @@ GeoTIFF/COG data without exposing arbitrary remote filesystem import to
 the HTTP API; Rasterio surfaces tiling, source block layout and overviews.
 Multi-channel ONNX model preprocessing uses manifest-defined spectral
 bands and normalization for up to 20 channels.
+
+## Operational ownership and protection
+
+The optional authenticated API middleware requires a single operator key
+for all routes, except public liveness and CORS preflight. In default
+local mode the HTTP boundary denies remote clients. Browser credentials
+are session-only. This is not multi-user authorization.
+
+`jobs/leases.py` fences workers with a database lease, heartbeat and
+cross-process raster/inference slots; `jobs/isolation.py` executes
+full-resolution heavy tasks in a monitored, terminable subprocess.
+`jobs/worker.py` starts a separately scheduled local worker or prunes
+terminal jobs. No network filesystem SQLite or multi-host leasing is
+supported.
+
+`imagery/remote.py` resolves a curated Earth Search STAC item and
+uses allowlisted HTTPS COG range reads. `vision/quality.py` handles
+Sentinel-2 scene-classification masks and exact confusion statistics.
+`vision/evaluate.py` compares real installed ONNX model predictions
+against independently supplied georeferenced labels. Separate operator
+GPU acceptance observes the actual model and GPU rather than mocking
+device inference.

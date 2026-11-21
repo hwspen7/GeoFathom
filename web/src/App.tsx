@@ -27,6 +27,7 @@ import ProjectsPanel from './ProjectsPanel';
 import ModelControls from './ModelControls';
 import RasterPanel, { type TraceSettings } from './RasterPanel';
 import GeoAIAnalysisPanel from './GeoAIAnalysisPanel';
+import ApiAccessPanel from './ApiAccessPanel';
 import {
   addMapAnnotation, applyOverlay, applyTopology, constructGeometry, editPair, getWorkspace, moveMeasured,
   previewTopology, refineRaster, traceExisting, traceImagery,
@@ -497,6 +498,7 @@ export default function App() {
           <div><strong>GeoFathom</strong><span>GEOSPATIAL INTELLIGENCE</span></div>
         </div>
         <div className="sidebar-scroll">
+          <ApiAccessPanel />
           <div className="intro">
             <div className="eyebrow"><Sparkles size={13} /> LOCAL-FIRST WORKSPACE</div>
             <h1>Explore the world, <em>spatially.</em></h1>

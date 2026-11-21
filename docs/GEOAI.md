@@ -219,3 +219,42 @@ The importer validates GDAL georeferencing, copies into the local
 managed imagery catalog and computes SHA-256 provenance. It does not
 fetch arbitrary external URLs and does not implement STAC range-request
 streaming or a full virtual raster mosaic engine.
+
+## Remote Earth Search COG and real evaluation
+
+Choose **Remote STAC/COG NDVI with SCL cloud masking** in the GeoAI panel,
+select a project, paste an Earth Search Sentinel-2 scene ID, and enter the
+admin token. The backend fetches only fixed Earth Search collection-item
+URLs. It validates each COG HTTPS asset host against an operator-defined
+allowlist (by default the public Element84 Sentinel-2 bucket) and streams
+individual NIR/red/SCL raster bands using GDAL `/vsicurl/`. It aligns
+different source grids with Rasterio's `WarpedVRT` and excludes cloud,
+cirrus, shadow, snow, saturated and dark-area SCL categories. The output
+states if resolution was reduced. It never accepts arbitrary browser URL
+targets, redirects from the STAC metadata client, or signed query URLs.
+
+This pipeline is a remote range-reading implementation, **not** proof
+that a particular catalog scene is currently reachable. Earth Search
+collections and asset availability change; some scenes contain JP2
+rather than the expected COG trio. Missing bands cause a visible error.
+Operators should review dataset terms and quality metadata.
+
+Accuracy requires real images and labeled target rasters. Evaluate using:
+
+```bash
+python -m vision.evaluate --image data/scene.tif \
+  --labels data/landcover_labels.tif --model installed_model \
+  --scl data/scene_classification.tif --output data/metrics.json
+```
+
+The evaluator reports per-class precision, recall, F1, IoU, overall
+accuracy, mIoU (present classes) and a full confusion matrix, plus source
+and model SHA-256. Pixel masks and labels are reprojected to the same grid.
+No ground-truth dataset or ONNX weights are bundled, so CI can validate
+the evaluation **implementation**, not real-world model accuracy or
+confidence calibration.
+
+GPU qualification for the RTX 4070 Ti SUPER is operator-run and
+uses actual CUDA on the configured machine; CI validates interfaces only.
+The optional I/O Binding still copies CPU input and result data; it
+is not an entirely GPU-resident image processing pipeline.

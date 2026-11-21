@@ -261,3 +261,37 @@ capacity, copies the file into the managed imagery catalog and computes a
 SHA-256 source checksum. It accepts **only a local filesystem path** and is
 not exposed as an arbitrary remote URL import endpoint. Image metadata
 displays source block shape, overview levels and tiled layout.
+
+## Resilient local processing and secured deployments
+
+GeoFathom runs in local mode by default: only loopback clients (and the
+FastAPI test client) can reach the API. To deploy behind TLS on a trusted
+reverse proxy, explicitly configure a high-entropy shared API credential:
+
+```dotenv
+GEOFATHOM_AUTH_MODE=required
+GEOFATHOM_API_TOKEN=replace-with-a-random-string-of-at-least-32-characters
+```
+
+The browser's **Server access** panel holds that key in session storage.
+This single-operator gate is *not* project-level RBAC or a complete
+multi-tenant identity system. Do not expose an unauthenticated API.
+
+Queued jobs use cross-process SQLite claims, unique worker leases, heartbeats
+and shared raster/inference slots. For independent background workers on
+the same machine, set `GEOFATHOM_EXTERNAL_WORKER=1` on the API and run
+`python -m jobs.worker --workers 2` separately. Do not share SQLite on
+NFS or across separate hosts. Raster/ONNX background jobs run in a killable
+subprocess by default with configurable CPU RSS and wall-clock budgets.
+
+```bash
+python -m storage.maintenance --verify --audit-imagery
+python -m storage.maintenance --repair-index --backup data/backup.sqlite
+python -m jobs.worker --cleanup-days 30
+```
+
+For cloud-native Sentinel-2 COGs, the **Remote STAC/COG NDVI** GeoAI operation
+resolves a validated Earth Search item and performs allowlisted GDAL range
+reads on the NIR, red and SCL assets. It does not accept arbitrary remote
+URLs or claim a full satellite scene was downloaded.
+See [GeoAI data and model validation](docs/GEOAI.md).

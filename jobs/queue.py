@@ -12,21 +12,25 @@ from threading import BoundedSemaphore
 import sqlite3
 import time
 from datetime import datetime,timezone
-from threading import Lock
+from threading import Lock,Thread,Event
 from uuid import uuid4
 import json
 import os
 
 from storage.database import (StorageError,_connect,_required_project,
                               _now,database_path)
+from .leases import (PROCESS_ID,LEASE_SECONDS,ensure_lease_schema,
+    recover_expired,claim,heartbeat,is_owner,release_slot)
 
 KINDS={"topology_qa","spatial_select","export_geojson","postgis_sync",
-       "rebuild_index","spectral_index","spectral_change","semantic_segmentation"}
+       "rebuild_index","spectral_index","spectral_change","semantic_segmentation",
+       "stac_ndvi"}
 _POOL=ThreadPoolExecutor(max_workers=2,thread_name_prefix="geofathom-gis")
 _LOCK=Lock()
 _INITIALIZED=set()
 _ACTIVE_JOB=ContextVar("geofathom_current_gis_job", default=None)
 _ACTIVE_PROGRESS=ContextVar("geofathom_progress_throttle", default=None)
+_ACTIVE_OWNER=ContextVar("geofathom_lease_owner",default=None)
 # Limit simultaneous full-size raster tasks even when the general queue has
 # multiple worker threads. This gate is per process, not a distributed quota.
 _RASTER_GATE=BoundedSemaphore(1)
@@ -38,6 +42,7 @@ def _job_db():
     c=sqlite3.connect(database_path(), timeout=5)
     c.row_factory=sqlite3.Row
     c.execute("PRAGMA busy_timeout=5000")
+    c.execute("PRAGMA foreign_keys=ON")
     try:
         yield c
         c.commit()
@@ -63,10 +68,15 @@ def _progress(fraction):
     if completed-state["value"] < 5 and now-state["checked"] < .2:
         return
     with _job_db() as c:
-        row=c.execute("SELECT progress,cancel_requested FROM gis_jobs WHERE id=?",
-                      (uid,)).fetchone()
-        if row is None or row["cancel_requested"]:
-            raise RuntimeError("Running GIS operation was cancelled.")
+        row=c.execute("""SELECT progress,cancel_requested,lease_owner,
+            lease_expires FROM gis_jobs WHERE id=?""",(uid,)).fetchone()
+        owner=_ACTIVE_OWNER.get()
+        if (row is None or row["cancel_requested"] or
+                (owner is not None and
+                 (row["lease_owner"]!=owner or
+                  row["lease_expires"] is None or
+                  row["lease_expires"]<time.time()))):
+            raise RuntimeError("Running GIS operation was cancelled or its lease expired.")
         if (completed > row["progress"] and
                 (completed-row["progress"] >= 5
                  or now-state["committed"] >= .5)):
@@ -99,6 +109,7 @@ def _schema(c):
         content TEXT NOT NULL,
         size_bytes INTEGER NOT NULL
     )""")
+    ensure_lease_schema(c)
 
 
 def _from_row(row):
@@ -118,25 +129,27 @@ def _ensure():
         if path in _INITIALIZED:return
         with _connect() as c:
             _schema(c)
-            c.execute("""UPDATE gis_jobs SET status='interrupted',
-                error='Previous worker stopped before committing a result.',
-                updated_at=? WHERE status='running'""",(_now(),))
+            recover_expired(c)
             pending=[r["id"] for r in c.execute(
                 "SELECT id FROM gis_jobs WHERE status='queued' ORDER BY created_at",
             ).fetchall()]
         _INITIALIZED.add(path)
-        for uid in pending:_POOL.submit(_worker,uid,path)
+        if os.getenv("GEOFATHOM_EXTERNAL_WORKER")!="1":
+            for uid in pending:_POOL.submit(_worker,uid,path)
 
 
 def queue_job(project_id,kind,payload):
     _ensure()
     if kind not in KINDS:raise StorageError("Unsupported background GIS operation.")
     if not isinstance(payload,dict):raise StorageError("Job payload must be a JSON object.")
+    if kind=="stac_ndvi":
+        payload={**payload,"full_resolution":True}
     serialized=json.dumps(payload,allow_nan=False)
     if len(serialized.encode("utf-8"))>100_000:
         raise StorageError("Job request exceeds 100 KB.")
     with _connect() as c:
         _required_project(c,project_id);_schema(c)
+        c.execute("BEGIN IMMEDIATE")
         active=c.execute("""SELECT count(*) FROM gis_jobs
            WHERE status IN ('queued','running')""").fetchone()[0]
         if active>=32:raise StorageError("Local background job queue is full.")
@@ -146,8 +159,8 @@ def queue_job(project_id,kind,payload):
             progress,cancel_requested,created_at,updated_at)
             VALUES(?,?,?,?,'queued',0,0,?,?)""",
             (uid,project_id,kind,serialized,now,now))
-    _POOL.submit(_worker,uid,str(__import__("storage.database",fromlist=["database_path"])
-                     .database_path().resolve()))
+    if os.getenv("GEOFATHOM_EXTERNAL_WORKER")!="1":
+        _POOL.submit(_worker,uid,str(database_path().resolve()))
     return get_job(project_id,uid)
 
 
@@ -205,6 +218,13 @@ def cancel_job(project_id,job_id):
 
 
 def _execute(kind,project_id,payload):
+    if kind=="stac_ndvi":
+        from imagery.remote import run_stac_ndvi
+        return run_stac_ndvi(payload["collection"],payload["item_id"],
+            payload.get("threshold",.25),payload.get("max_side",4096),
+            payload.get("tile_size",256),
+            payload.get("max_pixels",16_777_216),
+            payload.get("memory_mb",32),progress=_progress)
     if kind in {"spectral_index","spectral_change","semantic_segmentation"}:
         from imagery.store import image_file
         from vision.geoai import spectral_index, spectral_change
@@ -283,42 +303,81 @@ def _execute(kind,project_id,payload):
     raise StorageError("Unsupported GIS job.")
 
 
+def _lease_heartbeat(uid,path,owner,stop,lost):
+    """Renew the shared lease during blocking GDAL/ONNX operations."""
+    while not stop.wait(3.):
+        try:
+            c=sqlite3.connect(path,timeout=5)
+            c.row_factory=sqlite3.Row
+            try:
+                if not heartbeat(c,uid,owner):
+                    lost.set()
+                    return
+                c.commit()
+            finally:
+                c.close()
+        except sqlite3.Error:
+            # A transient busy database does not immediately invalidate an
+            # existing lease. Subsequent attempts may renew it before expiry.
+            continue
+
+
 def _worker(uid,path):
-    # The database path is captured at submission time so concurrent test
-    # projects and reconfigured local users do not affect earlier tasks.
     from storage.database import job_database_override
     token=job_database_override.set(path)
+    owner=PROCESS_ID+":"+uid
+    acquired=False
+    stop=Event()
+    lost=Event()
+    thread=None
     try:
-        with _connect() as c:
-            _schema(c)
-            row=c.execute("SELECT * FROM gis_jobs WHERE id=?",(uid,)).fetchone()
-            if row is None or row["status"]!="queued":return
-            if row["cancel_requested"]:
-                c.execute("UPDATE gis_jobs SET status='cancelled',updated_at=? WHERE id=?",
-                          (_now(),uid));return
-            c.execute("UPDATE gis_jobs SET status='running',progress=10,updated_at=? WHERE id=?",
-                      (_now(),uid))
-            project_id=row["project_id"];kind=row["kind"];payload=json.loads(row["payload"])
+        # A claimed raster slot may be busy in another process. Keep the
+        # queued task pending instead of exceeding the global resource limit.
+        deadline=time.monotonic()+120
+        while True:
+            with _connect() as c:
+                _schema(c)
+                row=claim(c,uid,owner)
+                if row is None:
+                    status=c.execute("SELECT status FROM gis_jobs WHERE id=?",
+                                     (uid,)).fetchone()
+                    pending=bool(status and status["status"]=="queued")
+                else:
+                    pending=False
+            if row is not None:
+                acquired=True
+                break
+            if not pending or time.monotonic()>=deadline:
+                return
+            time.sleep(.2)
+        project_id=row["project_id"]
+        kind=row["kind"]
+        payload=json.loads(row["payload"])
+        thread=Thread(target=_lease_heartbeat,
+                      args=(uid,path,owner,stop,lost),daemon=True)
+        thread.start()
         try:
             active_token=_ACTIVE_JOB.set(uid)
             progress_token=_ACTIVE_PROGRESS.set({
                 "value":10,"checked":time.monotonic(),
                 "committed":time.monotonic()})
+            owner_token=_ACTIVE_OWNER.set(owner)
             try:
                 if (kind in {"spectral_index","spectral_change",
-                             "semantic_segmentation"}
-                        and payload.get("full_resolution") is True):
-                    with _RASTER_GATE:
-                        _progress(0)
-                        outcome=_execute(kind,project_id,payload)
+                             "semantic_segmentation","stac_ndvi"}
+                        and payload.get("full_resolution") is True
+                        and os.getenv("GEOFATHOM_RASTER_ISOLATE","1")=="1"):
+                    from .isolation import run_isolated
+                    outcome=run_isolated(path,uid,owner,kind,project_id,payload,lost)
                 else:
                     outcome=_execute(kind,project_id,payload)
             finally:
+                _ACTIVE_OWNER.reset(owner_token)
                 _ACTIVE_PROGRESS.reset(progress_token)
                 _ACTIVE_JOB.reset(active_token)
             if (kind in {"spectral_index","spectral_change","semantic_segmentation"}
                     and isinstance(outcome,dict)):
-                from imagery.store import image_file, file_sha256
+                from imagery.store import image_file,file_sha256
                 source_ids=outcome.get("source_images",[])
                 source_hashes={identifier:file_sha256(image_file(identifier))
                                for identifier in source_ids}
@@ -335,37 +394,55 @@ def _worker(uid,path):
             result_bytes=len(result.encode("utf-8"))
             if result_bytes>5_000_000:
                 raise StorageError("GIS job output exceeded 5 MB; narrow the query.")
+            if lost.is_set():
+                return
             with _connect() as c:
-                row=c.execute("SELECT cancel_requested FROM gis_jobs WHERE id=?",(uid,)).fetchone()
+                c.execute("BEGIN IMMEDIATE")
+                if not is_owner(c,uid,owner):
+                    return
+                row=c.execute("SELECT cancel_requested FROM gis_jobs WHERE id=?",
+                              (uid,)).fetchone()
                 if row is None:return
                 if row["cancel_requested"]:
-                    c.execute("UPDATE gis_jobs SET status='cancelled',progress=100,"
-                              "updated_at=? WHERE id=?",(_now(),uid))
+                    c.execute("""UPDATE gis_jobs SET status='cancelled',progress=100,
+                        lease_owner=NULL,lease_expires=NULL,updated_at=?
+                        WHERE id=? AND lease_owner=?""",(_now(),uid,owner))
                 else:
-                    # Atomic state transition and result insert. Large results
-                    # no longer live in the frequently polled job metadata row.
                     c.execute("""INSERT INTO gis_job_results(job_id,content,size_bytes)
                         VALUES(?,?,?) ON CONFLICT(job_id) DO UPDATE SET
                         content=excluded.content,size_bytes=excluded.size_bytes""",
                         (uid,result,result_bytes))
                     c.execute("""UPDATE gis_jobs SET status='completed',
-                        progress=100,result=NULL,updated_at=? WHERE id=?""",
-                        (_now(),uid))
+                        progress=100,result=NULL,lease_owner=NULL,lease_expires=NULL,
+                        updated_at=? WHERE id=? AND lease_owner=?""",
+                        (_now(),uid,owner))
+                release_slot(c,owner)
         except Exception as error:
             with _connect() as c:
+                c.execute("BEGIN IMMEDIATE")
+                if not is_owner(c,uid,owner):
+                    return
                 row=c.execute("SELECT cancel_requested FROM gis_jobs WHERE id=?",
                               (uid,)).fetchone()
-                if row is None:
-                    return
+                if row is None:return
                 if row["cancel_requested"]:
-                    # Cancellation wins even if the underlying blocking task
-                    # raises while winding down; do not publish a false failure.
                     c.execute("""UPDATE gis_jobs SET status='cancelled',
-                        progress=100,error=NULL,result=NULL,updated_at=?
-                        WHERE id=?""",(_now(),uid))
+                        progress=100,error=NULL,result=NULL,lease_owner=NULL,
+                        lease_expires=NULL,updated_at=? WHERE id=? AND lease_owner=?""",
+                        (_now(),uid,owner))
                 else:
                     c.execute("""UPDATE gis_jobs SET status='failed',progress=100,
-                        error=?,updated_at=? WHERE id=?""",
-                        (str(error)[:250],_now(),uid))
+                        error=?,lease_owner=NULL,lease_expires=NULL,updated_at=?
+                        WHERE id=? AND lease_owner=?""",
+                        (str(error)[:250],_now(),uid,owner))
+                release_slot(c,owner)
     finally:
+        stop.set()
+        if thread is not None:
+            thread.join(timeout=5)
+        if acquired:
+            # Never release a successor's slot. A stale owner releases only
+            # a row that still carries its exact unique token.
+            with _connect() as c:
+                release_slot(c,owner)
         job_database_override.reset(token)
