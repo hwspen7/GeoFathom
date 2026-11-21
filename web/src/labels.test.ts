@@ -135,3 +135,35 @@ describe('QGIS-style categorized symbology and legend classes',()=>{
     expect(legend.map(e=>e.name)).not.toContain('  industrial');
   });
 });
+
+
+describe('conditional attribute label rules',()=>{
+  const map=structuredClone(DEFAULT_LAYER_STYLE);
+  map.labels.enabled=true;
+  map.labels.rule_field='height';
+  map.labels.rule_operator='gte';
+  map.labels.rule_value='30';
+  it('shows only qualifying numeric features',()=>{
+    expect(featureLabel(feature({style:map,properties:{height:18}}))).toBe('');
+    expect(featureLabel(feature({style:map,properties:{height:34}}))).toBe('Building A');
+  });
+  it('supports equals, substring and exists rules without eval',()=>{
+    const style=structuredClone(map);
+    style.labels.rule_field='category';
+    style.labels.rule_operator='equals';
+    style.labels.rule_value='industrial';
+    expect(featureLabel(feature({style}))).toBe('Building A');
+    style.labels.rule_operator='contains';
+    style.labels.rule_value='dust';
+    expect(featureLabel(feature({style}))).toBe('Building A');
+    style.labels.rule_operator='exists';
+    expect(featureLabel(feature({style}))).toBe('Building A');
+    style.labels.rule_field='missing';
+    expect(featureLabel(feature({style}))).toBe('');
+  });
+  it('standalone note overrides layer labeling predicate',()=>{
+    const style=structuredClone(map);
+    expect(featureLabel(feature({style,properties:{annotation:true,
+      annotation_text:'Note',height:5}}))).toBe('Note');
+  });
+});

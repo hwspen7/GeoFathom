@@ -19,6 +19,7 @@ export const DEFAULT_LAYER_STYLE:LayerStyle={
     halo_color:'#ffffff',halo_width:1.5,min_zoom:0,max_zoom:24,
     allow_overlap:false,priority:50,offset_x:0,offset_y:0,
     prefix:'',suffix:'',placement:'auto',callout:false,
+    rule_field:'',rule_operator:'equals',rule_value:'',
   },
   symbol:{
     fill_opacity:.17,line_width:3,point_radius:5,stroke_color:'#ffffff',
@@ -43,6 +44,21 @@ export function featureLabel(feature:LabelFeature,zoom=14):string {
     value=properties.annotation_text;
   }else{
     if(!labels.enabled)return '';
+    if(labels.rule_field){
+      const rule=labels.rule_field;
+      const actual=rule==='name'?name:rule==='source'?source:
+        properties[rule];
+      const operand=labels.rule_value;
+      const scalar=actual===null||actual===undefined||
+        typeof actual==='object'?'':String(actual);
+      const good=labels.rule_operator==='exists'?actual!==undefined&&actual!==null:
+        labels.rule_operator==='equals'?scalar.toLocaleLowerCase()===operand.toLocaleLowerCase():
+        labels.rule_operator==='contains'?scalar.toLocaleLowerCase().includes(operand.toLocaleLowerCase()):
+        Number.isFinite(Number(scalar))&&operand.trim()!==''&&Number.isFinite(Number(operand))&&
+          (labels.rule_operator==='gte'?Number(scalar)>=Number(operand):
+            Number(scalar)<=Number(operand));
+      if(!good)return '';
+    }
     const field=labels.field.trim();
     if(field==='name')value=name;
     else if(field==='source')value=source;

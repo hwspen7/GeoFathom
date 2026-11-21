@@ -600,6 +600,9 @@ export interface LabelStyle {
   priority:number;offset_x:number;offset_y:number;
   prefix:string;suffix:string;
   placement:'auto'|'point'|'line';callout:boolean;
+  rule_field:string;
+  rule_operator:'equals'|'contains'|'gte'|'lte'|'exists';
+  rule_value:string;
 }
 export interface SymbolStyle {
   fill_opacity:number;
