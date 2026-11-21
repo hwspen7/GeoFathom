@@ -136,3 +136,9 @@ GEOFATHOM_API int gf_buffer_pool_release(void* p,std::uint64_t lease) noexcept;
 GEOFATHOM_API int gf_buffer_pool_stats(void* p,std::size_t* out) noexcept;
 GEOFATHOM_API int gf_buffer_pool_destroy(void* p) noexcept;
 }
+
+// Scalar/SSE2/AVX2/NEON capability bits; backend 0 selects automatically.
+extern "C" {
+GEOFATHOM_API unsigned gf_mask_transition_backends() noexcept;
+GEOFATHOM_API int gf_mask_transitions_backend(const unsigned char* data,std::size_t width,std::size_t height,unsigned backend) noexcept;
+}

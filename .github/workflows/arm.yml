@@ -1,0 +1,16 @@
+name: ARM native acceptance
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  arm64:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          cmake -S . -B build/native -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/native --parallel
+          ctest --test-dir build/native --output-on-failure
