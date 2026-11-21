@@ -290,6 +290,10 @@ export default function MapCanvas({
       const features = hits(event);
       const handle = features.find(f => f.properties?.role === 'edit-vertex'
                                    || f.properties?.role === 'edit-midpoint');
+      if(import.meta.env.DEV&&container.current){
+        container.current.setAttribute('data-dev-hit-role',
+          String(handle?.properties?.role ?? features.map(f=>f.properties?.role).join(',')));
+      }
       let first = state.selected;
       let path: GeometryPath | null = null;
       let kind: Drag['kind'] | null = null;
@@ -307,6 +311,8 @@ export default function MapCanvas({
         kind = 'feature';
       }
       if (!kind) return;
+      if(import.meta.env.DEV&&container.current)
+        container.current.setAttribute('data-dev-drag-began',kind);
       drag.current = { original: first, last: first, path, kind,
         start: coordinates(event),end:coordinates(event) };
       map.dragPan.disable();
@@ -354,6 +360,8 @@ export default function MapCanvas({
         changed = moveVertex(current.original, current.path!, snapAt(coordinate, current.path));
       }
       current.last = changed;
+      if(import.meta.env.DEV&&container.current)
+        container.current.setAttribute('data-dev-drag-updated','true');
       eventRef.current.onGeometryPreview(changed);
     }
     function finishDrag() {
@@ -362,6 +370,8 @@ export default function MapCanvas({
       drag.current = null;
       map.dragPan.enable();
       map.getCanvas().style.cursor = 'crosshair';
+      if(import.meta.env.DEV&&container.current)
+        container.current.setAttribute('data-dev-drag-ended',current.kind);
       if(current.kind==='feature'){
         const delta=geodesicDrag(current.start,current.end);
         if(delta.distance_m>0.001){

@@ -49,7 +49,15 @@ test('survey editor draws, repositions vertices, supports undo and saves project
   await page.mouse.down();
   await page.mouse.move(x+20,y-20,{steps:12});
   await page.mouse.up();
-  await expect.poll(()=>changes.length,{timeout:10000}).toBeGreaterThan(0);
+  try{
+    await expect.poll(()=>changes.length,{timeout:10000}).toBeGreaterThan(0);
+  }catch(failure){
+    const debug=await map.evaluate(element=>Object.fromEntries(
+      [...element.attributes].filter(item=>item.name.startsWith('data-dev-')||
+        item.name.startsWith('data-rendered')) .map(item=>[item.name,item.value])));
+    throw new Error('MapLibre drag acceptance diagnostics: '+
+      JSON.stringify(debug)+'; '+String(failure));
+  }
   expect(changes[0].type).toBe('Polygon');
   await expect(page.getByRole('button',{name:'Undo',exact:true})).toBeEnabled();
   await page.getByRole('button',{name:'Undo',exact:true}).click();
