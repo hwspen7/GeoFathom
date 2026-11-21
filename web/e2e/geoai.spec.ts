@@ -42,7 +42,7 @@ test('Remote STAC COG analysis exposes fixed catalog and cloud mask controls',
       .fill('S2B_32TMT_20240101_0_L2A');
     await expect(page.getByLabel('Remote STAC processing resolution'))
       .toHaveValue('4096');
-    await expect(page.getByText(/SCL cloud masking/).first()).toBeVisible();
+    await expect(page.getByText(/scene-classification masking/)).toBeVisible();
     await expect(page.getByLabel('Spectral first band')).toHaveCount(0);
     await expect(page.getByLabel('Process full image at native pixel resolution'))
       .toHaveCount(0);
