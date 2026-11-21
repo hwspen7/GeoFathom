@@ -82,11 +82,15 @@ def test_print_hides_locked_or_invisible_layers():
     {"extent":[10,20,0,30]},
     {"extent":[0,-90,5,10]},
     {"extent":[0,0,100,10]},
-    {"layer_ids":["not-a-layer"]},
 ])
 def test_invalid_layout_cannot_generate_pdf(changes):
     root,layer=make()
     assert export(root,**changes).status_code==422
+
+def test_nonexistent_layer_is_a_404():
+    root,layer=make()
+    assert export(root,layer_ids=["not-a-layer"]).status_code==404
+
 
 def test_empty_project_requires_extent():
     p=c.post("/projects",json={"name":"Blank"}).json()["id"]
