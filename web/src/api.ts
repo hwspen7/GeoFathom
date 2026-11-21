@@ -641,3 +641,82 @@ export async function deleteProjectFeature(projectId:string,featureId:string):Pr
     throw new Error(error.detail||'Could not delete the selected map feature.');
   }
 }
+
+
+// Professional map analysis and document layout workflows.
+export type SpatialRelation='intersects'|'within'|'contains'|'touches'|'crosses';
+export interface SpatialSelection {
+  ids:string[];
+  results:Array<{id:string;name:string;geometry:GeoJSON.Geometry;
+    revision:number;layer_id:string;properties:Record<string,unknown>}>;
+  total:number;limit:number;offset:number;method:string;
+}
+export interface QualityIssue {
+  type:'overlap'|'gap'|'duplicate'|'invalid'|'dangle';
+  feature_ids:string[];
+  geometry:GeoJSON.Geometry;
+  message:string;
+  area_m2:number;
+}
+export interface QualityReport{
+  issues:QualityIssue[];
+  counts:Record<string,number>;
+  issue_count:number;
+  checked_features:number;
+  truncated:boolean;
+  warning:string;
+  method:string;
+}
+export function selectSpatialFeatures(projectId:string,geometry:GeoJSON.Geometry,
+  relation:SpatialRelation='intersects',
+  layerIds:string[]|null=null,visibleOnly=true,limit=500,offset=0):Promise<SpatialSelection>{
+  return request('/projects/'+encodeURIComponent(projectId)+'/spatial/select',{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({geometry,relation,layer_ids:layerIds,visible_only:visibleOnly,limit,offset}),
+  });
+}
+export function reviewTopology(projectId:string,body:{
+  layer_ids?:string[]|null;study_area?:GeoJSON.Geometry|null;
+  minimum_area_m2?:number;check_dangles?:boolean;max_issues?:number;
+}):Promise<QualityReport>{
+  return request('/projects/'+encodeURIComponent(projectId)+'/quality/topology',{
+    method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),
+  });
+}
+export async function downloadMapPDF(projectId:string,settings:{
+  title:string;paper:'a4'|'a3'|'letter';
+  orientation:'landscape'|'portrait';
+  extent:[number,number,number,number]|null;
+  show_grid:boolean;show_legend:boolean;
+  layer_ids:string[]|null;
+}):Promise<void>{
+  const response=await fetch(API_URL+'/projects/'+encodeURIComponent(projectId)+'/print/pdf',{
+    method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(settings),
+  });
+  if(!response.ok){
+    let error='Map layout could not be rendered';
+    try{const data=await response.json() as {detail?:string};
+      error=data.detail||error;}catch{ /* Keep generic message. */ }
+    throw new Error(error);
+  }
+  const blob=await response.blob();
+  const url=URL.createObjectURL(blob);
+  try{
+    const link=document.createElement('a');
+    link.href=url;
+    link.download='geofathom-map.pdf';
+    document.body.appendChild(link);link.click();link.remove();
+  }finally{window.setTimeout(()=>URL.revokeObjectURL(url),1500);}
+}
+export interface SpatialPage {
+  results:WorkspaceFeature[];
+  total:number;limit:number;offset:number;indexed:boolean;
+}
+export function viewportFeatures(projectId:string,
+  bbox:[number,number,number,number],limit=250,offset=0):Promise<SpatialPage>{
+  const params=new URLSearchParams({
+    west:String(bbox[0]),south:String(bbox[1]),east:String(bbox[2]),
+    north:String(bbox[3]),limit:String(limit),offset:String(offset),
+  });
+  return request('/projects/'+encodeURIComponent(projectId)+'/features/viewport?'+params);
+}
