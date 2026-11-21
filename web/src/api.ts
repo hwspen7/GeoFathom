@@ -597,6 +597,9 @@ export interface LabelStyle {
   min_zoom:number;
   max_zoom:number;
   allow_overlap:boolean;
+  priority:number;offset_x:number;offset_y:number;
+  prefix:string;suffix:string;
+  placement:'auto'|'point'|'line';callout:boolean;
 }
 export interface SymbolStyle {
   fill_opacity:number;
@@ -605,6 +608,10 @@ export interface SymbolStyle {
   stroke_color:string;
   category_field:string;
   category_colors:Record<string,string>;
+  graduated_field:string;
+  graduated_method:'equal_interval'|'quantile'|'jenks';
+  graduated_breaks:number[];
+  graduated_colors:string[];
 }
 export interface LayerStyle {
   labels:LabelStyle;
@@ -719,4 +726,53 @@ export function viewportFeatures(projectId:string,
     north:String(bbox[3]),limit:String(limit),offset:String(offset),
   });
   return request('/projects/'+encodeURIComponent(projectId)+'/features/viewport?'+params);
+}
+
+
+// P1 project coordinate-system metadata and graduated cartography.
+export interface ProjectCRS {
+  project_id:string;
+  epsg:string;grid_visible:number;revision:number;
+}
+export function getProjectCRS(projectId:string):Promise<ProjectCRS>{
+  return request('/projects/'+encodeURIComponent(projectId)+'/crs');
+}
+export function saveProjectCRS(projectId:string,epsg:string,gridVisible:boolean,
+  revision:number):Promise<ProjectCRS>{
+  return request('/projects/'+encodeURIComponent(projectId)+'/crs',{
+    method:'PUT',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({epsg,grid_visible:gridVisible,expected_revision:revision}),
+  });
+}
+export interface CoordinatesProjection {
+  source:string;target:string;coordinates:[number,number][];units:string;
+}
+export function transformProjectCoordinates(projectId:string,
+  positions:[number,number][],target:string,
+  source='EPSG:4326'):Promise<CoordinatesProjection>{
+  return request('/projects/'+encodeURIComponent(projectId)+'/crs/transform',{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({points:positions,target,source}),
+  });
+}
+export function getProjectGrid(projectId:string,
+  bbox:[number,number,number,number]):Promise<GeoJSON.FeatureCollection>{
+  const query=new URLSearchParams({
+    west:String(bbox[0]),south:String(bbox[1]),
+    east:String(bbox[2]),north:String(bbox[3]),divisions:'5',
+  });
+  return request('/projects/'+encodeURIComponent(projectId)+'/crs/grid?'+query);
+}
+export interface Classification {
+  method:'quantile'|'jenks'|'equal_interval';
+  classes:number;min:number;max:number;breaks:number[];
+  ranges:Array<{min:number;max:number;inclusive_upper:boolean}>;
+  samples:number;
+}
+export function classifyValues(values:number[],method:Classification['method'],
+  classes:number):Promise<Classification>{
+  return request('/analysis/classify',{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({values,method,classes}),
+  });
 }
