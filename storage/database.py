@@ -7,6 +7,7 @@ Use a configured writable path; local deployments default to data/geofathom.sqli
 import json
 import os
 import sqlite3
+from contextvars import ContextVar
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -16,6 +17,7 @@ from uuid import uuid4
 from geometry.measure import GeometryError, measure_geometry
 
 _ROOT = Path(__file__).resolve().parent.parent
+job_database_override:ContextVar[str|None]=ContextVar("geofathom_job_database",default=None)
 
 
 class StorageError(ValueError):
@@ -27,6 +29,8 @@ def _now() -> str:
 
 
 def database_path() -> Path:
+    override=job_database_override.get()
+    if override:return Path(override)
     return Path(os.getenv("GEOFATHOM_DATABASE_PATH", str(_ROOT / "data" / "geofathom.sqlite"))).expanduser()
 
 

@@ -10,6 +10,7 @@ from analysis.classification_routes import router as classification_router, proj
 from storage.crs_routes import router as crs_router
 from storage.postgis_routes import router as postgis_router
 from services.routes import router as ogc_router
+from jobs.routes import router as jobs_router
 from cartography.routes import router as print_router
 from storage.routes import router as storage_router
 from storage.workspace_routes import router as workspace_router
@@ -47,6 +48,7 @@ app.include_router(graduated_project_router)
 app.include_router(crs_router)
 app.include_router(postgis_router)
 app.include_router(ogc_router)
+app.include_router(jobs_router)
 app.include_router(print_router)
 app.include_router(storage_router)
 app.include_router(workspace_router)
