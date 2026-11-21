@@ -12,6 +12,7 @@ import {
 import MapCanvas, { type FocusPoint } from './MapCanvas';
 import SurveyTools from './SurveyTools';
 import ProfessionalPanel from './ProfessionalPanel';
+import ImageCorrectionPanel, { type PromptMode } from './ImageCorrectionPanel';
 import {
   GeometryTimeline, approximateMeasurement, previewEdgeLengths, pathsOf,
   singleMovedVertex, type Position, type ShapeMode,
@@ -23,7 +24,8 @@ import ModelControls from './ModelControls';
 import RasterPanel, { type TraceSettings } from './RasterPanel';
 import {
   applyOverlay, applyTopology, constructGeometry, editPair, getWorkspace,
-  previewTopology, traceExisting, traceImagery, type SharedTopologyPreview, type RasterAsset,
+  previewTopology, refineRaster, traceExisting, traceImagery,
+  type SharedTopologyPreview, type RasterAsset,
 } from './api';
 
 const number = (value: number, digits = 2) =>
@@ -52,6 +54,10 @@ export default function App() {
   const [satellite, setSatellite] = useState(false);
   const [imageLayer, setImageLayer] = useState<RasterAsset | null>(null);
   const [traceMode, setTraceMode] = useState(false);
+  const [promptMode,setPromptMode] = useState<PromptMode>(null);
+  const [positivePoints,setPositivePoints] = useState<Position[]>([]);
+  const [negativePoints,setNegativePoints] = useState<Position[]>([]);
+  const [boxPoints,setBoxPoints] = useState<Position[]>([]);
   const [traceSettings, setTraceSettings] = useState<TraceSettings>({
     method: 'color', tolerance: 20, window_size: 512,
   });
@@ -412,6 +418,7 @@ export default function App() {
 
   function clearWorkspace() {
     setGeometry(null);
+    setPromptMode(null);setPositivePoints([]);setNegativePoints([]);setBoxPoints([]);
     setPendingShared(null);
     lastValid.current = null;
     timeline.current.push(null);
@@ -605,7 +612,54 @@ export default function App() {
               onSettings={setTraceSettings}
               viewport={viewport}
             />
-          </section>
+ 
+            <ImageCorrectionPanel
+              enabled={Boolean(imageLayer)}
+              mode={promptMode}
+              onMode={mode=>{
+                setPromptMode(mode);setTraceMode(false);setDrawingMode(null);
+              }}
+              positive={positivePoints}
+              negative={negativePoints}
+              box={boxPoints}
+              busy={busy}
+              onClear={()=>{
+                setPositivePoints([]);setNegativePoints([]);
+                setBoxPoints([]);setPromptMode(null);
+              }}
+              onRefine={async()=>{
+                if(!imageLayer||positivePoints.length===0)return;
+                setBusy(true);setError('');
+                try{
+                  const refined=await refineRaster({
+                    image_id:imageLayer.id,positive_points:positivePoints,
+                    negative_points:negativePoints,
+                    box:boxPoints.length===2?boxPoints:null,
+                    window_size:traceSettings.window_size,
+                  });
+                  setGeometry(refined.geometry);
+                  lastValid.current=structuredClone(refined.geometry);
+                  timeline.current.push(refined.geometry);
+                  setHistoryPulse(x=>x+1);
+                  setMeasurement(refined.measurement);
+                  setSelectedFeatureId(null);setEditing(false);
+                  setGeometrySource('Local SAM 2 refinement · '+imageLayer.name);
+                  setFeatureProperties({
+                    source_type:'image_derived',image_id:imageLayer.id,
+                    model_id:refined.model_id,method:'sam2-prompt-refinement',
+                    positive_count:refined.positive_count,
+                    negative_count:refined.negative_count,
+                    box_used:refined.box_used,
+                    quality:'requires_user_review',
+                  });
+                  setPromptMode(null);
+                  setMessage(refined.warning);
+                }catch(failure){
+                  setError(failure instanceof Error?failure.message:'SAM 2 refinement unavailable.');
+                }finally{setBusy(false);}
+              }}
+            />
+         </section>
 
           <section className="panel-section">
             <div className="section-heading"><Layers3 size={16} /><span>Projects & saved geometry</span></div>
@@ -781,8 +835,15 @@ export default function App() {
               if (feature) openStoredFeature(feature);
             }}
             focus={focus} satellite={satellite}
-            imageLayer={imageLayer} traceMode={traceMode}
+            imageLayer={imageLayer} traceMode={traceMode||promptMode!==null}
             onTraceClick={async ([longitude, latitude]) => {
+              if (promptMode!==null) {
+                const location:Position=[longitude,latitude];
+                if(promptMode==='positive')setPositivePoints(points=>points.length>=20?points:[...points,location]);
+                else if(promptMode==='negative')setNegativePoints(points=>points.length>=20?points:[...points,location]);
+                else setBoxPoints(points=>points.length>=2?[location]:[...points,location]);
+                return;
+              }
               if (!imageLayer || busy) return;
               setBusy(true);
               setError('');
