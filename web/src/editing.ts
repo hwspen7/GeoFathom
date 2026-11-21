@@ -277,3 +277,48 @@ export function singleMovedVertex(
   }
   return change;
 }
+
+
+// Fast spherical drag preview; server PyProj Geod is authoritative on release.
+export function geodesicDrag(from:Position,to:Position): {
+  bearing_deg:number;distance_m:number;
+} {
+  const radius=6371008.8;
+  const rad=Math.PI/180;
+  const [lon1,lat1]=from.map(x=>x*rad);
+  const [lon2,lat2]=to.map(x=>x*rad);
+  const dLon=lon2-lon1,dLat=lat2-lat1;
+  const half=Math.sin(dLat/2)**2+Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLon/2)**2;
+  const distance=2*radius*Math.asin(Math.min(1,Math.sqrt(half)));
+  const bearing=Math.atan2(Math.sin(dLon)*Math.cos(lat2),
+    Math.cos(lat1)*Math.sin(lat2)-Math.sin(lat1)*Math.cos(lat2)*Math.cos(dLon));
+  return {bearing_deg:bearing/rad,distance_m:distance};
+}
+
+export function translateSpherical(
+  geometry:GeoJSON.Geometry,bearingDeg:number,distanceM:number,
+):GeoJSON.Geometry {
+  const result=copyGeometry(geometry);
+  const angle=bearingDeg*Math.PI/180;
+  const delta=distanceM/6371008.8;
+  function shifted(value:unknown):unknown {
+    if(!Array.isArray(value))return value;
+    if(typeof value[0]==='number'){
+      const p=value as number[];
+      const lon=p[0]*Math.PI/180,lat=p[1]*Math.PI/180;
+      const latitude=Math.asin(Math.sin(lat)*Math.cos(delta)+
+        Math.cos(lat)*Math.sin(delta)*Math.cos(angle));
+      const longitude=lon+Math.atan2(Math.sin(angle)*Math.sin(delta)*Math.cos(lat),
+        Math.cos(delta)-Math.sin(lat)*Math.sin(latitude));
+      let lng=longitude*180/Math.PI;
+      lng=((lng+540)%360)-180;
+      return [lng,latitude*180/Math.PI,...p.slice(2)];
+    }
+    return value.map(shifted);
+  }
+  if('coordinates' in result){
+    (result as GeoJSON.Geometry&{coordinates:unknown}).coordinates=
+      shifted((result as GeoJSON.Geometry&{coordinates:unknown}).coordinates);
+  }
+  return result;
+}

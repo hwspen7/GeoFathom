@@ -4,7 +4,7 @@ import maplibregl, { type GeoJSONSource, type MapMouseEvent, type StyleSpecifica
 import { rasterPreviewUrl, type RasterAsset } from './api';
 import { PixelSnapIndex } from './spatialIndex';
 import {
-  addVertex, moveVertex, removeVertex, shiftGeometry, pathsOf,
+  addVertex, moveVertex, removeVertex, translateSpherical, geodesicDrag, pathsOf,
   verticesOf, type GeometryPath, type Position, type ShapeMode,
 } from './editing';
 
@@ -42,7 +42,9 @@ interface Props {
   selectedLocked: boolean;
   layerFeatures: MapLayerFeature[];
   onGeometryPreview: (geometry: GeoJSON.Geometry) => void;
-  onGeometryCommit: (geometry: GeoJSON.Geometry) => void;
+  onGeometryCommit: (geometry: GeoJSON.Geometry, movement?: {
+    original:GeoJSON.Geometry;bearing_deg:number;distance_m:number;
+  }) => void;
   onSelectSavedFeature: (id: string) => void;
 }
 
@@ -141,6 +143,7 @@ function featureCollection(
 
 type Drag = {
   start: Position;
+  end: Position;
   original: GeoJSON.Geometry;
   last: GeoJSON.Geometry;
   path: GeometryPath | null;
@@ -225,7 +228,8 @@ export default function MapCanvas({
         kind = 'feature';
       }
       if (!kind) return;
-      drag.current = { original: first, last: first, path, kind, start: coordinates(event) };
+      drag.current = { original: first, last: first, path, kind,
+        start: coordinates(event),end:coordinates(event) };
       map.dragPan.disable();
       map.getCanvas().style.cursor = 'grabbing';
       event.preventDefault();
@@ -262,10 +266,11 @@ export default function MapCanvas({
       const current = drag.current;
       if (!current) return;
       const coordinate = coordinates(event);
+      current.end=coordinate;
       let changed: GeoJSON.Geometry;
       if (current.kind === 'feature') {
-        changed = shiftGeometry(current.original,
-          coordinate[0] - current.start[0], coordinate[1] - current.start[1]);
+        const delta=geodesicDrag(current.start,coordinate);
+        changed=translateSpherical(current.original,delta.bearing_deg,delta.distance_m);
       } else {
         changed = moveVertex(current.original, current.path!, snapAt(coordinate, current.path));
       }
@@ -278,7 +283,16 @@ export default function MapCanvas({
       drag.current = null;
       map.dragPan.enable();
       map.getCanvas().style.cursor = 'crosshair';
-      eventRef.current.onGeometryCommit(current.last);
+      if(current.kind==='feature'){
+        const delta=geodesicDrag(current.start,current.end);
+        if(delta.distance_m>0.001){
+          eventRef.current.onGeometryCommit(current.last,{
+            original:current.original,...delta,
+          });
+        }
+      }else{
+        eventRef.current.onGeometryCommit(current.last);
+      }
     }
     function click(event: MapMouseEvent) {
       const state = eventRef.current;

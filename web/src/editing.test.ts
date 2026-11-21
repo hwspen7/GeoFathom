@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 import {
   GeometryTimeline, addVertex, approximateMeasurement, moveVertex,
   removeVertex, shiftGeometry, snapPixels, snapToPaths, verticesOf, previewEdgeLengths,
+  geodesicDrag, translateSpherical,
 } from './editing';
 
 import type { Position } from './editing';
@@ -103,4 +104,16 @@ test('P0 live edge-length labels enumerate every polygon edge', () => {
   expect(measured.edges[0].length_m).toBeGreaterThan(1000);
   expect(measured.edges[0].length_m).toBeLessThan(1200);
   expect(previewEdgeLengths(box,2).total).toBe(4);
+});
+
+
+test('metric drag uses a geodesic displacement instead of a raw degree offset',()=>{
+  const delta=geodesicDrag([0,45],[.001,45]);
+  expect(delta.distance_m).toBeGreaterThan(70);
+  expect(delta.distance_m).toBeLessThan(90);
+  const shifted=translateSpherical(box,delta.bearing_deg,delta.distance_m);
+  expect(shifted.type).toBe('Polygon');
+  const before=approximateMeasurement(box).area_m2!;
+  const after=approximateMeasurement(shifted).area_m2!;
+  expect(Math.abs(after-before)/before).toBeLessThan(.001);
 });

@@ -23,7 +23,7 @@ import ProjectsPanel from './ProjectsPanel';
 import ModelControls from './ModelControls';
 import RasterPanel, { type TraceSettings } from './RasterPanel';
 import {
-  applyOverlay, applyTopology, constructGeometry, editPair, getWorkspace,
+  applyOverlay, applyTopology, constructGeometry, editPair, getWorkspace, moveMeasured,
   previewTopology, refineRaster, traceExisting, traceImagery,
   type SharedTopologyPreview, type RasterAsset,
 } from './api';
@@ -829,7 +829,17 @@ export default function App() {
               setGeometry(next);
               setPreview(approximateMeasurement(next));
             }}
-            onGeometryCommit={next => { void commitGeometry(next); }}
+            onGeometryCommit={(next,movement) => {
+              if(!movement){void commitGeometry(next);return;}
+              if(selectedLocked){setError('Unlock the feature layer.');return;}
+              void moveMeasured(movement.original,movement.bearing_deg,movement.distance_m)
+                .then(result=>commitGeometry(result.geometry,
+                  'Shape translated by geodesic distance and azimuth.'))
+                .catch(error=>{
+                  setError(error instanceof Error?error.message:'Geodesic translation failed.');
+                  setGeometry(lastValid.current);setPreview(null);
+                });
+            }}
             onSelectSavedFeature={id => {
               const feature = projectWorkspace?.features.find(item => item.id === id);
               if (feature) openStoredFeature(feature);
