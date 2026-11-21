@@ -77,9 +77,14 @@ def layers(project_id):
         _required_project(c, project_id)
         _schema(c)
         _default(c, project_id)
-        return [dict(row) for row in c.execute(
-            "SELECT * FROM geo_layers WHERE project_id=? ORDER BY z_index,id", (project_id,),
-        )]
+        from .cartography import read_style_in_connection
+        return [
+            {**dict(row),**read_style_in_connection(c,row["id"])}
+            for row in c.execute(
+                "SELECT * FROM geo_layers WHERE project_id=? ORDER BY z_index,id",
+                (project_id,),
+            ).fetchall()
+        ]
 
 
 def add_layer(project_id, name, color="#2563eb"):
