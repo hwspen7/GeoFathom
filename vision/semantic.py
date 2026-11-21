@@ -119,6 +119,7 @@ def _session(path, modified_ns, device):
         # can allocate memory outside the CUDA execution-provider arena.
         providers = [("CUDAExecutionProvider", {
             "gpu_mem_limit": str(gpu_arena_budget_mb() * 1024 * 1024),
+            "device_id": str(int(os.getenv("GEOFATHOM_CUDA_DEVICE_ID","0"))),
         }), "CPUExecutionProvider"]
     session = ort.InferenceSession(path, sess_options=options,
                                    providers=providers)
@@ -142,13 +143,19 @@ def _predict_batch(tensor, config, device):
             or expected_bytes > tensor_budget_mb() * 1024 * 1024):
         raise RasterError("Model tile exceeds the configured tensor memory budget.")
     state = path.stat()
-    key = (str(path.resolve()), state.st_mtime_ns, state.st_size, device)
-    with pool_for(device).lease(
-        key, lambda: _session(str(path), state.st_mtime_ns, device)) as session:
+    # Include the runtime arena policy in the session identity, and account
+    # the model bytes plus a declared arena/overhead reservation. Providers
+    # may allocate outside an arena; this is admission, not a driver quota.
+    overhead=(gpu_arena_budget_mb() if device=="cuda" else 128)*1024**2
+    device_id=int(os.getenv("GEOFATHOM_CUDA_DEVICE_ID","0")) if device=="cuda" else 0
+    gpu_decode=device=="cuda" and os.getenv("GEOFATHOM_VISION_DEVICE_POSTPROCESS","0")=="1"
+    key=(str(path.resolve()),state.st_mtime_ns,state.st_size,device,overhead,device_id)
+    with pool_for(device).lease(key,lambda:_session(str(path),state.st_mtime_ns,device),
+            reserved_bytes=state.st_size+overhead,working_bytes=int(expected_bytes)) as session:
         inputs = session.get_inputs()
         if len(inputs) != 1:
             raise RasterError("Semantic model must accept exactly one image tensor.")
-        if device=="cuda" and os.getenv("GEOFATHOM_VISION_IO_BINDING","0")=="1":
+        if device=="cuda" and (gpu_decode or os.getenv("GEOFATHOM_VISION_IO_BINDING","0")=="1"):
             # ONNX Runtime manages CUDA output allocation. Source pixels still
             # originate on CPU and classifications return to CPU for GIS
             # polygonization: this path is NOT a GPU zero-copy pipeline.
@@ -157,8 +164,18 @@ def _predict_batch(tensor, config, device):
                 raise RasterError("Semantic model has no declared output.")
             binding=session.io_binding()
             binding.bind_cpu_input(inputs[0].name,tensor)
-            binding.bind_output(names[0].name,"cuda")
+            if gpu_decode or device_id:
+                binding.bind_output(names[0].name,"cuda",device_id)
+            else:
+                binding.bind_output(names[0].name,"cuda")
             session.run_with_iobinding(binding)
+            if gpu_decode:
+                binding.synchronize_outputs()
+                device_values=binding.get_outputs()
+                if not device_values:
+                    raise RasterError("Semantic model returned no CUDA output.")
+                from .device_postprocess import decode_cuda_logits
+                return decode_cuda_logits(device_values[0],batch,classes,size,device_id)
             outputs=binding.copy_outputs_to_cpu()
         else:
             outputs = session.run(None, {inputs[0].name: tensor})

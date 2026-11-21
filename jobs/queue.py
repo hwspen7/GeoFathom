@@ -398,8 +398,9 @@ def _worker(uid,path):
             try:
                 if (kind in {"spectral_index","spectral_change",
                              "semantic_segmentation","stac_ndvi"}
-                        and payload.get("full_resolution") is True
-                        and os.getenv("GEOFATHOM_RASTER_ISOLATE","1")=="1"):
+                        and ((payload.get("full_resolution") is True
+                             and os.getenv("GEOFATHOM_RASTER_ISOLATE","1")=="1")
+                             or os.getenv("GEOFATHOM_WORKER_MEMORY_MB","0")!="0")):
                     from .isolation import run_isolated
                     outcome=run_isolated(path,uid,owner,kind,project_id,payload,lost)
                 else:

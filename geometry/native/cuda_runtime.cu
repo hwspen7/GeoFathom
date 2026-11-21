@@ -1,6 +1,7 @@
 #include "geometry.h"
 #include <cuda_runtime.h>
 #include <cmath>
+#include <algorithm>
 #include <mutex>
 #include <new>
 
@@ -8,24 +9,41 @@ namespace {
 constexpr std::size_t max_pixels=16U*1024U*1024U;
 // One explicit owner keeps device buffers resident between calls.
 struct GPU {
-    std::size_t capacity=0;
+    std::size_t limit=0,capacity=0;
     int device=0;
     float *a=nullptr,*b=nullptr,*out=nullptr;
     unsigned char *av=nullptr,*bv=nullptr,*mask=nullptr;
     std::mutex lock;
-    ~GPU(){
-        cudaSetDevice(device);
+    void release() noexcept {
         cudaFree(mask);cudaFree(bv);cudaFree(av);
         cudaFree(out);cudaFree(b);cudaFree(a);
+        mask=bv=av=nullptr;out=b=a=nullptr;capacity=0;
     }
-    bool initialize(){
-        return cudaSetDevice(device)==cudaSuccess &&
-            cudaMalloc(reinterpret_cast<void**>(&a),capacity*sizeof(float))==cudaSuccess &&
-            cudaMalloc(reinterpret_cast<void**>(&b),capacity*sizeof(float))==cudaSuccess &&
-            cudaMalloc(reinterpret_cast<void**>(&out),capacity*sizeof(float))==cudaSuccess &&
-            cudaMalloc(reinterpret_cast<void**>(&av),capacity)==cudaSuccess &&
-            cudaMalloc(reinterpret_cast<void**>(&bv),capacity)==cudaSuccess &&
-            cudaMalloc(reinterpret_cast<void**>(&mask),capacity)==cudaSuccess;
+    ~GPU(){if(cudaSetDevice(device)==cudaSuccess)release();}
+    bool ensure(std::size_t requested){
+        if(requested>limit||cudaSetDevice(device)!=cudaSuccess)return false;
+        if(requested<=capacity)return true;
+        // All previous calls synchronize before returning. Free the idle
+        // allocation first to avoid a transient old+new allocation peak.
+        release();
+        std::size_t target=std::min(limit,std::max(requested,std::size_t(65536)));
+        // Round to a reusable power of two, bounded by the configured limit.
+        std::size_t rounded=1;
+        while(rounded<target)rounded*=2;
+        target=std::min(rounded,limit);
+        std::size_t free=0,total=0;
+        if(cudaMemGetInfo(&free,&total)!=cudaSuccess)return false;
+        constexpr std::size_t bytes_per_pixel=3*sizeof(float)+3;
+        if(target>free/bytes_per_pixel)return false;
+        bool ok=cudaMalloc(reinterpret_cast<void**>(&a),target*sizeof(float))==cudaSuccess &&
+            cudaMalloc(reinterpret_cast<void**>(&b),target*sizeof(float))==cudaSuccess &&
+            cudaMalloc(reinterpret_cast<void**>(&out),target*sizeof(float))==cudaSuccess &&
+            cudaMalloc(reinterpret_cast<void**>(&av),target)==cudaSuccess &&
+            cudaMalloc(reinterpret_cast<void**>(&bv),target)==cudaSuccess &&
+            cudaMalloc(reinterpret_cast<void**>(&mask),target)==cudaSuccess;
+        if(!ok){release();return false;}
+        capacity=target;
+        return true;
     }
 };
 __global__ void nd(const float* a,const float* b,const unsigned char* valid,
@@ -83,8 +101,8 @@ extern "C" GEOFATHOM_API void* gf_cuda_runtime_create(std::size_t n,int device) 
     if(!n||n>max_pixels||device<0)return nullptr;
     try{
         auto g=new GPU;
-        g->device=device;g->capacity=n;
-        if(!g->initialize()){delete g;return nullptr;}
+        g->device=device;g->limit=n;
+        if(cudaSetDevice(device)!=cudaSuccess){delete g;return nullptr;}
         return g;
     }catch(...){return nullptr;}
 }
@@ -96,9 +114,9 @@ extern "C" GEOFATHOM_API int gf_cuda_runtime_index(void* handle,
     float* result,unsigned char* mask) noexcept {
     if(!handle||!a||!b||!valid||!result||!mask||!n)return -1;
     auto& g=*static_cast<GPU*>(handle);
-    if(n>g.capacity)return -1;
     try{
         std::lock_guard<std::mutex> guard(g.lock);
+        if(!g.ensure(n))return -1;
         if(!upload(g,a,b,valid,n))return -1;
         nd<<<static_cast<unsigned>((n+255)/256),256>>>(g.a,g.b,g.av,n,g.out,g.mask);
         if(cudaGetLastError()!=cudaSuccess||cudaDeviceSynchronize()!=cudaSuccess)return -1;
@@ -114,9 +132,9 @@ extern "C" GEOFATHOM_API int gf_cuda_runtime_change(void* handle,
     if(!handle||!a||!b||!av||!bv||!mask||!n||
        !std::isfinite(threshold)||threshold<=0||threshold>=1)return -1;
     auto& g=*static_cast<GPU*>(handle);
-    if(n>g.capacity)return -1;
     try{
         std::lock_guard<std::mutex> guard(g.lock);
+        if(!g.ensure(n))return -1;
         if(!upload(g,a,b,av,n)||cudaMemcpy(g.bv,bv,n,cudaMemcpyHostToDevice)!=cudaSuccess)return -1;
         change<<<static_cast<unsigned>((n+255)/256),256>>>(g.a,g.av,g.b,g.bv,n,threshold,g.mask);
         if(cudaGetLastError()!=cudaSuccess||cudaDeviceSynchronize()!=cudaSuccess||
@@ -133,9 +151,9 @@ extern "C" GEOFATHOM_API int gf_cuda_runtime_paired_change(void* handle,
     if(!handle||!old_a||!old_b||!old_v||!new_a||!new_b||!new_v||!labels||!valid||
        !n||!std::isfinite(threshold)||threshold<=0||threshold>=1)return -1;
     auto& g=*static_cast<GPU*>(handle);
-    if(n>g.capacity)return -1;
     try{
         std::lock_guard<std::mutex> guard(g.lock);
+        if(!g.ensure(n))return -1;
         if(!upload(g,old_a,old_b,old_v,n))return -1;
         nd<<<static_cast<unsigned>((n+255)/256),256>>>(g.a,g.b,g.av,n,g.out,g.bv);
         if(cudaGetLastError()!=cudaSuccess||cudaDeviceSynchronize()!=cudaSuccess)return -1;
@@ -151,4 +169,105 @@ extern "C" GEOFATHOM_API int gf_cuda_runtime_paired_change(void* handle,
         int count=0;for(std::size_t i=0;i<n;++i)count+=valid[i]!=0;
         return count;
     }catch(...){return -1;}
+}
+
+// Operator-owned device arrays: no host copies, no internal scratch buffers.
+// Caller must provide non-overlapping, contiguous buffers of at least n
+// elements, all on the current CUDA device, and keep them alive until return.
+namespace {
+bool device_pointer(const void* p,int device){
+    cudaPointerAttributes a{};
+    return p&&cudaPointerGetAttributes(&a,p)==cudaSuccess&&
+        a.type==cudaMemoryTypeDevice&&a.device==device;
+}
+}
+extern "C" GEOFATHOM_API int gf_cuda_device_index(int device,const float* a,
+    const float* b,const unsigned char* valid,std::size_t n,
+    float* out,unsigned char* mask) noexcept {
+    if(!n||n>max_pixels||device<0||cudaSetDevice(device)!=cudaSuccess)return -1;
+    if(!device_pointer(a,device)||!device_pointer(b,device)||
+       !device_pointer(valid,device)||!device_pointer(out,device)||
+       !device_pointer(mask,device))return -1;
+    // Synchronize upstream producer streams before using their buffers.
+    if(cudaDeviceSynchronize()!=cudaSuccess)return -1;
+    nd<<<static_cast<unsigned>((n+255)/256),256>>>(a,b,valid,n,out,mask);
+    return cudaGetLastError()==cudaSuccess&&cudaDeviceSynchronize()==cudaSuccess?0:-1;
+}
+extern "C" GEOFATHOM_API int gf_cuda_device_change(int device,const float* a,
+    const unsigned char* av,const float* b,const unsigned char* bv,std::size_t n,
+    float threshold,unsigned char* mask) noexcept {
+    if(!n||n>max_pixels||!std::isfinite(threshold)||threshold<=0||threshold>=1||
+       device<0||cudaSetDevice(device)!=cudaSuccess)return -1;
+    if(!device_pointer(a,device)||!device_pointer(av,device)||
+       !device_pointer(b,device)||!device_pointer(bv,device)||!device_pointer(mask,device))return -1;
+    if(cudaDeviceSynchronize()!=cudaSuccess)return -1;
+    change<<<static_cast<unsigned>((n+255)/256),256>>>(a,av,b,bv,n,threshold,mask);
+    return cudaGetLastError()==cudaSuccess&&cudaDeviceSynchronize()==cudaSuccess?0:-1;
+}
+extern "C" GEOFATHOM_API int gf_cuda_runtime_stats(void* handle,std::size_t* out) noexcept {
+    if(!handle||!out)return -1;
+    try{
+        auto& g=*static_cast<GPU*>(handle);
+        std::lock_guard<std::mutex> guard(g.lock);
+        out[0]=g.capacity;out[1]=g.limit;out[2]=g.capacity*(3*sizeof(float)+3);
+        return 0;
+    }catch(...){return -1;}
+}
+extern "C" GEOFATHOM_API int gf_cuda_runtime_trim(void* handle) noexcept {
+    if(!handle)return -1;
+    try{
+        auto& g=*static_cast<GPU*>(handle);
+        std::lock_guard<std::mutex> guard(g.lock);
+        if(cudaSetDevice(g.device)!=cudaSuccess||cudaDeviceSynchronize()!=cudaSuccess)return -1;
+        g.release();return 0;
+    }catch(...){return -1;}
+}
+
+// Decode NCHW float32 logits entirely on device; only final label/confidence
+// arrays are exported. Invalid input is signaled by NaN confidence.
+namespace {
+__global__ void semantic_logits(const float* input,std::size_t pixels,
+    unsigned classes,std::size_t total,unsigned char* labels,float* conf){
+    std::size_t i=blockIdx.x*blockDim.x+threadIdx.x;
+    if(i>=total)return;
+    const std::size_t offset=(i/pixels)*classes*pixels+i%pixels;
+    float best=input[offset];
+    unsigned selected=0;
+    for(unsigned c=0;c<classes;++c){
+        float value=input[offset+c*pixels];
+        if(!isfinite(value)){labels[i]=0;conf[i]=nanf("");return;}
+        if(value>best){best=value;selected=c;}
+    }
+    float sum=0;
+    for(unsigned c=0;c<classes;++c)sum+=expf(input[offset+c*pixels]-best);
+    labels[i]=static_cast<unsigned char>(selected);
+    conf[i]=1.0f/sum;
+}
+template<class T>
+__global__ void semantic_ids(const T* input,std::size_t n,unsigned classes,
+    unsigned char* labels,float* conf){
+    std::size_t i=blockIdx.x*blockDim.x+threadIdx.x;
+    if(i>=n)return;
+    T v=input[i];
+    if(v<0||static_cast<unsigned long long>(v)>=classes){
+        labels[i]=0;conf[i]=nanf("");return;
+    }
+    labels[i]=static_cast<unsigned char>(v);conf[i]=1;
+}
+}
+extern "C" GEOFATHOM_API int gf_cuda_device_semantic(int device,const void* input,
+    std::size_t batch,std::size_t pixels,unsigned classes,unsigned type,
+    unsigned char* labels,float* conf) noexcept {
+    // type: 0=float32 logits, 1=int64 labels, 2=int32 labels, 3=uint8 labels.
+    if(device<0||!batch||batch>16||!pixels||pixels>262144||
+       classes<2||classes>32||type>3||cudaSetDevice(device)!=cudaSuccess)return -1;
+    if(!device_pointer(input,device)||!device_pointer(labels,device)||
+       !device_pointer(conf,device)||cudaDeviceSynchronize()!=cudaSuccess)return -1;
+    std::size_t n=batch*pixels;
+    const unsigned blocks=static_cast<unsigned>((n+255)/256);
+    if(type==0)semantic_logits<<<blocks,256>>>(static_cast<const float*>(input),pixels,classes,n,labels,conf);
+    else if(type==1)semantic_ids<<<blocks,256>>>(static_cast<const long long*>(input),n,classes,labels,conf);
+    else if(type==2)semantic_ids<<<blocks,256>>>(static_cast<const int*>(input),n,classes,labels,conf);
+    else semantic_ids<<<blocks,256>>>(static_cast<const unsigned char*>(input),n,classes,labels,conf);
+    return cudaGetLastError()==cudaSuccess&&cudaDeviceSynchronize()==cudaSuccess?0:-1;
 }

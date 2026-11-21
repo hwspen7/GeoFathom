@@ -112,6 +112,15 @@ GEOFATHOM_API int gf_cpu_runtime_change(void* runtime,const float* a,
 extern "C" {
 GEOFATHOM_API void* gf_cuda_runtime_create(std::size_t n,int device) noexcept;
 GEOFATHOM_API void gf_cuda_runtime_destroy(void* g) noexcept;
+GEOFATHOM_API int gf_cuda_device_semantic(int device,const void* input,
+    std::size_t batch,std::size_t pixels,unsigned classes,unsigned type,
+    unsigned char* labels,float* conf) noexcept;
+GEOFATHOM_API int gf_cuda_runtime_stats(void* handle,std::size_t* out) noexcept;
+GEOFATHOM_API int gf_cuda_runtime_trim(void* handle) noexcept;
+GEOFATHOM_API int gf_cuda_device_index(int device,const float* a,const float* b,
+    const unsigned char* valid,std::size_t n,float* out,unsigned char* mask) noexcept;
+GEOFATHOM_API int gf_cuda_device_change(int device,const float* a,const unsigned char* av,
+    const float* b,const unsigned char* bv,std::size_t n,float threshold,unsigned char* mask) noexcept;
 GEOFATHOM_API int gf_cuda_runtime_index(void* g,const float* a,const float* b,
     const unsigned char* v,std::size_t n,float* out,unsigned char* mask) noexcept;
 GEOFATHOM_API int gf_cuda_runtime_change(void* g,const float* a,const unsigned char* av,
@@ -135,4 +144,10 @@ GEOFATHOM_API int gf_buffer_pool_acquire(void* p,std::size_t bytes,std::uint64_t
 GEOFATHOM_API int gf_buffer_pool_release(void* p,std::uint64_t lease) noexcept;
 GEOFATHOM_API int gf_buffer_pool_stats(void* p,std::size_t* out) noexcept;
 GEOFATHOM_API int gf_buffer_pool_destroy(void* p) noexcept;
+}
+
+// Scalar/SSE2/AVX2/NEON capability bits; backend 0 selects automatically.
+extern "C" {
+GEOFATHOM_API unsigned gf_mask_transition_backends() noexcept;
+GEOFATHOM_API int gf_mask_transitions_backend(const unsigned char* data,std::size_t width,std::size_t height,unsigned backend) noexcept;
 }

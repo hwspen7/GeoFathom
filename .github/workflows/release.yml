@@ -4,6 +4,8 @@ on:
   push:
     tags: ['v[0-9]*']
   workflow_dispatch:
+  pull_request:
+    branches: [main]
 
 permissions:
   contents: read
@@ -43,7 +45,9 @@ jobs:
           npm test
           npm run build
       - name: Assemble immutable release bundle
-        run: python scripts/package_release.py
+        run: |
+          python scripts/package_release.py
+          python scripts/verify_release.py
       - uses: actions/upload-artifact@v4
         with:
           name: geofathom-${{ runner.os }}

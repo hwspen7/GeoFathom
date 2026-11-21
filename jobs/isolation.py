@@ -38,6 +38,8 @@ def _child_entry(send,path,uid,owner,kind,project_id,payload,scratch):
     state=queue._ACTIVE_PROGRESS.set({
         "value":10,"checked":clock.monotonic(),"committed":clock.monotonic()})
     try:
+        from .hard_limits import enforce
+        enforce(str(Path(path).resolve()))
         from .resources import configure_child
         from sqlite3 import connect
         with __import__("contextlib").closing(connect(path,timeout=5)) as db:
