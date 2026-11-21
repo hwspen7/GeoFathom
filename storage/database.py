@@ -61,6 +61,10 @@ def _connect() -> Iterator[sqlite3.Connection]:
             CREATE INDEX IF NOT EXISTS features_project_id_idx ON features(project_id);
             """
         )
+        # Keep spatial-index SQLite UDFs registered on every writer connection;
+        # INSERT/UPDATE triggers call them even outside spatial queries.
+        from .paging import prepare_rtree
+        prepare_rtree(connection)
         yield connection
         connection.commit()
     except Exception:
