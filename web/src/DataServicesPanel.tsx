@@ -1,4 +1,4 @@
-import {useEffect,useState} from 'react';
+import {useEffect,useRef,useState} from 'react';
 import {Database,Globe2,Layers3,RefreshCcw} from 'lucide-react';
 import {cancelGISJob,downloadGISJob,getGISJobs,getOGCSources,getPostGISStatus,
   inspectOGCSource,ogcTileTemplate,queueGISJob,registerOGCSource,
@@ -38,14 +38,22 @@ export default function DataServicesPanel(p:Props){
   const [info,setInfo]=useState('');
   const [error,setError]=useState('');
   const [busy,setBusy]=useState(false);
+  const activeProject=useRef(p.projectId);
+  activeProject.current=p.projectId;
   async function load(){
-    if(!p.projectId)return;
+    const projectId=p.projectId;
+    if(!projectId)return;
     try{
       const [ogc,tasks,pg]=await Promise.all([
-        getOGCSources(p.projectId),getGISJobs(p.projectId),getPostGISStatus(),
+        getOGCSources(projectId),getGISJobs(projectId),getPostGISStatus(),
       ]);
+      // Ignore late responses for a project that is no longer active.
+      if(activeProject.current!==projectId)return;
       setSources(ogc.sources);setJobs(tasks.jobs);setStatus(pg);
-    }catch(cause){setError(cause instanceof Error?cause.message:'Cannot load GIS services.');}
+    }catch(cause){
+      if(activeProject.current===projectId)
+        setError(cause instanceof Error?cause.message:'Cannot load GIS services.');
+    }
   }
   useEffect(()=>{
     setSources([]);setVisibleTiles([]);setRemote(null);
@@ -53,9 +61,12 @@ export default function DataServicesPanel(p:Props){
     void load();
   },[p.projectId]);
   useEffect(()=>{
-    if(!p.projectId)return;
+    const projectId=p.projectId;
+    if(!projectId)return;
     const timer=window.setInterval(()=>{
-      getGISJobs(p.projectId!).then(data=>setJobs(data.jobs)).catch(()=>{});
+      getGISJobs(projectId).then(data=>{
+        if(activeProject.current===projectId)setJobs(data.jobs);
+      }).catch(()=>{});
     },2000);
     return ()=>window.clearInterval(timer);
   },[p.projectId]);
@@ -86,8 +97,10 @@ export default function DataServicesPanel(p:Props){
     setInfo('Capabilities: '+JSON.stringify(meta).slice(0,500));
   }
   async function preview(source:OGCSource){
-    if(!p.projectId||!p.viewport)return;
-    const collection=await remoteOGCFeatures(p.projectId,source.id,p.viewport);
+    const projectId=p.projectId;
+    if(!projectId||!p.viewport)return;
+    const collection=await remoteOGCFeatures(projectId,source.id,p.viewport);
+    if(activeProject.current!==projectId)return;
     setRemote(collection);
     p.onPreview(collection.features.map(item=>item.geometry).filter(
       (value):value is GeoJSON.Geometry=>Boolean(value)));
@@ -115,16 +128,16 @@ export default function DataServicesPanel(p:Props){
     setInfo('Queued '+result.kind+' as '+result.id.slice(0,8)+'.');
   }
   async function readViewport(usePostgis:boolean){
-    if(!p.projectId||!p.viewport)throw Error('Map viewport unavailable.');
-    if(usePostgis){
-      const page=await queryPostGIS(p.projectId,p.viewport,500,pageOffset);
-      p.onPage(page.results);setFeaturesLoaded(page.total);
-      setInfo('PostGIS GiST: '+page.results.length+' of '+page.total+' region features.');
-    }else{
-      const page=await viewportFeatures(p.projectId,p.viewport,500,pageOffset);
-      p.onPage(page.results);setFeaturesLoaded(page.total);
-      setInfo('SQLite R-tree: '+page.results.length+' of '+page.total+' region features.');
-    }
+    const projectId=p.projectId;
+    if(!projectId||!p.viewport)throw Error('Map viewport unavailable.');
+    const page=usePostgis
+      ?await queryPostGIS(projectId,p.viewport,500,pageOffset)
+      :await viewportFeatures(projectId,p.viewport,500,pageOffset);
+    // Never paint a previous project's page into the newly selected project.
+    if(activeProject.current!==projectId)return;
+    p.onPage(page.results);setFeaturesLoaded(page.total);
+    setInfo((usePostgis?'PostGIS GiST: ':'SQLite R-tree: ')+
+      page.results.length+' of '+page.total+' region features.');
   }
 
   return <div className="professional-panel">

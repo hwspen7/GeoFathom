@@ -135,3 +135,28 @@ def test_payload_bounds_and_no_credentials_in_job_response():
         "kind":"topology_qa","payload":{"comment":"x"*110000},
     })
     assert large.status_code==422
+
+def test_cancelled_running_job_does_not_become_failed_on_worker_exception(monkeypatch):
+    from threading import Event
+    from jobs import queue
+    root=setup()
+    started=Event()
+    release=Event()
+
+    def blocked_failure(kind,project_id,payload):
+        started.set()
+        assert release.wait(4), "Test worker was never released"
+        raise RuntimeError("Simulated provider interruption after cancellation")
+
+    monkeypatch.setattr(queue,"_execute",blocked_failure)
+    try:
+        created=client.post(root+"/jobs",json={"kind":"export_geojson"}).json()
+        assert started.wait(4), "Queued job did not start"
+        request=client.post(root+"/jobs/"+created["id"]+"/cancel")
+        assert request.status_code==200,request.text
+    finally:
+        release.set()
+    result=finished(root,created["id"])
+    assert result["status"]=="cancelled",result
+    assert result["result"] is None
+    assert result["error"] is None

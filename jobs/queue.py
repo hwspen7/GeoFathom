@@ -183,8 +183,19 @@ def _worker(uid,path):
                         (result,_now(),uid))
         except Exception as error:
             with _connect() as c:
-                c.execute("""UPDATE gis_jobs SET status='failed',progress=100,
-                    error=?,updated_at=? WHERE id=?""",
-                    (str(error)[:250],_now(),uid))
+                row=c.execute("SELECT cancel_requested FROM gis_jobs WHERE id=?",
+                              (uid,)).fetchone()
+                if row is None:
+                    return
+                if row["cancel_requested"]:
+                    # Cancellation wins even if the underlying blocking task
+                    # raises while winding down; do not publish a false failure.
+                    c.execute("""UPDATE gis_jobs SET status='cancelled',
+                        progress=100,error=NULL,result=NULL,updated_at=?
+                        WHERE id=?""",(_now(),uid))
+                else:
+                    c.execute("""UPDATE gis_jobs SET status='failed',progress=100,
+                        error=?,updated_at=? WHERE id=?""",
+                        (str(error)[:250],_now(),uid))
     finally:
         job_database_override.reset(token)

@@ -171,3 +171,35 @@ def test_quality_detects_empty_aoi_coverage():
         assert report["checked_features"]==int(with_line)
     # Without a defined study area, missing exterior coverage is unknowable.
     assert c.post(root+"/quality/topology",json={"check_dangles":False}).json()["issue_count"]==0
+
+def test_quality_clips_overlap_to_declared_study_area():
+    # The polygons overlap outside the AOI; inside they only touch at a corner.
+    root,_=setup()
+    add(root,"A",polygon(0,0))
+    add(root,"B",polygon(.5,.5))
+    aoi={"type":"Polygon","coordinates":[[
+        [.1,.1],[.5,.1],[.5,.5],[.1,.5],[.1,.1],
+    ]]}
+    regional=c.post(root+"/quality/topology",json={"study_area":aoi,
+        "minimum_area_m2":10,"check_dangles":False})
+    assert regional.status_code==200,regional.text
+    assert regional.json()["counts"].get("overlap",0)==0
+    assert regional.json()["counts"].get("gap",0)==0
+    whole=c.post(root+"/quality/topology",json={"minimum_area_m2":10,
+        "check_dangles":False})
+    assert whole.status_code==200,whole.text
+    assert whole.json()["counts"]["overlap"]==1
+
+
+def test_quality_ignores_line_endpoints_outside_study_area():
+    root,_=setup()
+    add(root,"Partial line",{"type":"LineString",
+        "coordinates":[[.2,.2],[1.5,.2]]})
+    local=c.post(root+"/quality/topology",json={
+        "study_area":polygon(0),"check_dangles":True})
+    assert local.status_code==200,local.text
+    assert local.json()["counts"]["dangle"]==1
+    global_report=c.post(root+"/quality/topology",json={
+        "check_dangles":True})
+    assert global_report.status_code==200,global_report.text
+    assert global_report.json()["counts"]["dangle"]==2

@@ -62,10 +62,17 @@ def review_topology(project_id:str,layer_ids:list[str]|None=None,
                 if j<=index:continue
                 other_row,other=polys[j]
                 if geom.equals(other):
-                    issue("duplicate",[row["id"],other_row["id"]],geom,
-                          "Duplicate mapped polygon",_area(geom))
+                    # Limit issue geometry to the declared study area. A pair
+                    # touching the AOI boundary has no covered area to report.
+                    duplicate=geom.intersection(aoi) if aoi is not None else geom
+                    duplicate_area=_area(duplicate)
+                    if duplicate_area>0:
+                        issue("duplicate",[row["id"],other_row["id"]],duplicate,
+                              "Duplicate mapped polygon",duplicate_area)
                 elif geom.intersects(other):
                     overlap=geom.intersection(other)
+                    if aoi is not None:
+                        overlap=overlap.intersection(aoi)
                     magnitude=_area(overlap)
                     if magnitude>minimum_area_m2:
                         issue("overlap",[row["id"],other_row["id"]],overlap,
@@ -101,10 +108,14 @@ def review_topology(project_id:str,layer_ids:list[str]|None=None,
                 endpoints.extend([(row["id"],tuple(part.coords[0])),
                                   (row["id"],tuple(part.coords[-1]))])
         counts_at=Counter((round(p[0],7),round(p[1],7)) for _,p in endpoints)
+        from shapely.geometry import Point
         for uid,p in endpoints:
+            endpoint=Point(p)
+            # Do not report disconnected endpoints outside the AOI.
+            if aoi is not None and not aoi.covers(endpoint):
+                continue
             if counts_at[(round(p[0],7),round(p[1],7))]==1:
-                from shapely.geometry import Point
-                issue("dangle",[uid],Point(p),"Potential disconnected line endpoint")
+                issue("dangle",[uid],endpoint,"Potential disconnected line endpoint")
     return {"issues":problems,"counts":dict(counts),"checked_features":len(items),
             "issue_count":sum(counts.values()),"truncated":sum(counts.values())>len(problems),
             "method":"Shapely STRtree topology; WGS84 geodesic area",
