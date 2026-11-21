@@ -123,3 +123,36 @@ def test_invalid_advanced_symbology_rejected(patch):
     response=c.patch(root+"/layers/"+layer["id"]+"/style",json=patch)
     assert response.status_code==422,response.text
     assert c.get(root+"/workspace").json()["layers"][0]["style_revision"]==0
+
+
+
+@pytest.mark.parametrize("operator",["equals","contains","gte","lte","exists"])
+def test_persist_attribute_label_rule_with_safe_operator(operator):
+    root,layer=setup()
+    response=c.patch(root+"/layers/"+layer["id"]+"/style",json={
+        "labels":{
+            "enabled":True,"field":"name","rule_field":"height",
+            "rule_operator":operator,"rule_value":"40",
+        },
+    })
+    assert response.status_code==200,response.text
+    stored=c.get(root+"/workspace").json()["layers"][0]["style"]["labels"]
+    assert stored["rule_field"]=="height"
+    assert stored["rule_operator"]==operator
+    assert stored["rule_value"]=="40"
+    assert stored["enabled"] is True
+
+
+@pytest.mark.parametrize("changes",[
+    {"rule_operator":"eval"},
+    {"rule_operator":"javascript"},
+    {"rule_field":"x"*65},
+    {"rule_value":"x"*121},
+])
+def test_unsafe_label_rule_rejected(changes):
+    root,layer=setup()
+    response=c.patch(root+"/layers/"+layer["id"]+"/style",json={
+        "labels":changes,
+    })
+    assert response.status_code==422,response.text
+    assert c.get(root+"/workspace").json()["layers"][0]["style_revision"]==0

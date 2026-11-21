@@ -138,3 +138,52 @@ test('drawing selection rectangle selects actual saved map features',async({page
   await page.getByLabel('Select spatial matches').click();
   await expect(page.getByLabel('Spatial selection results')).toContainText('Map center');
 });
+
+
+test('P1 drag a saved point label and commit revisioned offset fields',async({page})=>{
+  const id=await create(page,'P1 freehand label placement');
+  await add(page,id,'Important POI',{type:'Point',coordinates:[0,22]},
+    {category:'field station'});
+  await page.reload();
+  const map=page.getByLabel('Interactive geospatial map');
+  await expect(map).toHaveAttribute('data-label-layer-ready','true',{timeout:25000});
+  await page.locator('.layer-cartography summary').click();
+  await page.getByLabel('Enable layer labels').check();
+  await expect.poll(async()=>{
+    const r=await page.request.get(API+'/projects/'+id+'/workspace');
+    return (await r.json()).layers[0].style.labels.enabled;
+  }).toBe(true);
+  await page.locator('details').filter({hasText:'Advanced label placement & callouts'})
+    .locator('summary').click();
+  await page.getByLabel('Label rule field').fill('category');
+  await page.getByLabel('Label rule field').press('Tab');
+  await expect.poll(async()=>{
+    const r=await page.request.get(API+'/projects/'+id+'/workspace');
+    return (await r.json()).layers[0].style.labels.rule_field;
+  }).toBe('category');
+  await page.getByLabel('Label rule operator').selectOption('contains');
+  await page.getByLabel('Label rule value').fill('field');
+  await page.getByLabel('Label rule value').press('Tab');
+  await expect.poll(async()=>{
+    const r=await page.request.get(API+'/projects/'+id+'/workspace');
+    return (await r.json()).layers[0].style.labels.rule_value;
+  }).toBe('field');
+  await page.getByLabel('Move map labels').click();
+  await expect(page.getByRole('button',{name:'Stop moving labels'})).toBeVisible();
+  const bbox=await map.boundingBox();
+  expect(bbox).not.toBeNull();
+  const x=bbox!.x+bbox!.width/2,y=bbox!.y+bbox!.height/2;
+  await page.mouse.move(x,y);
+  await page.mouse.down();
+  await page.mouse.move(x+55,y+20,{steps:10});
+  await page.mouse.up();
+  await expect.poll(async()=>{
+    const r=await page.request.get(API+'/projects/'+id+'/workspace');
+    const w=await r.json();
+    return w.features[0].revision;
+  },{timeout:13000}).toBeGreaterThan(0);
+  const response=await page.request.get(API+'/projects/'+id+'/workspace');
+  const w=await response.json();
+  expect(w.features[0].properties.label_offset_x).toBeGreaterThan(0);
+  expect(w.features[0].properties.label_offset_y).toBeGreaterThan(0);
+});
