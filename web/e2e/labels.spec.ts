@@ -77,6 +77,8 @@ test('click to create, rename, revise and delete a permanent map note',async({pa
   await page.mouse.click(bbox!.x+bbox!.width*.52,bbox!.y+bbox!.height*.52);
   await expect(page.getByText('Map annotation saved.')).toBeVisible();
   await expect.poll(async()=> (await savedWorkspace(page,id)).features.length).toBe(1);
+  await expect.poll(async()=>Number(await map.getAttribute('data-label-feature-count')),
+    {timeout:15000}).toBeGreaterThan(0);
   let w=await savedWorkspace(page,id);
   expect(w.features[0].properties.annotation).toBe(true);
   expect(w.features[0].properties.annotation_text).toBe('Observation point 设备 A');
