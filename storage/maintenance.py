@@ -6,6 +6,7 @@ Never copy the database file directly during active writes.
 import argparse
 import json
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 
 from storage.database import _connect,database_path
@@ -23,12 +24,15 @@ def backup_database(destination):
     if temp.exists():
         raise ValueError("Temporary backup target already exists.")
     try:
-        with sqlite3.connect(source) as original:
-            with sqlite3.connect(temp) as target:
+        # sqlite3.Connection.__exit__ commits but does not CLOSE the file.
+        # Explicit closing is required for atomic rename on Windows.
+        with closing(sqlite3.connect(source)) as original:
+            with closing(sqlite3.connect(temp)) as target:
                 original.backup(target,pages=100,sleep=.05)
                 row=target.execute("PRAGMA integrity_check").fetchone()
                 if not row or row[0]!="ok":
                     raise RuntimeError("Backed-up database failed integrity check.")
+                target.commit()
         temp.replace(destination)
     finally:
         temp.unlink(missing_ok=True)
