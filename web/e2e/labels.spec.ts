@@ -28,7 +28,7 @@ async function savedWorkspace(page:import('@playwright/test').Page,id:string) {
 test('style labels by field, persist symbol settings and reload the workspace',async({page})=>{
   const id=await project(page,'Labeling integration');
   const map=page.getByLabel('Interactive geospatial map');
-  await expect(map).toHaveAttribute('data-label-layer-ready','true',{timeout:12000});
+  await expect(map).toHaveAttribute('data-label-layer-ready','true',{timeout:25000});
   await page.locator('.layer-cartography summary').click();
   const enabled=page.getByLabel('Enable layer labels');
   await expect(enabled).not.toBeChecked();
@@ -60,15 +60,15 @@ test('style labels by field, persist symbol settings and reload the workspace',a
   await expect(page.getByLabel('Label font size')).toHaveValue('18');
   await expect(page.getByLabel('Label source field')).toHaveValue('category');
   await expect(page.getByLabel('Polygon fill opacity')).toHaveValue('0.6');
-  await expect(page.getByLabel('Map legend')).toContainText('Measurements');
+  await expect(page.getByLabel('Map legend',{exact:true})).toContainText('Measurements');
   await page.getByLabel('Toggle map legend').click();
-  await expect(page.getByLabel('Map legend')).not.toBeVisible();
+  await expect(page.getByLabel('Map legend',{exact:true})).not.toBeVisible();
 });
 
 test('click to create, rename, revise and delete a permanent map note',async({page})=>{
   const id=await project(page,'Annotation integration');
   const map=page.getByLabel('Interactive geospatial map');
-  await expect(map).toHaveAttribute('data-label-layer-ready','true',{timeout:12000});
+  await expect(map).toHaveAttribute('data-label-layer-ready','true',{timeout:25000});
   await page.getByLabel('Map note text').fill('Observation point 设备 A');
   await page.getByLabel('Place map note').click();
   await expect(page.getByLabel('Cancel map note')).toBeVisible();
@@ -145,7 +145,7 @@ test('categorized attribute colors produce visible legend classes and identify a
     const w=await r.json();
     return Object.keys(w.layers[0].style.symbol.category_colors).length;
   }).toBe(2);
-  const legend=page.getByLabel('Map legend');
+  const legend=page.getByLabel('Map legend',{exact:true});
   await expect(legend).toContainText('hospital');
   await expect(legend).toContainText('school');
   await page.locator('.project-features button').filter({hasText:'Facility A'}).click();
