@@ -21,6 +21,7 @@ _DEFAULT={
         "priority":50,"offset_x":0,"offset_y":0,
         "prefix":"","suffix":"","placement":"auto",
         "callout":False,
+        "rule_field":"","rule_operator":"equals","rule_value":"",
     },
     "symbol":{
         "fill_opacity":0.17,"line_width":3,"point_radius":5,
@@ -70,6 +71,12 @@ def _validate(changes:dict[str,Any],current:dict[str,Any])->dict:
             elif name=="placement":
                 if value not in {"auto","point","line"}:
                     raise StorageError("Label placement must be auto, point or line.")
+            elif name=="rule_operator":
+                if value not in {"equals","contains","gte","lte","exists"}:
+                    raise StorageError("Unsupported label rule operator.")
+            elif name=="rule_value":
+                if not isinstance(value,str) or len(value)>120 or any(ord(c)<32 for c in value):
+                    raise StorageError("Label rule value must be short plain text.")
             elif name=="graduated_method":
                 if value not in {"equal_interval","quantile","jenks"}:
                     raise StorageError("Unsupported graduated classification method.")
@@ -84,10 +91,10 @@ def _validate(changes:dict[str,Any],current:dict[str,Any])->dict:
                     not isinstance(x,str) or not _HEX.fullmatch(x) for x in value
                 ):
                     raise StorageError("Graduated colors must be #RRGGBB entries.")
-            elif name in {"field","category_field","graduated_field"}:
+            elif name in {"field","category_field","graduated_field","rule_field"}:
                 if (not isinstance(value,str) or
                         (name=="field" and not 1<=len(value)<=64) or
-                        (name in {"category_field","graduated_field"} and len(value)>64) or
+                        (name in {"category_field","graduated_field","rule_field"} and len(value)>64) or
                         any(ord(ch)<32 for ch in value)):
                     raise StorageError("Attribute field must have at most 64 printable characters.")
             elif name=="category_colors":
