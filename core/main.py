@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .config import get_settings
 from analysis.routes import router as analysis_router
 from analysis.pro_routes import router as spatial_workflow_router
-from analysis.classification_routes import router as classification_router
+from analysis.classification_routes import router as classification_router, project_router as graduated_project_router
 from storage.crs_routes import router as crs_router
 from cartography.routes import router as print_router
 from storage.routes import router as storage_router
@@ -41,6 +41,7 @@ app.include_router(intelligence_router)
 app.include_router(analysis_router)
 app.include_router(spatial_workflow_router)
 app.include_router(classification_router)
+app.include_router(graduated_project_router)
 app.include_router(crs_router)
 app.include_router(print_router)
 app.include_router(storage_router)
