@@ -1,7 +1,7 @@
 """Persistent geospatial task queue API with cooperative cancellation."""
 from typing import Any,Literal
 import json
-from fastapi import APIRouter,Header,HTTPException,Query
+from fastapi import APIRouter,Header,HTTPException,Query,Request
 from fastapi.responses import Response
 from pydantic import BaseModel,Field
 from intelligence.catalog import require_admin
@@ -13,7 +13,7 @@ router=APIRouter(prefix="/projects",tags=["background-jobs"])
 class SubmitJob(BaseModel):
     kind:Literal["topology_qa","spatial_select","export_geojson",
                  "postgis_sync","rebuild_index","spectral_index",
-                 "spectral_change","semantic_segmentation"]
+                 "spectral_change","semantic_segmentation","stac_ndvi"]
     payload:dict[str,Any]=Field(default_factory=dict)
 
 def fail(error):
@@ -21,10 +21,12 @@ def fail(error):
         else 422,detail=str(error))
 
 @router.post("/{project_id}/jobs",status_code=202)
-def submit(project_id:str,body:SubmitJob,
+def submit(project_id:str,body:SubmitJob,request:Request,
            token:str|None=Header(default=None,alias="X-GeoFathom-Admin-Token")):
+    if getattr(request.state,"principal",None) and body.kind not in {"topology_qa","spatial_select","export_geojson"}:
+        raise HTTPException(status_code=403,detail="Operator-only job.")
     if body.kind in {"postgis_sync","rebuild_index","spectral_index",
-                     "spectral_change","semantic_segmentation"}:
+                     "spectral_change","semantic_segmentation","stac_ndvi"}:
         try:require_admin(token)
         except PermissionError as error:
             raise HTTPException(status_code=403,detail=str(error)) from error

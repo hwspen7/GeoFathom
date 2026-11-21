@@ -13,6 +13,7 @@ from uuid import uuid4
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
 
 _LOGGER=logging.getLogger("geofathom.access")
 
@@ -46,7 +47,16 @@ def _authorized(request,mode):
         auth=request.headers.get("authorization","")
         if auth.startswith("Bearer "):
             token=auth[7:]
-    if not token or not hmac.compare_digest(token,expected):
+    if token and hmac.compare_digest(token.encode(),expected.encode()):
+        return None
+    from .access import authenticate,permits
+    principal=authenticate(token)
+    if principal:
+        request.state.principal=principal
+        if permits(principal,request.method,request.url.path):
+            return None
+        return JSONResponse(status_code=403,content={"detail":"Project permission denied."})
+    if principal is None:
         return JSONResponse(status_code=401,content={
             "detail":"Valid API credentials are required."},
             headers={"WWW-Authenticate":"Bearer"})
@@ -60,7 +70,7 @@ class APIBoundaryMiddleware(BaseHTTPMiddleware):
         response=None
         try:
             mode=os.getenv("GEOFATHOM_AUTH_MODE","local").lower()
-            rejected=_authorized(request,mode)
+            rejected=await run_in_threadpool(_authorized,request,mode)
             response=rejected if rejected is not None else await call_next(request)
             return response
         finally:
