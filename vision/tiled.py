@@ -386,7 +386,9 @@ def semantic_segmentation_tiled(path: Path, image_id: str,
     import os
     from .tiles import context_tiles
     from geometry.buffers import ScratchPool
-    from .semantic import _manifest, _predict_tile
+    from .semantic import _manifest, _predict_tile, _predict_batch
+    from .runtime import tensor_budget_mb
+    from itertools import islice
     if (not math.isfinite(minimum_confidence)
             or not 0 <= minimum_confidence <= 1):
         raise RasterError("Confidence threshold must be between zero and one.")
@@ -405,8 +407,10 @@ def semantic_segmentation_tiled(path: Path, image_id: str,
         # Model logits may require far more memory than spectral masks.
         # Account for output class channels as well as the input tensor.
         bytes_needed = (plan.tile_size * plan.tile_size *
-                        (len(config["bands"]) + len(config["classes"]) + 4) * 4)
-        if bytes_needed > memory_mb * 1024 * 1024:
+                        (len(config["bands"]) + 4 * len(config["classes"]) + 12) * 4)
+        budget = min(memory_mb, tensor_budget_mb()) * 1024 * 1024
+        batch_size = min(config.get("max_batch",1), budget // bytes_needed)
+        if batch_size < 1:
             raise RasterError("Model output tensors exceed the per-tile memory allowance.")
         halo = config.get("halo", 0)
         stride = plan.tile_size - 2 * halo
@@ -426,41 +430,48 @@ def semantic_segmentation_tiled(path: Path, image_id: str,
                                transform=src.transform, nodata=0,
                                tiled=True, blockxsize=128, blockysize=128,
                                compress="deflate") as target:
-                for number, tile in enumerate(context_tiles(src.width, src.height,
-                        plan.tile_size, halo), 1):
-                    window = tile.core
+                iterator = iter(context_tiles(src.width,src.height,plan.tile_size,halo))
+                number=0
+                while True:
+                    group=list(islice(iterator,batch_size))
+                    if not group:
+                        break
+                    validity=[]
                     if progress is not None:
-                        progress((number - 1) / tile_count)
-                    raw, valid = _tile_bands(src, config["bands"], tile.read)
-                    rows, cols = int(tile.read.height), int(tile.read.width)
-                    normalized = (
-                        np.nan_to_num(raw, nan=0., posinf=0., neginf=0.) /
-                        config["input_scale"] - mean) / std
-                    y, x = tile.input_row, tile.input_col
-                    # Synchronous inference completes before the scratch lease
-                    # is returned. No model output references the input view.
-                    with pool.floats((1, len(config["bands"]), plan.tile_size,
-                                      plan.tile_size)) as tensor:
-                        tensor[0, :, y:y+rows, x:x+cols] = normalized
-                        labels, confidence = _predict_tile(tensor, config, device)
-                    core_valid = np.zeros((plan.tile_size, plan.tile_size), bool)
-                    core_valid[y:y+rows, x:x+cols] = valid
-                    valid = core_valid[tile.crop]
-                    confidence = confidence[tile.crop]
-                    labels = labels[tile.crop]
-                    accepted = (valid & np.isfinite(confidence) &
-                                (confidence >= minimum_confidence))
-                    current = np.where(accepted, labels, 0).astype(np.uint8)
-                    transitions += _transitions(current)
-                    if transitions > MAX_BOUNDARY_TRANSITIONS:
-                        raise RasterError("Raster mask is too fragmented for safe vectorization.")
-                    target.write(current, 1, window=window)
-                    if number % 16 == 0:
-                        _check_scratch(output, scratch_quota)
-                    foreground = current != 0
-                    valid_pixels += int(valid.sum())
-                    classified_pixels += int(foreground.sum())
-                    sum_confidence += float(confidence[foreground].sum())
+                        progress(number/tile_count)
+                    shape=(len(group),len(config["bands"]),plan.tile_size,plan.tile_size)
+                    with pool.floats(shape) as tensor:
+                        for n,tile in enumerate(group):
+                            raw,valid=_tile_bands(src,config["bands"],tile.read)
+                            rows,cols=int(tile.read.height),int(tile.read.width)
+                            normalized=(np.nan_to_num(raw,nan=0.,posinf=0.,neginf=0.) /
+                                        config["input_scale"]-mean)/std
+                            y,x=tile.input_row,tile.input_col
+                            tensor[n,:,y:y+rows,x:x+cols]=normalized
+                            core_valid=np.zeros((plan.tile_size,plan.tile_size),bool)
+                            core_valid[y:y+rows,x:x+cols]=valid
+                            validity.append(core_valid[tile.crop].copy())
+                        if len(group)==1:
+                            labels,confidence=_predict_tile(tensor,config,device)
+                            labels,confidence=labels[None],confidence[None]
+                        else:
+                            labels,confidence=_predict_batch(tensor,config,device)
+                    for n,tile in enumerate(group):
+                        number+=1
+                        valid=validity[n]
+                        conf=confidence[n][tile.crop]
+                        accepted=valid & np.isfinite(conf) & (conf>=minimum_confidence)
+                        current=np.where(accepted,labels[n][tile.crop],0).astype(np.uint8)
+                        transitions+=_transitions(current)
+                        if transitions>MAX_BOUNDARY_TRANSITIONS:
+                            raise RasterError("Raster mask is too fragmented for safe vectorization.")
+                        target.write(current,1,window=tile.core)
+                        if number%16==0:
+                            _check_scratch(output,scratch_quota)
+                        foreground=current!=0
+                        valid_pixels+=int(valid.sum())
+                        classified_pixels+=int(foreground.sum())
+                        sum_confidence+=float(conf[foreground].sum())
             _check_scratch(output, scratch_quota)
             if progress is not None:
                 progress(.93)
@@ -485,7 +496,7 @@ def semantic_segmentation_tiled(path: Path, image_id: str,
                                      if classified_pixels else None,
             "confidence_calibrated": False,
             "tile_count": tile_count, "tile_size": plan.tile_size,
-            "context_halo": halo,
+            "context_halo": halo, "batch_size": batch_size,
             "memory_budget_mb": memory_mb, "truncated": truncated,
             "warning": "Model tiles may have edge artifacts and confidence "
                        "is not calibrated. Inspect polygon boundaries and "

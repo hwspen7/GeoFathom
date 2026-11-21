@@ -53,6 +53,7 @@ def _manifest(identifier):
     size = info.get("tile_size", 256)
     scale = info.get("input_scale", 255.0)
     halo = info.get("halo", 0)
+    max_batch = info.get("max_batch", 1)
     mean = info.get("mean", [0] * len(bands) if isinstance(bands,list) else [])
     std = info.get("std", [1] * len(bands) if isinstance(bands,list) else [])
     if (not isinstance(classes, list) or not 2 <= len(classes) <= 32 or
@@ -62,6 +63,8 @@ def _manifest(identifier):
         len(set(bands)) != len(bands) or type(size) is not int
         or size not in (128, 256, 512)):
         raise RasterError("Model requires class names, three bands and a supported tile size.")
+    if type(max_batch) is not int or not 1 <= max_batch <= 16:
+        raise RasterError("Model max_batch must be an integer from 1 to 16.")
     if type(halo) is not int or not 0 <= halo <= size // 4:
         raise RasterError("Model halo must be 0 to one quarter of tile size.")
     if (not isinstance(scale, (float, int)) or not math.isfinite(scale)
@@ -76,7 +79,7 @@ def _manifest(identifier):
         raise RasterError("Model normalization standard deviations must be positive.")
     return {
         "id": identifier, "classes": classes, "bands": bands,
-        "tile_size": size, "halo": halo, "input_scale": float(scale),
+        "tile_size": size, "halo": halo, "max_batch": max_batch, "input_scale": float(scale),
         "mean": [float(x) for x in mean], "std": [float(x) for x in std],
         "description": str(info.get("description", ""))[:180],
         "runtime": "onnxruntime", "model_path": weights,
@@ -124,15 +127,18 @@ def _session(path, modified_ns, device):
     return session
 
 
-def _predict_tile(tensor, config, device):
+def _predict_batch(tensor, config, device):
     path = config["model_path"]
     size = config["tile_size"]
     classes = len(config["classes"])
     # Budget model input/output tensors before allocating native sessions.
     # It does not bound all ONNX Runtime activations or GPU driver memory.
     channels = len(config.get("bands", [1, 2, 3]))
-    expected_bytes = size * size * (channels + classes + 4) * 4
-    if (tensor.shape != (1, channels, size, size) or tensor.dtype != np.float32
+    batch = tensor.shape[0] if tensor.ndim == 4 else 0
+    # Count working logits, softmax intermediates, masks and input.
+    expected_bytes = batch * size * size * (channels + 4 * classes + 12) * 4
+    if (not 1 <= batch <= config.get("max_batch", 1)
+            or tensor.shape != (batch, channels, size, size) or tensor.dtype != np.float32
             or expected_bytes > tensor_budget_mb() * 1024 * 1024):
         raise RasterError("Model tile exceeds the configured tensor memory budget.")
     state = path.stat()
@@ -161,25 +167,32 @@ def _predict_tile(tensor, config, device):
         raw = outputs[0]
     if not isinstance(raw, np.ndarray) or not np.isfinite(raw).all():
         raise RasterError("Model output contains nonfinite predictions.")
-    if raw.ndim == 4 and raw.shape == (1, classes, size, size):
-        logits = raw[0].astype(np.float32)
-        logits -= logits.max(axis=0)
-        exponential = np.exp(logits)
-        probabilities = exponential / np.maximum(exponential.sum(axis=0), 1e-12)
-        predicted = probabilities.argmax(axis=0).astype(np.uint8)
-        confidence = probabilities.max(axis=0).astype(np.float32)
-    elif raw.ndim == 3 and raw.shape == (1, size, size):
+    if raw.ndim == 4 and raw.shape == (batch, classes, size, size):
+        logits = raw.astype(np.float32)
+        logits -= logits.max(axis=1, keepdims=True)
+        np.exp(logits, out=logits)
+        logits /= np.maximum(logits.sum(axis=1, keepdims=True), 1e-12)
+        predicted = logits.argmax(axis=1).astype(np.uint8)
+        confidence = logits.max(axis=1).astype(np.float32)
+    elif raw.ndim == 3 and raw.shape == (batch, size, size):
         if (not np.issubdtype(raw.dtype, np.integer)
                 or np.any(raw < 0) or np.any(raw >= classes)):
             raise RasterError("Integer model output contains invalid class IDs.")
-        predicted = raw[0].astype(np.uint8)
+        predicted = raw.astype(np.uint8)
         # Hard class labels are not calibrated probability estimates.
-        confidence = np.ones((size, size), dtype=np.float32)
+        confidence = np.ones((batch, size, size), dtype=np.float32)
     else:
-        raise RasterError("Model output must be [1,C,H,W] logits or [1,H,W] class IDs.")
+        raise RasterError("Model output must be [N,C,H,W] logits or [N,H,W] class IDs.")
     if np.any(predicted >= classes):
         raise RasterError("Model predicted a class index outside its manifest.")
     return predicted, confidence
+
+
+def _predict_tile(tensor, config, device):
+    predicted, confidence = _predict_batch(tensor, config, device)
+    if len(predicted) != 1:
+        raise RasterError("Single tile prediction requires batch size one.")
+    return predicted[0], confidence[0]
 
 
 def semantic_segmentation(path: Path, image_id: str, model_id: str,
