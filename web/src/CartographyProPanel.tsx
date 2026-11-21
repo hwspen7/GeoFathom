@@ -12,6 +12,8 @@ interface Props {
   selectedGeometry:GeoJSON.Geometry|null;
   onChanged:()=>void;
   onGrid:(grid:GeoJSON.FeatureCollection|null)=>void;
+  labelMoveMode:boolean;
+  onLabelMoveMode:(active:boolean)=>void;
 }
 const palette=['#f7fbff','#c6dbef','#9ecae1','#6baed6','#4292c6',
   '#2171b5','#08519c','#08306b','#041e42'];
@@ -187,6 +189,52 @@ export default function CartographyProPanel(p:Props){
                 onBlur={event=>{const v=Number(event.target.value);
                   if(v!==layer.style.labels.offset_y)void saveLabels({offset_y:v});}}/>
             </label>
+          </div>
+          <div className="professional-form">
+            <strong>Conditional labeling rule</strong>
+            <label>Label only when attribute matches
+              <input aria-label="Label rule field" maxLength={64}
+                key={layer.style_revision+'rulefield'}
+                defaultValue={layer.style.labels.rule_field}
+                placeholder="Blank = show every feature"
+                onBlur={event=>{
+                  if(event.currentTarget.value!==layer.style.labels.rule_field)
+                    void saveLabels({rule_field:event.currentTarget.value});
+                }}/>
+            </label>
+            <div className="area-fields">
+              <label>Comparison
+                <select aria-label="Label rule operator" disabled={busy}
+                  value={layer.style.labels.rule_operator}
+                  onChange={event=>void saveLabels({
+                    rule_operator:event.target.value as GeoLayer['style']['labels']['rule_operator'],
+                  })}>
+                  <option value="equals">Equals</option>
+                  <option value="contains">Contains</option>
+                  <option value="gte">Numeric ≥</option>
+                  <option value="lte">Numeric ≤</option>
+                  <option value="exists">Has a value</option>
+                </select>
+              </label>
+              <label>Compared value
+                <input aria-label="Label rule value" maxLength={120}
+                  key={layer.style_revision+'rulevalue'}
+                  defaultValue={layer.style.labels.rule_value}
+                  disabled={busy||layer.style.labels.rule_operator==='exists'}
+                  onBlur={event=>{
+                    if(event.currentTarget.value!==layer.style.labels.rule_value)
+                      void saveLabels({rule_value:event.currentTarget.value});
+                  }}/>
+              </label>
+            </div>
+            <button aria-label="Move map labels" disabled={busy||!p.projectId}
+              className={p.labelMoveMode?'active':''}
+              onClick={()=>p.onLabelMoveMode(!p.labelMoveMode)}>
+              {p.labelMoveMode?'Stop moving labels':'Move labels by dragging on map'}
+            </button>
+            <p className="project-hint">Drag a saved label and release to store a
+              feature-specific X/Y offset in its revision history.
+              Field rules use plain comparisons, never code expressions.</p>
           </div>
           <label>Label prefix
             <input aria-label="Label prefix" maxLength={24}
