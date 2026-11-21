@@ -776,3 +776,15 @@ export function classifyValues(values:number[],method:Classification['method'],
     body:JSON.stringify({values,method,classes}),
   });
 }
+
+
+export function saveGraduatedStyle(projectId:string,body:{
+  layer_id:string;field:string;classes:number;
+  method:'equal_interval'|'quantile'|'jenks';
+  colors?:string[]|null;expected_revision:number;
+}):Promise<{classification:Classification;layer:GeoLayer}>{
+  return request('/projects/'+encodeURIComponent(projectId)+'/symbology/graduated',{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(body),
+  });
+}
