@@ -53,6 +53,10 @@ interface Props {
   promptBox:Position[];
   annotationMode:boolean;
   onAnnotationClick:(position:Position)=>void;
+  selectionBoxMode:boolean;
+  onSelectionBox:(bbox:[number,number,number,number])=>void;
+  selectedIds:string[];
+  qualityIssues:GeoJSON.Geometry[];
   onGeometryPreview: (geometry: GeoJSON.Geometry) => void;
   onGeometryCommit: (geometry: GeoJSON.Geometry, movement?: {
     original:GeoJSON.Geometry;bearing_deg:number;distance_m:number;
@@ -100,6 +104,7 @@ function featureCollection(
   layerFeatures: MapLayerFeature[],
   editing: boolean,
   promptPositive:Position[],promptNegative:Position[],promptBox:Position[],
+  selectedIds:string[],qualityIssues:GeoJSON.Geometry[],
   zoom:number,
 ): GeoJSON.FeatureCollection {
   const features: GeoJSON.Feature[] = [];
@@ -108,7 +113,8 @@ function featureCollection(
     features.push({
       type: 'Feature', geometry: saved.geometry,
       properties: {
-        role:'saved',id:saved.id,color:saved.color,
+        role:'saved',id:saved.id,color:selectedIds.includes(saved.id)?'#f59e0b':saved.color,
+        spatialSelected:selectedIds.includes(saved.id),
         locked:saved.locked,layer_id:saved.layer_id,
         name:saved.name,
         label:featureLabel(saved,zoom),
@@ -123,6 +129,11 @@ function featureCollection(
         strokeColor:saved.style.symbol.stroke_color,
       },
     });
+  }
+  for(const geometry of qualityIssues){
+    features.push({type:'Feature',properties:{
+      role:'qa-issue',color:'#d22b41',fillOpacity:.08,lineWidth:4,
+    },geometry});
   }
   for (const geometry of discovered) {
     features.push({
@@ -203,30 +214,32 @@ export default function MapCanvas({
   onViewportChange, discovered, imageLayer, traceMode, onTraceClick,
   editing, moving, snapping, selectedLocked, layerFeatures,
   promptPositive,promptNegative,promptBox,annotationMode,onAnnotationClick,
+  selectionBoxMode,onSelectionBox,selectedIds,qualityIssues,
   onGeometryPreview, onGeometryCommit, onSelectSavedFeature,
 }: Props) {
   const container = useRef<HTMLDivElement>(null);
   const coordinateRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const eventRef = useRef({
-    selected, drawingMode, traceMode, annotationMode,editing, moving, snapping, selectedLocked,
-    layerFeatures, onMapClick, onTraceClick,onAnnotationClick,onViewportChange,
+    selected, drawingMode, traceMode, annotationMode,selectionBoxMode,editing, moving, snapping, selectedLocked,
+    layerFeatures, onMapClick, onTraceClick,onAnnotationClick,onSelectionBox,onViewportChange,
     onGeometryPreview, onGeometryCommit, onSelectSavedFeature,
   });
   const renderRef = useRef({
     selected,vertices,drawingMode,discovered,layerFeatures,editing,
-    promptPositive,promptNegative,promptBox,
+    promptPositive,promptNegative,promptBox,selectedIds,qualityIssues,
   });
   renderRef.current={
     selected,vertices,drawingMode,discovered,layerFeatures,editing,
-    promptPositive,promptNegative,promptBox,
+    promptPositive,promptNegative,promptBox,selectedIds,qualityIssues,
   };
   const drag = useRef<Drag | null>(null);
+  const selectionDrag=useRef<{start:Position;end:Position}|null>(null);
   const spatialSnap = useRef<PixelSnapIndex|null>(null);
   const [ready, setReady] = useState(false);
   eventRef.current = {
-    selected, drawingMode, traceMode, annotationMode,editing, moving, snapping, selectedLocked,
-    layerFeatures, onMapClick, onTraceClick,onAnnotationClick,onViewportChange,
+    selected, drawingMode, traceMode, annotationMode,selectionBoxMode,editing, moving, snapping, selectedLocked,
+    layerFeatures, onMapClick, onTraceClick,onAnnotationClick,onSelectionBox,onViewportChange,
     onGeometryPreview, onGeometryCommit, onSelectSavedFeature,
   };
 
@@ -245,7 +258,8 @@ export default function MapCanvas({
       if(!source)return;
       source.setData(featureCollection(
         view.selected,view.vertices,view.drawingMode,view.discovered,view.layerFeatures,
-        view.editing,view.promptPositive,view.promptNegative,view.promptBox,map.getZoom(),
+        view.editing,view.promptPositive,view.promptNegative,view.promptBox,
+        view.selectedIds,view.qualityIssues,map.getZoom(),
       ));
     };
     map.on('zoomend',refreshZoomLabels);
@@ -285,6 +299,11 @@ export default function MapCanvas({
     }
     function beginDrag(event: MapMouseEvent) {
       spatialSnap.current=null;
+      if(eventRef.current.selectionBoxMode){
+        selectionDrag.current={start:coordinates(event),end:coordinates(event)};
+        map.dragPan.disable();event.preventDefault();
+        return;
+      }
       const state = eventRef.current;
       if (!state.editing || state.selectedLocked || !state.selected) return;
       const features = hits(event);
@@ -366,6 +385,21 @@ export default function MapCanvas({
       return hit.kind==='none'?point:hit.point;
     }
     function dragging(event: MapMouseEvent) {
+      if(selectionDrag.current){
+        selectionDrag.current.end=coordinates(event);
+        const a=selectionDrag.current.start,b=selectionDrag.current.end;
+        const west=Math.min(a[0],b[0]),east=Math.max(a[0],b[0]);
+        const south=Math.min(a[1],b[1]),north=Math.max(a[1],b[1]);
+        const source=map.getSource('selection-preview') as GeoJSONSource|undefined;
+        if(source&&west<east&&south<north)
+          source.setData({type:'FeatureCollection',features:[{
+            type:'Feature',properties:{},geometry:{
+              type:'Polygon',coordinates:[[[west,south],[east,south],
+                [east,north],[west,north],[west,south]]],
+            },
+          }]});
+        return;
+      }
       const current = drag.current;
       if (!current) return;
       const coordinate = coordinates(event);
@@ -383,6 +417,17 @@ export default function MapCanvas({
       eventRef.current.onGeometryPreview(changed);
     }
     function finishDrag() {
+      if(selectionDrag.current){
+        const {start,end}=selectionDrag.current;
+        selectionDrag.current=null;map.dragPan.enable();
+        const source=map.getSource('selection-preview') as GeoJSONSource|undefined;
+        if(source)source.setData({type:'FeatureCollection',features:[]});
+        const west=Math.min(start[0],end[0]),east=Math.max(start[0],end[0]);
+        const south=Math.min(start[1],end[1]),north=Math.max(start[1],end[1]);
+        if(east-west>1e-8&&north-south>1e-8)
+          eventRef.current.onSelectionBox([west,south,east,north]);
+        return;
+      }
       const current = drag.current;
       if (!current) return;
       drag.current = null;
@@ -404,6 +449,7 @@ export default function MapCanvas({
     function click(event: MapMouseEvent) {
       const state = eventRef.current;
       if (drag.current) return;
+      if (state.selectionBoxMode) return;
       if (state.annotationMode) state.onAnnotationClick(coordinates(event));
       else if (state.traceMode) state.onTraceClick(coordinates(event));
       else if (state.drawingMode) state.onMapClick(snapAt(coordinates(event), null));
@@ -498,6 +544,13 @@ export default function MapCanvas({
       map.addSource('workspace', {
         type: 'geojson', data: { type: 'FeatureCollection', features: [] },
       });
+      map.addSource('selection-preview',{
+        type:'geojson',data:{type:'FeatureCollection',features:[]},
+      });
+      map.addLayer({id:'selection-preview-fill',source:'selection-preview',type:'fill',
+        paint:{'fill-color':'#20a9cf','fill-opacity':.15}});
+      map.addLayer({id:'selection-preview-line',source:'selection-preview',type:'line',
+        paint:{'line-color':'#20a9cf','line-width':2,'line-dasharray':[2,2]}});
       map.addLayer({
         id: 'workspace-fill', type: 'fill', source: 'workspace',
         filter: ['==', ['geometry-type'], 'Polygon'],
@@ -571,7 +624,7 @@ export default function MapCanvas({
     const map = mapRef.current;
     if (!ready || !map) return;
     const collection=featureCollection(selected,vertices,drawingMode,discovered,layerFeatures,
-      editing,promptPositive,promptNegative,promptBox,map.getZoom());
+      editing,promptPositive,promptNegative,promptBox,selectedIds,qualityIssues,map.getZoom());
     (map.getSource('workspace') as GeoJSONSource).setData(collection);
     if(container.current && import.meta.env.DEV){
       container.current.setAttribute('data-label-feature-count',
@@ -584,7 +637,7 @@ export default function MapCanvas({
     }
     if (!drag.current) spatialSnap.current=null;
   }, [selected, vertices, drawingMode, discovered, layerFeatures, editing,
-      promptPositive,promptNegative,promptBox,ready]);
+      promptPositive,promptNegative,promptBox,selectedIds,qualityIssues,ready]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -626,8 +679,8 @@ export default function MapCanvas({
     const map = mapRef.current;
     if (!map) return;
     map.doubleClickZoom[editing ? 'disable' : 'enable']();
-    map.getCanvas().style.cursor = drawingMode || traceMode || editing || annotationMode ? 'crosshair' : '';
-  }, [editing, drawingMode, traceMode, annotationMode, ready]);
+    map.getCanvas().style.cursor = drawingMode || traceMode || editing || annotationMode || selectionBoxMode ? 'crosshair' : '';
+  }, [editing, drawingMode, traceMode, annotationMode, selectionBoxMode,ready]);
 
   return <>
     <div aria-label="Interactive geospatial map" data-label-layer-ready={ready ? "true" : "false"} className="map-canvas" ref={container}/>
