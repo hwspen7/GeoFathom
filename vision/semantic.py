@@ -142,9 +142,13 @@ def _predict_batch(tensor, config, device):
             or expected_bytes > tensor_budget_mb() * 1024 * 1024):
         raise RasterError("Model tile exceeds the configured tensor memory budget.")
     state = path.stat()
-    key = (str(path.resolve()), state.st_mtime_ns, state.st_size, device)
-    with pool_for(device).lease(
-        key, lambda: _session(str(path), state.st_mtime_ns, device)) as session:
+    # Include the runtime arena policy in the session identity, and account
+    # the model bytes plus a declared arena/overhead reservation. Providers
+    # may allocate outside an arena; this is admission, not a driver quota.
+    overhead=(gpu_arena_budget_mb() if device=="cuda" else 128)*1024**2
+    key=(str(path.resolve()),state.st_mtime_ns,state.st_size,device,overhead)
+    with pool_for(device).lease(key,lambda:_session(str(path),state.st_mtime_ns,device),
+            reserved_bytes=state.st_size+overhead,working_bytes=int(expected_bytes)) as session:
         inputs = session.get_inputs()
         if len(inputs) != 1:
             raise RasterError("Semantic model must accept exactly one image tensor.")
