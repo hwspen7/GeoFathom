@@ -3,6 +3,8 @@ import maplibregl, { type GeoJSONSource, type MapMouseEvent, type StyleSpecifica
 
 import { rasterPreviewUrl, type RasterAsset } from './api';
 import { PixelSnapIndex } from './spatialIndex';
+import { featureLabel, DEFAULT_LAYER_STYLE } from './labels';
+import type { Measurement,LayerStyle } from './api';
 import {
   addVertex, moveVertex, removeVertex, translateSpherical, geodesicDrag, pathsOf,
   verticesOf, type GeometryPath, type Position, type ShapeMode,
@@ -17,6 +19,11 @@ export interface FocusPoint {
 
 export interface MapLayerFeature {
   id: string;
+  name: string;
+  properties: Record<string,unknown>;
+  source: string;
+  measurement: Measurement;
+  style: LayerStyle;
   geometry: GeoJSON.Geometry;
   layer_id: string;
   color: string;
@@ -44,6 +51,8 @@ interface Props {
   promptPositive:Position[];
   promptNegative:Position[];
   promptBox:Position[];
+  annotationMode:boolean;
+  onAnnotationClick:(position:Position)=>void;
   onGeometryPreview: (geometry: GeoJSON.Geometry) => void;
   onGeometryCommit: (geometry: GeoJSON.Geometry, movement?: {
     original:GeoJSON.Geometry;bearing_deg:number;distance_m:number;
@@ -57,6 +66,8 @@ const satelliteAttribution = import.meta.env.VITE_SATELLITE_ATTRIBUTION || 'Sate
 function mapStyle(): StyleSpecification {
   const style: StyleSpecification = {
     version: 8,
+    glyphs:import.meta.env.VITE_GLYPHS_URL ||
+      'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
     sources: {
       street: {
         type: 'raster',
@@ -89,14 +100,28 @@ function featureCollection(
   layerFeatures: MapLayerFeature[],
   editing: boolean,
   promptPositive:Position[],promptNegative:Position[],promptBox:Position[],
+  zoom:number,
 ): GeoJSON.FeatureCollection {
   const features: GeoJSON.Feature[] = [];
   for (const saved of layerFeatures) {
     if (!saved.visible) continue;
     features.push({
       type: 'Feature', geometry: saved.geometry,
-      properties: { role: 'saved', id: saved.id, color: saved.color,
-                    locked: saved.locked, layer_id: saved.layer_id },
+      properties: {
+        role:'saved',id:saved.id,color:saved.color,
+        locked:saved.locked,layer_id:saved.layer_id,
+        name:saved.name,
+        label:featureLabel(saved,zoom),
+        labelSize:saved.style.labels.font_size,
+        labelColor:saved.style.labels.text_color,
+        labelHaloColor:saved.style.labels.halo_color,
+        labelHaloWidth:saved.style.labels.halo_width,
+        labelOverlap:saved.style.labels.allow_overlap,
+        fillOpacity:saved.style.symbol.fill_opacity,
+        lineWidth:saved.style.symbol.line_width,
+        pointRadius:saved.style.symbol.point_radius,
+        strokeColor:saved.style.symbol.stroke_color,
+      },
     });
   }
   for (const geometry of discovered) {
@@ -177,22 +202,30 @@ export default function MapCanvas({
   selected, drawingMode, vertices, focus, satellite, onMapClick,
   onViewportChange, discovered, imageLayer, traceMode, onTraceClick,
   editing, moving, snapping, selectedLocked, layerFeatures,
-  promptPositive,promptNegative,promptBox,
+  promptPositive,promptNegative,promptBox,annotationMode,onAnnotationClick,
   onGeometryPreview, onGeometryCommit, onSelectSavedFeature,
 }: Props) {
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const eventRef = useRef({
-    selected, drawingMode, traceMode, editing, moving, snapping, selectedLocked,
-    layerFeatures, onMapClick, onTraceClick, onViewportChange,
+    selected, drawingMode, traceMode, annotationMode,editing, moving, snapping, selectedLocked,
+    layerFeatures, onMapClick, onTraceClick,onAnnotationClick,onViewportChange,
     onGeometryPreview, onGeometryCommit, onSelectSavedFeature,
   });
+  const renderRef = useRef({
+    selected,vertices,drawingMode,discovered,layerFeatures,editing,
+    promptPositive,promptNegative,promptBox,
+  });
+  renderRef.current={
+    selected,vertices,drawingMode,discovered,layerFeatures,editing,
+    promptPositive,promptNegative,promptBox,
+  };
   const drag = useRef<Drag | null>(null);
   const spatialSnap = useRef<PixelSnapIndex|null>(null);
   const [ready, setReady] = useState(false);
   eventRef.current = {
-    selected, drawingMode, traceMode, editing, moving, snapping, selectedLocked,
-    layerFeatures, onMapClick, onTraceClick, onViewportChange,
+    selected, drawingMode, traceMode, annotationMode,editing, moving, snapping, selectedLocked,
+    layerFeatures, onMapClick, onTraceClick,onAnnotationClick,onViewportChange,
     onGeometryPreview, onGeometryCommit, onSelectSavedFeature,
   };
 
@@ -204,6 +237,17 @@ export default function MapCanvas({
     });
     map.addControl(new maplibregl.NavigationControl({ showCompass: true }), 'bottom-right');
     map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left');
+    map.addControl(new maplibregl.ScaleControl({ maxWidth:140,unit:'metric' }), 'bottom-left');
+    const refreshZoomLabels=()=>{
+      const view=renderRef.current;
+      const source=map.getSource('workspace') as GeoJSONSource | undefined;
+      if(!source)return;
+      source.setData(featureCollection(
+        view.selected,view.vertices,view.drawingMode,view.discovered,view.layerFeatures,
+        view.editing,view.promptPositive,view.promptNegative,view.promptBox,map.getZoom(),
+      ));
+    };
+    map.on('zoomend',refreshZoomLabels);
 
     function bounds() {
       spatialSnap.current=null;
@@ -321,7 +365,8 @@ export default function MapCanvas({
     function click(event: MapMouseEvent) {
       const state = eventRef.current;
       if (drag.current) return;
-      if (state.traceMode) state.onTraceClick(coordinates(event));
+      if (state.annotationMode) state.onAnnotationClick(coordinates(event));
+      else if (state.traceMode) state.onTraceClick(coordinates(event));
       else if (state.drawingMode) state.onMapClick(snapAt(coordinates(event), null));
       else if (!state.editing) {
         const feature = hits(event).find(f => f.properties?.role === 'saved');
@@ -394,7 +439,7 @@ export default function MapCanvas({
         filter: ['==', ['geometry-type'], 'Polygon'],
         paint: {
           'fill-color': ['coalesce', ['get', 'color'], '#2563eb'],
-          'fill-opacity': 0.17,
+          'fill-opacity': ['coalesce',['get','fillOpacity'],0.17],
         },
       });
       map.addLayer({
@@ -403,7 +448,7 @@ export default function MapCanvas({
                         ['==', ['geometry-type'], 'LineString']],
         paint: {
           'line-color': ['coalesce', ['get', 'color'], '#2563eb'],
-          'line-width': 3, 'line-opacity': 0.95,
+          'line-width': ['coalesce',['get','lineWidth'],3], 'line-opacity': 0.95,
         },
       });
       map.addLayer({
@@ -413,12 +458,33 @@ export default function MapCanvas({
           'circle-color': [
             'match',['get','role'],
             'prompt-positive','#39b779','prompt-negative','#ed4a4a',
-            'prompt-box-corner','#f2a138','edit-midpoint','#c9e5ff','#ffffff',
+            'prompt-box-corner','#f2a138','edit-midpoint','#c9e5ff',
+            'saved',['coalesce',['get','color'],'#2563eb'],'#ffffff',
           ],
           'circle-radius': [
-            'case', ['==', ['get', 'role'], 'edit-midpoint'], 4, 6,
+            'case',['==',['get','role'],'edit-midpoint'],4,
+            ['coalesce',['get','pointRadius'],6],
           ],
-          'circle-stroke-color': '#2563eb', 'circle-stroke-width': 2,
+          'circle-stroke-color': ['coalesce',['get','strokeColor'],'#2563eb'],
+          'circle-stroke-width': 2,
+        },
+      });
+      map.addLayer({
+        id:'workspace-labels',type:'symbol',source:'workspace',
+        filter:['all',['==',['get','role'],'saved'],['!=',['get','label'],'']],
+        layout:{
+          'text-field':['get','label'],
+          'text-font':['Open Sans Regular'],
+          'text-size':['coalesce',['get','labelSize'],12],
+          'text-max-width':15,
+          'text-allow-overlap':['coalesce',['get','labelOverlap'],false],
+          'text-padding':4,
+          'text-optional':true,
+        },
+        paint:{
+          'text-color':['coalesce',['get','labelColor'],'#183954'],
+          'text-halo-color':['coalesce',['get','labelHaloColor'],'#ffffff'],
+          'text-halo-width':['coalesce',['get','labelHaloWidth'],1.5],
         },
       });
       setReady(true);
@@ -426,6 +492,7 @@ export default function MapCanvas({
     });
     mapRef.current = map;
     return () => {
+      map.off('zoomend',refreshZoomLabels);
       map.off('mousemove', dragging);
       map.off('mouseup', finishDrag);
       map.dragPan.enable();
@@ -439,7 +506,7 @@ export default function MapCanvas({
     if (!ready || !map) return;
     (map.getSource('workspace') as GeoJSONSource).setData(
       featureCollection(selected, vertices, drawingMode, discovered, layerFeatures, editing,
-        promptPositive,promptNegative,promptBox),
+        promptPositive,promptNegative,promptBox,map.getZoom()),
     );
     if (!drag.current) spatialSnap.current=null;
   }, [selected, vertices, drawingMode, discovered, layerFeatures, editing,
@@ -485,8 +552,8 @@ export default function MapCanvas({
     const map = mapRef.current;
     if (!map) return;
     map.doubleClickZoom[editing ? 'disable' : 'enable']();
-    map.getCanvas().style.cursor = drawingMode || traceMode || editing ? 'crosshair' : '';
-  }, [editing, drawingMode, traceMode, ready]);
+    map.getCanvas().style.cursor = drawingMode || traceMode || editing || annotationMode ? 'crosshair' : '';
+  }, [editing, drawingMode, traceMode, annotationMode, ready]);
 
   return <div aria-label="Interactive geospatial map" className="map-canvas" ref={container} />;
 }

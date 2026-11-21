@@ -13,6 +13,17 @@ export interface LabelFeature {
   measurement:Measurement;
   style:LayerStyle;
 }
+export const DEFAULT_LAYER_STYLE:LayerStyle={
+  labels:{
+    enabled:false,field:'name',font_size:12,text_color:'#183954',
+    halo_color:'#ffffff',halo_width:1.5,min_zoom:0,max_zoom:24,
+    allow_overlap:false,
+  },
+  symbol:{
+    fill_opacity:.17,line_width:3,point_radius:5,stroke_color:'#ffffff',
+  },
+};
+
 const fmt = new Intl.NumberFormat('en-US',{maximumFractionDigits:2});
 const MAX_TEXT=120;
 
