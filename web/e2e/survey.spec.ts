@@ -25,10 +25,20 @@ test('survey editor draws, repositions vertices, supports undo and saves project
   await page.getByRole('button',{name:'Finish',exact:true}).click();
   await expect(page.getByText(/Drawing completed and measured/)).toBeVisible();
   await page.getByRole('button',{name:'Vertices',exact:true}).click();
+  const changes:GeoJSON.Geometry[]=[];
+  page.on('request',request=>{
+    if(request.url().endsWith('/measure')&&request.method()==='POST'){
+      const payload=request.postDataJSON() as {geometry:GeoJSON.Geometry};
+      changes.push(payload.geometry);
+    }
+  });
+  await page.waitForTimeout(350);
   await page.mouse.move(points[1][0],points[1][1]);
   await page.mouse.down();
   await page.mouse.move(points[1][0]+20,points[1][1]-20,{steps:8});
   await page.mouse.up();
+  await expect.poll(()=>changes.length,{timeout:10000}).toBeGreaterThan(0);
+  expect(changes[0].type).toBe('Polygon');
   await expect(page.getByRole('button',{name:'Undo',exact:true})).toBeEnabled();
   await page.getByRole('button',{name:'Undo',exact:true}).click();
   await page.getByRole('button',{name:'Redo',exact:true}).click();
@@ -48,4 +58,31 @@ test('professional GIS panel exposes attributes, vector formats and DEM analysis
   await expect(page.getByLabel('GIS export format')).toBeVisible();
   await page.getByText('Terrain slope & elevation profile').click();
   await expect(page.getByRole('button',{name:/Analyze selected/})).toBeDisabled();
+});
+
+
+test('import KML, query the attribute table and persist a bulk property update',async({page})=>{
+  await page.goto('/');
+  await page.getByLabel('New project name').fill('Vector browser test');
+  await page.getByRole('button',{name:'Create project'}).click();
+  await page.getByText('GIS file import / export').click();
+  const xml='<?xml version="1.0" encoding="UTF-8"?>'+
+    '<kml xmlns="http://www.opengis.net/kml/2.2"><Document><Placemark>'+
+    '<name>Facility A</name><Point><coordinates>0,22</coordinates></Point>'+
+    '</Placemark></Document></kml>';
+  await page.getByLabel('Import GIS vector file').setInputFiles({
+    name:'facility.kml',mimeType:'application/vnd.google-earth.kml+xml',
+    buffer:Buffer.from(xml),
+  });
+  await expect(page.getByText(/Imported 1 georeferenced GIS features/)).toBeVisible();
+  await page.getByText(/Attribute table/).click();
+  await page.getByLabel('Attribute search field').selectOption('name');
+  await page.getByLabel('Attribute search value').fill('Facility');
+  await page.getByRole('button',{name:'Filter rows'}).click();
+  await expect(page.getByRole('button',{name:'Facility A',exact:true})).toBeVisible();
+  await page.getByLabel('Select Facility A').check();
+  await page.getByLabel('Attribute property name').fill('category');
+  await page.getByLabel('New attribute value').fill('warehouse');
+  await page.getByRole('button',{name:'Save properties & revisions'}).click();
+  await expect(page.getByText(/Updated 1 feature attributes atomically/)).toBeVisible();
 });
