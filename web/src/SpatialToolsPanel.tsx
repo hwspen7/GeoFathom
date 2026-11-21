@@ -1,4 +1,4 @@
-import {useState,type FormEvent} from 'react';
+import {useState} from 'react';
 import {AlertTriangle,Download,MousePointer2,Square} from 'lucide-react';
 import {downloadMapPDF,reviewTopology,selectSpatialFeatures,
   type QualityIssue,type SpatialRelation} from './api';
