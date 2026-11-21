@@ -34,15 +34,21 @@ def _predictor():
     return SAM2ImagePredictor.from_pretrained(identifier)
 
 
-def sam_mask(image: np.ndarray, seed_x: int, seed_y: int) -> tuple[np.ndarray, float, str]:
+def sam_mask(image: np.ndarray, seed_x: int, seed_y: int,
+             positive=None, negative=None, box=None) -> tuple[np.ndarray, float, str]:
     """Infer a click-conditioned mask on the supplied RGB window."""
     predictor = _predictor()
     import torch
+    positive = positive if positive is not None else [[seed_x, seed_y]]
+    negative = negative if negative is not None else []
+    prompts = np.asarray([*positive,*negative], dtype=np.float32)
+    labels = np.asarray([1]*len(positive)+[0]*len(negative), dtype=np.int32)
     with torch.inference_mode(), torch.autocast("cuda", dtype=torch.bfloat16):
         predictor.set_image(image)
         masks, scores, _ = predictor.predict(
-            point_coords=np.array([[seed_x, seed_y]], dtype=np.float32),
-            point_labels=np.array([1], dtype=np.int32),
+            point_coords=prompts,
+            point_labels=labels,
+            box=np.asarray(box, dtype=np.float32) if box is not None else None,
             multimask_output=True,
         )
     index = int(np.argmax(scores))

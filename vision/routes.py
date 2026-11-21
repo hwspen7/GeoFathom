@@ -13,6 +13,7 @@ from geometry.topology import _native
 from imagery.store import image_file
 from .sam import VisionUnavailable, sam_enabled
 from .trace import trace_raster
+from .refine import refine_raster
 
 router = APIRouter(prefix="/vision", tags=["vision"])
 _limit = asyncio.Semaphore(1)
@@ -61,3 +62,33 @@ async def trace(body: TraceRequest) -> dict:
             raise HTTPException(status_code=501, detail=str(error)) from error
         except (RasterError, ValueError) as error:
             raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+
+class RefineRequest(BaseModel):
+    image_id:str
+    positive_points:list[list[float]] = Field(min_length=1,max_length=20)
+    negative_points:list[list[float]] = Field(default_factory=list,max_length=20)
+    box:list[list[float]] | None = None
+    window_size:int = Field(default=512,ge=32,le=1024)
+
+
+@router.post("/refine")
+async def refine(body:RefineRequest)->dict:
+    if not sam_enabled():
+        raise HTTPException(status_code=501,detail="Install and enable local SAM 2 to refine masks.")
+    try:path=image_file(body.image_id)
+    except FileNotFoundError as error:
+        raise HTTPException(status_code=404,detail=str(error)) from error
+    except RasterError as error:
+        raise HTTPException(status_code=422,detail=str(error)) from error
+    async with _limit:
+        try:
+            return await run_in_threadpool(
+                refine_raster,path,body.image_id,body.positive_points[0],
+                body.positive_points,body.negative_points,body.box,body.window_size,
+            )
+        except VisionUnavailable as error:
+            raise HTTPException(status_code=501,detail=str(error)) from error
+        except (RasterError,ValueError) as error:
+            raise HTTPException(status_code=422,detail=str(error)) from error
