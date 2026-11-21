@@ -116,3 +116,60 @@ test('annotation respects locked layer and project boundaries',async({page})=>{
   expect(foreign.status()).toBe(404);
   expect((await savedWorkspace(page,id)).features).toHaveLength(0);
 });
+
+
+test('categorized attribute colors produce visible legend classes and identify a feature',async({page})=>{
+  const id=await project(page,'Categorized buildings');
+  const point=(x:number,name:string,category:string)=>({
+    name,source:'Surveyor',geometry:{type:'Point',coordinates:[x,22]},
+    properties:{category,height:12},
+  });
+  for(const item of [point(0,'Facility A','hospital'),point(1,'Facility B','school')]){
+    const response=await page.request.post(
+      'http://127.0.0.1:8000/projects/'+id+'/features',{data:item},
+    );
+    expect(response.status()).toBe(201);
+  }
+  await page.reload();
+  await page.locator('.layer-cartography summary').click();
+  await page.getByLabel('Category color field').fill('category');
+  await page.getByLabel('Category color field').press('Tab');
+  await expect.poll(async()=>{
+    const w=await savedWorkspace(page,id);
+    return w.layers[0].style.symbol.category_field;
+  }).toBe('category');
+  await page.getByRole('button',{name:'Generate colors for attribute categories'}).click();
+  await expect.poll(async()=>{
+    const r=await page.request.get(
+      'http://127.0.0.1:8000/projects/'+id+'/workspace');
+    const w=await r.json();
+    return Object.keys(w.layers[0].style.symbol.category_colors).length;
+  }).toBe(2);
+  const legend=page.getByLabel('Map legend');
+  await expect(legend).toContainText('hospital');
+  await expect(legend).toContainText('school');
+  await page.locator('.project-features button').filter({hasText:'Facility A'}).click();
+  await page.locator('.feature-inspector summary').click();
+  await expect(page.getByText('Surveyor', {exact:true})).toBeVisible();
+  await expect(page.getByText(/height:/)).toBeVisible();
+  const map=page.getByLabel('Interactive geospatial map');
+  const bounds=await map.boundingBox();
+  expect(bounds).not.toBeNull();
+  await page.mouse.move(bounds!.x+bounds!.width*.5,bounds!.y+bounds!.height*.5);
+  await expect(page.getByLabel('Cursor coordinates')).toContainText(/Lon .*Lat /);
+});
+
+test('map labels treat HTML-like annotation content as plain geographic data',async({page})=>{
+  const id=await project(page,'Safe map labels');
+  const malicious='<img src=x onerror=alert(1)>';
+  await page.getByLabel('Map note text').fill(malicious);
+  await page.getByLabel('Place map note').click();
+  const map=page.getByLabel('Interactive geospatial map');
+  const bounds=await map.boundingBox();
+  expect(bounds).not.toBeNull();
+  await page.mouse.click(bounds!.x+bounds!.width*.5,bounds!.y+bounds!.height*.5);
+  await expect(page.getByText('Map annotation saved.')).toBeVisible();
+  const w=await savedWorkspace(page,id);
+  expect(w.features[0].properties.annotation_text).toBe(malicious);
+  expect(await page.evaluate(()=>document.querySelectorAll('img[onerror]').length)).toBe(0);
+});
