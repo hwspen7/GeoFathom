@@ -1,5 +1,5 @@
 import { describe,expect,it } from 'vitest';
-import { DEFAULT_LAYER_STYLE,featureLabel,legendEntries,type LabelFeature } from './labels';
+import { DEFAULT_LAYER_STYLE,featureLabel,featureColor,legendEntries,type LabelFeature } from './labels';
 import type {Measurement} from './api';
 
 const measurements:Measurement={
@@ -94,5 +94,44 @@ describe('GIS map legend',()=>{
     const before=structuredClone(data);
     for(let i=0;i<1000;i++)featureLabel(data,15);
     expect(data).toEqual(before);
+  });
+});
+
+
+describe('QGIS-style categorized symbology and legend classes',()=>{
+  const style=structuredClone(DEFAULT_LAYER_STYLE);
+  style.symbol.category_field='landuse';
+  style.symbol.category_colors={
+    residential:'#ec7e39',
+    industrial:'#336799',
+  };
+  it('maps attribute values to stable colors and retains fallback',()=>{
+    expect(featureColor({
+      name:'Parcel',source:'Manual',properties:{landuse:'residential'},
+    },style,'#aaaaaa')).toBe('#ec7e39');
+    expect(featureColor({
+      name:'Parcel',source:'Manual',properties:{landuse:'industrial'},
+    },style,'#aaaaaa')).toBe('#336799');
+    expect(featureColor({
+      name:'Parcel',source:'Manual',properties:{landuse:'other'},
+    },style,'#aaaaaa')).toBe('#aaaaaa');
+  });
+  it('uses only exact keys and does not trust object prototype lookup',()=>{
+    const obj={__proto__:null} as Record<string,unknown>;
+    obj.landuse='__proto__';
+    const result=featureColor({name:'x',source:'y',properties:obj},style,'#abcabc');
+    expect(result).toBe('#abcabc');
+  });
+  it('lists only active categories present in visible features',()=>{
+    const layers=[{id:'zones',name:'Zones',color:'#345678',visible:1,style}];
+    const items=[
+      {layer_id:'zones',name:'A',source:'Manual',properties:{landuse:'residential'}},
+      {layer_id:'zones',name:'B',source:'Manual',properties:{landuse:'residential'}},
+      {layer_id:'zones',name:'C',source:'Manual',properties:{landuse:'other'}},
+    ];
+    const legend=legendEntries(layers,items);
+    expect(legend).toHaveLength(2);
+    expect(legend[1].color).toBe('#ec7e39');
+    expect(legend.map(e=>e.name)).not.toContain('  industrial');
   });
 });

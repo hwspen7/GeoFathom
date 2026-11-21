@@ -173,3 +173,52 @@ def test_style_survives_feature_revision_and_is_independent_of_geometry_history(
     assert client.patch(root+"/features/"+feat["id"],json={"name":"Area 2","expected_revision":0}).status_code==200
     assert first_layer(root)["style_revision"]==1
     assert first_layer(root)["style"]["labels"]["enabled"] is True
+
+
+
+def test_categorized_colors_save_and_survive_project_reload():
+    root=project()
+    layer=first_layer(root)
+    colors={"residential":"#aabbcc","industrial":"#112233"}
+    changed=patch(root,layer,{
+        "symbol":{"category_field":"landuse","category_colors":colors},
+        "expected_revision":0,
+    })
+    assert changed.status_code==200,changed.text
+    persisted=first_layer(root)["style"]["symbol"]
+    assert persisted["category_field"]=="landuse"
+    assert persisted["category_colors"]==colors
+    assert first_layer(root)["style_revision"]==1
+
+
+@pytest.mark.parametrize("colors",[
+    {"industrial":"not-a-color"},
+    {"x"*81:"#112233"},
+    {"illegal\nkey":"#112233"},
+    {str(i):"#112233" for i in range(21)},
+    ["#112233"],
+    {"industrial":123},
+])
+def test_invalid_category_palettes_are_rejected_atomically(colors):
+    root=project();layer=first_layer(root)
+    bad=patch(root,layer,{"symbol":{
+        "category_field":"landuse","category_colors":colors}})
+    assert bad.status_code==422,bad.text
+    assert first_layer(root)["style_revision"]==0
+
+
+def test_clear_categorization_keeps_label_settings():
+    root=project();layer=first_layer(root)
+    update=patch(root,layer,{
+        "labels":{"enabled":True,"field":"name"},
+        "symbol":{"category_field":"zone","category_colors":{"1":"#aabbcc"}},
+    })
+    assert update.status_code==200
+    clear=patch(root,layer,{
+        "symbol":{"category_field":"","category_colors":{}},
+        "expected_revision":1,
+    })
+    assert clear.status_code==200
+    style=first_layer(root)["style"]
+    assert style["labels"]["enabled"] is True
+    assert style["symbol"]["category_colors"]=={}
