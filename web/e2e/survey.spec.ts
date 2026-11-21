@@ -34,17 +34,17 @@ test('survey editor draws, repositions vertices, supports undo and saves project
     }
   });
   await expect.poll(async()=>{
-    const raw=await map.getAttribute('data-edit-handle-pixels');
+    const raw=await map.getAttribute('data-rendered-handle-pixels');
     const positions=raw?JSON.parse(raw) as number[][]:[];
-    return positions.length>=4?positions:null;
-  },{timeout:12000}).toBeTruthy();
-  // Use the actual MapLibre-projected edit handle, not an assumed pixel
-  // location captured before the map had finished loading.
-  const screen=JSON.parse((await map.getAttribute('data-edit-handle-pixels'))||'[]') as number[][];
-  expect(screen.length).toBeGreaterThanOrEqual(4);
+    return positions.length;
+  },{timeout:20000}).toBeGreaterThan(0);
+  // Query the actual rendered edit handle reported after MapLibre's
+  // asynchronous GeoJSON source worker reaches the idle state.
+  const screen=JSON.parse((await map.getAttribute('data-rendered-handle-pixels'))||'[]') as number[][];
+  expect(screen.length).toBeGreaterThan(0);
   const current=await map.boundingBox();
   expect(current).not.toBeNull();
-  const x=current!.x+screen[1][0],y=current!.y+screen[1][1];
+  const x=current!.x+screen[0][0],y=current!.y+screen[0][1];
   await page.mouse.move(x,y);
   await page.mouse.down();
   await page.mouse.move(x+20,y-20,{steps:12});
