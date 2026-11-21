@@ -28,3 +28,22 @@ test('GeoAI controls expose distinct spectral, change and model workflows',async
   await expect(page.getByLabel('Local ONNX vision model')).toBeVisible();
   await expect(page.getByText(/No model is silently downloaded/)).toBeVisible();
 });
+
+
+test('Remote STAC COG analysis exposes fixed catalog and cloud mask controls',
+  async({page})=>{
+    await page.goto('/');
+    await page.getByText('GeoAI raster analysis & change detection').click();
+    await page.getByLabel('GeoAI analysis operation').selectOption('stac_ndvi');
+    await expect(page.getByLabel('Remote STAC collection'))
+      .toHaveValue('sentinel-2-c1-l2a');
+    await expect(page.getByLabel('Remote STAC item identifier')).toBeVisible();
+    await page.getByLabel('Remote STAC item identifier')
+      .fill('S2B_32TMT_20240101_0_L2A');
+    await expect(page.getByLabel('Remote STAC processing resolution'))
+      .toHaveValue('4096');
+    await expect(page.getByText(/SCL cloud masking/).first()).toBeVisible();
+    await expect(page.getByLabel('Spectral first band')).toHaveCount(0);
+    await expect(page.getByLabel('Process full image at native pixel resolution'))
+      .toHaveCount(0);
+  });
