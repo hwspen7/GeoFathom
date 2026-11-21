@@ -472,7 +472,11 @@ export default function MapCanvas({
     map.on('mouseup', finishDrag);
     map.on('contextmenu', removeByRightClick);
     map.on('dblclick', insertByDoubleClick);
-    map.on('load', () => {
+    // Install local workspace layers as soon as the style is parsed. Waiting
+    // for the full "load" event would block editing when a remote raster tile
+    // server is slow, unavailable, or rate limited.
+    map.on('style.load', () => {
+      if(map.getSource('workspace'))return;
       map.addSource('workspace', {
         type: 'geojson', data: { type: 'FeatureCollection', features: [] },
       });
