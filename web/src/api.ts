@@ -568,3 +568,18 @@ export async function exportVectorFile(
   link.click();link.remove();
   window.setTimeout(()=>URL.revokeObjectURL(url),1500);
 }
+
+
+export interface RefineResult extends RasterTrace {
+  positive_count:number;negative_count:number;box_used:boolean;
+}
+export function refineRaster(body:{
+  image_id:string;positive_points:[number,number][];
+  negative_points:[number,number][];box:[number,number][]|null;
+  window_size:number;
+}):Promise<RefineResult> {
+  return request('/vision/refine',{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(body),
+  });
+}
