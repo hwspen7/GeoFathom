@@ -222,3 +222,52 @@ extern "C" GEOFATHOM_API int gf_cuda_runtime_trim(void* handle) noexcept {
         g.release();return 0;
     }catch(...){return -1;}
 }
+
+// Decode NCHW float32 logits entirely on device; only final label/confidence
+// arrays are exported. Invalid input is signaled by NaN confidence.
+namespace {
+__global__ void semantic_logits(const float* input,std::size_t pixels,
+    unsigned classes,std::size_t total,unsigned char* labels,float* conf){
+    std::size_t i=blockIdx.x*blockDim.x+threadIdx.x;
+    if(i>=total)return;
+    const std::size_t offset=(i/pixels)*classes*pixels+i%pixels;
+    float best=input[offset];
+    unsigned selected=0;
+    for(unsigned c=0;c<classes;++c){
+        float value=input[offset+c*pixels];
+        if(!isfinite(value)){labels[i]=0;conf[i]=nanf("");return;}
+        if(value>best){best=value;selected=c;}
+    }
+    float sum=0;
+    for(unsigned c=0;c<classes;++c)sum+=expf(input[offset+c*pixels]-best);
+    labels[i]=static_cast<unsigned char>(selected);
+    conf[i]=1.0f/sum;
+}
+template<class T>
+__global__ void semantic_ids(const T* input,std::size_t n,unsigned classes,
+    unsigned char* labels,float* conf){
+    std::size_t i=blockIdx.x*blockDim.x+threadIdx.x;
+    if(i>=n)return;
+    T v=input[i];
+    if(v<0||static_cast<unsigned long long>(v)>=classes){
+        labels[i]=0;conf[i]=nanf("");return;
+    }
+    labels[i]=static_cast<unsigned char>(v);conf[i]=1;
+}
+}
+extern "C" GEOFATHOM_API int gf_cuda_device_semantic(int device,const void* input,
+    std::size_t batch,std::size_t pixels,unsigned classes,unsigned type,
+    unsigned char* labels,float* conf) noexcept {
+    // type: 0=float32 logits, 1=int64 labels, 2=int32 labels, 3=uint8 labels.
+    if(device<0||!batch||batch>16||!pixels||pixels>262144||
+       classes<2||classes>32||type>3||cudaSetDevice(device)!=cudaSuccess)return -1;
+    if(!device_pointer(input,device)||!device_pointer(labels,device)||
+       !device_pointer(conf,device)||cudaDeviceSynchronize()!=cudaSuccess)return -1;
+    std::size_t n=batch*pixels;
+    const unsigned blocks=static_cast<unsigned>((n+255)/256);
+    if(type==0)semantic_logits<<<blocks,256>>>(static_cast<const float*>(input),pixels,classes,n,labels,conf);
+    else if(type==1)semantic_ids<<<blocks,256>>>(static_cast<const long long*>(input),n,classes,labels,conf);
+    else if(type==2)semantic_ids<<<blocks,256>>>(static_cast<const int*>(input),n,classes,labels,conf);
+    else semantic_ids<<<blocks,256>>>(static_cast<const unsigned char*>(input),n,classes,labels,conf);
+    return cudaGetLastError()==cudaSuccess&&cudaDeviceSynchronize()==cudaSuccess?0:-1;
+}

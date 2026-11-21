@@ -46,6 +46,21 @@ int main(){
     if(gf_cuda_device_change(0,dx,mx,dy,my,n,.1f,dl))return 14;
     if(cudaMemcpy(cl.data(),dl,n,cudaMemcpyDeviceToHost)!=cudaSuccess)return 15;
     for(std::size_t i=0;i<n;++i)if(cl[i]!=(xm[i]?2:0))return 16;
+    // Native semantic postprocessing checks NCHW layout, ties and invalid logits.
+    constexpr std::size_t pixels=5,batch=2,classes=3;
+    std::vector<float> logits(batch*pixels*classes,0.f);
+    for(std::size_t i=0;i<pixels;++i){logits[pixels+i]=2.f;logits[4*pixels+i]=-2.f;}
+    logits[0]=std::numeric_limits<float>::quiet_NaN();
+    if(cudaMemcpy(da,logits.data(),logits.size()*sizeof(float),cudaMemcpyHostToDevice)!=cudaSuccess)return 17;
+    if(gf_cuda_device_semantic(0,da,batch,pixels,classes,0,dl,dx))return 18;
+    std::vector<float> confidence(batch*pixels);
+    if(cudaMemcpy(cl.data(),dl,batch*pixels,cudaMemcpyDeviceToHost)!=cudaSuccess||
+       cudaMemcpy(confidence.data(),dx,batch*pixels*sizeof(float),cudaMemcpyDeviceToHost)!=cudaSuccess)return 19;
+    if(!std::isnan(confidence[0]))return 20;
+    for(std::size_t i=1;i<pixels;++i)
+        if(cl[i]!=1||std::abs(confidence[i]-1.f/(1.f+2.f*std::exp(-2.f)))>1e-6f)return 21;
+    for(std::size_t i=pixels;i<batch*pixels;++i)
+        if(cl[i]!=0||std::abs(confidence[i]-1.f/(2.f+std::exp(-2.f)))>1e-6f)return 22;
     cudaFree(da);cudaFree(db);cudaFree(dx);cudaFree(dy);cudaFree(dv);
     cudaFree(mx);cudaFree(my);cudaFree(dl);
     gf_cuda_runtime_destroy(gpu);

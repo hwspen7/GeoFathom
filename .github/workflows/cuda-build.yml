@@ -1,0 +1,21 @@
+name: CUDA compile acceptance
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  cuda-compile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    container: nvidia/cuda:12.6.3-devel-ubuntu22.04
+    steps:
+      - run: apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y cmake g++ git
+      - uses: actions/checkout@v4
+      - name: Compile CUDA library and hardware test executable for Ada
+        run: |
+          cmake -S . -B build/cuda -DGEOFATHOM_NATIVE_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES=89 -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/cuda --parallel 2
+          ctest --test-dir build/cuda --output-on-failure -E '^cuda_runtime$'
+      # Running cuda_runtime requires a physical GPU and is a separate gate.
