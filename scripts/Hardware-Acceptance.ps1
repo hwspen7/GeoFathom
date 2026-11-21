@@ -24,6 +24,7 @@ $env:GEOFATHOM_SPECTRAL_DEVICE = "cuda"
 Invoke-Checked { python benchmarks/soak.py --seconds $SoakSeconds --device cuda --output hardware-soak.json }
 if ($Model) {
     $env:GEOFATHOM_VISION_DEVICE = "cuda"
+    $env:GEOFATHOM_VISION_DEVICE_POSTPROCESS = "1"
     Invoke-Checked { python benchmarks/gpu_acceptance.py --model $Model --runs 100 }
 } else {
     Write-Warning "No installed ONNX model specified; real CUDA model inference is not qualified."

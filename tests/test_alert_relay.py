@@ -36,3 +36,21 @@ def test_metrics_thresholds_and_unavailable_api():
         assert check_metrics(client,"http://localhost:8000/health/metrics","operator")=={"LOW_DISK","HIGH_ERROR_RATE","HIGH_RSS"}
     with httpx.Client(transport=httpx.MockTransport(lambda _:httpx.Response(503))) as client:
         assert check_metrics(client,"http://localhost:8000/health/metrics","operator")=={"API_UNAVAILABLE"}
+
+def test_outage_preserves_firing_then_recovery(tmp_path):
+    seen=[];available=False
+    def handler(request):
+        import json
+        seen.append(json.loads(request.content))
+        return httpx.Response(200 if available else 503)
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        relay=AlertRelay(tmp_path/"state.sqlite","https://alerts.example.test/hook",client)
+        relay.reconcile({"LOW_DISK"})
+        relay.reconcile({"API_UNAVAILABLE"})
+        available=True
+        # The API recovered and confirmed disk recovery. Do not discard
+        # the firing events that had not yet reached the receiver.
+        assert relay.reconcile(set())==4
+    assert [(v["code"],v["state"]) for v in seen[-4:]]==[
+        ("LOW_DISK","firing"),("API_UNAVAILABLE","firing"),
+        ("API_UNAVAILABLE","resolved"),("LOW_DISK","resolved")]

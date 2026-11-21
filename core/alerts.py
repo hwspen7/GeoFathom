@@ -35,6 +35,11 @@ class AlertRelay:
             db.execute("""CREATE TABLE IF NOT EXISTS alert_states(
                 code TEXT PRIMARY KEY,active INTEGER NOT NULL,event_id TEXT NOT NULL,
                 delivered INTEGER NOT NULL DEFAULT 0)""")
+            db.execute("""CREATE TABLE IF NOT EXISTS alert_outbox(
+                seq INTEGER PRIMARY KEY AUTOINCREMENT,event_id TEXT UNIQUE NOT NULL,
+                code TEXT NOT NULL,active INTEGER NOT NULL)""")
+            db.execute("""INSERT OR IGNORE INTO alert_outbox(event_id,code,active)
+                SELECT event_id,code,active FROM alert_states WHERE delivered=0""")
 
     def _connect(self):
         return sqlite3.connect(self.path,timeout=30)
@@ -49,21 +54,30 @@ class AlertRelay:
         with closing(self._connect()) as db,db:
             db.execute("BEGIN IMMEDIATE")
             rows={r[0]:r[1] for r in db.execute("SELECT code,active FROM alert_states")}
+            # Unreachable metrics do not establish that an existing incident
+            # has resolved; preserve those incident states until a valid poll.
+            if "API_UNAVAILABLE" in codes:
+                codes|={code for code,active in rows.items() if active}
             for code in sorted(codes|set(rows)):
                 active=int(code in codes)
                 if rows.get(code,0)!=active:
+                    if db.execute("SELECT count(*) FROM alert_outbox").fetchone()[0]>=10000:
+                        raise RuntimeError("Alert outbox is full; restore webhook delivery.")
+                    event_id=uuid4().hex
                     db.execute("""INSERT INTO alert_states VALUES(?,?,?,0)
                         ON CONFLICT(code) DO UPDATE SET active=excluded.active,
-                        event_id=excluded.event_id,delivered=0""",(code,active,uuid4().hex))
-        # Commit the transition before performing network I/O so failed
-        # deliveries survive a process restart.
-        for code in sorted(KNOWN):
+                        event_id=excluded.event_id,delivered=0""",(code,active,event_id))
+                    db.execute("INSERT INTO alert_outbox(event_id,code,active) VALUES(?,?,?)",
+                               (event_id,code,active))
+        # Commit transitions before network I/O. Preserve their original
+        # order even if an outage spans both firing and recovery.
+        for _ in range(20):
             with closing(self._connect()) as db,db:
                 db.execute("BEGIN IMMEDIATE")
-                event=db.execute("""SELECT active,event_id FROM alert_states
-                    WHERE code=? AND delivered=0""",(code,)).fetchone()
-                if not event:continue
-                active,event_id=event
+                event=db.execute("""SELECT event_id,code,active FROM alert_outbox
+                    ORDER BY seq LIMIT 1""").fetchone()
+                if not event:break
+                event_id,code,active=event
                 try:
                     response=self.client.post(self.webhook,json={
                         "service":"GeoFathom","code":code,
@@ -71,8 +85,9 @@ class AlertRelay:
                     },headers={"Idempotency-Key":event_id},follow_redirects=False)
                     response.raise_for_status()
                 except httpx.HTTPError:
-                    continue
+                    break
                 db.execute("UPDATE alert_states SET delivered=1 WHERE event_id=?",(event_id,))
+                db.execute("DELETE FROM alert_outbox WHERE event_id=?",(event_id,))
                 sent+=1
         return sent
 

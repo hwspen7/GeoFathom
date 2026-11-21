@@ -4,7 +4,7 @@
 
 The C++ worker pool executes independent pixel spans; aligned scratch-buffer
 leases are used for streamed inference (64-byte alignment, bounded allocator,
-zeroed reuse). SSE2 mask counting has a scalar fallback. The optional CUDA
+zeroed reuse). Mask counting dispatches AVX2, SSE2, ARM64 NEON or scalar at runtime; each available implementation is tested against an independent scalar reference. The optional CUDA
 library provides spectral kernels and a fused two-date index pipeline. Two
 normalized indices stay on the GPU during fused change computation; raw
 GeoTIFF bands and the final classification still cross the bus. This is not
@@ -12,8 +12,7 @@ a fully GPU-resident end-to-end GIS pipeline.
 
 `GEOFATHOM_SPECTRAL_DEVICE=auto` selects a CUDA-capable native library for a
 configured minimum tile size and falls back to CPU after a CUDA error.
-Explicit `cuda` is strict. CUDA buffers have a configured fixed capacity;
-they are reused but do not guarantee driver-wide VRAM limits. ONNX batches
+Explicit `cuda` is strict. CUDA buffers grow on demand within the configured spectral byte budget, support explicit trimming, and are reused. Driver-wide VRAM is not guaranteed by the allocator. ONNX batches
 are opt-in via model manifest `max_batch` (1–16); the actual batch is bounded
 by the tensor and task budgets. Model must support dynamic batch dimension
 if max_batch exceeds one. Halo overlap retains disjoint tile cores.
@@ -21,8 +20,7 @@ if max_batch exceeds one. Halo overlap retains disjoint tile cores.
 Optional `GEOFATHOM_CPU_CORES_PER_WORKER` applies disjoint local affinity
 groups for isolated worker slots on Linux/Windows. `GEOFATHOM_RASTER_AS_MB`
 is a CPU-only Linux virtual-address limit; the RSS monitor remains sampled.
-Process limits are not a global hard resident-memory quota for GDAL, CUDA
-and the entire operating system.
+For aggregate isolated worker memory, configure GEOFATHOM_WORKER_MEMORY_MB. Linux requires a delegated cgroup v2 with memory.max at or below that limit; Windows uses a shared named Job Object committed-memory limit. Both fail closed if the boundary cannot be applied. This is not a limit on unrelated OS processes or CUDA VRAM.
 
 ## Raster and remote inputs
 
@@ -105,3 +103,34 @@ RTX 4070 Ti SUPER CUDA build, GPU parity, 24-hour actual resource soak,
 actual satellite model accuracy and multi-host physical acceptance require
 hardware, models, annotation and nodes. Short hosted smoke tests are not
 a substitute for those results.
+
+## Production recovery and resident GPU processing
+
+`python -m storage.incremental backups/archive.sqlite capture --retain 7 --interval 3600`
+stores only new 64 KiB chunks from a consistent online backup snapshot.
+Restore any retained generation using
+`python -m storage.incremental backups/archive.sqlite restore GENERATION restored.sqlite`.
+Capture reads a full consistent snapshot before deduplication; the archive
+stores incremental data, not incremental capture I/O. SQLite can reuse freed
+pages; the archive file need not shrink immediately after retention pruning.
+
+Configure an HTTPS receiver via `GEOFATHOM_ALERT_WEBHOOK` and run
+`python -m core.alerts --state data/alert-state.sqlite` as a separate process.
+Alert transitions are persisted and retried, with stable event IDs and
+recovery messages. Delivery is at least once; receivers should deduplicate.
+
+CUDA spectral memory uses a demand-grown pool capped by
+`GEOFATHOM_CUDA_SPECTRAL_BUDGET_MB`. Trusted CuPy callers may chain
+`geometry.device_arrays` functions directly on resident buffers.
+For ONNX Runtime float32 logits and supported integer labels, enable
+`GEOFATHOM_VISION_DEVICE_POSTPROCESS=1`. Native CUDA borrows the output
+OrtValue, computes final class IDs and confidence on device, and returns
+only those compact arrays to CPU GIS. GDAL source input and GIS outputs
+still cross device boundaries. Model admission uses weighted per-device
+session and active tensor reservations, not actual global driver VRAM usage.
+
+The release workflow also builds and verifies the full Linux/Windows
+archive on pull requests without publishing a tag. CUDA compilation, ARM64
+parity and real Linux cgroup enforcement have separate CI jobs. Actual
+CUDA, 24-hour soak and multi-host hardware acceptance remain mandatory
+for production hardware qualification.
