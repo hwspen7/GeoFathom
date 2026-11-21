@@ -3,7 +3,7 @@ import maplibregl, { type GeoJSONSource, type MapMouseEvent, type StyleSpecifica
 
 import { rasterPreviewUrl, type RasterAsset } from './api';
 import { PixelSnapIndex } from './spatialIndex';
-import { featureLabel, DEFAULT_LAYER_STYLE } from './labels';
+import { featureLabel } from './labels';
 import type { Measurement,LayerStyle } from './api';
 import {
   addVertex, moveVertex, removeVertex, translateSpherical, geodesicDrag, pathsOf,
