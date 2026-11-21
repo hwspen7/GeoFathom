@@ -71,6 +71,19 @@ def prepare_rtree(conn:sqlite3.Connection)->None:
                         (SELECT rowid FROM features)""")
 
 
+def ensure_rtree_present(conn:sqlite3.Connection)->None:
+    """Recover a wholly missing spatial index using cheap existence probes.
+
+    On ordinary requests both probes use only the first index/table page.
+    Partially corrupt indexes still require explicit rebuild maintenance.
+    """
+    exists=conn.execute("SELECT EXISTS(SELECT 1 FROM feature_bounds)").fetchone()[0]
+    if not exists:
+        has_features=conn.execute("SELECT EXISTS(SELECT 1 FROM features)").fetchone()[0]
+        if has_features:
+            prepare_rtree(conn)
+
+
 def _bounds(bbox):
     if len(bbox)!=4:
         raise StorageError("BBox must contain four WGS84 coordinates.")
@@ -91,6 +104,7 @@ def bounding_candidates(project_id,bbox,layer_ids=None,visible_only=False,
         _required_project(conn,project_id)
         _schema(conn)
         _default(conn,project_id)
+        ensure_rtree_present(conn)
         if layer_ids:
             # Authorization: each layer id must belong to this project.
             allowed={row["id"] for row in conn.execute(
@@ -144,6 +158,7 @@ def page_features(project_id,bbox,limit=250,offset=0,layer_ids=None,
     with _connect() as conn:
         _required_project(conn,project_id)
         _schema(conn);_default(conn,project_id)
+        ensure_rtree_present(conn)
         if layer_ids:
             actual={r["id"] for r in conn.execute(
                 "SELECT id FROM geo_layers WHERE project_id=?",(project_id,))}

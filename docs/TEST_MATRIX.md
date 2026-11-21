@@ -178,3 +178,7 @@ scale/performance guarantees.
   overview and block metadata, checksums and immutability.
 - `web/e2e/professional.spec.ts`: background job polling returns only
   result metadata; the browser fetches full GeoJSON from the job detail.
+
+- `tests/test_pro_spatial.py::test_legacy_features_backfill_rtree`:
+  a legacy index that was externally cleared is repopulated before the
+  next viewport query without restoring full-table scans to every read.

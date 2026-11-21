@@ -159,3 +159,12 @@ and full-table index-count comparisons. Explicit index rebuild still uses
 `prepare_rtree`. External direct writes that bypass/destroy the triggers
 need an explicit rebuild; multiple processes still require a shared
 job lease coordinator before production multi-worker deployment.
+
+### Spatial-index recovery rule
+
+The fast viewport query performs an inexpensive index-existence probe.
+If source features exist but `feature_bounds` has been entirely cleared,
+the index is backfilled before returning a page. This preserves recovery
+after an interrupted or externally deleted index without running full
+feature-count scans on every API call. Partial out-of-band corruption still
+requires the explicit spatial-index rebuild operation.
