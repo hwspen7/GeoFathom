@@ -5,6 +5,7 @@ from typing import Any
 
 from pyproj import Geod
 from shapely.geometry import shape
+from shapely.errors import GEOSException
 from shapely.validation import explain_validity
 
 _GEOD = Geod(ellps="WGS84")
@@ -50,7 +51,7 @@ def measure_geometry(geometry: dict[str, Any]) -> dict[str, Any]:
 
     try:
         item = shape(geometry)
-    except (TypeError, ValueError, KeyError) as error:
+    except (TypeError, ValueError, KeyError, GEOSException) as error:
         raise GeometryError("Invalid GeoJSON coordinates.") from error
     if item.is_empty or not item.is_valid:
         raise GeometryError(f"Invalid geometry: {explain_validity(item)}")

@@ -27,7 +27,14 @@ jobs:
       - name: Run Python tests with native library
         env:
           GEOFATHOM_REQUIRE_NATIVE: '1'
-        run: python -m pytest -q
+        run: python -m pytest -q --cov=geometry --cov=storage --cov=terrain --cov=vision --cov-report=term-missing --cov-report=xml:coverage.xml
+      - name: Upload code coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: geofathom-python-coverage
+          path: coverage.xml
+          retention-days: 14
 
   web:
     runs-on: ubuntu-latest
