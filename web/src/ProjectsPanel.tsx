@@ -368,6 +368,62 @@ export default function ProjectsPanel({
                     </select>
                   </label>
                 </div>
+                <label>Category color attribute
+                  <input aria-label="Category color field" maxLength={64}
+                    placeholder="e.g. category, landuse, status"
+                    key={activeLayer.id+'-category-field-'+activeLayer.style_revision}
+                    defaultValue={activeLayer.style.symbol.category_field}
+                    onBlur={event=>{
+                      const value=event.currentTarget.value.trim();
+                      if(value!==activeLayer.style.symbol.category_field)
+                        void styleLayer({symbol:{
+                          category_field:value,category_colors:{},
+                        }});
+                    }}
+                    onKeyDown={event=>{if(event.key==='Enter')event.currentTarget.blur();}}/>
+                </label>
+                <button className="category-build" disabled={busy||
+                  !activeLayer.style.symbol.category_field.trim()}
+                  onClick={()=> {
+                    const field=activeLayer.style.symbol.category_field;
+                    const values=Array.from(new Set(
+                      (workspace?.features??[])
+                        .filter(feature=>feature.layer_id===activeLayer.id)
+                        .map(feature=>field==='name'?feature.name:
+                          field==='source'?feature.source:feature.properties[field])
+                        .filter(value=>typeof value==='string'||typeof value==='number'||typeof value==='boolean')
+                        .map(value=>String(value))
+                        .filter(value=>value.length>0&&value.length<=80)
+                    )).sort((a,b)=>a.localeCompare(b)).slice(0,20);
+                    const palette=['#2979b9','#ef6d49','#4d9b80','#8856a7','#d9a441',
+                      '#cb5a88','#599fc3','#9b7a45','#537ab6','#7ca34d',
+                      '#a9674e','#997eb9','#41a3a4','#bf6c43','#738b4b',
+                      '#ca819b','#47829b','#a4a44c','#c47768','#6283ae'];
+                    void styleLayer({symbol:{
+                      category_colors:Object.fromEntries(values.map((value,index)=>
+                        [value,palette[index]])),
+                    }});
+                  }}>
+                  Generate colors for attribute categories
+                </button>
+                {Object.entries(activeLayer.style.symbol.category_colors).map(([category,color])=>
+                  <label className="category-color-row" key={category}>
+                    <span>{category}</span>
+                    <input type="color" aria-label={'Color for category '+category}
+                      key={activeLayer.style_revision+'-'+category}
+                      defaultValue={color} disabled={busy}
+                      onBlur={event=>{
+                        if(event.currentTarget.value!==color)
+                          void styleLayer({symbol:{
+                            category_colors:{...activeLayer.style.symbol.category_colors,
+                              [category]:event.currentTarget.value},
+                          }});
+                      }}/>
+                  </label>
+                )}
+                <p className="project-hint">Choose an existing attribute and assign a different
+                  color to each unique value (up to 20 categories).
+                  Unknown values retain the layer’s default color.</p>
                 <label className="cartography-switch">
                   <input aria-label="Allow overlapping labels" type="checkbox" disabled={busy}
                     checked={activeLayer.style.labels.allow_overlap}
