@@ -603,6 +603,8 @@ export interface SymbolStyle {
   line_width:number;
   point_radius:number;
   stroke_color:string;
+  category_field:string;
+  category_colors:Record<string,string>;
 }
 export interface LayerStyle {
   labels:LabelStyle;

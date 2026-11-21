@@ -12,7 +12,7 @@ import {
 import MapCanvas, { type FocusPoint } from './MapCanvas';
 import SurveyTools from './SurveyTools';
 import ProfessionalPanel from './ProfessionalPanel';
-import { legendEntries, DEFAULT_LAYER_STYLE } from './labels';
+import { featureColor, legendEntries, DEFAULT_LAYER_STYLE } from './labels';
 import ImageCorrectionPanel, { type PromptMode } from './ImageCorrectionPanel';
 import {
   GeometryTimeline, approximateMeasurement, previewEdgeLengths, pathsOf,
@@ -836,7 +836,8 @@ export default function App() {
                 id: feature.id, layer_id: feature.layer_id, geometry: feature.geometry,
                 name:feature.name,source:feature.source,properties:feature.properties,
                 measurement:feature.measurement,style:layer?.style ?? DEFAULT_LAYER_STYLE,
-                color: layer?.color ?? '#2563eb', visible: Boolean(layer?.visible),
+                color:featureColor(feature,layer?.style??DEFAULT_LAYER_STYLE,
+                  layer?.color??'#2563eb'),visible:Boolean(layer?.visible),
                 locked: Boolean(layer?.locked),
               };
             })}
@@ -944,7 +945,7 @@ export default function App() {
               <Layers3 size={15}/> Legend
             </button>
             {showLegend&&<div className="map-legend-items" aria-label="Map legend">
-              {legendEntries(projectWorkspace?.layers??[]).map(item=>(
+              {legendEntries(projectWorkspace?.layers??[],projectWorkspace?.features??[]).map(item=>(
                 <div key={item.id} className="map-legend-item">
                   <span className="legend-swatch" style={{
                     borderColor:item.color,
