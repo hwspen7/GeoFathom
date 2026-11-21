@@ -391,3 +391,29 @@ button:disabled { opacity: .45; cursor: not-allowed; }
   .map-legend-items {max-width:155px;max-height:145px;}
   .annotation-banner {top:47px;min-width:200px;}
 }
+
+
+/* Standard GIS identify workflow and cursor coordinate readout */
+.map-coordinate-readout{
+  position:absolute;right:12px;bottom:47px;pointer-events:none;
+  z-index:5;background:rgba(255,255,255,.92);border-radius:7px;
+  padding:6px 9px;color:#355c7c;font-size:10px;font-variant-numeric:tabular-nums;
+  box-shadow:0 1px 6px rgba(25,64,91,.12);
+}
+.feature-inspector{
+  border:1px solid #dbe7f1;border-radius:9px;
+  padding:9px;background:#fbfdff;color:#426684;margin-top:9px;
+}
+.feature-inspector>summary{font-size:11px;font-weight:700;cursor:pointer;}
+.feature-inspector-body{
+  display:flex;flex-direction:column;gap:5px;max-height:340px;
+  overflow:auto;padding-top:9px;
+}
+.feature-inspector-body p{
+  font-size:10px;color:#607891;margin:0;overflow-wrap:anywhere;
+}
+.feature-inspector-body p strong{color:#3f5c7a;}
+.feature-inspector-body button{
+  border:1px solid #dce8f0;background:#eff6fd;border-radius:7px;
+  padding:8px;color:#336a9e;font-size:10px;font-weight:650;
+}

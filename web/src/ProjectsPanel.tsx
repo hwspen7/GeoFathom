@@ -494,6 +494,36 @@ export default function ProjectsPanel({
             {!workspace?.features.length && <p className="project-hint">No saved features yet.</p>}
           </div>
 
+          {current&&<details className="feature-inspector">
+            <summary>Identify feature · properties & measurement</summary>
+            <div className="feature-inspector-body">
+              <p><strong>Name:</strong> {current.name}</p>
+              <p><strong>Type:</strong> {current.geometry.type}</p>
+              <p><strong>Source:</strong> {current.source}</p>
+              {current.measurement.area_m2!==null&&
+                <p><strong>Area:</strong> {current.measurement.area_m2.toLocaleString('en-US',
+                  {maximumFractionDigits:2})} m²</p>}
+              {current.measurement.perimeter_m!==null&&
+                <p><strong>Perimeter:</strong> {current.measurement.perimeter_m.toFixed(2)} m</p>}
+              {current.measurement.length_m!==null&&
+                <p><strong>Length:</strong> {current.measurement.length_m.toFixed(2)} m</p>}
+              <p><strong>Revision:</strong> {current.revision}</p>
+              {Object.entries(current.properties).slice(0,30).map(([key,value])=>
+                <p key={key}><strong>{key}:</strong> {typeof value==='object'
+                  ?JSON.stringify(value).slice(0,150):String(value).slice(0,150)}</p>)}
+              <button type="button" onClick={()=>onOpen(current)}>Zoom to feature</button>
+              <button type="button" onClick={async()=>{
+                try{
+                  await navigator.clipboard.writeText(JSON.stringify({
+                    type:'Feature',geometry:current.geometry,properties:{
+                      ...current.properties,name:current.name,source:current.source,
+                    },
+                  },null,2));
+                  setInfo('Feature GeoJSON copied.');
+                }catch{setError('Clipboard permissions are unavailable.');}
+              }}>Copy feature GeoJSON</button>
+            </div>
+          </details>}
           {current && (
             <>
               {current.properties.annotation===true&&(
