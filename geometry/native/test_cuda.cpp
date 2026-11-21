@@ -15,6 +15,13 @@ int main(){
         for(std::size_t i=0;i<n;++i)if(std::abs(x[i]-y[i])>1e-6f)return 3;
     }
     if(gf_cuda_runtime_change(gpu,x.data(),xm.data(),y.data(),ym.data(),n,.2f,cl.data())!=0)return 4;
+    std::vector<float> newer(n,400),new_index(n);
+    std::vector<unsigned char> new_mask(n),reference(n),both(n);
+    gf_spectral_normalized_difference(newer.data(),b.data(),v.data(),n,new_index.data(),new_mask.data());
+    gf_spectral_change(x.data(),xm.data(),new_index.data(),new_mask.data(),n,.1f,reference.data());
+    if(gf_cuda_runtime_paired_change(gpu,a.data(),b.data(),v.data(),newer.data(),
+        b.data(),v.data(),n,.1f,cl.data(),both.data())<0||cl!=reference)return 5;
+    for(std::size_t i=0;i<n;++i)if(both[i]!=(xm[i]&&new_mask[i]))return 6;
     gf_cuda_runtime_destroy(gpu);
     return 0;
 }

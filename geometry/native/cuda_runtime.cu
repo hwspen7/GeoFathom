@@ -51,6 +51,27 @@ __global__ void change(const float* a,const unsigned char* av,
     if(delta>=t)mask[i]=1;
     else if(delta<=-t)mask[i]=2;
 }
+// The first normalized index and validity remain resident while the second
+// date is uploaded. Round the second index to float32 exactly as the
+// standalone kernel does, so threshold decisions agree with the scalar API.
+__global__ void paired(const float* prior,const unsigned char* prior_valid,
+    const float* a,const float* b,const unsigned char* valid,std::size_t n,
+    float threshold,unsigned char* labels,unsigned char* both){
+    const std::size_t i=blockIdx.x*blockDim.x+threadIdx.x;
+    if(i>=n)return;
+    const bool usable=prior_valid[i]&&valid[i];
+    labels[i]=0;both[i]=0;
+    if(!usable||!isfinite(a[i])||!isfinite(b[i]))return;
+    double x=a[i],y=b[i],den=x+y;
+    if(!isfinite(den)||fabs(den)<=1e-9)return;
+    double v=(x-y)/den;
+    if(!isfinite(v))return;
+    float next=static_cast<float>(fmin(1.0,fmax(-1.0,v)));
+    double delta=static_cast<double>(next)-prior[i];
+    both[i]=1;
+    if(delta>=threshold)labels[i]=1;
+    else if(delta<=-threshold)labels[i]=2;
+}
 bool upload(GPU& g,const float* a,const float* b,const unsigned char* v,std::size_t n){
     return cudaSetDevice(g.device)==cudaSuccess &&
       cudaMemcpy(g.a,a,n*sizeof(float),cudaMemcpyHostToDevice)==cudaSuccess &&
@@ -101,6 +122,33 @@ extern "C" GEOFATHOM_API int gf_cuda_runtime_change(void* handle,
         if(cudaGetLastError()!=cudaSuccess||cudaDeviceSynchronize()!=cudaSuccess||
            cudaMemcpy(mask,g.mask,n,cudaMemcpyDeviceToHost)!=cudaSuccess)return -1;
         int count=0;for(std::size_t i=0;i<n;++i)count+=mask[i]!=0;
+        return count;
+    }catch(...){return -1;}
+}
+
+extern "C" GEOFATHOM_API int gf_cuda_runtime_paired_change(void* handle,
+    const float* old_a,const float* old_b,const unsigned char* old_v,
+    const float* new_a,const float* new_b,const unsigned char* new_v,
+    std::size_t n,float threshold,unsigned char* labels,unsigned char* valid) noexcept{
+    if(!handle||!old_a||!old_b||!old_v||!new_a||!new_b||!new_v||!labels||!valid||
+       !n||!std::isfinite(threshold)||threshold<=0||threshold>=1)return -1;
+    auto& g=*static_cast<GPU*>(handle);
+    if(n>g.capacity)return -1;
+    try{
+        std::lock_guard<std::mutex> guard(g.lock);
+        if(!upload(g,old_a,old_b,old_v,n))return -1;
+        nd<<<static_cast<unsigned>((n+255)/256),256>>>(g.a,g.b,g.av,n,g.out,g.bv);
+        if(cudaGetLastError()!=cudaSuccess||cudaDeviceSynchronize()!=cudaSuccess)return -1;
+        if(!upload(g,new_a,new_b,new_v,n))return -1;
+        // g.av is the second-date input validity. Reuse it as the overlap
+        // output only after its value has been read by each independent thread.
+        // Use g.mask for final labels and return both byte masks to the host.
+        paired<<<static_cast<unsigned>((n+255)/256),256>>>(g.out,g.bv,g.a,g.b,g.av,n,
+            threshold,g.mask,g.av);
+        if(cudaGetLastError()!=cudaSuccess||cudaDeviceSynchronize()!=cudaSuccess||
+           cudaMemcpy(labels,g.mask,n,cudaMemcpyDeviceToHost)!=cudaSuccess||
+           cudaMemcpy(valid,g.av,n,cudaMemcpyDeviceToHost)!=cudaSuccess)return -1;
+        int count=0;for(std::size_t i=0;i<n;++i)count+=valid[i]!=0;
         return count;
     }catch(...){return -1;}
 }

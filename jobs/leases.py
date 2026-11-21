@@ -66,7 +66,7 @@ def _resources(kind,payload):
     if ((kind=="semantic_segmentation" and
             os.getenv("GEOFATHOM_VISION_DEVICE","cpu").lower()=="cuda")
             or (kind in {"spectral_index","spectral_change","stac_ndvi"} and
-            os.getenv("GEOFATHOM_SPECTRAL_DEVICE","cpu").lower()=="cuda")):
+            os.getenv("GEOFATHOM_SPECTRAL_DEVICE","cpu").lower() in ("cuda","auto"))):
         result.append("accelerator")
     return result
 

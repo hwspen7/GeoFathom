@@ -116,6 +116,10 @@ GEOFATHOM_API int gf_cuda_runtime_index(void* g,const float* a,const float* b,
     const unsigned char* v,std::size_t n,float* out,unsigned char* mask) noexcept;
 GEOFATHOM_API int gf_cuda_runtime_change(void* g,const float* a,const unsigned char* av,
     const float* b,const unsigned char* bv,std::size_t n,float t,unsigned char* mask) noexcept;
+GEOFATHOM_API int gf_cuda_runtime_paired_change(void* handle,
+    const float* old_a,const float* old_b,const unsigned char* old_v,
+    const float* new_a,const float* new_b,const unsigned char* new_v,
+    std::size_t n,float threshold,unsigned char* labels,unsigned char* valid) noexcept;
 }
 #endif
 

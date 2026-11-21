@@ -25,7 +25,7 @@ from shapely.geometry import mapping, shape
 from shapely.validation import make_valid
 
 from geometry.measure import measure_geometry, GeometryError
-from geometry.spectral import normalized_difference, classify_change
+from geometry.spectral import normalized_difference, classify_change, paired_change
 from geometry.transitions import count_transitions
 from imagery.raster import RasterError, _check
 
@@ -323,12 +323,8 @@ def spectral_change_tiled(before_path: Path, after_path: Path,
                             before, (first_band, second_band), window)
                         new, new_valid = _tile_bands(
                             aligned, (first_band, second_band), window)
-                        old_index, ov, before_engine = normalized_difference(
-                            old[0], old[1], old_valid)
-                        new_index, nv, after_engine = normalized_difference(
-                            new[0], new[1], new_valid)
-                        labels, current_engine = classify_change(
-                            old_index, ov, new_index, nv, threshold)
+                        labels, both, current_engine, _ = paired_change(
+                            old,old_valid,new,new_valid,threshold)
                         if engine is None:
                             engine = current_engine
                         elif engine != current_engine:
@@ -339,7 +335,7 @@ def spectral_change_tiled(before_path: Path, after_path: Path,
                         target.write(labels, 1, window=window)
                         if number % 16 == 0:
                             _check_scratch(output, scratch_quota)
-                        valid_pixels += int((ov & nv).sum())
+                        valid_pixels += int(both.sum())
                         gain_pixels += int((labels == 1).sum())
                         loss_pixels += int((labels == 2).sum())
             if not valid_pixels:
