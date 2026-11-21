@@ -20,9 +20,13 @@ def _bbox_json(data:str)->tuple:
 def prepare_rtree(conn:sqlite3.Connection)->None:
     # Register on every connection: SQLite triggers invoke this UDF when
     # geometry is changed by any of the existing project edit pathways.
-    for index,name in enumerate(("geo_minx","geo_miny","geo_maxx","geo_maxy")):
-        conn.create_function(name,1,lambda data,i=index:_bbox_json(data)[i],
-                             deterministic=True)
+    # _connect() already installs the UDFs before yielding the connection.
+    # Recreating a SQLite UDF after an active write (e.g. index rebuild)
+    # raises sqlite3.OperationalError: Error creating function.
+    if not conn.in_transaction:
+        for index,name in enumerate(("geo_minx","geo_miny","geo_maxx","geo_maxy")):
+            conn.create_function(name,1,lambda data,i=index:_bbox_json(data)[i],
+                                 deterministic=True)
     conn.executescript("""
     CREATE VIRTUAL TABLE IF NOT EXISTS feature_bounds USING rtree(
       feature_rowid,minx,maxx,miny,maxy
