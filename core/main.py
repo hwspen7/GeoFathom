@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .config import get_settings
 from analysis.routes import router as analysis_router
+from analysis.pro_routes import router as spatial_workflow_router
 from storage.routes import router as storage_router
 from storage.workspace_routes import router as workspace_router
 from storage.topology_routes import router as topology_router
@@ -35,6 +36,7 @@ app.include_router(edit_router)
 app.include_router(places_router)
 app.include_router(intelligence_router)
 app.include_router(analysis_router)
+app.include_router(spatial_workflow_router)
 app.include_router(storage_router)
 app.include_router(workspace_router)
 app.include_router(topology_router)
