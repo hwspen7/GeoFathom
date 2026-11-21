@@ -189,7 +189,7 @@ def fetch_features(project_id,source_id,bbox,limit=100):
             valid.append({"type":"Feature","id":str(feature.get("id") or "")[:100],
                 "geometry":feature["geometry"],"properties":{
                     str(k)[:64]:v for k,v in list(feature["properties"].items())[:100]
-                    if isinstance(v,(str,int,float,bool)) or v is None,
+                    if isinstance(v,(str,int,float,bool)) or v is None
                 }})
         return {"type":"FeatureCollection","features":valid,"source_id":source_id,
             "service":source["service"],"attribution":source["attribution"],
