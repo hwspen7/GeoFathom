@@ -31,7 +31,8 @@ export default function CartographyProPanel(p:Props){
   const [error,setError]=useState('');
   const [notice,setNotice]=useState('');
   const workspaceLayer=p.workspace?.layers.find(x=>x.id===layerId)??p.workspace?.layers[0]??null;
-  const layer=localStyle?.id===workspaceLayer?.id&&
+  const layer=localStyle&&workspaceLayer&&
+    localStyle.id===workspaceLayer.id&&
     localStyle.style_revision>=workspaceLayer.style_revision?
     localStyle:workspaceLayer;
 
