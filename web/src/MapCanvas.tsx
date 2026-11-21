@@ -342,8 +342,21 @@ export default function MapCanvas({
         const found=hits(event).find(item=>
           item.properties?.role==='saved'&&
           state.layerFeatures.some(feature=>feature.id===String(item.properties?.id)));
-        const target=found?.properties?.id?state.layerFeatures.find(
-          item=>item.id===String(found.properties.id)):null;
+        let target=found?.properties?.id?state.layerFeatures.find(
+          item=>item.id===String(found.properties.id)):undefined;
+        // A point annotation must remain draggable even when the remote
+        // glyph font has not loaded and MapLibre cannot hit its symbol.
+        if(!target){
+          let nearest=18;
+          for(const item of state.layerFeatures){
+            if(!item.visible||item.locked||item.geometry.type!=='Point')continue;
+            if(!item.style.labels.enabled&&item.properties.annotation!==true)continue;
+            const projected=map.project(item.geometry.coordinates as maplibregl.LngLatLike);
+            const distance=Math.hypot(event.point.x-projected.x,
+              event.point.y-projected.y);
+            if(distance<nearest){nearest=distance;target=item;}
+          }
+        }
         if(target&&!target.locked){
           const base:[number,number]=[
             typeof target.properties.label_offset_x==='number'?
