@@ -29,6 +29,7 @@ import RasterPanel, { type TraceSettings } from './RasterPanel';
 import {
   addMapAnnotation, applyOverlay, applyTopology, constructGeometry, editPair, getWorkspace, moveMeasured,
   previewTopology, refineRaster, traceExisting, traceImagery,
+  updateProjectFeature,
   type SharedTopologyPreview, type RasterAsset,
 } from './api';
 
@@ -84,6 +85,7 @@ export default function App() {
   const [spatialSelected,setSpatialSelected]=useState<string[]>([]);
   const [qualityIssues,setQualityIssues]=useState<QualityIssue[]>([]);
   const [projectGrid,setProjectGrid]=useState<GeoJSON.FeatureCollection|null>(null);
+  const [labelMoveMode,setLabelMoveMode]=useState(false);
   const [externalTiles,setExternalTiles]=useState<ExternalTile[]>([]);
   const [externalFeatures,setExternalFeatures]=useState<GeoJSON.Geometry[]>([]);
   const [pagedFeatures,setPagedFeatures]=useState<WorkspaceFeature[]>([]);
@@ -437,6 +439,7 @@ export default function App() {
     setPendingAnnotation(null);
     setSelectionBoxMode(false);setSelectionBox(null);
     setSpatialSelected([]);setQualityIssues([]);setProjectGrid(null);
+    setLabelMoveMode(false);
     setExternalFeatures([]);setPagedFeatures([]);
     setPromptMode(null);setPositivePoints([]);setNegativePoints([]);setBoxPoints([]);
     setPendingShared(null);
@@ -758,6 +761,15 @@ export default function App() {
               selectedGeometry={geometry}
               onChanged={()=>setRefreshToken(v=>v+1)}
               onGrid={setProjectGrid}
+              labelMoveMode={labelMoveMode}
+              onLabelMoveMode={active=>{
+                setLabelMoveMode(active);
+                if(active){
+                  setSelectionBoxMode(false);setTraceMode(false);
+                  setDrawingMode(null);setEditing(false);setMoving(false);
+                  setPromptMode(null);setPendingAnnotation(null);
+                }
+              }}
             />
           </section>
 
@@ -941,6 +953,30 @@ export default function App() {
             qualityIssues={qualityIssues.map(issue=>issue.geometry)}
             projectGrid={projectGrid}
             externalTiles={externalTiles}
+            labelMoveMode={labelMoveMode}
+            onLabelMove={(id,dx,dy)=>{
+              const current=[...(projectWorkspace?.features??[]),...pagedFeatures]
+                .find(item=>item.id===id);
+              if(!activeProjectId||!current||busy)return;
+              const activeLayer=projectWorkspace?.layers.find(
+                layer=>layer.id===current.layer_id);
+              if(activeLayer?.locked){
+                setError('Unlock the feature layer before moving its label.');
+                return;
+              }
+              setBusy(true);setError('');
+              void updateProjectFeature(activeProjectId,id,{
+                properties:{...current.properties,
+                  label_offset_x:dx,label_offset_y:dy},
+                expected_revision:current.revision,
+              }).then(updated=>{
+                setRefreshToken(value=>value+1);
+                if(selectedFeatureId===id)openStoredFeature(updated);
+                setMessage('Label position stored as a new feature revision.');
+              }).catch(failure=>{
+                setError(failure instanceof Error?failure.message:'Label movement failed.');
+              }).finally(()=>setBusy(false));
+            }}
             onTraceClick={async ([longitude, latitude]) => {
               if (promptMode!==null) {
                 const location:Position=[longitude,latitude];
