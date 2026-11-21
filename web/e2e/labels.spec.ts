@@ -7,6 +7,9 @@ test.beforeEach(async({page})=>{
 });
 
 async function project(page:import('@playwright/test').Page,name:string) {
+  // Each test retry must own a unique project. Shared CI backend data
+  // persists across browser retries and otherwise creates ambiguous options.
+  name=name+'-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,8);
   await page.goto('/');
   await page.getByLabel('New project name').fill(name);
   await page.getByRole('button',{name:'Create project'}).click();
@@ -170,13 +173,18 @@ test('categorized attribute colors produce visible legend classes and identify a
 test('map labels treat HTML-like annotation content as plain geographic data',async({page})=>{
   const id=await project(page,'Safe map labels');
   const malicious='<img src=x onerror=alert(1)>';
+  const map=page.getByLabel('Interactive geospatial map');
+  // The asynchronous MapLibre source must be ready before accepting
+  // geographic clicks; the map canvas existing in the DOM is insufficient.
+  await expect(map).toHaveAttribute('data-label-layer-ready','true',{timeout:25000});
   await page.getByLabel('Map note text').fill(malicious);
   await page.getByLabel('Place map note').click();
-  const map=page.getByLabel('Interactive geospatial map');
+  await expect(page.getByLabel('Cancel map note')).toBeVisible();
   const bounds=await map.boundingBox();
   expect(bounds).not.toBeNull();
-  await page.mouse.click(bounds!.x+bounds!.width*.5,bounds!.y+bounds!.height*.5);
-  await expect(page.getByText('Map annotation saved.')).toBeVisible();
+  await page.mouse.click(bounds!.x+bounds!.width*.52,bounds!.y+bounds!.height*.52);
+  await expect.poll(async()=> (await savedWorkspace(page,id)).features.length,
+    {timeout:15000}).toBe(1);
   const w=await savedWorkspace(page,id);
   expect(w.features[0].properties.annotation_text).toBe(malicious);
   expect(await page.evaluate(()=>document.querySelectorAll('img[onerror]').length)).toBe(0);
