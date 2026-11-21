@@ -290,16 +290,34 @@ export default function MapCanvas({
       const features = hits(event);
       const handle = features.find(f => f.properties?.role === 'edit-vertex'
                                    || f.properties?.role === 'edit-midpoint');
+      // MapLibre's asynchronous GeoJSON hit test can briefly miss a visible
+      // handle. Prefer the rendered feature, but fall back to a small
+      // screen-pixel radius around the actual projected geometric vertex.
+      let fallback:ReturnType<typeof verticesOf>[number]|null=null;
+      if(!handle){
+        let best=9;
+        for(const node of verticesOf(state.selected)){
+          const p=map.project(node.point as maplibregl.LngLatLike);
+          const distance=Math.hypot(event.point.x-p.x,event.point.y-p.y);
+          if(distance<best){
+            best=distance;fallback=node;
+          }
+        }
+      }
       if(import.meta.env.DEV&&container.current){
         container.current.setAttribute('data-dev-hit-role',
-          String(handle?.properties?.role ?? features.map(f=>f.properties?.role).join(',')));
+          String(handle?.properties?.role??(fallback?'fallback-'+
+            (fallback.midpoint?'edit-midpoint':'edit-vertex'):
+            features.map(f=>f.properties?.role).join(','))));
+        container.current.setAttribute('data-dev-pointer-pixel',
+          JSON.stringify([event.point.x,event.point.y]));
       }
       let first = state.selected;
       let path: GeometryPath | null = null;
       let kind: Drag['kind'] | null = null;
-      if (handle) {
-        path = nodePath(handle.properties);
-        if (handle.properties?.role === 'edit-midpoint') {
+      if (handle || fallback) {
+        path = handle ? nodePath(handle.properties) : fallback!.path;
+        if (handle?.properties?.role === 'edit-midpoint' || fallback?.midpoint) {
           first = addVertex(first, path, coordinates(event));
           path = { ...path, vertex: path.vertex + 1 };
           state.onGeometryPreview(first);
