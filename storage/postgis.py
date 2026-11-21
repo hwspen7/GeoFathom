@@ -126,6 +126,9 @@ def spatial_page(project_id,bbox,limit=250,offset=0,relation="intersects")->dict
             data=[{"id":r[0],"project_id":r[1],"layer_id":r[2],
                    "revision":r[3],"name":r[4],"source":r[5],
                    "properties":r[6],"geometry":json.loads(r[7])} for r in rows]
+            from geometry.measure import measure_geometry
+            for item in data:
+                item["measurement"]=measure_geometry(item["geometry"])
             return {"results":data,"total":total,"limit":limit,"offset":offset,
                     "indexed":True,"source":"PostGIS GiST spatial query"}
     except Exception as error:

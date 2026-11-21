@@ -127,5 +127,9 @@ def page_features(project_id,bbox,limit=250,offset=0,layer_ids=None,
         raise StorageError("Spatial page must have limit 1–1000 and offset at most 1 million.")
     results=bounding_candidates(project_id,bbox,layer_ids,visible_only,max_candidates=25000)
     total=len(results)
-    return {"results":results[offset:offset+limit],"total":total,
+    from geometry.measure import measure_geometry
+    page=results[offset:offset+limit]
+    for item in page:
+        item["measurement"]=measure_geometry(item["geometry"])
+    return {"results":page,"total":total,
             "limit":limit,"offset":offset,"indexed":True}
