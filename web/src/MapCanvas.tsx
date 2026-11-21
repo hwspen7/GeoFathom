@@ -518,10 +518,18 @@ export default function MapCanvas({
   useEffect(() => {
     const map = mapRef.current;
     if (!ready || !map) return;
-    (map.getSource('workspace') as GeoJSONSource).setData(
-      featureCollection(selected, vertices, drawingMode, discovered, layerFeatures, editing,
-        promptPositive,promptNegative,promptBox,map.getZoom()),
-    );
+    const collection=featureCollection(selected,vertices,drawingMode,discovered,layerFeatures,
+      editing,promptPositive,promptNegative,promptBox,map.getZoom());
+    (map.getSource('workspace') as GeoJSONSource).setData(collection);
+    if(container.current && import.meta.env.DEV){
+      container.current.setAttribute('data-label-feature-count',
+        String(collection.features.filter(item=>Boolean(item.properties?.label)).length));
+      const handles=editing&&selected?verticesOf(selected).filter(item=>!item.midpoint).map(item=>{
+        const p=map.project(item.point as maplibregl.LngLatLike);
+        return [p.x,p.y];
+      }):[];
+      container.current.setAttribute('data-edit-handle-pixels',JSON.stringify(handles));
+    }
     if (!drag.current) spatialSnap.current=null;
   }, [selected, vertices, drawingMode, discovered, layerFeatures, editing,
       promptPositive,promptNegative,promptBox,ready]);

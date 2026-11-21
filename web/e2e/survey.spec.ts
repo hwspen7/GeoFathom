@@ -12,6 +12,7 @@ test('survey editor draws, repositions vertices, supports undo and saves project
   await page.goto('/');
   const map=page.getByLabel('Interactive geospatial map');
   await expect(map).toBeVisible();
+  await expect(map).toHaveAttribute('data-label-layer-ready','true',{timeout:25000});
   await expect(page.getByRole('button',{name:'Polygon',exact:true})).toBeVisible();
   await page.getByRole('button',{name:'Polygon',exact:true}).click();
   const box=await map.boundingBox();
@@ -32,10 +33,21 @@ test('survey editor draws, repositions vertices, supports undo and saves project
       changes.push(payload.geometry);
     }
   });
-  await page.waitForTimeout(350);
-  await page.mouse.move(points[1][0],points[1][1]);
+  await expect.poll(async()=>{
+    const raw=await map.getAttribute('data-edit-handle-pixels');
+    const positions=raw?JSON.parse(raw) as number[][]:[];
+    return positions.length>=4?positions:null;
+  },{timeout:12000}).toBeTruthy();
+  // Use the actual MapLibre-projected edit handle, not an assumed pixel
+  // location captured before the map had finished loading.
+  const screen=JSON.parse((await map.getAttribute('data-edit-handle-pixels'))||'[]') as number[][];
+  expect(screen.length).toBeGreaterThanOrEqual(4);
+  const current=await map.boundingBox();
+  expect(current).not.toBeNull();
+  const x=current!.x+screen[1][0],y=current!.y+screen[1][1];
+  await page.mouse.move(x,y);
   await page.mouse.down();
-  await page.mouse.move(points[1][0]+20,points[1][1]-20,{steps:8});
+  await page.mouse.move(x+20,y-20,{steps:12});
   await page.mouse.up();
   await expect.poll(()=>changes.length,{timeout:10000}).toBeGreaterThan(0);
   expect(changes[0].type).toBe('Polygon');
