@@ -61,11 +61,16 @@ describe('GIS map layer labelling from safe attributes',()=>{
       properties:{annotation:true,annotation_text:'測'.repeat(130)},
     })).length).toBe(120);
   });
-  it('replaces ASCII controls and trims text without changing Unicode',()=>{
-    const styled=feature({style:enabled('notice'),properties:{notice:' Hello\\nworld\\t世界 '}});
-    expect(featureLabel(styled)).toBe('Hello\\nworld\\t世界');
-    const ctrl=feature({style:enabled('notice'),properties:{notice:'\\u0001Text'}});
-    expect(featureLabel(ctrl)).toBe('\\u0001Text');
+  it('replaces genuine ASCII controls and preserves Unicode letters',()=>{
+    const styled=feature({
+      style:enabled('notice'),
+      properties:{notice:' Hello'+String.fromCharCode(10)+'world'+
+        String.fromCharCode(9)+'世界 '},
+    });
+    expect(featureLabel(styled)).toBe('Hello world 世界');
+    const ctrl=feature({style:enabled('notice'),
+      properties:{notice:String.fromCharCode(1)+'Text'}});
+    expect(featureLabel(ctrl)).toBe('Text');
   });
   it('displays free-form annotation before attribute fields',()=>{
     const note=feature({style:enabled('category'),
