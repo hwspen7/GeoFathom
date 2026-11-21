@@ -434,6 +434,26 @@ export default function MapCanvas({
       }
     }
 
+    // Browser acceptance tests must wait for the asynchronous GeoJSON worker
+    // to render vertex handles, not merely for React to schedule setData.
+    function inspectRenderedHandles() {
+      if(!import.meta.env.DEV || !map.getLayer('workspace-points') || !container.current)return;
+      const view=renderRef.current;
+      if(!view.editing||!view.selected){
+        container.current.setAttribute('data-rendered-handle-pixels','[]');
+        return;
+      }
+      const pixels:Position[]=[];
+      for(const handle of verticesOf(view.selected).filter(node=>!node.midpoint)){
+        const point=map.project(handle.point as maplibregl.LngLatLike);
+        const matched=map.queryRenderedFeatures(point,{
+          layers:['workspace-points'],
+        }).some(item=>item.properties?.role==='edit-vertex');
+        if(matched)pixels.push([point.x,point.y]);
+      }
+      container.current.setAttribute('data-rendered-handle-pixels',JSON.stringify(pixels));
+    }
+    map.on('idle',inspectRenderedHandles);
     map.on('moveend', bounds);
     map.on('click', click);
     map.on('mousedown', beginDrag);
@@ -505,6 +525,7 @@ export default function MapCanvas({
     mapRef.current = map;
     return () => {
       map.off('zoomend',refreshZoomLabels);
+      map.off('idle',inspectRenderedHandles);
       map.off('mousemove', dragging);
       map.off('mousemove',displayCoordinates);
       map.off('mouseup', finishDrag);
