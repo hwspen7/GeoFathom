@@ -85,6 +85,13 @@ def review_topology(project_id:str,layer_ids:list[str]|None=None,
                 if magnitude>minimum_area_m2:
                     issue("gap",[],gap,"Uncovered area in the chosen topology study area" if aoi
                           else "Internal polygon hole in the mapped coverage",magnitude)
+    elif aoi is not None:
+        # A declared study area with no polygon coverage is itself one gap.
+        # This also covers projects containing only points or line features.
+        missing_area=_area(aoi)
+        if missing_area>minimum_area_m2:
+            issue("gap",[],aoi,"Uncovered area in the chosen topology study area",
+                  missing_area)
     if check_dangles:
         # Report line endpoints that have no second line endpoint within
         # ~1 cm at the equator. These may be legitimate road dead ends.
