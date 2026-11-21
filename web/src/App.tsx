@@ -623,7 +623,8 @@ export default function App() {
               }}
               onOpen={openStoredFeature}
             />
- 
+          </section>
+
           <section className="panel-section">
             <div className="section-heading"><Layers3 size={16}/><span>Professional GIS tools</span></div>
             <ProfessionalPanel
@@ -639,7 +640,6 @@ export default function App() {
               }}
             />
           </section>
-         </section>
 
           <section className="panel-section">
             <div className="section-heading"><Search size={16} /><span>Find areas by size</span><span className="section-pill">Spatial query</span></div>
