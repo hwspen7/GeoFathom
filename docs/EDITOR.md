@@ -121,3 +121,8 @@ does not replace manual browser pointer and touch-device acceptance tests.
 See also [Advanced GIS workflows](ADVANCED_GIS.md) for linked topology,
 vector tracing, attribute tables, GDAL import/export, terrain analytics,
 SAM 2 refinement and browser performance tests.
+
+
+Layer labeling, editable map notes, categorized colors, legend, scale bar
+and identify/inspection are covered by [Cartography guide](CARTOGRAPHY.md).
+See [Multi-dimensional tests](TEST_MATRIX.md).

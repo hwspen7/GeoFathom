@@ -14,6 +14,16 @@ GeoFathom uses **Python for orchestration, GIS analysis and provider adapters**
 and **C++17 for optional performance-sensitive geometric topology**. The
 native module has a correctness-preserving Shapely/Python fallback.
 
+## Cartographic labeling and map annotations
+
+Per-layer labels can show names, sources, geodesic area/length or custom
+attributes. Edit font size, halo, collision and zoom range, or add a
+standalone point note. Categorized symbology colors features by unique
+attribute values, with a matching legend. A scale bar, cursor coordinates
+and identify inspector support day-to-day cartography. See
+[Cartography guide](docs/CARTOGRAPHY.md) and
+[Multi-dimensional test matrix](docs/TEST_MATRIX.md).
+
 ## Advanced professional GIS tools
 
 The workspace additionally includes linked topological boundary previews and
