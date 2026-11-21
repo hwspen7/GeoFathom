@@ -30,8 +30,12 @@ def test_streaming_batch_and_tail(tmp_path,monkeypatch):
     assert seen==[3,3,3,1]
 
 def test_real_onnx_cpu_batch(tmp_path,monkeypatch):
-    onnx=pytest.importorskip("onnx")
-    pytest.importorskip("onnxruntime")
+    import os
+    if os.getenv("GEOFATHOM_REQUIRE_REAL_ONNX")=="1":
+        import onnx,onnxruntime
+    else:
+        onnx=pytest.importorskip("onnx")
+        pytest.importorskip("onnxruntime")
     from onnx import TensorProto,helper
     root=tmp_path/"real";root.mkdir()
     # Dynamic N, two class logits: class 1 wins for every positive pixel.

@@ -1,10 +1,12 @@
 """Opt-in API authentication boundary and request telemetry for deployments.
 
 By default the API is local-first, not a multi-tenant service. Required mode
-protects ALL data routes with a single operator key. Individual project RBAC
-and public hosting require a separate identity provider and authorization.
+protects all data routes with an operator key or a scoped, revocable user token.
+Public hosting still requires TLS and a hardened deployment boundary.
 """
 import hmac
+import json
+from .metrics import observe
 import logging
 import os
 import time
@@ -80,7 +82,9 @@ class APIBoundaryMiddleware(BaseHTTPMiddleware):
                 response.headers["X-Process-Time-ms"]=str(elapsed)
                 response.headers["Cache-Control"]=(
                     response.headers.get("Cache-Control","no-store"))
-            _LOGGER.info(
-                "http request_id=%s method=%s route=%s status=%s elapsed_ms=%.2f",
-                request_id,request.method,request.url.path,
-                response.status_code if response is not None else 500,elapsed)
+            status=response.status_code if response is not None else 500
+            observe(status,elapsed)
+            # Encode control characters and do not log credentials.
+            _LOGGER.info(json.dumps({"event":"http_request","request_id":request_id,
+                "method":request.method,"path":request.url.path[:256],
+                "status":status,"elapsed_ms":elapsed},separators=(",",":")))

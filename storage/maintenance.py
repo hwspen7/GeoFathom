@@ -113,9 +113,33 @@ def audit_imagery():
     return {"checked":checked,"mismatches":bad}
 
 
+def backup_rotation(directory,retain=7):
+    """Create one verified backup, then prune only this command's old snapshots."""
+    from datetime import datetime,timezone
+    from uuid import uuid4
+    import re
+    if type(retain) is not int or not 1<=retain<=365:
+        raise ValueError("Backup retention count must be 1–365.")
+    root=Path(directory).expanduser().resolve()
+    root.mkdir(parents=True,exist_ok=True)
+    stamp=datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+    dest=root/f"geofathom-{stamp}-{uuid4().hex[:8]}.sqlite"
+    backup_database(dest)
+    owned=[p for p in root.glob("geofathom-*.sqlite") if
+           re.fullmatch(r"geofathom-\d{8}T\d{12}Z-[a-f0-9]{8}\.sqlite",p.name)
+           and p.is_file() and not p.is_symlink()]
+    removed=[]
+    for path in sorted(owned,reverse=True)[retain:]:
+        path.unlink(missing_ok=True);removed.append(path.name)
+    return {"backup":str(dest),"pruned":removed}
+
+
 def main():
     parser=argparse.ArgumentParser()
     parser.add_argument("--backup",type=Path)
+    parser.add_argument("--backup-dir",type=Path)
+    parser.add_argument("--retain",type=int,default=7)
+    parser.add_argument("--interval",type=int,default=0,help="Repeat rotating backup every N seconds (0 = once)")
     parser.add_argument("--restore-from",type=Path)
     parser.add_argument("--restore-to",type=Path)
     parser.add_argument("--verify",action="store_true")
@@ -123,6 +147,19 @@ def main():
     parser.add_argument("--audit-imagery",action="store_true")
     args=parser.parse_args()
     results={}
+    if args.interval and (not args.backup_dir or not 60<=args.interval<=86400):
+        parser.error("Periodic backup requires --backup-dir and an interval of 60–86400 seconds.")
+    if args.backup_dir:
+        results["rotation"]=backup_rotation(args.backup_dir,args.retain)
+        if args.interval:
+            import time
+            try:
+                while True:
+                    print(json.dumps(results),flush=True)
+                    time.sleep(args.interval)
+                    results["rotation"]=backup_rotation(args.backup_dir,args.retain)
+            except KeyboardInterrupt:
+                return
     if bool(args.restore_from)!=bool(args.restore_to):
         parser.error("Use --restore-from and --restore-to together.")
     if args.restore_from:

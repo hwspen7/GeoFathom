@@ -23,3 +23,9 @@ def readiness():
     okay=all(state.values())
     return JSONResponse(status_code=200 if okay else 503,
         content={"status":"ready" if okay else "unavailable","checks":state})
+
+
+@router.get("/health/metrics")
+def operational_metrics():
+    from .metrics import snapshot
+    return snapshot()
