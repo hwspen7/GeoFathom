@@ -57,6 +57,7 @@ interface Props {
   onSelectionBox:(bbox:[number,number,number,number])=>void;
   selectedIds:string[];
   qualityIssues:GeoJSON.Geometry[];
+  projectGrid:GeoJSON.FeatureCollection|null;
   onGeometryPreview: (geometry: GeoJSON.Geometry) => void;
   onGeometryCommit: (geometry: GeoJSON.Geometry, movement?: {
     original:GeoJSON.Geometry;bearing_deg:number;distance_m:number;
@@ -106,6 +107,7 @@ function featureCollection(
   promptPositive:Position[],promptNegative:Position[],promptBox:Position[],
   selectedIds:string[],qualityIssues:GeoJSON.Geometry[],
   zoom:number,
+  offsetPoint?:(point:Position,dx:number,dy:number)=>Position,
 ): GeoJSON.FeatureCollection {
   const features: GeoJSON.Feature[] = [];
   for (const saved of layerFeatures) {
@@ -123,12 +125,35 @@ function featureCollection(
         labelHaloColor:saved.style.labels.halo_color,
         labelHaloWidth:saved.style.labels.halo_width,
         labelOverlap:saved.style.labels.allow_overlap,
+        labelSortKey:-saved.style.labels.priority,
+        labelPlacement:saved.style.labels.placement,
+        labelOffset:[
+          typeof saved.properties.label_offset_x==='number'?
+            saved.properties.label_offset_x:saved.style.labels.offset_x,
+          typeof saved.properties.label_offset_y==='number'?
+            saved.properties.label_offset_y:saved.style.labels.offset_y,
+        ],
         fillOpacity:saved.style.symbol.fill_opacity,
         lineWidth:saved.style.symbol.line_width,
         pointRadius:saved.style.symbol.point_radius,
         strokeColor:saved.style.symbol.stroke_color,
       },
     });
+  }
+  for(const saved of layerFeatures){
+    if(!saved.visible||saved.geometry.type!=='Point'||!saved.style.labels.callout||
+       !offsetPoint)continue;
+    const font=saved.style.labels.font_size;
+    const dx=(typeof saved.properties.label_offset_x==='number'?
+      saved.properties.label_offset_x:saved.style.labels.offset_x)*font;
+    const dy=(typeof saved.properties.label_offset_y==='number'?
+      saved.properties.label_offset_y:saved.style.labels.offset_y)*font;
+    if(Math.hypot(dx,dy)<font*.5)continue;
+    const origin=saved.geometry.coordinates as Position;
+    const end=offsetPoint(origin,dx,dy);
+    features.push({type:'Feature',properties:{
+      role:'label-callout',color:saved.style.labels.text_color,lineWidth:1.2,
+    },geometry:{type:'LineString',coordinates:[origin,end]}});
   }
   for(const geometry of qualityIssues){
     features.push({type:'Feature',properties:{
@@ -214,7 +239,7 @@ export default function MapCanvas({
   onViewportChange, discovered, imageLayer, traceMode, onTraceClick,
   editing, moving, snapping, selectedLocked, layerFeatures,
   promptPositive,promptNegative,promptBox,annotationMode,onAnnotationClick,
-  selectionBoxMode,onSelectionBox,selectedIds,qualityIssues,
+  selectionBoxMode,onSelectionBox,selectedIds,qualityIssues,projectGrid,
   onGeometryPreview, onGeometryCommit, onSelectSavedFeature,
 }: Props) {
   const container = useRef<HTMLDivElement>(null);
@@ -260,6 +285,11 @@ export default function MapCanvas({
         view.selected,view.vertices,view.drawingMode,view.discovered,view.layerFeatures,
         view.editing,view.promptPositive,view.promptNegative,view.promptBox,
         view.selectedIds,view.qualityIssues,map.getZoom(),
+        (point,dx,dy)=>{
+          const p=map.project(point as maplibregl.LngLatLike);
+          const shifted=map.unproject([p.x+dx,p.y+dy]);
+          return [shifted.lng,shifted.lat];
+        },
       ));
     };
     map.on('zoomend',refreshZoomLabels);
@@ -544,6 +574,17 @@ export default function MapCanvas({
       map.addSource('workspace', {
         type: 'geojson', data: { type: 'FeatureCollection', features: [] },
       });
+      map.addSource('project-grid',{type:'geojson',
+        data:{type:'FeatureCollection',features:[]}});
+      map.addLayer({id:'project-grid-lines',type:'line',source:'project-grid',
+        paint:{'line-color':'#4b9dc3','line-opacity':.45,'line-width':1,
+          'line-dasharray':[4,4]}});
+      map.addLayer({id:'project-grid-labels',type:'symbol',source:'project-grid',
+        layout:{'symbol-placement':'line','text-field':['get','label'],
+          'text-size':10,'text-font':['Open Sans Regular'],
+          'text-rotation-alignment':'map','text-allow-overlap':false},
+        paint:{'text-color':'#367a9c','text-halo-color':'#ffffff',
+          'text-halo-width':1}});
       map.addSource('selection-preview',{
         type:'geojson',data:{type:'FeatureCollection',features:[]},
       });
@@ -588,10 +629,15 @@ export default function MapCanvas({
       });
       map.addLayer({
         id:'workspace-labels',type:'symbol',source:'workspace',
-        filter:['all',['==',['get','role'],'saved'],['!=',['get','label'],'']],
+        filter:['all',['==',['get','role'],'saved'],
+          ['any',['!=',['geometry-type'],'LineString'],
+                 ['!=',['get','labelPlacement'],'line']],
+          ['!=',['get','label'],'']],
         layout:{
           'text-field':['get','label'],
           'text-font':['Open Sans Regular'],
+          'symbol-sort-key':['get','labelSortKey'],
+          'text-offset':['get','labelOffset'],
           'text-size':['coalesce',['get','labelSize'],12],
           'text-max-width':15,
           'text-allow-overlap':['coalesce',['get','labelOverlap'],false],
@@ -603,6 +649,22 @@ export default function MapCanvas({
           'text-halo-color':['coalesce',['get','labelHaloColor'],'#ffffff'],
           'text-halo-width':['coalesce',['get','labelHaloWidth'],1.5],
         },
+      });
+      map.addLayer({
+        id:'workspace-line-labels',type:'symbol',source:'workspace',
+        filter:['all',['==',['get','role'],'saved'],
+          ['==',['geometry-type'],'LineString'],
+          ['==',['get','labelPlacement'],'line'],
+          ['!=',['get','label'],'']],
+        layout:{'symbol-placement':'line','text-field':['get','label'],
+          'text-font':['Open Sans Regular'],'text-size':['get','labelSize'],
+          'text-allow-overlap':['get','labelOverlap'],
+          'symbol-sort-key':['get','labelSortKey'],
+          'text-max-angle':30,
+        },
+        paint:{'text-color':['get','labelColor'],
+          'text-halo-color':['get','labelHaloColor'],
+          'text-halo-width':['get','labelHaloWidth']},
       });
       setReady(true);
       bounds();
@@ -624,7 +686,12 @@ export default function MapCanvas({
     const map = mapRef.current;
     if (!ready || !map) return;
     const collection=featureCollection(selected,vertices,drawingMode,discovered,layerFeatures,
-      editing,promptPositive,promptNegative,promptBox,selectedIds,qualityIssues,map.getZoom());
+      editing,promptPositive,promptNegative,promptBox,selectedIds,qualityIssues,
+      map.getZoom(),(point,dx,dy)=>{
+        const p=map.project(point as maplibregl.LngLatLike);
+        const shifted=map.unproject([p.x+dx,p.y+dy]);
+        return [shifted.lng,shifted.lat];
+      });
     (map.getSource('workspace') as GeoJSONSource).setData(collection);
     if(container.current && import.meta.env.DEV){
       container.current.setAttribute('data-label-feature-count',
@@ -638,6 +705,13 @@ export default function MapCanvas({
     if (!drag.current) spatialSnap.current=null;
   }, [selected, vertices, drawingMode, discovered, layerFeatures, editing,
       promptPositive,promptNegative,promptBox,selectedIds,qualityIssues,ready]);
+
+  useEffect(()=>{
+    const map=mapRef.current;
+    if(!ready||!map)return;
+    const source=map.getSource('project-grid') as GeoJSONSource|undefined;
+    source?.setData(projectGrid??{type:'FeatureCollection',features:[]});
+  },[projectGrid,ready]);
 
   useEffect(() => {
     const map = mapRef.current;
