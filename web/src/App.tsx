@@ -846,6 +846,8 @@ export default function App() {
             }}
             focus={focus} satellite={satellite}
             imageLayer={imageLayer} traceMode={traceMode||promptMode!==null}
+            promptPositive={positivePoints} promptNegative={negativePoints}
+            promptBox={boxPoints}
             onTraceClick={async ([longitude, latitude]) => {
               if (promptMode!==null) {
                 const location:Position=[longitude,latitude];

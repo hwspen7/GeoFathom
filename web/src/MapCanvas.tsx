@@ -41,6 +41,9 @@ interface Props {
   snapping: boolean;
   selectedLocked: boolean;
   layerFeatures: MapLayerFeature[];
+  promptPositive:Position[];
+  promptNegative:Position[];
+  promptBox:Position[];
   onGeometryPreview: (geometry: GeoJSON.Geometry) => void;
   onGeometryCommit: (geometry: GeoJSON.Geometry, movement?: {
     original:GeoJSON.Geometry;bearing_deg:number;distance_m:number;
@@ -85,6 +88,7 @@ function featureCollection(
   discovered: GeoJSON.Geometry[],
   layerFeatures: MapLayerFeature[],
   editing: boolean,
+  promptPositive:Position[],promptNegative:Position[],promptBox:Position[],
 ): GeoJSON.FeatureCollection {
   const features: GeoJSON.Feature[] = [];
   for (const saved of layerFeatures) {
@@ -124,6 +128,25 @@ function featureCollection(
       geometry: { type: 'Point', coordinates: position },
     });
   }
+
+  for(const [role,points] of [['prompt-positive',promptPositive],['prompt-negative',promptNegative]] as const){
+    for(const point of points){
+      features.push({type:'Feature',
+        properties:{role},geometry:{type:'Point',coordinates:point}});
+    }
+  }
+  for(const point of promptBox){
+    features.push({type:'Feature',
+      properties:{role:'prompt-box-corner'},geometry:{type:'Point',coordinates:point}});
+  }
+  if(promptBox.length===2){
+    const [a,b]=promptBox;
+    const west=Math.min(a[0],b[0]),east=Math.max(a[0],b[0]);
+    const south=Math.min(a[1],b[1]),north=Math.max(a[1],b[1]);
+    features.push({type:'Feature',properties:{role:'prompt-box',color:'#ef9238'},
+      geometry:{type:'Polygon',coordinates:[[[west,south],[east,south],
+        [east,north],[west,north],[west,south]]]}});
+  }
   if (editing && selected) {
     for (const node of verticesOf(selected)) {
       features.push({
@@ -154,6 +177,7 @@ export default function MapCanvas({
   selected, drawingMode, vertices, focus, satellite, onMapClick,
   onViewportChange, discovered, imageLayer, traceMode, onTraceClick,
   editing, moving, snapping, selectedLocked, layerFeatures,
+  promptPositive,promptNegative,promptBox,
   onGeometryPreview, onGeometryCommit, onSelectSavedFeature,
 }: Props) {
   const container = useRef<HTMLDivElement>(null);
@@ -387,7 +411,9 @@ export default function MapCanvas({
         filter: ['==', ['geometry-type'], 'Point'],
         paint: {
           'circle-color': [
-            'case', ['==', ['get', 'role'], 'edit-midpoint'], '#c9e5ff', '#ffffff',
+            'match',['get','role'],
+            'prompt-positive','#39b779','prompt-negative','#ed4a4a',
+            'prompt-box-corner','#f2a138','edit-midpoint','#c9e5ff','#ffffff',
           ],
           'circle-radius': [
             'case', ['==', ['get', 'role'], 'edit-midpoint'], 4, 6,
@@ -412,10 +438,12 @@ export default function MapCanvas({
     const map = mapRef.current;
     if (!ready || !map) return;
     (map.getSource('workspace') as GeoJSONSource).setData(
-      featureCollection(selected, vertices, drawingMode, discovered, layerFeatures, editing),
+      featureCollection(selected, vertices, drawingMode, discovered, layerFeatures, editing,
+        promptPositive,promptNegative,promptBox),
     );
     if (!drag.current) spatialSnap.current=null;
-  }, [selected, vertices, drawingMode, discovered, layerFeatures, editing, ready]);
+  }, [selected, vertices, drawingMode, discovered, layerFeatures, editing,
+      promptPositive,promptNegative,promptBox,ready]);
 
   useEffect(() => {
     const map = mapRef.current;

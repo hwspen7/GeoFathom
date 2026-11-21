@@ -159,7 +159,7 @@ export default function ProfessionalPanel({
               <td><input aria-label={'Select '+row.name} type="checkbox" checked={selection.includes(row.id)}
                 onChange={e=>setSelection(old=>e.target.checked?[...old,row.id]:old.filter(x=>x!==row.id))}/></td>
               <td><button className="attribute-open" onClick={()=>onOpen(row.id)}>{row.name}</button></td>
-              <td>{formatValue(row.properties[field])}</td>
+              <td>{formatValue(field==='name'?row.name:field==='source'?row.source:row.properties[field])}</td>
               <td>{row.source}</td>
             </tr>)}</tbody>
           </table>
