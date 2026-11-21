@@ -12,6 +12,7 @@ import {
 import MapCanvas, { type FocusPoint } from './MapCanvas';
 import SurveyTools from './SurveyTools';
 import ProfessionalPanel from './ProfessionalPanel';
+import { legendEntries, DEFAULT_LAYER_STYLE } from './labels';
 import ImageCorrectionPanel, { type PromptMode } from './ImageCorrectionPanel';
 import {
   GeometryTimeline, approximateMeasurement, previewEdgeLengths, pathsOf,
@@ -23,7 +24,7 @@ import ProjectsPanel from './ProjectsPanel';
 import ModelControls from './ModelControls';
 import RasterPanel, { type TraceSettings } from './RasterPanel';
 import {
-  applyOverlay, applyTopology, constructGeometry, editPair, getWorkspace, moveMeasured,
+  addMapAnnotation, applyOverlay, applyTopology, constructGeometry, editPair, getWorkspace, moveMeasured,
   previewTopology, refineRaster, traceExisting, traceImagery,
   type SharedTopologyPreview, type RasterAsset,
 } from './api';
@@ -71,6 +72,10 @@ export default function App() {
   const [selectedFeatureId, setSelectedFeatureId] = useState<string | null>(null);
   const [splitParts, setSplitParts] = useState<GeoJSON.Geometry[]>([]);
   const [refreshToken,setRefreshToken] = useState(0);
+  const [pendingAnnotation,setPendingAnnotation] = useState<{
+    projectId:string;layerId:string;text:string;
+  }|null>(null);
+  const [showLegend,setShowLegend] = useState(true);
   const [linked,setLinked] = useState(false);
   const [pendingShared,setPendingShared] = useState<{
     preview:SharedTopologyPreview;old:[number,number];next:[number,number];
@@ -418,6 +423,7 @@ export default function App() {
 
   function clearWorkspace() {
     setGeometry(null);
+    setPendingAnnotation(null);
     setPromptMode(null);setPositivePoints([]);setNegativePoints([]);setBoxPoints([]);
     setPendingShared(null);
     lastValid.current = null;
@@ -676,6 +682,12 @@ export default function App() {
                 setActiveProjectId(id);
               }}
               onOpen={openStoredFeature}
+              onPlaceAnnotation={(projectId,layerId,text)=>{
+                setPendingAnnotation({projectId,layerId,text});
+                setDrawingMode(null);setTraceMode(false);setPromptMode(null);
+                setEditing(false);setMoving(false);
+                setMessage('Click the map where the annotation should be placed.');
+              }}
             />
           </section>
 
@@ -821,6 +833,8 @@ export default function App() {
               const layer = projectWorkspace?.layers.find(item => item.id === feature.layer_id);
               return {
                 id: feature.id, layer_id: feature.layer_id, geometry: feature.geometry,
+                name:feature.name,source:feature.source,properties:feature.properties,
+                measurement:feature.measurement,style:layer?.style ?? DEFAULT_LAYER_STYLE,
                 color: layer?.color ?? '#2563eb', visible: Boolean(layer?.visible),
                 locked: Boolean(layer?.locked),
               };
@@ -899,13 +913,59 @@ export default function App() {
               }
             }}
             discovered={[...discovered.map(place => place.geometry).filter((item): item is GeoJSON.Geometry => item !== null), ...splitParts.slice(1)]}
+            annotationMode={Boolean(pendingAnnotation)}
+            onAnnotationClick={async position=>{
+              if(!pendingAnnotation||busy)return;
+              setBusy(true);setError('');
+              try{
+                const {projectId,layerId,text}=pendingAnnotation;
+                const created=await addMapAnnotation(projectId,text,position,layerId);
+                const latest=await getWorkspace(projectId);
+                setProjectWorkspace(latest);
+                setRefreshToken(value=>value+1);
+                const opened=latest.features.find(feature=>feature.id===created.id);
+                if(opened)openStoredFeature(opened);
+                setPendingAnnotation(null);
+                setMessage('Map annotation saved.');
+              }catch(failure){
+                setError(failure instanceof Error?failure.message:'Could not place annotation.');
+              }finally{setBusy(false);}
+            }}
             onViewportChange={setViewport}
             onMapClick={position => {
               const max = ['rectangle','circle','trace-along'].includes(drawingMode ?? '') ? 2 : 4000;
               setVertices(value => value.length >= max ? value : [...value, position]);
             }}
           />
-          <div className="map-hint"><MousePointer2 size={15} /> {traceMode ? 'Click imported imagery to trace a region' : drawingMode ? 'Click corners, then Finish' : editing ? 'Drag handles or use Move. Right-click corner to delete.' : 'Pan, zoom, or choose a result'}</div>
+          <div className="map-legend">
+            <button className="map-legend-toggle" aria-label="Toggle map legend"
+              onClick={()=>setShowLegend(value=>!value)}>
+              <Layers3 size={15}/> Legend
+            </button>
+            {showLegend&&<div className="map-legend-items" aria-label="Map legend">
+              {legendEntries(projectWorkspace?.layers??[]).map(item=>(
+                <div key={item.id} className="map-legend-item">
+                  <span className="legend-swatch" style={{
+                    borderColor:item.color,
+                    backgroundColor:item.color,
+                    opacity:Math.max(.3,item.opacity),
+                  }}/>
+                  <span>{item.name}</span>
+                  {item.labels&&<small>Labels</small>}
+                </div>
+              ))}
+              {!(projectWorkspace?.layers??[]).some(layer=>Boolean(layer.visible))&&
+                <small>No visible project layers</small>}
+            </div>}
+          </div>
+          {pendingAnnotation&&<div className="annotation-banner">
+            Click map to place: <strong>{pendingAnnotation.text}</strong>
+            <button onClick={()=>setPendingAnnotation(null)} aria-label="Cancel map note">
+              Cancel
+            </button>
+          </div>}
+          <div className="map-hint"><MousePointer2 size={15} /> {pendingAnnotation ? 'Click map to place a permanent label' :
+            traceMode ? 'Click imported imagery to trace a region' : drawingMode ? 'Click corners, then Finish' : editing ? 'Drag handles or use Move. Right-click corner to delete.' : 'Pan, zoom, or choose a result'}</div>
           <div className="map-badge"><span className="live-dot" /> WGS84 GEODESIC ENGINE</div>
         </div>
         <div className="bottom-bar">

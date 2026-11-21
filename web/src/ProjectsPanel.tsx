@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import {
   Copy, Download, Eye, EyeOff, FolderOpen, History, Layers3, Lock,
-  LockOpen, Plus, RotateCcw, Save,
+  LockOpen, MapPin, Plus, RotateCcw, Save,
 } from 'lucide-react';
 
 import {
   copyProjectFeature, createLayer, exportProject, getFeatureHistory, getProjects,
   getWorkspace, newProject, patchLayer, restoreFeature, saveProjectFeature,
-  saveFeatureBatch, updateProjectFeature, type GeoLayer, type GeoWorkspace, type Project,
+  saveFeatureBatch, patchLayerStyle, updateProjectFeature, type GeoLayer, type GeoWorkspace, type Project,
   type WorkspaceFeature, type FeatureHistory,
 } from './api';
 
@@ -21,11 +21,12 @@ interface Props {
   refreshToken: number;
   onOpen: (feature: WorkspaceFeature) => void;
   onWorkspace: (workspace: GeoWorkspace | null, projectId: string | null) => void;
+  onPlaceAnnotation: (projectId:string,layerId:string,text:string)=>void;
 }
 
 export default function ProjectsPanel({
   geometry, featureName, featureSource, featureProperties, selectedFeatureId,
-  splitParts, refreshToken, onOpen, onWorkspace,
+  splitParts, refreshToken, onOpen, onWorkspace, onPlaceAnnotation,
 }: Props) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [selected, setSelected] = useState('');
@@ -33,6 +34,7 @@ export default function ProjectsPanel({
   const [layerId, setLayerId] = useState('');
   const [draftName, setDraftName] = useState('');
   const [layerName, setLayerName] = useState('');
+  const [noteText,setNoteText] = useState('');
   const [history, setHistory] = useState<FeatureHistory | null>(null);
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
@@ -165,6 +167,27 @@ export default function ProjectsPanel({
     await run(async () => { await patchLayer(selected, layer.id, update); });
   }
 
+  async function styleLayer(changes:{
+    labels?:Partial<GeoLayer['style']['labels']>;
+    symbol?:Partial<GeoLayer['style']['symbol']>;
+  }){
+    if(!selected||!activeLayer)return;
+    await run(async()=>{
+      await patchLayerStyle(selected,activeLayer.id,{
+        ...changes,expected_revision:activeLayer.style_revision,
+      });
+      setInfo('Label and symbology settings saved.');
+    });
+  }
+
+  function placeNote(event:FormEvent<HTMLFormElement>){
+    event.preventDefault();
+    if(!selected||!activeLayer||!noteText.trim()||activeLayer.locked)return;
+    onPlaceAnnotation(selected,activeLayer.id,noteText.trim());
+    setNoteText('');
+    setInfo('Click the map to place your note.');
+  }
+
   async function duplicate() {
     if (!selected || !current || locked) return;
     await run(async () => {
@@ -223,6 +246,117 @@ export default function ProjectsPanel({
                 onClick={() => void changeLayer(layer, { z_index: layer.z_index - 2 })}>↓</button>
             </div>
           ))}
+          {activeLayer && (
+            <details className="layer-cartography" key={activeLayer.id}>
+              <summary>Labeling & map symbology · {activeLayer.name}</summary>
+              <div className="cartography-editor">
+                <label className="cartography-switch">
+                  <input aria-label="Enable layer labels" type="checkbox"
+                    checked={activeLayer.style.labels.enabled} disabled={busy}
+                    onChange={event=>void styleLayer({labels:{enabled:event.target.checked}})}/>
+                  Automatically label visible features
+                </label>
+                <label>Label source field
+                  <input aria-label="Label source field" list="geo-label-fields"
+                    key={activeLayer.id+'-field-'+activeLayer.style_revision}
+                    defaultValue={activeLayer.style.labels.field}
+                    maxLength={64}
+                    onBlur={event=>{
+                      const value=event.currentTarget.value.trim();
+                      if(value&&value!==activeLayer.style.labels.field)
+                        void styleLayer({labels:{field:value}});
+                    }}
+                    onKeyDown={event=>{if(event.key==='Enter')event.currentTarget.blur();}}/>
+                  <datalist id="geo-label-fields">
+                    <option value="name"/><option value="source"/>
+                    <option value="@area_m2"/><option value="@length_m"/>
+                    {Array.from(new Set(workspace?.features.flatMap(feature=>
+                      Object.keys(feature.properties))??[])).slice(0,70).map(field=>
+                        <option key={field} value={field}/>)}
+                  </datalist>
+                </label>
+                <div className="cartography-grid">
+                  <label>Font size (px)
+                    <select aria-label="Label font size" disabled={busy}
+                      value={activeLayer.style.labels.font_size}
+                      onChange={event=>void styleLayer({labels:{font_size:Number(event.target.value)}})}>
+                      {[9,10,11,12,14,16,18,20,24,28].map(size=>
+                        <option key={size} value={size}>{size}</option>)}
+                    </select>
+                  </label>
+                  <label>Text color
+                    <input type="color" aria-label="Label text color" disabled={busy}
+                      defaultValue={activeLayer.style.labels.text_color}
+                      key={activeLayer.id+'-text-'+activeLayer.style_revision}
+                      onBlur={event=>{if(event.currentTarget.value!==activeLayer.style.labels.text_color)
+                        void styleLayer({labels:{text_color:event.currentTarget.value}});}}/>
+                  </label>
+                  <label>Halo color
+                    <input type="color" aria-label="Label halo color" disabled={busy}
+                      defaultValue={activeLayer.style.labels.halo_color}
+                      key={activeLayer.id+'-halo-'+activeLayer.style_revision}
+                      onBlur={event=>{if(event.currentTarget.value!==activeLayer.style.labels.halo_color)
+                        void styleLayer({labels:{halo_color:event.currentTarget.value}});}}/>
+                  </label>
+                  <label>Halo width
+                    <select aria-label="Label halo width" disabled={busy}
+                      value={activeLayer.style.labels.halo_width}
+                      onChange={event=>void styleLayer({labels:{halo_width:Number(event.target.value)}})}>
+                      {[0,0.5,1,1.5,2].map(value=><option key={value} value={value}>{value} px</option>)}
+                    </select>
+                  </label>
+                  <label>Min zoom
+                    <select aria-label="Label min zoom" disabled={busy}
+                      value={activeLayer.style.labels.min_zoom}
+                      onChange={event=>void styleLayer({labels:{min_zoom:Number(event.target.value)}})}>
+                      {Array.from({length:25},(_,i)=>i).map(i=><option key={i} value={i}>{i}</option>)}
+                    </select>
+                  </label>
+                  <label>Max zoom
+                    <select aria-label="Label max zoom" disabled={busy}
+                      value={activeLayer.style.labels.max_zoom}
+                      onChange={event=>void styleLayer({labels:{max_zoom:Number(event.target.value)}})}>
+                      {Array.from({length:25},(_,i)=>i).map(i=><option key={i} value={i}>{i}</option>)}
+                    </select>
+                  </label>
+                  <label>Fill opacity
+                    <select aria-label="Polygon fill opacity" disabled={busy}
+                      value={activeLayer.style.symbol.fill_opacity}
+                      onChange={event=>void styleLayer({symbol:{fill_opacity:Number(event.target.value)}})}>
+                      {[0,0.1,0.17,0.25,0.4,0.6,0.8,1].map(value=>
+                        <option key={value} value={value}>{value}</option>)}
+                    </select>
+                  </label>
+                  <label>Line width
+                    <select aria-label="Map line width" disabled={busy}
+                      value={activeLayer.style.symbol.line_width}
+                      onChange={event=>void styleLayer({symbol:{line_width:Number(event.target.value)}})}>
+                      {[1,2,3,4,6,8].map(value=><option key={value} value={value}>{value}px</option>)}
+                    </select>
+                  </label>
+                </div>
+                <label className="cartography-switch">
+                  <input aria-label="Allow overlapping labels" type="checkbox" disabled={busy}
+                    checked={activeLayer.style.labels.allow_overlap}
+                    onChange={event=>void styleLayer({labels:{allow_overlap:event.target.checked}})}/>
+                  Allow labels to overlap (normally off)
+                </label>
+                <p className="project-hint">
+                  Fields include name, source, @area_m2, @length_m and custom properties.
+                  Each layer has independent styling and collision handling.
+                </p>
+              </div>
+            </details>
+          )}
+          <form className="project-create" onSubmit={placeNote}>
+            <input aria-label="Map note text" placeholder="Map note / label text"
+              maxLength={120} value={noteText}
+              onChange={event=>setNoteText(event.target.value)}/>
+            <button aria-label="Place map note" type="submit"
+              disabled={busy||!noteText.trim()||!selected||Boolean(activeLayer?.locked)}>
+              <MapPin size={14}/>
+            </button>
+          </form>
           <form className="project-create" onSubmit={addNewLayer}>
             <input aria-label="New layer name" placeholder="Add map layer" value={layerName}
               onChange={event => setLayerName(event.target.value)} maxLength={100}/>
