@@ -2,8 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import maplibregl, { type GeoJSONSource, type MapMouseEvent, type StyleSpecification } from 'maplibre-gl';
 
 import { rasterPreviewUrl, type RasterAsset } from './api';
+import { PixelSnapIndex } from './spatialIndex';
 import {
-  addVertex, moveVertex, removeVertex, shiftGeometry, snapToPaths, pathsOf,
+  addVertex, moveVertex, removeVertex, shiftGeometry, pathsOf,
   verticesOf, type GeometryPath, type Position, type ShapeMode,
 } from './editing';
 
@@ -160,6 +161,7 @@ export default function MapCanvas({
     onGeometryPreview, onGeometryCommit, onSelectSavedFeature,
   });
   const drag = useRef<Drag | null>(null);
+  const spatialSnap = useRef<PixelSnapIndex|null>(null);
   const [ready, setReady] = useState(false);
   eventRef.current = {
     selected, drawingMode, traceMode, editing, moving, snapping, selectedLocked,
@@ -177,6 +179,7 @@ export default function MapCanvas({
     map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left');
 
     function bounds() {
+      spatialSnap.current=null;
       const extent = map.getBounds();
       eventRef.current.onViewportChange([
         extent.getWest(), extent.getSouth(), extent.getEast(), extent.getNorth(),
@@ -199,6 +202,7 @@ export default function MapCanvas({
       };
     }
     function beginDrag(event: MapMouseEvent) {
+      spatialSnap.current=null;
       const state = eventRef.current;
       if (!state.editing || state.selectedLocked || !state.selected) return;
       const features = hits(event);
@@ -226,31 +230,33 @@ export default function MapCanvas({
       map.getCanvas().style.cursor = 'grabbing';
       event.preventDefault();
     }
-    function snapAt(point: Position, movingPath: GeometryPath | null): Position {
-      const state = eventRef.current;
-      if (!state.snapping) return point;
-      const paths: Position[][] = [];
-      for (const feature of state.layerFeatures) {
-        if (feature.visible) paths.push(...pathsOf(feature.geometry));
-      }
-      if (state.selected) {
-        for (const path of pathsOf(state.selected)) {
-          // Avoid magnetizing an actively dragged vertex to its own old
-          // coordinate, but preserve the other corners and edge snap targets.
-          paths.push(path.filter(candidate => {
-            if (!movingPath) return true;
-            const old = verticesOf(state.selected!).find(node =>
-              !node.midpoint && node.path.polygon === movingPath.polygon &&
-              node.path.ring === movingPath.ring &&
-              node.path.vertex === movingPath.vertex);
-            return !old || candidate[0] !== old.point[0] || candidate[1] !== old.point[1];
-          }));
+    function snapAt(point:Position,movingPath:GeometryPath|null):Position {
+      const state=eventRef.current;
+      if(!state.snapping)return point;
+      if(!spatialSnap.current) {
+        const paths:Position[][]=[];
+        for(const feature of state.layerFeatures) {
+          if(!feature.visible)continue;
+          // Do not snap a selected saved polygon onto the geometry that is
+          // currently being dragged; keep neighboring polygons available.
+          if(state.selected && JSON.stringify(feature.geometry)===JSON.stringify(state.selected))
+            continue;
+          paths.push(...pathsOf(feature.geometry));
         }
+        if(!movingPath && state.selected)paths.push(...pathsOf(state.selected));
+        spatialSnap.current=new PixelSnapIndex(paths,position=>{
+          const p=map.project(position as maplibregl.LngLatLike);
+          return [p.x,p.y];
+        });
       }
-      return snapToPaths(point, paths, position => {
-        const pixel = map.project(position as maplibregl.LngLatLike);
-        return [pixel.x, pixel.y];
-      }).position;
+      const pixel=map.project(point as maplibregl.LngLatLike);
+      const old=movingPath&&state.selected?
+        verticesOf(state.selected).find(item=>!item.midpoint&&
+          item.path.polygon===movingPath.polygon&&
+          item.path.ring===movingPath.ring&&
+          item.path.vertex===movingPath.vertex)?.point :undefined;
+      const hit=spatialSnap.current.snap([pixel.x,pixel.y],12,old);
+      return hit.kind==='none'?point:hit.point;
     }
     function dragging(event: MapMouseEvent) {
       const current = drag.current;
@@ -394,6 +400,7 @@ export default function MapCanvas({
     (map.getSource('workspace') as GeoJSONSource).setData(
       featureCollection(selected, vertices, drawingMode, discovered, layerFeatures, editing),
     );
+    if (!drag.current) spatialSnap.current=null;
   }, [selected, vertices, drawingMode, discovered, layerFeatures, editing, ready]);
 
   useEffect(() => {
