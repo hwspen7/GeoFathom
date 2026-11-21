@@ -499,7 +499,6 @@ export default function MapCanvas({
           'text-halo-width':['coalesce',['get','labelHaloWidth'],1.5],
         },
       });
-      container.current?.setAttribute('data-label-layer-ready','true');
       setReady(true);
       bounds();
     });
@@ -578,7 +577,7 @@ export default function MapCanvas({
   }, [editing, drawingMode, traceMode, annotationMode, ready]);
 
   return <>
-    <div aria-label="Interactive geospatial map" className="map-canvas" ref={container}/>
+    <div aria-label="Interactive geospatial map" data-label-layer-ready={ready ? "true" : "false"} className="map-canvas" ref={container}/>
     <div aria-label="Cursor coordinates" className="map-coordinate-readout" ref={coordinateRef}>
       Move cursor to inspect WGS84 coordinates
     </div>
