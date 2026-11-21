@@ -120,12 +120,13 @@ def spatial_page(project_id,bbox,limit=250,offset=0,relation="intersects")->dict
             total=conn.execute("SELECT COUNT(*) FROM geofathom_features WHERE "+condition,
                                doubled).fetchone()[0]
             rows=conn.execute("""SELECT id,project_id,layer_id,revision,name,source,
-                    properties,ST_AsGeoJSON(geom) AS geometry
+                    properties,ST_AsGeoJSON(geom) AS geometry,updated_at::text AS created_at
                     FROM geofathom_features WHERE """+condition+
                     " ORDER BY id LIMIT %s OFFSET %s",(*doubled,limit,offset)).fetchall()
             data=[{"id":r[0],"project_id":r[1],"layer_id":r[2],
                    "revision":r[3],"name":r[4],"source":r[5],
-                   "properties":r[6],"geometry":json.loads(r[7])} for r in rows]
+                   "properties":r[6],"geometry":json.loads(r[7]),
+                   "created_at":r[8]} for r in rows]
             from geometry.measure import measure_geometry
             for item in data:
                 item["measurement"]=measure_geometry(item["geometry"])

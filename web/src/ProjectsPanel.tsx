@@ -23,11 +23,13 @@ interface Props {
   onWorkspace: (workspace: GeoWorkspace | null, projectId: string | null) => void;
   onPlaceAnnotation: (projectId:string,layerId:string,text:string)=>void;
   onFeatureDeleted:()=>void;
+  extraFeatures:WorkspaceFeature[];
 }
 
 export default function ProjectsPanel({
   geometry, featureName, featureSource, featureProperties, selectedFeatureId,
   splitParts, refreshToken, onOpen, onWorkspace, onPlaceAnnotation, onFeatureDeleted,
+  extraFeatures,
 }: Props) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [selected, setSelected] = useState('');
@@ -75,13 +77,15 @@ export default function ProjectsPanel({
   }, [selected, selectedFeatureId, refreshToken]);
 
   useEffect(()=>{
-    const feature=workspace?.features.find(item=>item.id===selectedFeatureId);
+    const feature=workspace?.features.find(item=>item.id===selectedFeatureId) ??
+      extraFeatures.find(item=>item.id===selectedFeatureId);
     setNoteEditText(feature?.properties.annotation===true?
       String(feature.properties.annotation_text||''):'');
-  },[workspace,selectedFeatureId]);
+  },[workspace,extraFeatures,selectedFeatureId]);
   
   const activeLayer = workspace?.layers.find(l => l.id === layerId);
-  const current = workspace?.features.find(f => f.id === selectedFeatureId);
+  const current = workspace?.features.find(f => f.id === selectedFeatureId) ??
+    extraFeatures.find(f=>f.id===selectedFeatureId);
   const locked = Boolean(current &&
     workspace?.layers.find(l => l.id === current.layer_id)?.locked);
 
@@ -491,7 +495,14 @@ export default function ProjectsPanel({
                 </button>
               );
             })}
-            {!workspace?.features.length && <p className="project-hint">No saved features yet.</p>}
+            {extraFeatures.filter(f=>!(workspace?.features??[]).some(x=>x.id===f.id))
+              .slice(0,60).map(item=><button key={item.id}
+              className={selectedFeatureId===item.id?'active':''}
+              onClick={()=>onOpen(item)}>
+                <FolderOpen size={14}/><span>{item.name}</span><small>r{item.revision}</small>
+              </button>)}
+            {!workspace?.features.length&&!extraFeatures.length &&
+              <p className="project-hint">No saved features yet.</p>}
           </div>
 
           {current&&<details className="feature-inspector">

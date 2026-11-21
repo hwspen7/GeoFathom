@@ -694,7 +694,10 @@ export default function App() {
               selectedFeatureId={selectedFeatureId}
               splitParts={splitParts}
               refreshToken={refreshToken}
+              extraFeatures={pagedFeatures}
               onWorkspace={(data, id) => {
+                if(activeProjectId!==id){setPagedFeatures([]);setExternalFeatures([]);
+                  setSpatialSelected([]);setQualityIssues([]);}
                 setProjectWorkspace(data);
                 setActiveProjectId(id);
               }}
@@ -937,7 +940,8 @@ export default function App() {
                 });
             }}
             onSelectSavedFeature={id => {
-              const feature = projectWorkspace?.features.find(item => item.id === id);
+              const feature = projectWorkspace?.features.find(item => item.id === id) ??
+                pagedFeatures.find(item=>item.id===id);
               if (feature) openStoredFeature(feature);
             }}
             focus={focus} satellite={satellite}
