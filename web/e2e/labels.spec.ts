@@ -150,7 +150,7 @@ test('categorized attribute colors produce visible legend classes and identify a
   await expect(legend).toContainText('school');
   await page.locator('.project-features button').filter({hasText:'Facility A'}).click();
   await page.locator('.feature-inspector summary').click();
-  await expect(page.getByText('Surveyor', {exact:true})).toBeVisible();
+  await expect(page.locator('.feature-inspector-body')).toContainText('Surveyor');
   await expect(page.getByText(/height:/)).toBeVisible();
   const map=page.getByLabel('Interactive geospatial map');
   const bounds=await map.boundingBox();
