@@ -38,9 +38,10 @@ def _verify_url(url):
         raise OGCError("Local and metadata endpoints cannot be OGC sources.")
     try:
         ip=ipaddress.ip_address(hostname)
-        if not ip.is_global:raise OGCError("Private and reserved IP addresses are blocked.")
     except ValueError:
-        pass
+        ip=None
+    if ip is not None and not ip.is_global:
+        raise OGCError("Private and reserved IP addresses are blocked.")
     if parsed.port is not None and parsed.port!=443:
         raise OGCError("OGC endpoints must use standard HTTPS port 443.")
     return url.rstrip("/")
@@ -61,7 +62,7 @@ def _schema(c):
     c.execute("CREATE INDEX IF NOT EXISTS ogc_sources_project_idx ON ogc_sources(project_id)")
 
 
-def add_source(project_id,service,title,url,layer_name,attribution="",tile_matrix_set="GoogleMapsCompatible"):
+def add_source(project_id,service,title,base_url,layer_name,attribution="",tile_matrix_set="GoogleMapsCompatible"):
     if service not in _SERVICES:raise OGCError("Unsupported OGC service type.")
     if not isinstance(title,str) or not 1<=len(title.strip())<=100:
         raise OGCError("OGC source title must have 1–100 characters.")
@@ -69,7 +70,7 @@ def add_source(project_id,service,title,url,layer_name,attribution="",tile_matri
         raise OGCError("Invalid OGC layer or tile matrix identifier.")
     if not isinstance(attribution,str) or len(attribution)>240:
         raise OGCError("Attribution text exceeds 240 characters.")
-    validated=_verify_url(url)
+    validated=_verify_url(base_url)
     with _connect() as c:
         _required_project(c,project_id);_schema(c)
         count=c.execute("SELECT count(*) FROM ogc_sources WHERE project_id=?",(project_id,)).fetchone()[0]
