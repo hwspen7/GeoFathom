@@ -8,6 +8,7 @@ import json
 import os
 import tempfile
 import zipfile
+from xml.etree import ElementTree as ET
 from pathlib import Path
 
 import numpy as np
@@ -79,41 +80,50 @@ def read_vector(name:str,blob:bytes)->dict:
                 raise VectorIOError("Unsupported GDAL vector driver.")
             if info.get("features",0)>100:
                 raise VectorIOError("Import at most 100 features per file.")
-            meta,fids,geometries,fields=pyogrio.raw.read(path,max_features=101,force_2d=True)
+            # GPX is a multi-layer container: waypoints, tracks and routes.
+            # Read every supported layer, including when the first is empty.
+            datasets=[]
+            layer_names=[entry[0] for entry in pyogrio.list_layers(path)] if path.suffix.lower()=='.gpx' else [None]
+            for layer in layer_names:
+                meta,fids,geometries,fields=pyogrio.raw.read(path,layer=layer,max_features=101,force_2d=True)
+                if len(geometries): datasets.append((meta,geometries,fields))
         except (pyogrio.errors.DataSourceError,pyogrio.errors.DataLayerError,ValueError) as error:
             raise VectorIOError("GDAL could not read the uploaded vector dataset.") from error
-        if len(geometries)>100:
-            raise VectorIOError("Input has more than 100 features.")
-        if not meta.get("crs"):
-            raise VectorIOError("Source CRS is missing. Import cannot guess its coordinates.")
-        try:
-            origin=CRS.from_user_input(meta["crs"])
-            transform_coords=Transformer.from_crs(origin,"EPSG:4326",always_xy=True).transform
-        except Exception as error:
-            raise VectorIOError("Vector source CRS could not be transformed to WGS84.") from error
+        total=sum(len(geometries) for _,geometries,_ in datasets)
+        if total>100:raise VectorIOError("Input has more than 100 features.")
         entries=[]
-        for index,wkb in enumerate(geometries):
-            if wkb is None: continue
+        source_crs=None
+        for meta,geometries,fields in datasets:
+            if not meta.get("crs"):
+                raise VectorIOError("Source CRS is missing. Import cannot guess its coordinates.")
             try:
-                geom=transform(transform_coords,shapely.from_wkb(wkb))
-                geojson=mapping(geom)
-                measure_geometry(geojson)
-            except (GeometryError,ValueError,TypeError) as error:
-                raise VectorIOError(f"Invalid feature {index+1}: {error}") from error
-            props={}
-            for field,values in zip(meta.get("fields",[]),fields):
-                item=values[index]
-                if isinstance(item,np.generic):item=item.item()
-                if item is not None:
-                    if not isinstance(item,(str,int,float,bool)):
-                        item=str(item)
+                origin=CRS.from_user_input(meta["crs"])
+                transform_coords=Transformer.from_crs(origin,"EPSG:4326",always_xy=True).transform
+                source_crs=origin.to_string()
+            except Exception as error:
+                raise VectorIOError("Vector source CRS could not be transformed to WGS84.") from error
+            for index,wkb in enumerate(geometries):
+                if wkb is None: continue
+                try:
+                    geom=transform(transform_coords,shapely.from_wkb(wkb))
+                    geojson=mapping(geom)
+                    measure_geometry(geojson)
+                except (GeometryError,ValueError,TypeError) as error:
+                    raise VectorIOError(f"Invalid feature {index+1}: {error}") from error
+                props={}
+                for field,values in zip(meta.get("fields",[]),fields):
+                    item=values[index]
+                    if isinstance(item,np.generic):item=item.item()
+                    if item is None:continue
+                    if isinstance(item,float) and not np.isfinite(item):continue
+                    if not isinstance(item,(str,int,float,bool)):item=str(item)
                     props[str(field)[:64]]=item
-            entries.append({
-                "geometry":geojson,"properties":props,
-                "name":str(props.get("name") or f"Imported feature {index+1}")[:200],
-                "source":f"{info['driver']} imported file; source CRS {origin.to_string()}",
-            })
-        return {"features":entries,"source_crs":origin.to_string(),
+                entries.append({
+                    "geometry":geojson,"properties":props,
+                    "name":str(props.get("name") or props.get("Name") or f"Imported feature {index+1}")[:200],
+                    "source":f"{info['driver']} imported file; source CRS {source_crs}",
+                })
+        return {"features":entries,"source_crs":source_crs,
                 "count":len(entries),"driver":info["driver"]}
 
 
@@ -128,6 +138,54 @@ def write_vector(collection:dict, format_name:str)->tuple[bytes,str,str]:
     if len(features)>10000:raise VectorIOError("Export at most 10,000 features.")
     if format_name=="geojson":
         return json.dumps(collection,ensure_ascii=False).encode(),"application/geo+json","geofathom.geojson"
+    if format_name in {"kml","gpx"}:
+        if format_name=="gpx":
+            root=ET.Element("gpx",version="1.1",creator="GeoFathom",
+                            xmlns="http://www.topografix.com/GPX/1/1")
+        else:
+            root=ET.Element("kml",xmlns="http://www.opengis.net/kml/2.2")
+            document=ET.SubElement(root,"Document")
+        for feature in features:
+            geo=feature["geometry"]
+            measure_geometry(geo)
+            name=str((feature.get("properties") or {}).get("name") or "Feature")
+            source=str((feature.get("properties") or {}).get("source") or "")
+            if format_name=="gpx":
+                if geo["type"]=="Point":
+                    point=ET.SubElement(root,"wpt",lat=str(geo["coordinates"][1]),
+                                        lon=str(geo["coordinates"][0]))
+                    ET.SubElement(point,"name").text=name
+                    ET.SubElement(point,"desc").text=source
+                elif geo["type"] in {"LineString","MultiLineString"}:
+                    track=ET.SubElement(root,"trk")
+                    ET.SubElement(track,"name").text=name
+                    ET.SubElement(track,"desc").text=source
+                    paths=[geo["coordinates"]] if geo["type"]=="LineString" else geo["coordinates"]
+                    for path in paths:
+                        segment=ET.SubElement(track,"trkseg")
+                        for point in path:
+                            ET.SubElement(segment,"trkpt",lat=str(point[1]),lon=str(point[0]))
+                else:
+                    raise VectorIOError("GPX supports point and line geometries, not polygons.")
+            else:
+                marker=ET.SubElement(document,"Placemark")
+                ET.SubElement(marker,"name").text=name
+                ET.SubElement(marker,"description").text=source
+                if geo["type"]=="Point":
+                    ET.SubElement(ET.SubElement(marker,"Point"),"coordinates").text=','.join(map(str,geo["coordinates"][:2]))
+                elif geo["type"]=="LineString":
+                    ET.SubElement(ET.SubElement(marker,"LineString"),"coordinates").text=' '.join(
+                        ','.join(map(str,point[:2])) for point in geo["coordinates"])
+                elif geo["type"]=="Polygon":
+                    polygon=ET.SubElement(marker,"Polygon")
+                    for i,ring in enumerate(geo["coordinates"]):
+                        boundary=ET.SubElement(polygon,"outerBoundaryIs" if i==0 else "innerBoundaryIs")
+                        ET.SubElement(ET.SubElement(boundary,"LinearRing"),"coordinates").text=' '.join(
+                            ','.join(map(str,point[:2])) for point in ring)
+                else:
+                    raise VectorIOError("KML export currently supports Point, LineString and Polygon.")
+        payload=ET.tostring(root,encoding="utf-8",xml_declaration=True)
+        return payload,"application/gpx+xml" if format_name=="gpx" else "application/vnd.google-earth.kml+xml","geofathom"+suffix
     shapes=[]
     records=[]
     for feature in features:
