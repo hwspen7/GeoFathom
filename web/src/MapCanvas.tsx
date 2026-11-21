@@ -206,6 +206,7 @@ export default function MapCanvas({
   onGeometryPreview, onGeometryCommit, onSelectSavedFeature,
 }: Props) {
   const container = useRef<HTMLDivElement>(null);
+  const coordinateRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const eventRef = useRef({
     selected, drawingMode, traceMode, annotationMode,editing, moving, snapping, selectedLocked,
@@ -256,13 +257,23 @@ export default function MapCanvas({
         extent.getWest(), extent.getSouth(), extent.getEast(), extent.getNorth(),
       ]);
     }
+    let lastCoordinateUpdate=0;
+    function displayCoordinates(event:MapMouseEvent){
+      const now=Date.now();
+      if(now-lastCoordinateUpdate<80)return;
+      lastCoordinateUpdate=now;
+      if(coordinateRef.current){
+        coordinateRef.current.textContent='Lon '+event.lngLat.lng.toFixed(6)+
+          '° · Lat '+event.lngLat.lat.toFixed(6)+'°';
+      }
+    }
     function coordinates(event: MapMouseEvent): Position {
       return [event.lngLat.lng, event.lngLat.lat];
     }
     function hits(event: MapMouseEvent) {
       if (!map.getLayer('workspace-points')) return [];
       return map.queryRenderedFeatures(event.point, {
-        layers: ['workspace-points', 'workspace-lines', 'workspace-fill'],
+        layers: ['workspace-labels','workspace-points','workspace-lines','workspace-fill'],
       });
     }
     function nodePath(props: GeoJSON.GeoJsonProperties): GeometryPath {
@@ -427,6 +438,7 @@ export default function MapCanvas({
     map.on('click', click);
     map.on('mousedown', beginDrag);
     map.on('mousemove', dragging);
+    map.on('mousemove',displayCoordinates);
     map.on('mouseup', finishDrag);
     map.on('contextmenu', removeByRightClick);
     map.on('dblclick', insertByDoubleClick);
@@ -495,6 +507,7 @@ export default function MapCanvas({
     return () => {
       map.off('zoomend',refreshZoomLabels);
       map.off('mousemove', dragging);
+      map.off('mousemove',displayCoordinates);
       map.off('mouseup', finishDrag);
       map.dragPan.enable();
       mapRef.current = null;
@@ -556,5 +569,10 @@ export default function MapCanvas({
     map.getCanvas().style.cursor = drawingMode || traceMode || editing || annotationMode ? 'crosshair' : '';
   }, [editing, drawingMode, traceMode, annotationMode, ready]);
 
-  return <div aria-label="Interactive geospatial map" className="map-canvas" ref={container} />;
+  return <>
+    <div aria-label="Interactive geospatial map" className="map-canvas" ref={container}/>
+    <div aria-label="Cursor coordinates" className="map-coordinate-readout" ref={coordinateRef}>
+      Move cursor to inspect WGS84 coordinates
+    </div>
+  </>;
 }
