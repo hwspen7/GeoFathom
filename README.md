@@ -16,7 +16,7 @@ native module has a correctness-preserving Shapely/Python fallback.
 
 
 
-## Full professional GIS P0/P1/P2 platform
+## Professional GIS workflows
 
 The workspace now includes professional map PDF layouts, spatial rectangle
 and polygon selection, topological polygon-gap/overlap QA, Jenks/quantile

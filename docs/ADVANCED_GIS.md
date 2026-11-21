@@ -154,6 +154,6 @@ latest commit rather than an older green run.
 - CPU/GPU high-resolution processing is not yet distributed across worker nodes.
 - Geometries crossing ±180° longitude need a specialized geographic workflow.
 - The current local SQLite server is not a multiuser secured GIS deployment.
-- Huge vector data calls for PostGIS/R-tree persistence and paging.
+- Indexed SQLite/PostGIS pagination is implemented; distributed vector-tile streaming and million-feature rendering benchmarks are not.
 - DEM values and CRS/vertical units must be verified by the user.
 - Imported vector data and raster imagery are not proof of land ownership.

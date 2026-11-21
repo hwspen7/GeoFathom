@@ -1,11 +1,11 @@
-# Professional GIS P0 / P1 / P2 workflows
+# Professional GIS workflows
 
 This extension builds on GeoFathom's existing Python FastAPI, C++ native
 geometry kernels, MapLibre editing canvas, persistent SQLite projects, and
 geodesic WGS84 measurements. It deliberately avoids an artificial second
 backend, nested version folders or a complete desktop GIS rewrite.
 
-## P0 — everyday survey mapping and quality control
+## Survey mapping and quality control
 
 ### Spatial selection
 
@@ -23,10 +23,11 @@ get a lazy backfill. API:
 - \`POST /projects/{id}/spatial/select\`
 - \`GET /projects/{id}/features/viewport?west=...&south=...&east=...&north=...&limit=250&offset=0\`
 
-The SQLite candidate limit is 25,000 features per query. A viewport request
-with too many candidates is rejected instead of exhausting memory. MapLibre
-renders up to the user-requested page; the original unpaged workspace
-currently loads its first 200 saved objects.
+Exact spatial selection caps R-tree candidates at 25,000 features;
+topology review caps its candidate set at 20,000. Indexed viewport pagination
+uses SQL COUNT/LIMIT/OFFSET without first materializing every matching feature.
+MapLibre renders the requested page; the standard workspace initially loads
+up to 200 saved objects.
 
 ### Topology quality assurance
 
@@ -61,7 +62,7 @@ require a specialized pipeline.
 
 API: \`POST /projects/{id}/print/pdf\`, media type \`application/pdf\`.
 
-## P1 — advanced cartography and coordinate systems
+## Advanced cartography and coordinate systems
 
 ### Graduated numeric colors
 
@@ -124,7 +125,7 @@ Endpoints: \`GET/PUT /projects/{id}/crs\`,
 \`POST /projects/{id}/crs/transform\`,
 \`GET /projects/{id}/crs/grid\`.
 
-## P2 — geospatial services and scalable storage
+## Geospatial services and scalable storage
 
 ### OGC WMS / WMTS / WFS / OGC API Features
 

@@ -46,8 +46,10 @@ the layer's normal color. You may edit a class's color individually.
 The map legend shows visible classes for the saved project features.
 
 This is the "unique values" / categorized renderer common in ArcGIS Pro
-and QGIS. It does not yet implement numeric graduated ramps, expressions,
-multiple-field classes, or rules for individual label placement.
+and QGIS. The advanced cartography panel additionally provides graduated
+numeric ramps, conditional label predicates, and per-feature dragged label
+offsets. Arbitrary expression-based styling, multi-field category definitions,
+and full cross-layer label deconfliction are not yet supported.
 
 ## Map inspection, legend and scale
 

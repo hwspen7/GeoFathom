@@ -6,7 +6,7 @@ a production multi-user deployment.
 
 | Area | What is checked | Test location |
 | --- | --- | --- |
-| Basic spatial geometry | Polygons, holes, line lengths, geodesic WGS84, malformed coordinates | \`tests/test_geometry.py\`, \`tests/test_robustness.py\` |
+| Basic spatial geometry | Polygons, holes, line lengths, geodesic WGS84, malformed coordinates | \`tests/test_geo.py\`, \`tests/test_robustness.py\` |
 | Seeded numeric fuzz | 240 varied geodesic rectangles, containment, area/perimeter comparisons | \`tests/test_robustness.py\` |
 | C++ native kernels | Point/snap, ring intersections, segmentation, 100K BVH edges, Horn DEM known slope | \`geometry/native/test_geometry.cpp\` |
 | Spatial indexing | Native nearest edge, path segments, native fallback policy, large index | \`tests/test_spatial.py\`, \`web/src/spatialIndex.test.ts\` |
@@ -62,34 +62,33 @@ The Playwright suite starts FastAPI and Vite automatically. Run it from the
 - Linux and Windows CI each need a fresh successful run **on the latest
   commit**, not an older green check.
 
-## Other common GIS features worth prioritizing
+## Remaining professional GIS capabilities
 
-Features present in QGIS or ArcGIS Pro but not yet fully replicated:
+The implemented workflow includes rectangle/polygon spatial selection,
+topology inspection, regional vector PDF export, graduated colors,
+conditional/dragged labels, project EPSG conversions and projected grids,
+OGC service connectors, indexed SQLite/PostGIS pages, and persistent jobs.
 
-1. **Spatial identify/select tools:** rectangular/lasso selection, multi-
-   select and selection by spatial relation (within, intersects, touches).
-2. **CRS-aware project view:** choose map projection, coordinate grid and
-   transformation policy; antimeridian workflow.
-3. **Graduated and rule-based cartography:** numeric classifications,
-   field-calculated expressions, per-category visibility and full labeling
-   priority/callout/drag-to-position controls.
-4. **Professional print layout:** page sizes, legend, scale bar, north
-   arrow, attribution, high-resolution PDF/SVG export.
-5. **Large project store:** PostGIS, indexed attribute paging, background
-   imports and streaming vector/raster tiles.
-6. **Data QA:** topological gap/overlap detection, snapping tolerances,
-   repair suggestions and data integrity reports.
-7. **Sources & services:** WMS, WMTS, WFS, OGC API Features and a more
-   configurable local/offline basemap cache.
-8. **Tasks:** long-running background GIS operations, GPU scheduling,
-   progress/cancel, logs and reproducible job results.
+Still outside the current scope:
 
-Keep these separate from claims of completed support. The current work is
-a reliable next step toward a professional GIS workspace, not a substitute
-for a full commercial desktop GIS.
+1. Full alternative-projection basemap rendering, including antimeridian and
+   polar map editing.
+2. Multi-user authoritative PostGIS editing with identity, row permissions,
+   audit trails, concurrent conflict handling, and live replication.
+3. Distributed processing, durable multi-process scheduling, and GPU worker
+   orchestration instead of the local two-thread worker pool.
+4. Streaming vector tiles, out-of-core editing and validated million-feature
+   end-to-end rendering benchmarks.
+5. Automated topology repair with review/preview and transactionally audited
+   topology changes.
+6. Fully offline map tiles/fonts and broad real-world WMS/WMTS/WFS provider
+   interoperability tests. External service success is configuration-dependent.
 
+Existing automated tests establish correctness for synthetic workloads and
+configured CI services, not legally accurate surveying or production
+scale/performance guarantees.
 
-## P0 / P1 / P2 additional integration coverage
+## Professional GIS integration coverage
 
 - \`tests/test_pro_spatial.py\`: R-tree maintenance, viewport pagination,
   exact predicates, overlap/duplicate/gap/dangle detection.
