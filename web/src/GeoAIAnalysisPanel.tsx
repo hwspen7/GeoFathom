@@ -34,6 +34,10 @@ export default function GeoAIAnalysisPanel(p:Props){
   const [confidence,setConfidence]=useState(.55);
   const [afterImageId,setAfterImageId]=useState('');
   const [maxSide,setMaxSide]=useState(512);
+  const [fullResolution,setFullResolution]=useState(false);
+  const [tileSize,setTileSize]=useState(256);
+  const [memoryBudget,setMemoryBudget]=useState(32);
+  const [maxPixels,setMaxPixels]=useState(16777216);
   const [token,setToken]=useState('');
   const [job,setJob]=useState<GISJob|null>(null);
   const [busy,setBusy]=useState(false);
@@ -85,6 +89,11 @@ export default function GeoAIAnalysisPanel(p:Props){
       if(!modelId)throw new Error('Install and select a configured ONNX model.');
       payload.model_id=modelId;
       payload.minimum_confidence=confidence;
+      if(fullResolution){
+        payload.full_resolution=true;
+        payload.memory_mb=memoryBudget;
+        payload.max_pixels=maxPixels;
+      }
     }else{
       if(!Number.isInteger(firstBand)||!Number.isInteger(secondBand)||
          firstBand===secondBand||firstBand<1||secondBand<1||
@@ -93,6 +102,12 @@ export default function GeoAIAnalysisPanel(p:Props){
       payload.first_band=firstBand;
       payload.second_band=secondBand;
       payload.threshold=threshold;
+      if(fullResolution){
+        payload.full_resolution=true;
+        payload.tile_size=tileSize;
+        payload.memory_mb=memoryBudget;
+        payload.max_pixels=maxPixels;
+      }
       if(operation==='spectral_index')payload.index=index;
       else{
         if(!afterImageId||afterImageId===p.image.id)
@@ -213,13 +228,50 @@ export default function GeoAIAnalysisPanel(p:Props){
             model weights and class/band metadata must be provisioned on the server.
             No model is silently downloaded.</p>
         </>}
-        <label>Maximum processing dimension
+        {<label><input type="checkbox"
+            aria-label="Process full image at native pixel resolution"
+            checked={fullResolution} onChange={e=>setFullResolution(e.target.checked)}/>
+            Full-resolution streamed analysis
+          </label>}
+        {fullResolution?<>
+          <p className="project-hint">Process every source pixel using bounded
+            raster windows, a temporary disk-backed mask and seamless
+            polygonization. Large images are limited by the configured pixel
+            budget and source image size.</p>
+          {operation==='semantic_segmentation'?
+            <p className="project-hint">Semantic tile size comes from the
+              installed ONNX model manifest. Tiles are stitched into a single
+              disk mask for geographic vectorization; model-edge predictions
+              may still show seams.</p>:
+          <label>Tile edge length
+            <select aria-label="GeoAI tile size" value={tileSize}
+              onChange={e=>setTileSize(Number(e.target.value))}>
+              <option value={128}>128 px</option>
+              <option value={256}>256 px</option>
+              <option value={512}>512 px</option>
+            </select>
+          </label>}
+          <label>Per-tile memory allowance
+            <select aria-label="GeoAI tile memory budget" value={memoryBudget}
+              onChange={e=>setMemoryBudget(Number(e.target.value))}>
+              <option value={16}>16 MB</option><option value={32}>32 MB</option>
+              <option value={64}>64 MB</option><option value={128}>128 MB</option>
+            </select>
+          </label>
+          <label>Maximum source pixels
+            <select aria-label="GeoAI pixel processing limit" value={maxPixels}
+              onChange={e=>setMaxPixels(Number(e.target.value))}>
+              <option value={16777216}>16.8 million</option>
+              <option value={64000000}>64 million</option>
+            </select>
+          </label>
+        </>:<label>Maximum processing dimension
           <select aria-label="GeoAI processing resolution" value={maxSide}
             onChange={e=>setMaxSide(Number(e.target.value))}>
             <option value={256}>256 px</option><option value={512}>512 px</option>
             <option value={768}>768 px</option>
           </select>
-        </label>
+        </label>}
         <input aria-label="GeoAI administration token" type="password"
           autoComplete="off" placeholder="Server administration token"
           value={token} onChange={e=>setToken(e.target.value)}/>

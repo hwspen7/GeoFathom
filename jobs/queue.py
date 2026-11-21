@@ -6,6 +6,7 @@ interrupted by a process crash are marked interrupted (not silently marked
 successful). Read-only analytics preserve project data on failure.
 """
 from concurrent.futures import ThreadPoolExecutor
+from contextvars import ContextVar
 from datetime import datetime,timezone
 from threading import Lock
 from uuid import uuid4
@@ -19,6 +20,24 @@ KINDS={"topology_qa","spatial_select","export_geojson","postgis_sync",
 _POOL=ThreadPoolExecutor(max_workers=2,thread_name_prefix="geofathom-gis")
 _LOCK=Lock()
 _INITIALIZED=set()
+_ACTIVE_JOB=ContextVar("geofathom_current_gis_job", default=None)
+
+
+def _progress(fraction):
+    """Publish monotone progress and honor cancellation at tile boundaries."""
+    uid=_ACTIVE_JOB.get()
+    if uid is None:
+        return
+    completed=max(10,min(95,10+int(80*float(fraction))))
+    with _connect() as c:
+        row=c.execute("SELECT progress,cancel_requested FROM gis_jobs WHERE id=?",
+                      (uid,)).fetchone()
+        if row is None or row["cancel_requested"]:
+            raise RuntimeError("Running GIS operation was cancelled.")
+        if completed>row["progress"]:
+            c.execute("UPDATE gis_jobs SET progress=?,updated_at=? WHERE id=?",
+                      (completed,_now(),uid))
+
 
 
 def _schema(c):
@@ -129,6 +148,35 @@ def _execute(kind,project_id,payload):
         from vision.semantic import semantic_segmentation
         image_id=payload["image_id"]
         path=image_file(image_id)
+        if type(payload.get("full_resolution",False)) is not bool:
+            raise StorageError("full_resolution must be a boolean.")
+        if payload.get("full_resolution",False):
+            from vision.tiled import (spectral_index_tiled,
+                                     spectral_change_tiled,
+                                     semantic_segmentation_tiled)
+            options={
+                "tile_size":payload.get("tile_size",256),
+                "max_pixels":payload.get("max_pixels",16_777_216),
+                "memory_mb":payload.get("memory_mb",32),
+                "progress":_progress,
+            }
+            if kind=="semantic_segmentation":
+                return semantic_segmentation_tiled(
+                    path,image_id,payload["model_id"],
+                    payload.get("minimum_confidence",.55),
+                    max_pixels=options["max_pixels"],
+                    memory_mb=options["memory_mb"],
+                    progress=_progress)
+            if kind=="spectral_index":
+                return spectral_index_tiled(
+                    path,image_id,payload.get("index","ndvi"),
+                    payload["first_band"],payload["second_band"],
+                    payload.get("threshold",.2),**options)
+            other_id=payload["after_image_id"]
+            return spectral_change_tiled(
+                path,image_file(other_id),image_id,other_id,
+                payload["first_band"],payload["second_band"],
+                payload.get("threshold",.2),**options)
         if kind=="spectral_index":
             return spectral_index(
                 path,image_id,payload.get("index","ndvi"),
@@ -189,7 +237,11 @@ def _worker(uid,path):
                       (_now(),uid))
             project_id=row["project_id"];kind=row["kind"];payload=json.loads(row["payload"])
         try:
-            outcome=_execute(kind,project_id,payload)
+            active_token=_ACTIVE_JOB.set(uid)
+            try:
+                outcome=_execute(kind,project_id,payload)
+            finally:
+                _ACTIVE_JOB.reset(active_token)
             result=json.dumps(outcome,allow_nan=False)
             if len(result.encode("utf-8"))>5_000_000:
                 raise StorageError("GIS job output exceeded 5 MB; narrow the query.")

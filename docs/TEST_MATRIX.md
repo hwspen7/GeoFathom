@@ -135,3 +135,15 @@ scale/performance guarantees.
 - CI uses Linux Release/Debug and ASan/UBSan standalone CTest builds and
   Windows MSVC/Python native library tests. Speedup is not asserted on
   shared CI runners; sustained hardware throughput is a separate check.
+
+## Streaming and runtime safety coverage
+
+- `tests/test_tiled_raster.py`: per-tile memory/pixel budgets, exact
+  geographic tile coverage, cross-tile contiguous polygons, nodata masks,
+  temporal gain/loss, partial cancellation and authenticated background jobs.
+- `tests/test_vision_runtime.py`: model LRU reuse, preventing active model
+  eviction, concurrency caps, release after initialization failure,
+  malformed ONNX class/logit validation and tensor budgets.
+- `tests/test_spatial.py`: shared-index close/query races and exact
+  zero-tolerance fallback lookup.
+- `web/e2e/geoai.spec.ts`: full-resolution controls in the user interface.

@@ -19,6 +19,11 @@ test('GeoAI controls expose distinct spectral, change and model workflows',async
   await expect(page.getByLabel('Spectral index')).toBeVisible();
   await page.getByLabel('Spectral index').selectOption('ndwi');
   await expect(page.getByLabel('Spectral first band')).toHaveValue('2');
+  await page.getByLabel('Process full image at native pixel resolution').check();
+  await expect(page.getByLabel('GeoAI tile size')).toBeVisible();
+  await expect(page.getByLabel('GeoAI tile memory budget')).toHaveValue('32');
+  await expect(page.getByLabel('GeoAI pixel processing limit')).toHaveValue('16777216');
+  await expect(page.getByLabel('GeoAI processing resolution')).toHaveCount(0);
   await mode.selectOption('semantic_segmentation');
   await expect(page.getByLabel('Local ONNX vision model')).toBeVisible();
   await expect(page.getByText(/No model is silently downloaded/)).toBeVisible();

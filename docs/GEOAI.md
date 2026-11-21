@@ -73,10 +73,11 @@ A model is discovered only when the directory contains matching
 - First output must contain either float logits
   `[1,num_classes,tile_size,tile_size]` or integer class IDs
   `[1,tile_size,tile_size]`; all outputs must match the model manifest.
-- The per-task image preview is bounded to 768 pixels along its longest
-  dimension and a maximum of 36 tiles; at most 100 polygon features are
-  returned. This is a conservative first implementation for local machines,
-  not full-resolution production segmentation of arbitrarily large scenes.
+- The default fast preview is bounded to 768 pixels along its longest
+  dimension and a maximum of 36 model tiles. Full-resolution mode streams
+  bounded tiles over the source raster; the first implementation caps work
+  at 64 million source pixels, not arbitrary scenes. In both modes at most
+  100 polygon features are returned.
 - Model file paths come only from the server's configured model directory.
   The browser can select only a validated model ID; it cannot upload an
   arbitrary executable model or ask the server to fetch a remote model URL.
@@ -108,10 +109,12 @@ radiometry, scene quality review and adequate spatial resolution.
 
 All three operations require the local administrator token on job submission,
 to prevent untrusted users from scheduling expensive imagery inference.
-The standard two-thread local worker queue applies: job results persist up
-to 5 MB, running jobs support **cooperative** cancellation and may finish
-a noninterruptible GDAL/model call before cancellation takes effect. This is
-not yet a distributed GPU scheduler.
+The standard two-thread local worker queue applies: job results persist
+up to 5 MB. In full-resolution mode, each tile updates task progress and
+checks cancellation. GDAL polygonization checks periodically, but a single
+native/model call remains noninterruptible until it returns. A local
+synchronized ONNX session pool bounds cached sessions and simultaneous
+inference. Neither the queue nor the pool is a distributed GPU scheduler.
 
 The regression suite in `tests/test_geoai.py` covers known synthetic
 spectral masks, geodesic polygon outputs, temporal gain/loss, invalid band
@@ -130,3 +133,36 @@ multispectral data-cube construction, 3D surface reconstruction,
 training/fine-tuning, fully automated quality repair, or distributed
 raster tiling. These should be integrated as verified providers and
 bounded operations rather than fabricated results.
+
+## Full-resolution streaming controls
+
+Select **Full-resolution streamed analysis** in the GeoAI panel. Spectral
+index and change jobs use the selected window size; semantic ONNX analysis
+uses the fixed model-manifest input tile shape. The API accepts
+`full_resolution: true`, `max_pixels` (maximum 64,000,000) and
+`memory_mb` (4–512). Spectral index/change also accept `tile_size`
+(64, 128, 256 or 512). The default maximum is 16,777,216 pixels.
+
+Full-resolution spectral and semantic workflows write a temporary compressed
+mask to local disk. Polygonization occurs across the full mask, preserving
+connected regions crossing processing-window seams. Predictions from
+tile-based models can still show edge effects, since model-context halos
+and blending are not yet implemented. Output remains an estimate requiring
+human review and optional manual boundary correction.
+
+ONNX runtime behavior is configured by:
+
+```dotenv
+GEOFATHOM_VISION_MAX_CACHED_MODELS=2
+GEOFATHOM_VISION_PARALLEL_INFERENCE=2
+GEOFATHOM_VISION_TENSOR_MEMORY_MB=128
+GEOFATHOM_VISION_CPU_THREADS=2
+# CUDA defaults to one concurrent inference and an advisory GPU arena.
+# GEOFATHOM_VISION_DEVICE=cuda
+# GEOFATHOM_VISION_GPU_ARENA_MB=2048
+```
+
+These are per-process controls. In particular, the CUDA arena setting is
+not a hard VRAM allocation guarantee. Model logits and predicted labels are
+validated for shape, class range and non-finite values. Softmax values from
+unvalidated models are not assumed to be calibrated probabilities.

@@ -18,9 +18,12 @@ native module has a correctness-preserving Shapely/Python fallback.
 
 ## Direct GeoAI image analysis
 
-The **GeoAI raster analysis & change detection** panel now provides explicit,
+The **GeoAI raster analysis & change detection** panel provides explicit,
 form-driven NDVI/NDWI analysis, two-date spectral change detection (aligned
-by Rasterio) and replaceable ONNX Runtime semantic segmentation. All operations
+by Rasterio) and replaceable ONNX Runtime semantic segmentation. A bounded
+full-resolution mode streams raster windows through native C++ spectral
+operators and an optional local ONNX model without materializing all source
+pixels in a NumPy array. All operations
 run as bounded persistent background jobs; polygon candidates are previewed
 before users explicitly save editable, provenance-tagged GeoJSON features.
 ONNX model weights are not bundled and must be installed separately. Spectral

@@ -102,3 +102,14 @@ The example is intended for local development. Do not expose the unprotected API
 - \`web/src/spatialIndex.ts\`: pixel-space cache for interactive snapping;
   separate from C++ service-side spatial indexing.
 - \`web/e2e/\`: real Playwright Chromium GIS workspace integration tests.
+
+## Streamed local raster computation
+
+`vision/tiled.py` bounds full-resolution raster work with fixed-size
+`rasterio.windows.Window` reads, native spectral kernels, a compressed
+temporary GeoTIFF classification mask, and GDAL connected polygonization
+across source tile boundaries. `vision/runtime.py` owns a reference-counted
+ONNX session cache and bounds concurrent model inference without replacing
+the existing Python/C++ raster and geometry ownership boundaries.
+`geometry.spatial.SegmentIndex` serializes query and close across threads
+to protect its immutable native BVH handle.

@@ -66,22 +66,54 @@ of raster pixels and 100,000-indexed metric segments. Runners are shared
 and variable, so the smoke tests intentionally do not assert a particular
 relative speedup.
 
+## Streamed raster engine and model sessions
+
+The full-resolution analysis mode now uses rasterio Window reads with a
+configurable tile size (64, 128, 256 or 512 pixels for spectral operations;
+the ONNX manifest's native tile size for semantic inference). It enforces
+a per-tile working-set allowance and a maximum of 64 million source pixels
+per task. Class masks are written to a temporary GeoTIFF instead of being
+assembled in an unbounded array. The final GDAL polygonization reads the
+whole disk-backed mask with 8-neighbor connectivity, so adjacent classified
+pixels on opposite sides of a tile boundary become one polygon.
+
+Jobs publish monotone progress into the SQLite queue. Cancellation is
+checked before every tile and periodically during connected-component
+extraction. Processing has bounded candidate count, caps returned polygons
+at 100 and deletes its temporary files after completion, failure or
+cancellation. These limits do not bound every internal GDAL allocation, and
+large pathological shapes may still exceed process RAM.
+
+Local ONNX sessions now use a synchronized model-session pool with explicit
+leases, an LRU cache of idle models and a limit on concurrent inference
+requests. Session keys include model path, modification time, size and
+provider. A session cannot be evicted while another thread uses it.
+CPU thread count, tensor working-set budget and CUDA arena advisory limits
+are configurable. The CUDA arena option cannot guarantee a process-wide
+VRAM limit because model weights, drivers and operators may allocate memory
+outside it. No GPU weights are bundled; CUDA execution still requires
+actual hardware validation.
+
+Python's metric BVH owner now uses a reentrant lock around query, batched
+query and destruction. This trades some parallel query throughput for a
+clear use-after-close safety guarantee; native C++ query data itself
+remains immutable.
+
 ## Remaining engineering work
 
 The kernels are an important foundation, not a completed high-performance
 GIS runtime. The next implementation targets are:
 
-1. Memory-budgeted, incremental out-of-core raster tile processing and
-   distributed/parallel task scheduling for multi-gigapixel scenes.
-2. No-copy GPU tensor handoff with an explicit CUDA/ONNX execution and
-   synchronization contract, keeping CPU fallback.
-3. Persistent, reusable spatial indexes and independent, concurrent edit
-   snapshots for projects with millions of features.
-4. Chunked connected-component stitching across tile boundaries, with
-   polygon provenance and topology quality checks.
-5. Hardware-measured latency/throughput profiles and stress/soak runs on
-   real imagery including nodata, multispectral sensors and CRS changes.
-6. Architecture-level fuzzing for C ABI input contracts and sanitizer
-   validation on additional operating systems and compiler versions.
+1. Distributed raster scheduling and streaming datasets beyond the current
+   64-million-pixel task limit.
+2. True zero-copy GPU tensor handoff and experimentally validated CUDA
+   memory use, throughput and failure recovery.
+3. Persistent mmap/disk spatial indexes, concurrently versioned edit
+   snapshots and million-feature read/write acceptance benchmarks.
+4. Model-context overlap or halo blending to reduce prediction seams in
+   tiled semantic inference. Pixel-mask polygon boundaries already join.
+5. Hardware-measured sustained throughput, confidence calibration and
+   full accuracy validation on real annotated multispectral scenes.
+6. Expanded C ABI fuzzing and sanitizer checks across compilers and OSes.
 
 These are deliberately marked outstanding until implemented and tested.

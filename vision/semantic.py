@@ -9,7 +9,6 @@ import json
 import math
 import os
 import re
-from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
@@ -17,6 +16,8 @@ import rasterio
 
 from imagery.raster import RasterError
 from .geoai import _window, _vector_features
+from .runtime import (pool_for, tensor_budget_mb, gpu_arena_budget_mb,
+                      cpu_threads)
 
 _MODEL_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
 _DEFAULT_ROOT = Path(__file__).resolve().parent.parent / "data" / "vision-models"
@@ -93,29 +94,54 @@ def models():
             "note": "Model files and manifests are installed locally by the operator."}
 
 
-@lru_cache(maxsize=2)
 def _session(path, modified_ns, device):
+    """Construct one session; the external pool owns reuse and lifetime."""
     try:
         import onnxruntime as ort
     except ImportError as error:
         raise RuntimeError("Install the optional onnxruntime package to run this model.") from error
+    options = ort.SessionOptions()
+    options.intra_op_num_threads = cpu_threads()
+    options.inter_op_num_threads = 1
     providers = ["CPUExecutionProvider"]
     if device == "cuda":
         if "CUDAExecutionProvider" not in ort.get_available_providers():
             raise RuntimeError("ONNX CUDA provider is unavailable.")
-        providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
-    return ort.InferenceSession(path, providers=providers)
+        # An arena limit is advisory: weights, kernels and external drivers
+        # can allocate memory outside the CUDA execution-provider arena.
+        providers = [("CUDAExecutionProvider", {
+            "gpu_mem_limit": str(gpu_arena_budget_mb() * 1024 * 1024),
+        }), "CPUExecutionProvider"]
+    session = ort.InferenceSession(path, sess_options=options,
+                                   providers=providers)
+    if device == "cuda" and session.get_providers()[0] != "CUDAExecutionProvider":
+        raise RuntimeError("ONNX CUDA session fell back to CPU unexpectedly.")
+    return session
 
 
 def _predict_tile(tensor, config, device):
     path = config["model_path"]
-    session = _session(str(path), path.stat().st_mtime_ns, device)
-    inputs = session.get_inputs()
-    if len(inputs) != 1:
-        raise RasterError("Semantic model must accept exactly one image tensor.")
-    raw = session.run(None, {inputs[0].name: tensor})[0]
     size = config["tile_size"]
     classes = len(config["classes"])
+    # Budget model input/output tensors before allocating native sessions.
+    # It does not bound all ONNX Runtime activations or GPU driver memory.
+    expected_bytes = size * size * (3 + classes + 4) * 4
+    if (tensor.shape != (1, 3, size, size) or tensor.dtype != np.float32
+            or expected_bytes > tensor_budget_mb() * 1024 * 1024):
+        raise RasterError("Model tile exceeds the configured tensor memory budget.")
+    state = path.stat()
+    key = (str(path.resolve()), state.st_mtime_ns, state.st_size, device)
+    with pool_for(device).lease(
+        key, lambda: _session(str(path), state.st_mtime_ns, device)) as session:
+        inputs = session.get_inputs()
+        if len(inputs) != 1:
+            raise RasterError("Semantic model must accept exactly one image tensor.")
+        outputs = session.run(None, {inputs[0].name: tensor})
+        if not outputs:
+            raise RasterError("Semantic model returned no output.")
+        raw = outputs[0]
+    if not isinstance(raw, np.ndarray) or not np.isfinite(raw).all():
+        raise RasterError("Model output contains nonfinite predictions.")
     if raw.ndim == 4 and raw.shape == (1, classes, size, size):
         logits = raw[0].astype(np.float32)
         logits -= logits.max(axis=0)
@@ -124,7 +150,11 @@ def _predict_tile(tensor, config, device):
         predicted = probabilities.argmax(axis=0).astype(np.uint8)
         confidence = probabilities.max(axis=0).astype(np.float32)
     elif raw.ndim == 3 and raw.shape == (1, size, size):
+        if (not np.issubdtype(raw.dtype, np.integer)
+                or np.any(raw < 0) or np.any(raw >= classes)):
+            raise RasterError("Integer model output contains invalid class IDs.")
         predicted = raw[0].astype(np.uint8)
+        # Hard class labels are not calibrated probability estimates.
         confidence = np.ones((size, size), dtype=np.float32)
     else:
         raise RasterError("Model output must be [1,C,H,W] logits or [1,H,W] class IDs.")
@@ -187,6 +217,7 @@ def semantic_segmentation(path: Path, image_id: str, model_id: str,
         "classified_pixels": int(foreground.sum()),
         "mean_model_confidence": float(confidence[foreground].mean())
                                  if foreground.any() else None,
+        "confidence_calibrated": False,
         "truncated": truncated,
         "warning": "Model predictions depend on training domain, selected bands, "
                    "normalization and georeferencing. Polygon boundaries are "

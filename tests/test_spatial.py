@@ -66,3 +66,48 @@ def test_batched_spatial_index_parity_and_no_match():
             index.query_many([(0.,0.)],-1.)
     with pytest.raises(ValueError,match="closed"):
         index.query_many([(0.,0.)],1.)
+
+
+def test_shared_native_index_safely_serializes_close_with_queries():
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+    import time
+    from geometry.measure import GeometryError
+
+    index=SegmentIndex([((float(i),0.),(float(i),10.)) for i in range(1500)])
+    start=Event()
+    def reader():
+        start.wait(3)
+        completed=0
+        for i in range(300):
+            try:
+                output=index.query(float(i%100),5.,.5)
+                assert output is not None
+                completed+=1
+            except GeometryError as error:
+                assert "closed" in str(error)
+                break
+        return completed
+    def closer():
+        start.wait(3)
+        time.sleep(.002)
+        index.close()
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        tasks=[executor.submit(reader) for _ in range(4)]
+        owner=executor.submit(closer)
+        start.set()
+        owner.result(timeout=10)
+        counts=[task.result(timeout=10) for task in tasks]
+    assert all(0 <= n <= 300 for n in counts)
+    assert index._handle is None
+    with pytest.raises(GeometryError,match="closed"):
+        index.query_many([(0.,0.)],1.)
+
+
+def test_zero_tolerance_shapely_fallback_hits_exact_line(monkeypatch):
+    import geometry.spatial as spatial
+    monkeypatch.setattr(spatial,"_native",lambda:None)
+    with spatial.SegmentIndex([((0.,0.),(10.,0.))]) as index:
+        assert index.engine=="shapely-strtree"
+        assert index.query(5.,0.,0.)["distance_m"]==0
+        assert index.query_many([(5.,0.),(5.,.1)],0.)[1] is None
