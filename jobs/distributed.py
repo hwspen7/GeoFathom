@@ -164,6 +164,8 @@ def _remote_child(send,spec,root,scratch):
     provenance=spec["provenance"]
     kind=spec["kind"]
     try:
+        from .hard_limits import enforce
+        enforce('distributed:'+str(Path(root).resolve()))
         from .resources import configure_child
         configure_child(0)
         if kind not in KINDS:

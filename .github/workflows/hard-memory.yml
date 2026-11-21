@@ -1,0 +1,14 @@
+name: Linux hard memory acceptance
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  linux-cgroup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enforce and exceed actual Linux cgroup limit
+        run: sudo bash scripts/test_cgroup_limit.sh
