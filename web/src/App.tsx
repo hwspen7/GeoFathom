@@ -26,6 +26,7 @@ import type { DiscoveryResponse, GeoWorkspace, WorkspaceFeature, QualityIssue } 
 import ProjectsPanel from './ProjectsPanel';
 import ModelControls from './ModelControls';
 import RasterPanel, { type TraceSettings } from './RasterPanel';
+import GeoAIAnalysisPanel from './GeoAIAnalysisPanel';
 import {
   addMapAnnotation, applyOverlay, applyTopology, constructGeometry, editPair, getWorkspace, moveMeasured,
   previewTopology, refineRaster, traceExisting, traceImagery,
@@ -634,6 +635,12 @@ export default function App() {
               settings={traceSettings}
               onSettings={setTraceSettings}
               viewport={viewport}
+            />
+            <GeoAIAnalysisPanel
+              projectId={activeProjectId}
+              image={imageLayer}
+              onPreview={setExternalFeatures}
+              onSaved={()=>setRefreshToken(value=>value+1)}
             />
  
             <ImageCorrectionPanel

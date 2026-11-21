@@ -109,3 +109,15 @@ scale/performance guarantees.
   safe conditional label filters and advanced typography.
 - \`web/e2e/professional.spec.ts\`: drag-to-position map label
   stores per-feature offsets with revision history.
+
+## GeoAI raster acceptance coverage
+
+- `tests/test_geoai.py`: known synthetic NDVI mask, WGS84 area/provenance,
+  reprojected two-date gain/loss, invalid bands, nonoverlap, admin-only
+  persistent analysis jobs, project isolation, local vision model manifest,
+  simulated ONNX segmentation output and malformed-output rejection.
+- `web/e2e/geoai.spec.ts`: real Chromium checks for switching among
+  spectral, temporal and semantic workflows without requiring a language prompt.
+- True ONNX model inference accuracy, out-of-domain generalization, CUDA GPU
+  performance and large-scene scene-by-scene validation require operator-
+  provided weights, independently labeled images and physical test hardware.

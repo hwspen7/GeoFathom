@@ -14,7 +14,8 @@ import os
 
 from storage.database import StorageError,_connect,_required_project,_now
 
-KINDS={"topology_qa","spatial_select","export_geojson","postgis_sync","rebuild_index"}
+KINDS={"topology_qa","spatial_select","export_geojson","postgis_sync",
+       "rebuild_index","spectral_index","spectral_change","semantic_segmentation"}
 _POOL=ThreadPoolExecutor(max_workers=2,thread_name_prefix="geofathom-gis")
 _LOCK=Lock()
 _INITIALIZED=set()
@@ -122,6 +123,27 @@ def cancel_job(project_id,job_id):
 
 
 def _execute(kind,project_id,payload):
+    if kind in {"spectral_index","spectral_change","semantic_segmentation"}:
+        from imagery.store import image_file
+        from vision.geoai import spectral_index, spectral_change
+        from vision.semantic import semantic_segmentation
+        image_id=payload["image_id"]
+        path=image_file(image_id)
+        if kind=="spectral_index":
+            return spectral_index(
+                path,image_id,payload.get("index","ndvi"),
+                payload["first_band"],payload["second_band"],
+                payload.get("threshold",.2),payload.get("max_side",512))
+        if kind=="semantic_segmentation":
+            return semantic_segmentation(
+                path,image_id,payload["model_id"],
+                payload.get("minimum_confidence",.55),
+                payload.get("max_side",512))
+        other_id=payload["after_image_id"]
+        return spectral_change(
+            path,image_file(other_id),image_id,other_id,
+            payload["first_band"],payload["second_band"],
+            payload.get("threshold",.2),payload.get("max_side",512))
     if kind=="topology_qa":
         from analysis.topology_qa import review_topology
         return review_topology(project_id,

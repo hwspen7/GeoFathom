@@ -1,6 +1,9 @@
 # Product direction
 
 GeoFathom should remain a general geospatial intelligence environment.
+Remote-sensing tools use direct controls; sophisticated natural-language planning
+is optional and is not required for image analytics. The local vision model
+runtime remains independent of the language-model catalog.
 
 ## Supported foundation
 
@@ -14,6 +17,9 @@ GeoFathom should remain a general geospatial intelligence environment.
 - Optional SAM 2 promptable image segmentation with explicit installation
 - Pixel-to-WGS84 polygon conversion and geodesic area measurement
 - Public STAC imagery metadata search limited to a bounded region
+- Deterministic NDVI/NDWI region extraction and reprojected two-date index change
+- Optional local ONNX semantic segmentation with explicit operator-installed weights,
+  manifest-based band mappings, bounded tiling and WGS84 candidate polygons
 
 - Persistent projects with SQLite and GeoJSON import/export
 - Metric buffer, overlay, area comparison and geodesic distance API
@@ -41,7 +47,7 @@ GeoFathom should remain a general geospatial intelligence environment.
 - Promptable visual segmentation via a replaceable CV provider
 - Geometry quality checks and optional manual validation
 - Multi-object batch analysis and spatial comparison
-- Temporal change detection using dated imagery
+- Generalized time-series change detection, radiometric correction and cloud masking
 - Digital elevation models and terrain operators
 - Reproducible, attributed reports and dataset exports
 - Authentication and distributed quota enforcement for production

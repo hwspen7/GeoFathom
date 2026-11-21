@@ -11,7 +11,9 @@ from .queue import queue_job,list_jobs,get_job,cancel_job
 router=APIRouter(prefix="/projects",tags=["background-jobs"])
 
 class SubmitJob(BaseModel):
-    kind:Literal["topology_qa","spatial_select","export_geojson","postgis_sync","rebuild_index"]
+    kind:Literal["topology_qa","spatial_select","export_geojson",
+                 "postgis_sync","rebuild_index","spectral_index",
+                 "spectral_change","semantic_segmentation"]
     payload:dict[str,Any]=Field(default_factory=dict)
 
 def fail(error):
@@ -21,7 +23,8 @@ def fail(error):
 @router.post("/{project_id}/jobs",status_code=202)
 def submit(project_id:str,body:SubmitJob,
            token:str|None=Header(default=None,alias="X-GeoFathom-Admin-Token")):
-    if body.kind in {"postgis_sync","rebuild_index"}:
+    if body.kind in {"postgis_sync","rebuild_index","spectral_index",
+                     "spectral_change","semantic_segmentation"}:
         try:require_admin(token)
         except PermissionError as error:
             raise HTTPException(status_code=403,detail=str(error)) from error

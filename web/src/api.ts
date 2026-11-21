@@ -865,8 +865,27 @@ export function queryPostGIS(projectId:string,bbox:[number,number,number,number]
   return request('/projects/'+encodeURIComponent(projectId)+
     '/postgis/features?'+params);
 }
+export interface VisionModel {
+  id:string; classes:string[]; bands:number[]; tile_size:number;
+  input_scale:number; mean:number[]; std:number[]; description:string;
+  runtime:string;
+}
+export interface VisionModels {
+  models:VisionModel[]; runtime_available:boolean;device:string;note:string;
+}
+export interface GeoAIResult extends GeoJSON.FeatureCollection {
+  analysis:string;engine:string;provider:string;model_id:string|null;
+  source_images:string[];source_crs:string;geometry_crs:string;
+  valid_pixels:number;classified_pixels?:number;gain_pixels?:number;
+  loss_pixels?:number;truncated:boolean;warning:string;
+}
+export function getVisionModels():Promise<VisionModels>{
+  return request('/vision/models/segmentation');
+}
+
 export type GISJobKind='topology_qa'|'spatial_select'|'export_geojson'|
-  'postgis_sync'|'rebuild_index';
+  'postgis_sync'|'rebuild_index'|'spectral_index'|'spectral_change'|
+  'semantic_segmentation';
 export interface GISJob {
   id:string;project_id:string;kind:GISJobKind;
   status:'queued'|'running'|'completed'|'failed'|'cancelled'|'interrupted';

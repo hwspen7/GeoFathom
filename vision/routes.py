@@ -14,6 +14,7 @@ from imagery.store import image_file
 from .sam import VisionUnavailable, sam_enabled
 from .trace import trace_raster
 from .refine import refine_raster
+from .semantic import models as segmentation_models
 
 router = APIRouter(prefix="/vision", tags=["vision"])
 _limit = asyncio.Semaphore(1)
@@ -39,6 +40,12 @@ def vision_capabilities() -> dict:
         "note": "Color similarity is deterministic, not semantic object recognition. "
                 "SAM 2 requires separate model installation and CUDA.",
     }
+
+
+@router.get("/models/segmentation")
+def available_segmentation_models() -> dict:
+    """List operator-provisioned local semantic segmentation models."""
+    return segmentation_models()
 
 
 @router.post("/trace")
