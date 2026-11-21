@@ -1,0 +1,51 @@
+import {expect,test} from '@playwright/test';
+
+const tile='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/ZecAAAAASUVORK5CYII=';
+
+test.beforeEach(async({page})=>{
+  // Deterministic cartography; CI needs no public tile server credentials.
+  await page.route('**/tile.openstreetmap.org/**',route=>
+    route.fulfill({status:200,contentType:'image/png',body:Buffer.from(tile,'base64')}));
+});
+
+test('survey editor draws, repositions vertices, supports undo and saves project',async({page})=>{
+  await page.goto('/');
+  const map=page.getByLabel('Interactive geospatial map');
+  await expect(map).toBeVisible();
+  await expect(page.getByRole('button',{name:'Polygon',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Polygon',exact:true}).click();
+  const box=await map.boundingBox();
+  expect(box).not.toBeNull();
+  const left=box!.x+box!.width*.40,top=box!.y+box!.height*.40;
+  const unit=Math.min(90,box!.width*.12,box!.height*.12);
+  const points=[
+    [left,top],[left+unit,top],[left+unit,top+unit],[left,top+unit],
+  ];
+  for(const [x,y] of points)await page.mouse.click(x,y);
+  await page.getByRole('button',{name:'Finish',exact:true}).click();
+  await expect(page.getByText(/Drawing completed and measured/)).toBeVisible();
+  await page.getByRole('button',{name:'Vertices',exact:true}).click();
+  await page.mouse.move(points[1][0],points[1][1]);
+  await page.mouse.down();
+  await page.mouse.move(points[1][0]+20,points[1][1]-20,{steps:8});
+  await page.mouse.up();
+  await expect(page.getByRole('button',{name:'Undo',exact:true})).toBeEnabled();
+  await page.getByRole('button',{name:'Undo',exact:true}).click();
+  await page.getByRole('button',{name:'Redo',exact:true}).click();
+  await page.getByLabel('New project name').fill('Playwright Survey');
+  await page.getByRole('button',{name:'Create project'}).click();
+  await expect(page.getByRole('button',{name:'Save selected'})).toBeEnabled();
+  await page.getByRole('button',{name:'Save selected'}).click();
+  await expect(page.getByText('New geometry saved to the chosen layer.')).toBeVisible();
+});
+
+test('professional GIS panel exposes attributes, vector formats and DEM analysis',async({page})=>{
+  await page.goto('/');
+  await expect(page.getByText('Professional GIS tools')).toBeVisible();
+  await page.getByText(/Attribute table/).click();
+  await expect(page.getByLabel('Attribute search field')).toBeVisible();
+  await page.getByText('GIS file import / export').click();
+  await expect(page.getByLabel('GIS export format')).toBeVisible();
+  await page.getByText('Terrain slope & elevation profile').click();
+  await expect(page.getByRole('button',{name:/Analyze selected/})).toBeDisabled();
+});
