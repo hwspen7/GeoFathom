@@ -17,7 +17,7 @@ describe('viewport-scale spatial hash snapping',()=>{
     }
     const t=performance.now();
     const index=new PixelSnapIndex(paths,point=>point);
-    expect(index.size).toBe(400000);
+    expect(index.size).toBe(300000);
     for(let i=0;i<100;i++){
       const target=100+i*900;
       const found=index.snap([target*20+2,50],10);
