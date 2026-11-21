@@ -1,4 +1,4 @@
-"""Optional CUDA backend with a fixed reusable device allocation."""
+"""Optional CUDA backend with demand-grown reusable device buffers."""
 import atexit
 import ctypes
 import os
@@ -22,7 +22,11 @@ def handle(lib,count):
     global _owner,_library
     if not hasattr(lib,"gf_cuda_runtime_create"):
         raise RuntimeError("Native CUDA backend was not built.")
-    capacity=int(os.getenv("GEOFATHOM_CUDA_SPECTRAL_MAX_PIXELS","1048576"))
+    capacity=int(os.getenv("GEOFATHOM_CUDA_SPECTRAL_MAX_PIXELS","16777216"))
+    budget=int(os.getenv("GEOFATHOM_CUDA_SPECTRAL_BUDGET_MB","256"))
+    if not 1<=budget<=4096:
+        raise ValueError("CUDA spectral budget must be 1–4096 MiB.")
+    capacity=min(capacity,budget*1024*1024//15)
     if not 1<=capacity<=16777216 or count>capacity:
         raise ValueError("CUDA spectral call exceeds the buffer capacity.")
     with _lock:
@@ -41,3 +45,20 @@ def handle(lib,count):
             raise RuntimeError("CUDA allocation failed.")
         _library=lib
         return _owner
+
+def trim():
+    """Release idle device buffers without invalidating the shared handle."""
+    with _lock:
+        if _owner:
+            fn=_library.gf_cuda_runtime_trim
+            fn.argtypes=[ctypes.c_void_p];fn.restype=ctypes.c_int
+            if fn(_owner)!=0:raise RuntimeError("CUDA buffer trim failed.")
+
+def stats():
+    with _lock:
+        if not _owner:return {"capacity_pixels":0,"limit_pixels":0,"allocated_bytes":0}
+        fn=_library.gf_cuda_runtime_stats
+        fn.argtypes=[ctypes.c_void_p,ctypes.POINTER(ctypes.c_size_t)];fn.restype=ctypes.c_int
+        out=(ctypes.c_size_t*3)()
+        if fn(_owner,out)!=0:raise RuntimeError("CUDA allocation stats failed.")
+        return dict(zip(("capacity_pixels","limit_pixels","allocated_bytes"),out))

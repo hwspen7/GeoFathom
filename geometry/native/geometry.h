@@ -112,6 +112,12 @@ GEOFATHOM_API int gf_cpu_runtime_change(void* runtime,const float* a,
 extern "C" {
 GEOFATHOM_API void* gf_cuda_runtime_create(std::size_t n,int device) noexcept;
 GEOFATHOM_API void gf_cuda_runtime_destroy(void* g) noexcept;
+GEOFATHOM_API int gf_cuda_runtime_stats(void* handle,std::size_t* out) noexcept;
+GEOFATHOM_API int gf_cuda_runtime_trim(void* handle) noexcept;
+GEOFATHOM_API int gf_cuda_device_index(int device,const float* a,const float* b,
+    const unsigned char* valid,std::size_t n,float* out,unsigned char* mask) noexcept;
+GEOFATHOM_API int gf_cuda_device_change(int device,const float* a,const unsigned char* av,
+    const float* b,const unsigned char* bv,std::size_t n,float threshold,unsigned char* mask) noexcept;
 GEOFATHOM_API int gf_cuda_runtime_index(void* g,const float* a,const float* b,
     const unsigned char* v,std::size_t n,float* out,unsigned char* mask) noexcept;
 GEOFATHOM_API int gf_cuda_runtime_change(void* g,const float* a,const unsigned char* av,
