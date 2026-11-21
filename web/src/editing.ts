@@ -1,7 +1,7 @@
 /* Pure, testable browser geometry state. Server PyProj is authoritative. */
 
 export type Position = [number, number];
-export type ShapeMode = 'polygon' | 'line' | 'rectangle' | 'circle' | 'hole' | 'split' | null;
+export type ShapeMode = 'polygon' | 'line' | 'rectangle' | 'circle' | 'hole' | 'split' | 'trace-along' | null;
 export type GeometryPath = { polygon: number; ring: number; vertex: number };
 type Rings = Position[][][];
 
@@ -253,4 +253,27 @@ export function previewEdgeLengths(geometry: GeoJSON.Geometry, limit = 30): {
     }
   }
   return { edges, total };
+}
+
+
+export function singleMovedVertex(
+  before: GeoJSON.Geometry, after: GeoJSON.Geometry,
+): {old:[number,number];next:[number,number]} | null {
+  if(before.type!==after.type)return null;
+  const oldPaths=pathsOf(before),newPaths=pathsOf(after);
+  if(oldPaths.length!==newPaths.length)return null;
+  let change: {old:[number,number];next:[number,number]} | null=null;
+  for(let i=0;i<oldPaths.length;i++) {
+    const a=oldPaths[i],b=newPaths[i];
+    if(a.length!==b.length)return null;
+    for(let j=0;j<a.length;j++) {
+      if(a[j][0]===b[j][0]&&a[j][1]===b[j][1])continue;
+      const candidate={old:[...a[j]] as [number,number],next:[...b[j]] as [number,number]};
+      if(change && (change.old[0]!==candidate.old[0]||
+        change.old[1]!==candidate.old[1]||change.next[0]!==candidate.next[0]||
+        change.next[1]!==candidate.next[1]))return null;
+      change=candidate;
+    }
+  }
+  return change;
 }

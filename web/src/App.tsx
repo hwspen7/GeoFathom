@@ -11,8 +11,10 @@ import {
 } from './api';
 import MapCanvas, { type FocusPoint } from './MapCanvas';
 import SurveyTools from './SurveyTools';
+import ProfessionalPanel from './ProfessionalPanel';
 import {
-  GeometryTimeline, approximateMeasurement, previewEdgeLengths, type Position, type ShapeMode,
+  GeometryTimeline, approximateMeasurement, previewEdgeLengths, pathsOf,
+  singleMovedVertex, type Position, type ShapeMode,
 } from './editing';
 import DiscoveryPanel from './DiscoveryPanel';
 import type { DiscoveryResponse, GeoWorkspace, WorkspaceFeature } from './api';
@@ -20,7 +22,8 @@ import ProjectsPanel from './ProjectsPanel';
 import ModelControls from './ModelControls';
 import RasterPanel, { type TraceSettings } from './RasterPanel';
 import {
-  applyOverlay, constructGeometry, editPair, traceImagery, type RasterAsset,
+  applyOverlay, applyTopology, constructGeometry, editPair, getWorkspace,
+  previewTopology, traceExisting, traceImagery, type SharedTopologyPreview, type RasterAsset,
 } from './api';
 
 const number = (value: number, digits = 2) =>
@@ -61,7 +64,11 @@ export default function App() {
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [selectedFeatureId, setSelectedFeatureId] = useState<string | null>(null);
   const [splitParts, setSplitParts] = useState<GeoJSON.Geometry[]>([]);
-  const refreshToken = 0;
+  const [refreshToken,setRefreshToken] = useState(0);
+  const [linked,setLinked] = useState(false);
+  const [pendingShared,setPendingShared] = useState<{
+    preview:SharedTopologyPreview;old:[number,number];next:[number,number];
+  }|null>(null);
   const [preview, setPreview] = useState<ReturnType<typeof approximateMeasurement> | null>(null);
   const [areaUnit, setAreaUnit] = useState<'m2' | 'ha' | 'km2' | 'mu'>('m2');
   const timeline = useRef(new GeometryTimeline());
@@ -78,6 +85,19 @@ export default function App() {
       return;
     }
     try {
+      if (linked && selectedFeatureId && activeProjectId && !detached && lastValid.current) {
+        const moved=singleMovedVertex(lastValid.current,next);
+        if (!moved) throw new Error('Linked mode requires moving exactly one existing vertex.');
+        const impact=await previewTopology(activeProjectId,moved.old,moved.next);
+        if (!impact.affected.some(item=>item.id===selectedFeatureId)) {
+          throw new Error('Selected feature does not contain this shared vertex.');
+        }
+        setPendingShared({preview:impact,old:moved.old,next:moved.next});
+        setGeometry(next);
+        setPreview(approximateMeasurement(next));
+        setMessage('Linked vertex preview ready. Confirm all affected feature changes.');
+        return;
+      }
       const checked = await measureGeometry(next);
       setGeometry(next);
       setMeasurement(checked);
@@ -104,6 +124,7 @@ export default function App() {
   }
 
   function openStoredFeature(feature: WorkspaceFeature) {
+    setPendingShared(null);
     setGeometry(feature.geometry);
     lastValid.current = structuredClone(feature.geometry);
     timeline.current.push(feature.geometry);
@@ -155,6 +176,7 @@ export default function App() {
   async function selectPlace(place: Place) {
     setSelectedPlace(place);
     setSelectedFeatureId(null);
+    setLinked(false);
     setEditing(false);
     setMoving(false);
     setSplitParts([]);
@@ -248,6 +270,11 @@ export default function App() {
   }
 
   function startDrawing(next: Exclude<ShapeMode, null>) {
+    if(next==='trace-along'&&!projectWorkspace?.features.some(f=>
+      f.geometry.type==='LineString'||f.geometry.type==='MultiLineString')) {
+      setError('Save at least one vector line feature in the active project to trace along.');
+      return;
+    }
     const operation = next === 'hole' || next === 'split';
     if (selectedLocked && operation) { setError('Unlock this layer before changing its geometry.'); return; }
     if (operation && geometry?.type !== 'Polygon' && geometry?.type !== 'MultiPolygon') {
@@ -292,7 +319,17 @@ export default function App() {
     try {
       let result: GeoJSON.Geometry;
       let measured: Measurement;
-      if (mode === 'polygon' || mode === 'rectangle' || mode === 'circle') {
+      if (mode === 'trace-along') {
+        const paths=(projectWorkspace?.features ?? [])
+          .filter(feature=>feature.geometry.type==='LineString'||feature.geometry.type==='MultiLineString')
+          .flatMap(feature=>pathsOf(feature.geometry));
+        const traced=await traceExisting(vertices[0],vertices[1],paths);
+        result=traced.geometry;
+        measured=traced.measurement;
+        setSelectedFeatureId(null);
+        setGeometrySource('Vector network tracing');
+        setFeatureProperties({source_type:'vector_trace',method:'shortest connected path'});
+      } else if (mode === 'polygon' || mode === 'rectangle' || mode === 'circle') {
         let constructed;
         if (mode === 'circle') {
           const path = { type: 'LineString', coordinates: vertices.slice(0,2) } as GeoJSON.LineString;
@@ -375,6 +412,7 @@ export default function App() {
 
   function clearWorkspace() {
     setGeometry(null);
+    setPendingShared(null);
     lastValid.current = null;
     timeline.current.push(null);
     setHistoryPulse(value => value + 1);
@@ -471,6 +509,14 @@ export default function App() {
               editing={editing}
               moving={moving}
               snapping={snapping}
+              linked={linked}
+              onLinked={enabled=>{
+                if(enabled&&!selectedFeatureId){
+                  setError('Open a saved feature to use linked vertex editing.');
+                  return;
+                }
+                setLinked(enabled);setPendingShared(null);
+              }}
               canUndo={timeline.current.canUndo && historyPulse >= 0}
               canRedo={timeline.current.canRedo && historyPulse >= 0}
               saved={activeProjectId ? projectWorkspace?.features ?? [] : []}
@@ -503,7 +549,38 @@ export default function App() {
                 }
               }}
             />
-          </section>
+ 
+            {pendingShared && <div className="linked-preview">
+              <strong>Shared boundary preview · {pendingShared.preview.count} features</strong>
+              {pendingShared.preview.affected.map(item=><div key={item.id}>
+                {item.name} · r{item.revision}
+                {item.locked?' · LOCKED':''}{!item.valid?' · INVALID':''}
+              </div>)}
+              <div className="survey-action-bar">
+                <button onClick={()=>{
+                  setGeometry(lastValid.current);setPendingShared(null);setPreview(null);
+                }}>Cancel</button>
+                <button disabled={busy||pendingShared.preview.affected.some(x=>x.locked||!x.valid)}
+                  onClick={async()=>{
+                    if(!activeProjectId)return;
+                    setBusy(true);setError('');
+                    try{
+                      const expected=Object.fromEntries(pendingShared.preview.affected.map(item=>
+                        [item.id,item.revision]));
+                      await applyTopology(activeProjectId,pendingShared.old,pendingShared.next,expected);
+                      const updated=await getWorkspace(activeProjectId);
+                      setProjectWorkspace(updated);
+                      const reopened=updated.features.find(item=>item.id===selectedFeatureId);
+                      if(reopened)openStoredFeature(reopened);
+                      setPendingShared(null);setRefreshToken(v=>v+1);
+                    }catch(failure){
+                      setError(failure instanceof Error?failure.message:'Linked edit failed.');
+                      setGeometry(lastValid.current);setPendingShared(null);
+                    }finally{setBusy(false);}
+                  }}>Apply to all linked features</button>
+              </div>
+            </div>}
+         </section>
 
           <section className="panel-section">
             <div className="section-heading"><Layers3 size={16} /><span>Georeferenced imagery</span></div>
@@ -546,7 +623,23 @@ export default function App() {
               }}
               onOpen={openStoredFeature}
             />
+ 
+          <section className="panel-section">
+            <div className="section-heading"><Layers3 size={16}/><span>Professional GIS tools</span></div>
+            <ProfessionalPanel
+              projectId={activeProjectId}
+              workspace={projectWorkspace}
+              geometry={geometry}
+              raster={imageLayer}
+              refreshToken={refreshToken}
+              onRefresh={()=>setRefreshToken(v=>v+1)}
+              onOpen={id=>{
+                const feature=projectWorkspace?.features.find(item=>item.id===id);
+                if(feature)openStoredFeature(feature);
+              }}
+            />
           </section>
+         </section>
 
           <section className="panel-section">
             <div className="section-heading"><Search size={16} /><span>Find areas by size</span><span className="section-pill">Spatial query</span></div>
@@ -735,7 +828,7 @@ export default function App() {
             discovered={[...discovered.map(place => place.geometry).filter((item): item is GeoJSON.Geometry => item !== null), ...splitParts.slice(1)]}
             onViewportChange={setViewport}
             onMapClick={position => {
-              const max = ['rectangle','circle'].includes(drawingMode ?? '') ? 2 : 4000;
+              const max = ['rectangle','circle','trace-along'].includes(drawingMode ?? '') ? 2 : 4000;
               setVertices(value => value.length >= max ? value : [...value, position]);
             }}
           />

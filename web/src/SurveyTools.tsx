@@ -31,6 +31,8 @@ interface Props {
   }) => void;
   onOverlay: (mode: 'union' | 'difference' | 'intersection', featureId: string) => void;
   onDuplicate: () => void;
+  linked: boolean;
+  onLinked: (enabled:boolean) => void;
 }
 
 const buttonModes: Array<{ mode: Exclude<ShapeMode, null>; title: string }> = [
@@ -40,12 +42,13 @@ const buttonModes: Array<{ mode: Exclude<ShapeMode, null>; title: string }> = [
   { mode: 'circle', title: 'Circle' },
   { mode: 'hole', title: 'Cut hole' },
   { mode: 'split', title: 'Split line' },
+  { mode: 'trace-along', title: 'Trace network' },
 ];
 
 export default function SurveyTools({
   mode, geometry, points, editing, moving, snapping, canUndo, canRedo, saved,
   onStart, onFinish, onCancel, onUndoPoint, onUndo, onRedo, onEdit,
-  onSnapping, onAddPoint, onNumeric, onOverlay, onDuplicate,
+  onSnapping, onAddPoint, onNumeric, onOverlay, onDuplicate, linked, onLinked,
 }: Props) {
   const [longitude, setLongitude] = useState('');
   const [latitude, setLatitude] = useState('');
@@ -81,7 +84,7 @@ export default function SurveyTools({
             disabled={['hole','split'].includes(item.mode) && geometry?.type !== 'Polygon' && geometry?.type !== 'MultiPolygon'}>
             {item.mode === 'circle' ? <Circle size={15}/> :
              item.mode === 'line' ? <Ruler size={15}/> :
-             item.mode === 'split' ? <Scissors size={15}/> :
+             item.mode === 'split' || item.mode === 'trace-along' ? <Scissors size={15}/> :
              item.mode === 'hole' ? <Eraser size={15}/> : <Pencil size={15}/>}
             {item.title}
           </button>
@@ -103,6 +106,10 @@ export default function SurveyTools({
         <button title="Snap to nearby vertices" className={snapping ? 'active' : ''}
           onClick={() => onSnapping(!snapping)}>Snap {snapping ? 'ON' : 'OFF'}</button>
       </div>
+      <label className="linked-vertex-toggle">
+        <input type="checkbox" checked={linked} onChange={e=>onLinked(e.target.checked)} />
+        Linked/shared vertices (preview neighboring feature edits)
+      </label>
       <p className="project-hint">Drag white corner handles to reshape. Drag blue midpoints to insert. Right-click a corner to remove it. Use Move to drag the whole feature.</p>
       <div className="survey-action-bar">
         <button disabled={!canUndo} onClick={onUndo}><Undo2 size={14}/> Undo</button>
