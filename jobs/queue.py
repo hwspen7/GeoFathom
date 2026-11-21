@@ -248,7 +248,8 @@ def _execute_impl(kind,project_id,payload):
             payload.get("threshold",.25),payload.get("max_side",4096),
             payload.get("tile_size",256),
             payload.get("max_pixels",16_777_216),
-            payload.get("memory_mb",32),progress=_progress)
+            payload.get("memory_mb",32),progress=_progress,
+            provider=payload.get("provider","earth-search"))
     if kind in {"spectral_index","spectral_change","semantic_segmentation"}:
         from imagery.store import image_file
         from vision.geoai import spectral_index, spectral_change

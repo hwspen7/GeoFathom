@@ -29,11 +29,12 @@ from geometry.spectral import normalized_difference, classify_change, paired_cha
 from geometry.transitions import count_transitions
 from imagery.raster import RasterError, _check
 
-MAX_PIXELS = 67_108_864
+MAX_PIXELS = 400_000_000
+DEFAULT_MAX_PIXELS = 67_108_864
 MAX_COMPONENTS = 20_000
 MAX_RESULTS = 100
 MAX_BOUNDARY_TRANSITIONS = 1_000_000
-MAX_SCRATCH_MB = 512
+MAX_SCRATCH_MB = 2048
 
 
 @contextmanager
@@ -50,7 +51,7 @@ def _scratch(plan, prefix):
     except ValueError as error:
         raise RasterError("Invalid raster scratch quota.") from error
     if not 16 <= budget <= MAX_SCRATCH_MB:
-        raise RasterError("Raster scratch quota must be between 16 and 512 MiB.")
+        raise RasterError("Raster scratch quota must be between 16 and 2048 MiB.")
     needed = plan.width * plan.height * 2 + 8 * 1024 * 1024
     if needed > budget * 1024 * 1024:
         raise RasterError("Raster scratch quota is insufficient for this image.")
@@ -79,12 +80,18 @@ class TilePlan:
     memory_mb: int = 32
 
     def __post_init__(self):
+        try:
+            allowed=int(os.getenv("GEOFATHOM_RASTER_MAX_PIXELS",str(DEFAULT_MAX_PIXELS)))
+        except ValueError as error:
+            raise RasterError("Invalid raster maximum pixel budget.") from error
+        if not 1<=allowed<=MAX_PIXELS:
+            raise RasterError("Operator raster pixel budget is outside the allowed range.")
         if (any(type(value) is not int for value in (
                 self.width, self.height, self.tile_size,
                 self.max_pixels, self.memory_mb))
                 or self.width <= 0 or self.height <= 0
                 or self.tile_size not in (64, 128, 256, 512)
-                or not 1 <= self.max_pixels <= MAX_PIXELS
+                or not 1 <= self.max_pixels <= allowed
                 or not 4 <= self.memory_mb <= 512):
             raise RasterError("Invalid raster tile dimensions or memory budget.")
         if self.width * self.height > self.max_pixels:

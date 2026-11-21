@@ -15,7 +15,7 @@ jobs:
         with:
           python-version: '3.11'
       - name: Install API and test dependencies
-        run: python -m pip install -e ".[dev,vision]" "onnx>=1.16,<2"
+        run: python -m pip install -c requirements/linux.lock -e ".[dev,vision]" "onnx>=1.16,<2"
       - name: Build native geometry kernels
         run: |
           cmake -S . -B build/native -DCMAKE_BUILD_TYPE=Release
@@ -44,13 +44,12 @@ jobs:
         env:
           GEOFATHOM_REQUIRE_NATIVE: '1'
           GEOFATHOM_STRESS_8K: '1'
+          GEOFATHOM_STRESS_16K: '1'
           GEOFATHOM_STRESS_MILLION_SEGMENTS: '1'
           GEOFATHOM_REQUIRE_REAL_ONNX: '1'
         run: python -m pytest -q --cov=geometry --cov=storage --cov=terrain --cov=vision --cov=jobs --cov=core --cov=imagery --cov-report=term-missing --cov-report=xml:coverage.xml
       - name: Native compute soak and performance smoke gate
         run: python benchmarks/soak.py --seconds 10 --output native-soak.json
-      - name: Record resolved Linux dependencies
-        run: python -c "import subprocess; print('GF_PY_LOCK_BEGIN'); print(subprocess.check_output(['python','-m','pip','freeze','--exclude-editable'],text=True)); print('GF_PY_LOCK_END')"
       - name: Upload native soak result
         uses: actions/upload-artifact@v4
         if: always()
@@ -74,10 +73,7 @@ jobs:
           node-version: '22'
       - name: Install web dependencies
         working-directory: web
-        run: npm install --no-audit --no-fund
-      - name: Record resolved web dependency lock
-        working-directory: web
-        run: node -e "const s=require('fs').readFileSync('package-lock.json').toString('base64'); for(let i=0;i<s.length;i+=3000)console.log('GF_NPM_LOCK '+s.slice(i,i+3000));"
+        run: npm ci --no-audit --no-fund
       - name: Typecheck and build
         working-directory: web
         run: npm run build
@@ -95,13 +91,13 @@ jobs:
         with:
           python-version: '3.11'
       - name: Install GIS API
-        run: python -m pip install -e ".[dev]"
+        run: python -m pip install -c requirements/linux.lock -e ".[dev]"
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
       - name: Install web and Playwright test dependencies
         working-directory: web
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
       - name: Install Chromium and system dependencies
         working-directory: web
         run: npx playwright install --with-deps chromium
@@ -125,9 +121,7 @@ jobs:
         with:
           python-version: '3.11'
       - name: Install Windows GIS and test dependencies
-        run: python -m pip install -e ".[dev]"
-      - name: Record resolved Windows dependencies
-        run: python -c "import subprocess; print('GF_PY_LOCK_BEGIN'); print(subprocess.check_output(['python','-m','pip','freeze','--exclude-editable'],text=True)); print('GF_PY_LOCK_END')"
+        run: python -m pip install -c requirements/windows.lock -e ".[dev]"
       - name: Compile native C++ kernels with MSVC
         run: |
           cmake -S . -B build/native -A x64
@@ -164,8 +158,6 @@ jobs:
         with:
           python-version: '3.11'
       - name: Install PostGIS integration dependencies
-        run: python -m pip install -e ".[dev,postgis]"
-      - name: Record resolved PostgreSQL dependencies
-        run: python -c "import subprocess; print('GF_PY_LOCK_BEGIN'); print(subprocess.check_output(['python','-m','pip','freeze','--exclude-editable'],text=True)); print('GF_PY_LOCK_END')"
+        run: python -m pip install -c requirements/postgis.lock -e ".[dev,postgis]"
       - name: Test real PostGIS sync, GiST indexed query and revision
         run: python -m pytest -v tests/test_postgis.py tests/test_distributed.py

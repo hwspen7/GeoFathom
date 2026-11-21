@@ -73,6 +73,8 @@ def _connect() -> Iterator[sqlite3.Connection]:
             )
             prepare_rtree(connection)
             connection.execute("PRAGMA user_version = 1")
+        from .migrations import migrate
+        migrate(connection)
         yield connection
         connection.commit()
     except Exception:

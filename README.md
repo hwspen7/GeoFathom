@@ -295,3 +295,9 @@ resolves a validated Earth Search item and performs allowlisted GDAL range
 reads on the NIR, red and SCL assets. It does not accept arbitrary remote
 URLs or claim a full satellite scene was downloaded.
 See [GeoAI data and model validation](docs/GEOAI.md).
+
+## Compute runtime qualification
+
+See [compute architecture and acceptance](docs/COMPUTE_ACCEPTANCE.md) for
+native scratch leases, optional CUDA, bounded model batching, persistent
+pyramids, version archiving, distributed workers, RBAC, and hardware tests.

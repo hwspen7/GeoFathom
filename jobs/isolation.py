@@ -38,6 +38,12 @@ def _child_entry(send,path,uid,owner,kind,project_id,payload,scratch):
     state=queue._ACTIVE_PROGRESS.set({
         "value":10,"checked":clock.monotonic(),"committed":clock.monotonic()})
     try:
+        from .resources import configure_child
+        from sqlite3 import connect
+        with __import__("contextlib").closing(connect(path,timeout=5)) as db:
+            row=db.execute("""SELECT name FROM gis_job_slots WHERE owner=?
+                AND name LIKE 'compute:%'""",(owner,)).fetchone()
+        configure_child(int(row[0].split(":")[1]) if row else 0)
         outcome=queue._execute(kind,project_id,payload)
         # Use bounded JSON IPC rather than unbounded pickled application results.
         data=json.dumps({"status":"ok","result":outcome},allow_nan=False).encode("utf-8")
