@@ -64,7 +64,10 @@ def _terminate(process):
 
 
 def _read_result(receive):
-    message=json.loads(receive.recv_bytes(maxlength=5_000_100))
+    try:
+        message=json.loads(receive.recv_bytes(maxlength=5_000_100))
+    except (EOFError,OSError,ValueError) as error:
+        raise RuntimeError("Raster subprocess IPC closed or returned invalid data.") from error
     if message["status"]!="ok":
         raise RuntimeError(message["error"])
     return message["result"]
@@ -96,7 +99,10 @@ def _run_isolated(path,uid,owner,kind,project_id,payload,lost,scratch):
     try:
         process.start()
         send.close()
-        monitor=psutil.Process(process.pid)
+        try:
+            monitor=psutil.Process(process.pid)
+        except psutil.NoSuchProcess as error:
+            raise RuntimeError("Raster subprocess exited before monitoring.") from error
         while True:
             if lost.is_set():
                 raise RuntimeError("Worker lease lost during raster processing.")
