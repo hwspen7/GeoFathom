@@ -57,6 +57,15 @@ GEOFATHOM_API void* gf_spatial_index_build(
 GEOFATHOM_API int gf_spatial_index_query(
     const void* handle, double x, double y, double tolerance_m,
     double* out_xydistance_segmentindex) noexcept;
+// Batch point queries amortize Python/C++ ABI overhead for dense snapping.
+// query_xy contains count interleaved metric XY pairs. outputs are count*4
+// [x,y,distance,segment] records; hit_flags are count bytes (0 or 1).
+// Returns number of hits, or -1 on invalid requests. No internal ownership
+// escapes this function; the parent index remains immutable.
+GEOFATHOM_API int gf_spatial_index_query_batch(
+    const void* handle, const double* query_xy, std::size_t count,
+    double tolerance_m, double* out_xydistance_segmentindex,
+    unsigned char* hit_flags) noexcept;
 GEOFATHOM_API void gf_spatial_index_destroy(void* handle) noexcept;
 }
 
@@ -68,3 +77,19 @@ GEOFATHOM_API void gf_spatial_index_destroy(void* handle) noexcept;
 extern "C" GEOFATHOM_API int gf_dem_gradient(
     const float* elevation,const unsigned char* valid,int width,int height,
     double pixel_width_m,double pixel_height_m,double* out4) noexcept;
+
+// Contiguous float32 spectral arrays and uint8 masks. Input values must already
+// be radiometrically comparable and the raster grids must be aligned by GDAL.
+// Normalized difference returns valid pixel count; change returns changed count.
+// Invalid pixels are set to zero and excluded from counts. A negative return
+// signals invalid pointers, sizes or thresholds. Outputs need count elements.
+// These kernels do not infer sensor band names or geographic coordinates.
+extern "C" {
+GEOFATHOM_API int gf_spectral_normalized_difference(
+    const float* first, const float* second, const unsigned char* valid,
+    std::size_t count, float* out_index, unsigned char* out_valid) noexcept;
+GEOFATHOM_API int gf_spectral_change(
+    const float* before_index, const unsigned char* before_valid,
+    const float* after_index, const unsigned char* after_valid,
+    std::size_t count, float threshold, unsigned char* out_class) noexcept;
+}

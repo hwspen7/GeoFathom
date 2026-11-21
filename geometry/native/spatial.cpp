@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <limits>
 #include <new>
+#include <memory>
 #include <numeric>
 #include <vector>
 
@@ -67,24 +68,26 @@ extern "C" GEOFATHOM_API void* gf_spatial_index_build(
     const double* segment_xyxy,std::size_t count) noexcept {
     if(!segment_xyxy || count==0 || count>1000000) return nullptr;
     try {
-        auto* index=new Index();
+        // Use RAII through every allocation/build failure. Returning nullptr
+        // from a noexcept C ABI must never leak a partially built tree.
+        auto index=std::make_unique<Index>();
         index->segments.reserve(count);
         for(std::size_t i=0;i<count;++i) {
             const double ax=segment_xyxy[i*4],ay=segment_xyxy[i*4+1];
             const double bx=segment_xyxy[i*4+2],by=segment_xyxy[i*4+3];
             if(!finite_number(ax)||!finite_number(ay)||!finite_number(bx)||!finite_number(by)) {
-                delete index;return nullptr;
+                return nullptr;
             }
             index->segments.push_back({
                 ax,ay,bx,by,std::min(ax,bx),std::min(ay,by),
-                std::max(ax,bx),std::max(ay,by),(ax+bx)/2,(ay+by)/2,
+                std::max(ax,bx),std::max(ay,by),ax/2+bx/2,ay/2+by/2,
             });
         }
         index->order.resize(count);
         std::iota(index->order.begin(),index->order.end(),0);
         index->nodes.reserve(count*2);
         build(*index,0,count);
-        return index;
+        return index.release();
     } catch(...) {return nullptr;}
 }
 
@@ -128,4 +131,28 @@ extern "C" GEOFATHOM_API int gf_spatial_index_query(
 }
 extern "C" GEOFATHOM_API void gf_spatial_index_destroy(void* handle) noexcept {
     delete static_cast<Index*>(handle);
+}
+
+// Batch queries preserve the same nearest-segment contract as single queries,
+// including boundary ties and no-match flags. The owning BVH is read-only and
+// may be shared by independent query threads.
+extern "C" GEOFATHOM_API int gf_spatial_index_query_batch(
+    const void* handle, const double* query_xy, std::size_t count,
+    double tolerance, double* out_records, unsigned char* hit_flags) noexcept {
+    if(!handle || !query_xy || !out_records || !hit_flags ||
+       count==0 || count>1000000 || !std::isfinite(tolerance) ||
+       tolerance<0) return -1;
+    int matched=0;
+    for(std::size_t i=0; i<count; ++i) {
+        const double x=query_xy[i*2],y=query_xy[i*2+1];
+        if(!std::isfinite(x) || !std::isfinite(y)) return -1;
+        // Initialize every record; callers never see stale output bytes.
+        double* record=out_records+i*4;
+        record[0]=record[1]=record[2]=record[3]=0.0;
+        const int status=gf_spatial_index_query(handle,x,y,tolerance,record);
+        if(status<0) return -1;
+        hit_flags[i]=static_cast<unsigned char>(status==1);
+        if(status==1) ++matched;
+    }
+    return matched;
 }

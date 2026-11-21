@@ -121,3 +121,17 @@ scale/performance guarantees.
 - True ONNX model inference accuracy, out-of-domain generalization, CUDA GPU
   performance and large-scene scene-by-scene validation require operator-
   provided weights, independently labeled images and physical test hardware.
+
+## Native C++ correctness and lifecycle coverage
+
+- \`geometry/native/test_geometry.cpp\`: direct C ABI tests for polygon,
+  color mask, snap, simplification, 100,000-segment BVH, batched indexed
+  queries, DEM and nodata-safe spectral kernels.
+- \`tests/test_spectral_native.py\`: native/NumPy parity with randomized
+  rasters, NaN/Inf, zero denominators, noncontiguous views, threshold edges,
+  validation errors and a 768-by-768-pixel stress case.
+- \`tests/test_spatial.py\`: index batch/scalar parity, distant misses,
+  explicit close and use-after-close checks.
+- CI uses Linux Release/Debug and ASan/UBSan standalone CTest builds and
+  Windows MSVC/Python native library tests. Speedup is not asserted on
+  shared CI runners; sustained hardware throughput is a separate check.

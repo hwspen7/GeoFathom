@@ -6,6 +6,7 @@
 #endif
 #include <cassert>
 #include <iostream>
+#include <limits>
 #include <vector>
 
 int main() {
@@ -72,6 +73,18 @@ int main() {
     assert(out[0]==5 && out[1]==0 && out[3]==0);
     assert(gf_spatial_index_query(idx,200,200,1,out)==0);
     assert(gf_spatial_index_query(idx,5,0,-1,out)==-1);
+    // Vectorized native lookups agree with scalar BVH queries.
+    constexpr double batch_queries[]={5,0.1, 50,50, 10.2,5};
+    double records[12]={};
+    unsigned char found_flags[3]={};
+    assert(gf_spatial_index_query_batch(
+        idx,batch_queries,3,.5,records,found_flags)==2);
+    assert(found_flags[0]==1 && found_flags[1]==0 && found_flags[2]==1);
+    assert(records[3]==0 && records[11]==1);
+    assert(gf_spatial_index_query_batch(
+        idx,batch_queries,0,.5,records,found_flags)==-1);
+    assert(gf_spatial_index_query_batch(
+        idx,batch_queries,3,-.5,records,found_flags)==-1);
     gf_spatial_index_destroy(idx);
     std::vector<double> many;
     for(int i=0;i<100000;++i) {
@@ -96,5 +109,40 @@ int main() {
     assert(terrain[0]>5.70 && terrain[0]<5.72);
     assert(terrain[2]==64);
     assert(gf_dem_gradient(nullptr,coverage.data(),10,10,10,10,terrain)==-1);
+    // Nodata, NaN, and zero denominators must not create apparent targets.
+    const float nan=std::numeric_limits<float>::quiet_NaN();
+    const float first[]={200,100,100,0,nan,100,50};
+    const float second[]={100,100,-100,0,100,100,50};
+    const unsigned char valid[]={1,1,1,1,1,0,1};
+    float index[7]={};
+    unsigned char spectral_valid[7]={};
+    const int found=gf_spectral_normalized_difference(
+        first,second,valid,7,index,spectral_valid);
+    assert(found==3);
+    assert(index[0]>0.3333f && index[0]<0.3334f);
+    assert(index[1]==0 && index[2]==0 && index[4]==0);
+    assert(spectral_valid[0]==1 && spectral_valid[1]==1 &&
+           spectral_valid[6]==1);
+    assert(spectral_valid[2]==0 && spectral_valid[3]==0 &&
+           spectral_valid[4]==0 && spectral_valid[5]==0);
+    assert(gf_spectral_normalized_difference(
+        nullptr,second,valid,7,index,spectral_valid)==-1);
+    assert(gf_spectral_normalized_difference(
+        first,second,valid,0,index,spectral_valid)==-1);
+
+    // Change classification is signed and excludes invalid source pixels.
+    const float before[]={0,0,0,0,nan,0};
+    const float after[]={.5f,-.6f,.1f,-.9f,.9f,.8f};
+    const unsigned char old_valid[]={1,1,1,0,1,1};
+    const unsigned char new_valid[]={1,1,1,1,1,0};
+    unsigned char labels[6]={255,255,255,255,255,255};
+    assert(gf_spectral_change(before,old_valid,after,new_valid,
+                              6,.2f,labels)==2);
+    assert(labels[0]==1 && labels[1]==2 && labels[2]==0 &&
+           labels[3]==0 && labels[4]==0 && labels[5]==0);
+    assert(gf_spectral_change(before,old_valid,after,new_valid,
+                              6,-.1f,labels)==-1);
+    assert(gf_spectral_change(before,old_valid,after,new_valid,
+                              0,.2f,labels)==-1);
     return 0;
 }

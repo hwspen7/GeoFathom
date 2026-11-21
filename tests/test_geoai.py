@@ -1,5 +1,6 @@
 """Remote-sensing analysis and replaceable ONNX segmentation integration tests."""
 import json
+import os
 import time
 
 import numpy as np
@@ -69,6 +70,8 @@ def test_ndvi_vectors_have_wgs84_measurement_and_no_fake_model_confidence(tmp_pa
     assert data["analysis"] == "ndvi"
     assert data["provider"] == "deterministic"
     assert data["model_id"] is None
+    if os.getenv("GEOFATHOM_REQUIRE_NATIVE") == "1":
+        assert data["engine"].endswith("cpp-spectral")
     assert data["valid_pixels"] == 4096
     assert data["classified_pixels"] == 32*32
     assert len(data["features"]) == 1
@@ -85,6 +88,9 @@ def test_two_date_warped_change_reports_gain_and_loss_without_guessing_dates(tmp
     new = raster(tmp_path,"new.tif",modified=True)
     gain = spectral_change(old,new,"old","new",4,1,.2,64)
     assert gain["valid_pixels"] == 4096
+    if os.getenv("GEOFATHOM_REQUIRE_NATIVE") == "1":
+        assert gain["engine"].endswith("cpp-spectral")
+        assert gain["index_engines"] == ["cpp-spectral","cpp-spectral"]
     assert gain["gain_pixels"] == 1024
     assert gain["loss_pixels"] == 0
     assert gain["features"][0]["properties"]["class_name"] == "index_gain"

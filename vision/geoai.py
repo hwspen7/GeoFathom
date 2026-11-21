@@ -16,6 +16,7 @@ from rasterio.warp import transform_geom
 from shapely.geometry import shape, mapping
 
 from geometry.measure import measure_geometry, GeometryError
+from geometry.spectral import normalized_difference, classify_change
 from imagery.raster import RasterError, _check
 
 MAX_SIDE = 768
@@ -47,11 +48,8 @@ def _window(src, bands, max_side):
 
 
 def _ratio(first, second, valid):
-    denominator = first + second
-    usable = valid & np.isfinite(denominator) & (np.abs(denominator) > 1e-9)
-    result = np.zeros(first.shape, dtype=np.float32)
-    np.divide(first - second, denominator, out=result, where=usable)
-    return np.clip(result, -1, 1), usable
+    # C++ handles hot per-pixel arithmetic, with a deterministic NumPy fallback.
+    return normalized_difference(first, second, valid)
 
 
 def _vector_features(labels, affine, crs, classes, max_features=MAX_FEATURES,
@@ -118,7 +116,7 @@ def spectral_index(path: Path, image_id: str, index: str,
         values, valid, affine = _window(src, (first_band, second_band), max_side)
         crs = str(src.crs)
         acquired = src.tags().get("ACQUISITION_DATE") or src.tags().get("TIFFTAG_DATETIME")
-    score, usable = _ratio(values[0], values[1], valid)
+    score, usable, index_engine = _ratio(values[0], values[1], valid)
     labels = np.where(usable & (score >= threshold), 1, 0).astype(np.uint8)
     klass = "vegetation_candidate" if index == "ndvi" else "surface_water_candidate"
     features, truncated = _vector_features(labels, affine, crs, {1: klass})
@@ -128,7 +126,7 @@ def spectral_index(path: Path, image_id: str, index: str,
             "bands": [first_band, second_band], "threshold": threshold,
         })
     return {"type": "FeatureCollection", "features": features,
-            "analysis": index, "engine": "rasterio-numpy-spectral-index",
+            "analysis": index, "engine": "rasterio+" + index_engine,
             "provider": "deterministic", "model_id": None,
             "source_images": [image_id], "acquired_at": acquired,
             "source_crs": crs, "geometry_crs": "EPSG:4326",
@@ -164,15 +162,13 @@ def spectral_change(before_path: Path, after_path: Path,
             before.tags().get("ACQUISITION_DATE") or before.tags().get("TIFFTAG_DATETIME"),
             after.tags().get("ACQUISITION_DATE") or after.tags().get("TIFFTAG_DATETIME"),
         ]
-    old_index, ov = _ratio(old[0], old[1], old_valid)
-    new_index, nv = _ratio(new[0], new[1], new_valid)
+    old_index, ov, old_engine = _ratio(old[0], old[1], old_valid)
+    new_index, nv, new_engine = _ratio(new[0], new[1], new_valid)
     both = ov & nv
     if not both.any():
         raise RasterError("The dated rasters have no valid overlapping pixels.")
-    delta = new_index - old_index
-    labels = np.zeros(delta.shape, dtype=np.uint8)
-    labels[both & (delta >= threshold)] = 1
-    labels[both & (delta <= -threshold)] = 2
+    labels, change_engine = classify_change(
+        old_index, ov, new_index, nv, threshold)
     features, truncated = _vector_features(
         labels, affine, crs, {1: "index_gain", 2: "index_loss"})
     for feature in features:
@@ -182,11 +178,13 @@ def spectral_change(before_path: Path, after_path: Path,
             "bands": [first_band, second_band], "threshold": threshold,
         })
     return {"type": "FeatureCollection", "features": features,
-            "analysis": "spectral_change", "engine": "rasterio-warped-vrt-numpy",
+            "analysis": "spectral_change",
+            "engine": "rasterio-warped-vrt+" + change_engine,
+            "index_engines": [old_engine, new_engine],
             "provider": "deterministic", "model_id": None,
             "source_images": [before_id, after_id], "acquired_at": dates,
             "source_crs": crs, "geometry_crs": "EPSG:4326",
-            "pixel_grid": [int(delta.shape[1]), int(delta.shape[0])],
+            "pixel_grid": [int(labels.shape[1]), int(labels.shape[0])],
             "valid_pixels": int(both.sum()),
             "gain_pixels": int((labels == 1).sum()),
             "loss_pixels": int((labels == 2).sum()),

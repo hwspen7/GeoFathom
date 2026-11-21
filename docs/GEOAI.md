@@ -19,6 +19,12 @@ A vegetation-index gain does **not** prove a new tree, construction or
 a change in ownership. The ONNX pipeline performs actual machine-learned
 inference when compatible weights are installed.
 
+C++17 native kernels compute normalized-difference pixels and change labels
+using contiguous float32 arrays and uint8 validity masks, with a matching
+NumPy fallback. GDAL/Rasterio remains responsible for reprojection, sensor
+band reads and nodata; GEOS/GDAL handles vector polygonization. Returned
+metadata discloses which native or fallback engine actually ran.
+
 All outputs use WGS84 GeoJSON, measured areas from the geographic geometry
 engine, explicit image source IDs, estimated boundary status, and a
 `requires_user_review` flag. Results are **preview only** until explicitly

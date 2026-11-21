@@ -87,8 +87,11 @@ The example is intended for local development. Do not expose the unprotected API
 
 ### Extended GIS capabilities
 
-- \`geometry/spatial.py\` and \`geometry/native/spatial.cpp\`: C++ BVH metric
-  segment indexing used by GIS network tracing and large snapping workloads.
+- \`geometry/spatial.py\` and \`geometry/native/spatial.cpp\`: immutable C++ BVH indexing of metric segments, with
+  scalar and batch queries, Shapely STRtree fallback and explicit handle ownership.
+- \`geometry/spectral.py\` and \`geometry/native/spectral.cpp\`: native
+  normalized-difference and signed two-date change kernels, masked float32
+  arrays and NumPy fallback. GDAL handles raster CRS, reprojection and nodata.
 - \`geometry/tracing.py\`: noded vector network shortest connected paths.
 - \`storage/topology.py\`: preview and atomic multi-feature shared-node edits.
 - \`storage/attributes.py\`: bounded searchable attributes and versioned bulk edits.

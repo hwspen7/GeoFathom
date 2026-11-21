@@ -61,8 +61,12 @@ SAM 2 positive/negative/box mask refinement. Native C++ BVH acceleration
 supports large nearest-edge queries, with a viewport spatial index in the
 browser. See [Advanced GIS workflows](docs/ADVANCED_GIS.md).
 
-CI includes Linux C++/Python/Web checks, Chromium Playwright UI tests and
-Windows MSVC validation. Optional local CUDA segmentation still requires
+CI includes Linux C++/Python/Web checks, Chromium Playwright UI tests,
+Windows MSVC validation and standalone native address/undefined-behavior
+sanitizers. Spectral pixels and change classes now use C++17 kernels when
+available, with deterministic NumPy fallback. The native metric BVH
+supports batched point queries to reduce Python/C++ ABI overhead.
+See [native engine contracts and verification](docs/NATIVE_ENGINE.md). Optional local CUDA segmentation still requires
 your own GPU and model installation.
 
 ## Interactive precision surveying and editing

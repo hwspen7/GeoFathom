@@ -24,6 +24,11 @@ jobs:
           cmake -S . -B build/native-debug -DCMAKE_BUILD_TYPE=Debug
           cmake --build build/native-debug --config Debug --parallel
           ctest --test-dir build/native-debug --build-config Debug --output-on-failure
+      - name: Audit native address/undefined behavior
+        run: |
+          cmake -S . -B build/native-sanitized -DCMAKE_BUILD_TYPE=Debug -DGEOFATHOM_NATIVE_SANITIZERS=ON
+          cmake --build build/native-sanitized --config Debug --parallel
+          ctest --test-dir build/native-sanitized --build-config Debug --output-on-failure
       - name: Run Python tests with native library
         env:
           GEOFATHOM_REQUIRE_NATIVE: '1'
