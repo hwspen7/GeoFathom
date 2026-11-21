@@ -10,8 +10,14 @@ async function project(page:import('@playwright/test').Page,name:string) {
   await page.goto('/');
   await page.getByLabel('New project name').fill(name);
   await page.getByRole('button',{name:'Create project'}).click();
-  await expect(page.getByLabel('Active project')).toBeVisible();
-  return await page.getByLabel('Active project').inputValue();
+  const selection=page.getByLabel('Active project');
+  await expect(selection).toBeVisible();
+  const option=selection.locator('option',{hasText:name});
+  await expect(option).toHaveCount(1);
+  const createdId=await option.getAttribute('value');
+  expect(createdId).toBeTruthy();
+  await expect(selection).toHaveValue(createdId!);
+  return createdId!;
 }
 async function savedWorkspace(page:import('@playwright/test').Page,id:string) {
   const r=await page.request.get('http://127.0.0.1:8000/projects/'+id+'/workspace');
