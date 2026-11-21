@@ -309,7 +309,7 @@ export default function GeoAIAnalysisPanel(p:Props){
               <option value={67108864}>67.1 million (8K²)</option>
             </select>
           </label>
-        </>:operation!=='stac_ndvi'&&<label>Maximum processing dimension
+        </>:<label>Maximum processing dimension
           <select aria-label="GeoAI processing resolution" value={maxSide}
             onChange={e=>setMaxSide(Number(e.target.value))}>
             <option value={256}>256 px</option><option value={512}>512 px</option>

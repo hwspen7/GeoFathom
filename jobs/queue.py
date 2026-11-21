@@ -148,8 +148,8 @@ def queue_job(project_id,kind,payload):
     if len(serialized.encode("utf-8"))>100_000:
         raise StorageError("Job request exceeds 100 KB.")
     with _connect() as c:
-        _required_project(c,project_id);_schema(c)
         c.execute("BEGIN IMMEDIATE")
+        _required_project(c,project_id);_schema(c)
         active=c.execute("""SELECT count(*) FROM gis_jobs
            WHERE status IN ('queued','running')""").fetchone()[0]
         if active>=32:raise StorageError("Local background job queue is full.")
@@ -336,6 +336,7 @@ def _worker(uid,path):
         deadline=time.monotonic()+120
         while True:
             with _connect() as c:
+                c.execute("BEGIN IMMEDIATE")
                 _schema(c)
                 row=claim(c,uid,owner)
                 if row is None:
