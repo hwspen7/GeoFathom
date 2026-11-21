@@ -151,3 +151,23 @@ def test_legacy_features_backfill_rtree():
     })
     assert resp.status_code==200,resp.text
     assert resp.json()["total"]==1
+
+def test_quality_detects_empty_aoi_coverage():
+    # A fully uncovered study area must be reported even when the project
+    # contains no polygon features (or only line features).
+    root,_=setup()
+    aoi=polygon(0,0)
+    payload={"study_area":aoi,"minimum_area_m2":10,"check_dangles":False}
+    for with_line in (False,True):
+        if with_line:
+            add(root,"Centerline",{"type":"LineString","coordinates":[[0.2,0.2],[0.8,0.2]]})
+        response=c.post(root+"/quality/topology",json=payload)
+        assert response.status_code==200,response.text
+        report=response.json()
+        assert report["counts"]=={"gap":1}
+        assert report["issue_count"]==1
+        assert report["issues"][0]["geometry"]==aoi
+        assert report["issues"][0]["area_m2"]>0
+        assert report["checked_features"]==int(with_line)
+    # Without a defined study area, missing exterior coverage is unknowable.
+    assert c.post(root+"/quality/topology",json={"check_dangles":False}).json()["issue_count"]==0
