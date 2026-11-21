@@ -788,3 +788,112 @@ export function saveGraduatedStyle(projectId:string,body:{
     body:JSON.stringify(body),
   });
 }
+
+
+// P2 trusted OGC services, PostGIS indexed mirror and persisted GIS jobs.
+export interface OGCSource {
+  id:string;project_id:string;
+  service:'wms'|'wmts'|'wfs'|'ogc_features';
+  title:string;base_url:string;layer_name:string;
+  attribution:string;tile_matrix_set:string;created_at:string;
+}
+export type NewOGCSource=Omit<OGCSource,'id'|'project_id'|'created_at'>;
+export function getOGCSources(projectId:string):Promise<{sources:OGCSource[]}>{
+  return request('/projects/'+encodeURIComponent(projectId)+'/ogc');
+}
+export function registerOGCSource(projectId:string,source:NewOGCSource,
+  adminToken:string):Promise<OGCSource>{
+  return request('/projects/'+encodeURIComponent(projectId)+'/ogc',{
+    method:'POST',headers:{'Content-Type':'application/json',
+      'X-GeoFathom-Admin-Token':adminToken},body:JSON.stringify(source),
+  });
+}
+export async function removeOGCSource(projectId:string,sourceId:string,token:string):Promise<void>{
+  const response=await fetch(API_URL+'/projects/'+encodeURIComponent(projectId)+
+    '/ogc/'+encodeURIComponent(sourceId),{
+    method:'DELETE',headers:{'X-GeoFathom-Admin-Token':token},
+  });
+  if(!response.ok)throw new Error('Could not remove OGC service.');
+}
+export function inspectOGCSource(projectId:string,id:string):Promise<{
+  service:string;layers?:string[];collections?:Array<{id:string;title:string}>;
+}>{
+  return request('/projects/'+encodeURIComponent(projectId)+'/ogc/'+
+    encodeURIComponent(id)+'/capabilities');
+}
+export function remoteOGCFeatures(projectId:string,id:string,
+  bbox:[number,number,number,number],limit=100):Promise<GeoJSON.FeatureCollection>{
+  const params=new URLSearchParams({
+    west:String(bbox[0]),south:String(bbox[1]),east:String(bbox[2]),
+    north:String(bbox[3]),limit:String(limit),
+  });
+  return request('/projects/'+encodeURIComponent(projectId)+'/ogc/'+
+    encodeURIComponent(id)+'/features?'+params);
+}
+export function ogcTileTemplate(projectId:string,id:string):string{
+  return API_URL+'/projects/'+encodeURIComponent(projectId)+
+    '/ogc/'+encodeURIComponent(id)+'/tiles/{z}/{x}/{y}';
+}
+export interface PostGISStatus {
+  configured:boolean;connected:boolean;engine:string;
+  postgis_version?:string;spatial_index?:string;note:string;
+}
+export function getPostGISStatus():Promise<PostGISStatus>{
+  return request('/postgis/status');
+}
+export function syncPostGIS(projectId:string,adminToken:string):Promise<{
+  synchronized:number;atomic:boolean;target:string;
+}>{
+  return request('/projects/'+encodeURIComponent(projectId)+'/postgis/sync',{
+    method:'POST',headers:{'Content-Type':'application/json',
+      'X-GeoFathom-Admin-Token':adminToken},
+    body:JSON.stringify({max_features:100000}),
+  });
+}
+export function queryPostGIS(projectId:string,bbox:[number,number,number,number],
+  limit=250,offset=0):Promise<{
+    results:WorkspaceFeature[];total:number;indexed:boolean;source:string;
+  }>{
+  const params=new URLSearchParams({
+    west:String(bbox[0]),south:String(bbox[1]),
+    east:String(bbox[2]),north:String(bbox[3]),
+    limit:String(limit),offset:String(offset),
+  });
+  return request('/projects/'+encodeURIComponent(projectId)+
+    '/postgis/features?'+params);
+}
+export type GISJobKind='topology_qa'|'spatial_select'|'export_geojson'|
+  'postgis_sync'|'rebuild_index';
+export interface GISJob {
+  id:string;project_id:string;kind:GISJobKind;
+  status:'queued'|'running'|'completed'|'failed'|'cancelled'|'interrupted';
+  progress:number;error:string|null;
+  payload:Record<string,unknown>;result:unknown;
+  cancel_requested:boolean;created_at:string;updated_at:string;
+}
+export function getGISJobs(projectId:string):Promise<{jobs:GISJob[]}>{
+  return request('/projects/'+encodeURIComponent(projectId)+'/jobs');
+}
+export function queueGISJob(projectId:string,kind:GISJobKind,
+  payload:Record<string,unknown>,token=''):Promise<GISJob>{
+  return request('/projects/'+encodeURIComponent(projectId)+'/jobs',{
+    method:'POST',headers:{'Content-Type':'application/json',
+      'X-GeoFathom-Admin-Token':token},
+    body:JSON.stringify({kind,payload}),
+  });
+}
+export function cancelGISJob(projectId:string,id:string):Promise<GISJob>{
+  return request('/projects/'+encodeURIComponent(projectId)+'/jobs/'+
+    encodeURIComponent(id)+'/cancel',{method:'POST'});
+}
+export async function downloadGISJob(projectId:string,id:string):Promise<void>{
+  const response=await fetch(API_URL+'/projects/'+encodeURIComponent(projectId)+
+    '/jobs/'+encodeURIComponent(id)+'/download');
+  if(!response.ok)throw new Error('Completed GeoJSON export job required.');
+  const url=URL.createObjectURL(await response.blob());
+  try{
+    const element=document.createElement('a');
+    element.href=url;element.download='geofathom-export.geojson';
+    document.body.appendChild(element);element.click();element.remove();
+  }finally{window.setTimeout(()=>URL.revokeObjectURL(url),1000);}
+}
