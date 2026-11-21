@@ -182,3 +182,8 @@ scale/performance guarantees.
 - `tests/test_pro_spatial.py::test_legacy_features_backfill_rtree`:
   a legacy index that was externally cleared is repopulated before the
   next viewport query without restoring full-table scans to every read.
+
+CI now also sets `GEOFATHOM_STRESS_MILLION_SEGMENTS=1` in the
+Linux native/Python acceptance run, so the 1,000,000-segment BVH build
+and 10,000 batched nearest-neighbor queries are exercised on a real
+GitHub runner, with no fixed speedup threshold.

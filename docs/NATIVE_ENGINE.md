@@ -168,3 +168,8 @@ the index is backfilled before returning a page. This preserves recovery
 after an interrupted or externally deleted index without running full
 feature-count scans on every API call. Partial out-of-band corruption still
 requires the explicit spatial-index rebuild operation.
+
+CI now also sets `GEOFATHOM_STRESS_MILLION_SEGMENTS=1` in the
+Linux native/Python acceptance run, so the 1,000,000-segment BVH build
+and 10,000 batched nearest-neighbor queries are exercised on a real
+GitHub runner, with no fixed speedup threshold.
