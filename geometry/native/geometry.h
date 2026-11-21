@@ -122,3 +122,13 @@ GEOFATHOM_API int gf_cuda_runtime_change(void* g,const float* a,const unsigned c
 // Exact horizontal and vertical label-edge count; bounded uint8 input.
 extern "C" GEOFATHOM_API int gf_mask_transitions(const unsigned char* data,
     std::size_t width,std::size_t height) noexcept;
+
+// Explicit aligned scratch-buffer leases. Never destroy during concurrent calls.
+#include <cstdint>
+extern "C" {
+GEOFATHOM_API void* gf_buffer_pool_create(std::size_t budget) noexcept;
+GEOFATHOM_API int gf_buffer_pool_acquire(void* p,std::size_t bytes,std::uint64_t* lease,void** data) noexcept;
+GEOFATHOM_API int gf_buffer_pool_release(void* p,std::uint64_t lease) noexcept;
+GEOFATHOM_API int gf_buffer_pool_stats(void* p,std::size_t* out) noexcept;
+GEOFATHOM_API int gf_buffer_pool_destroy(void* p) noexcept;
+}

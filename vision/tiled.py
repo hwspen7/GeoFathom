@@ -385,6 +385,7 @@ def semantic_segmentation_tiled(path: Path, image_id: str,
     """
     import os
     from .tiles import context_tiles
+    from geometry.buffers import ScratchPool
     from .semantic import _manifest, _predict_tile
     if (not math.isfinite(minimum_confidence)
             or not 0 <= minimum_confidence <= 1):
@@ -416,7 +417,8 @@ def semantic_segmentation_tiled(path: Path, image_id: str,
         valid_pixels = classified_pixels = 0
         transitions = 0
         sum_confidence = 0.
-        with _scratch(plan, "geofathom-semantic-") as (temp, scratch_quota):
+        with ScratchPool(memory_mb*1024*1024) as pool, \
+                _scratch(plan, "geofathom-semantic-") as (temp, scratch_quota):
             output = temp / "classes.tif"
             with rasterio.open(output, "w", driver="GTiff",
                                width=src.width, height=src.height,
@@ -434,12 +436,13 @@ def semantic_segmentation_tiled(path: Path, image_id: str,
                     normalized = (
                         np.nan_to_num(raw, nan=0., posinf=0., neginf=0.) /
                         config["input_scale"] - mean) / std
-                    tensor = np.zeros((1, len(config["bands"]), plan.tile_size,
-                                       plan.tile_size),
-                                      dtype=np.float32)
                     y, x = tile.input_row, tile.input_col
-                    tensor[0, :, y:y+rows, x:x+cols] = normalized
-                    labels, confidence = _predict_tile(tensor, config, device)
+                    # Synchronous inference completes before the scratch lease
+                    # is returned. No model output references the input view.
+                    with pool.floats((1, len(config["bands"]), plan.tile_size,
+                                      plan.tile_size)) as tensor:
+                        tensor[0, :, y:y+rows, x:x+cols] = normalized
+                        labels, confidence = _predict_tile(tensor, config, device)
                     core_valid = np.zeros((plan.tile_size, plan.tile_size), bool)
                     core_valid[y:y+rows, x:x+cols] = valid
                     valid = core_valid[tile.crop]
