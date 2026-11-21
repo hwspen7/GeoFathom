@@ -22,6 +22,8 @@ _DEFAULT={
     "symbol":{
         "fill_opacity":0.17,"line_width":3,"point_radius":5,
         "stroke_color":"#ffffff",
+        "category_field":"",
+        "category_colors":{},
     },
 }
 
@@ -56,10 +58,20 @@ def _validate(changes:dict[str,Any],current:dict[str,Any])->dict:
                 if value<low or value>high:raise StorageError(f"{name} is outside {low}–{high}.")
                 if name=="font_size" and int(value)!=value:
                     raise StorageError("font_size must be a whole pixel value.")
-            elif name=="field":
-                if (not isinstance(value,str) or not 1<=len(value)<=64
-                        or any(ord(ch)<32 for ch in value)):
-                    raise StorageError("Label attribute field must have 1–64 printable characters.")
+            elif name in {"field","category_field"}:
+                if (not isinstance(value,str) or
+                        (name=="field" and not 1<=len(value)<=64) or
+                        (name=="category_field" and len(value)>64) or
+                        any(ord(ch)<32 for ch in value)):
+                    raise StorageError("Attribute field must have at most 64 printable characters.")
+            elif name=="category_colors":
+                if not isinstance(value,dict) or len(value)>20:
+                    raise StorageError("Category palette supports at most 20 values.")
+                for category,color in value.items():
+                    if (not isinstance(category,str) or not 1<=len(category)<=80
+                            or any(ord(ch)<32 for ch in category)
+                            or not isinstance(color,str) or not _HEX.fullmatch(color)):
+                        raise StorageError("Category values and colors are invalid.")
             elif not isinstance(value,str) or not _HEX.fullmatch(value):
                 raise StorageError(f"{name} must be a #RRGGBB color.")
             updated[section][name]=value
