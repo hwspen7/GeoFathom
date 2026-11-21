@@ -4,6 +4,7 @@ import maplibregl, { type GeoJSONSource, type MapMouseEvent, type StyleSpecifica
 import { rasterPreviewUrl, type RasterAsset } from './api';
 import { PixelSnapIndex } from './spatialIndex';
 import { featureLabel } from './labels';
+import type { ExternalTile } from './DataServicesPanel';
 import type { Measurement,LayerStyle } from './api';
 import {
   addVertex, moveVertex, removeVertex, translateSpherical, geodesicDrag, pathsOf,
@@ -58,6 +59,7 @@ interface Props {
   selectedIds:string[];
   qualityIssues:GeoJSON.Geometry[];
   projectGrid:GeoJSON.FeatureCollection|null;
+  externalTiles:ExternalTile[];
   onGeometryPreview: (geometry: GeoJSON.Geometry) => void;
   onGeometryCommit: (geometry: GeoJSON.Geometry, movement?: {
     original:GeoJSON.Geometry;bearing_deg:number;distance_m:number;
@@ -239,7 +241,7 @@ export default function MapCanvas({
   onViewportChange, discovered, imageLayer, traceMode, onTraceClick,
   editing, moving, snapping, selectedLocked, layerFeatures,
   promptPositive,promptNegative,promptBox,annotationMode,onAnnotationClick,
-  selectionBoxMode,onSelectionBox,selectedIds,qualityIssues,projectGrid,
+  selectionBoxMode,onSelectionBox,selectedIds,qualityIssues,projectGrid,externalTiles,
   onGeometryPreview, onGeometryCommit, onSelectSavedFeature,
 }: Props) {
   const container = useRef<HTMLDivElement>(null);
@@ -705,6 +707,32 @@ export default function MapCanvas({
     if (!drag.current) spatialSnap.current=null;
   }, [selected, vertices, drawingMode, discovered, layerFeatures, editing,
       promptPositive,promptNegative,promptBox,selectedIds,qualityIssues,ready]);
+
+  useEffect(()=>{
+    const map=mapRef.current;
+    if(!ready||!map)return;
+    const current=map.getStyle().layers
+      .filter(layer=>layer.id.startsWith('remote-ogc-'))
+      .map(layer=>layer.id);
+    const wanted=new Set(externalTiles.map(tile=>'remote-ogc-'+tile.id));
+    for(const id of current){
+      if(wanted.has(id))continue;
+      if(map.getLayer(id))map.removeLayer(id);
+      const sourceId=id.replace('remote-ogc-','remote-ogc-source-');
+      if(map.getSource(sourceId))map.removeSource(sourceId);
+    }
+    for(const tile of externalTiles){
+      const sourceId='remote-ogc-source-'+tile.id;
+      const id='remote-ogc-'+tile.id;
+      if(map.getLayer(id))continue;
+      map.addSource(sourceId,{
+        type:'raster',tiles:[tile.template],tileSize:256,
+        attribution:tile.attribution||tile.title,maxzoom:19,
+      });
+      map.addLayer({id,source:sourceId,type:'raster',
+        paint:{'raster-opacity':.82,'raster-fade-duration':0}},'workspace-fill');
+    }
+  },[externalTiles,ready]);
 
   useEffect(()=>{
     const map=mapRef.current;

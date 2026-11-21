@@ -14,6 +14,7 @@ import SurveyTools from './SurveyTools';
 import ProfessionalPanel from './ProfessionalPanel';
 import SpatialToolsPanel from './SpatialToolsPanel';
 import CartographyProPanel from './CartographyProPanel';
+import DataServicesPanel, {type ExternalTile} from './DataServicesPanel';
 import { featureColor, legendEntries, DEFAULT_LAYER_STYLE } from './labels';
 import ImageCorrectionPanel, { type PromptMode } from './ImageCorrectionPanel';
 import {
@@ -83,6 +84,9 @@ export default function App() {
   const [spatialSelected,setSpatialSelected]=useState<string[]>([]);
   const [qualityIssues,setQualityIssues]=useState<QualityIssue[]>([]);
   const [projectGrid,setProjectGrid]=useState<GeoJSON.FeatureCollection|null>(null);
+  const [externalTiles,setExternalTiles]=useState<ExternalTile[]>([]);
+  const [externalFeatures,setExternalFeatures]=useState<GeoJSON.Geometry[]>([]);
+  const [pagedFeatures,setPagedFeatures]=useState<WorkspaceFeature[]>([]);
   const [linked,setLinked] = useState(false);
   const [pendingShared,setPendingShared] = useState<{
     preview:SharedTopologyPreview;old:[number,number];next:[number,number];
@@ -433,6 +437,7 @@ export default function App() {
     setPendingAnnotation(null);
     setSelectionBoxMode(false);setSelectionBox(null);
     setSpatialSelected([]);setQualityIssues([]);setProjectGrid(null);
+    setExternalFeatures([]);setPagedFeatures([]);
     setPromptMode(null);setPositivePoints([]);setNegativePoints([]);setBoxPoints([]);
     setPendingShared(null);
     lastValid.current = null;
@@ -757,6 +762,19 @@ export default function App() {
           </section>
 
           <section className="panel-section">
+            <div className="section-heading"><Layers3 size={16}/><span>OGC, indexed stores & background jobs</span></div>
+            <DataServicesPanel
+              projectId={activeProjectId}
+              viewport={viewport}
+              drawnGeometry={geometry}
+              onTiles={setExternalTiles}
+              onPreview={setExternalFeatures}
+              onPage={setPagedFeatures}
+              onRefresh={()=>setRefreshToken(value=>value+1)}
+            />
+          </section>
+
+          <section className="panel-section">
             <div className="section-heading"><Search size={16} /><span>Find areas by size</span><span className="section-pill">Spatial query</span></div>
             <DiscoveryPanel viewport={viewport} busy={busy} onFound={(result: DiscoveryResponse) => {
               setDiscovered(result.results);
@@ -874,7 +892,9 @@ export default function App() {
             selected={geometry} drawingMode={drawingMode} vertices={vertices}
             editing={editing} moving={moving} snapping={snapping}
             selectedLocked={selectedLocked}
-            layerFeatures={[...(projectWorkspace?.features ?? [])].sort((a,b) => {
+            layerFeatures={[...(projectWorkspace?.features ?? []),
+              ...pagedFeatures.filter(feature=>!(projectWorkspace?.features??[])
+                .some(row=>row.id===feature.id))].sort((a,b) => {
               const aIndex=projectWorkspace?.layers.find(layer=>layer.id===a.layer_id)?.z_index ?? 0;
               const bIndex=projectWorkspace?.layers.find(layer=>layer.id===b.layer_id)?.z_index ?? 0;
               return aIndex-bIndex;
@@ -920,6 +940,7 @@ export default function App() {
             selectedIds={spatialSelected}
             qualityIssues={qualityIssues.map(issue=>issue.geometry)}
             projectGrid={projectGrid}
+            externalTiles={externalTiles}
             onTraceClick={async ([longitude, latitude]) => {
               if (promptMode!==null) {
                 const location:Position=[longitude,latitude];
@@ -970,7 +991,8 @@ export default function App() {
                 setBusy(false);
               }
             }}
-            discovered={[...discovered.map(place => place.geometry).filter((item): item is GeoJSON.Geometry => item !== null), ...splitParts.slice(1)]}
+            discovered={[...discovered.map(place => place.geometry).filter((item): item is GeoJSON.Geometry => item !== null),
+              ...externalFeatures,...splitParts.slice(1)]}
             annotationMode={Boolean(pendingAnnotation)}
             onAnnotationClick={async position=>{
               if(!pendingAnnotation||busy)return;
