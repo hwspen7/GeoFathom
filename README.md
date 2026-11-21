@@ -14,6 +14,21 @@ GeoFathom uses **Python for orchestration, GIS analysis and provider adapters**
 and **C++17 for optional performance-sensitive geometric topology**. The
 native module has a correctness-preserving Shapely/Python fallback.
 
+
+
+## Full professional GIS P0/P1/P2 platform
+
+The workspace now includes professional map PDF layouts, spatial rectangle
+and polygon selection, topological polygon-gap/overlap QA, Jenks/quantile
+graduated colors, advanced labels and callouts, project EPSG metadata/grid,
+OGC WMS/WMTS/WFS/Features connectors, an indexed SQLite R-tree, an optional
+PostGIS GiST mirror and a persistent local background task queue.
+
+See [Professional GIS workflows](docs/PROFESSIONAL_GIS.md) and
+[Automated validation](docs/TEST_MATRIX.md). External OGC and PostGIS
+services need independently configured endpoints and cannot be assumed
+operational on an unconfigured development machine.
+
 ## Cartographic labeling and map annotations
 
 Per-layer labels can show names, sources, geodesic area/length or custom

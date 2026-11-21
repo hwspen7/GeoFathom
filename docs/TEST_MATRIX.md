@@ -87,3 +87,21 @@ Features present in QGIS or ArcGIS Pro but not yet fully replicated:
 Keep these separate from claims of completed support. The current work is
 a reliable next step toward a professional GIS workspace, not a substitute
 for a full commercial desktop GIS.
+
+
+## P0 / P1 / P2 additional integration coverage
+
+- \`tests/test_pro_spatial.py\`: R-tree maintenance, viewport pagination,
+  exact predicates, overlap/duplicate/gap/dangle detection.
+- \`tests/test_printing.py\`: vector PDF paper sizes, text extraction,
+  scale/legend and project scope.
+- \`tests/test_professional_p1.py\`: equal/quantile/Fisher–Jenks, EPSG
+  transformations, graticules, style validation.
+- \`tests/test_ogc_services.py\`: WMS GetMap, WMTS GetTile, WFS and OGC API
+  Features providers, HTTPS allowlist security and permission boundaries.
+- \`tests/test_background_jobs.py\`: persistent job execution, cancellation,
+  progress, error, JSON export and administrator-only operations.
+- \`tests/test_postgis.py\`: optional real PostGIS query and geometry sync,
+  with a dedicated \`postgis\` GitHub Actions service job.
+- \`web/e2e/professional.spec.ts\`: actual Chromium map selection, PDF download,
+  topology QA, graduated colors, project CRS and queued export.
