@@ -87,17 +87,20 @@ def sync_project(project_id:str,max_features:int=100000)->dict:
                     batch=[(project_id,r["id"],r["layer_id"],r["revision"],r["name"],
                             r["source"],json.dumps(json.loads(r["properties"])),
                             json.dumps(json.loads(r["geometry"]))) for r in rows]
-                    remote.executemany("""INSERT INTO geofathom_features(
-                      project_id,id,layer_id,revision,name,source,properties,geom)
-                      VALUES(%s,%s,%s,%s,%s,%s,%s::jsonb,
-                             ST_SetSRID(ST_GeomFromGeoJSON(%s),4326))""",batch)
+                    with remote.cursor() as cursor:
+                        cursor.executemany("""INSERT INTO geofathom_features(
+                          project_id,id,layer_id,revision,name,source,properties,geom)
+                          VALUES(%s,%s,%s,%s,%s,%s,%s::jsonb,
+                                 ST_SetSRID(ST_GeomFromGeoJSON(%s),4326))""",batch)
                     offset+=len(rows)
                 return {"project_id":project_id,"synchronized":offset,
                         "source":"SQLite","target":"PostGIS","atomic":True,
                         "index":"GiST geometry(Geometry,4326)",
                         "note":"Snapshot mirrored; re-sync after subsequent local edits."}
         except Exception as error:
-            raise PostGISError("PostGIS transaction failed; check service logs and configuration.") from error
+            raise PostGISError("PostGIS transaction failed ("+
+                type(error).__name__+", SQLSTATE="+str(getattr(error,"sqlstate","n/a"))+
+                "); verify server schema and configuration.") from error
 
 
 def spatial_page(project_id,bbox,limit=250,offset=0,relation="intersects")->dict:
