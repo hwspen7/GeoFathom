@@ -56,6 +56,8 @@ interface Props {
   onAnnotationClick:(position:Position)=>void;
   selectionBoxMode:boolean;
   onSelectionBox:(bbox:[number,number,number,number])=>void;
+  labelMoveMode:boolean;
+  onLabelMove:(id:string,dx:number,dy:number)=>void;
   selectedIds:string[];
   qualityIssues:GeoJSON.Geometry[];
   projectGrid:GeoJSON.FeatureCollection|null;
@@ -242,14 +244,15 @@ export default function MapCanvas({
   editing, moving, snapping, selectedLocked, layerFeatures,
   promptPositive,promptNegative,promptBox,annotationMode,onAnnotationClick,
   selectionBoxMode,onSelectionBox,selectedIds,qualityIssues,projectGrid,externalTiles,
+  labelMoveMode,onLabelMove,
   onGeometryPreview, onGeometryCommit, onSelectSavedFeature,
 }: Props) {
   const container = useRef<HTMLDivElement>(null);
   const coordinateRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const eventRef = useRef({
-    selected, drawingMode, traceMode, annotationMode,selectionBoxMode,editing, moving, snapping, selectedLocked,
-    layerFeatures, onMapClick, onTraceClick,onAnnotationClick,onSelectionBox,onViewportChange,
+    selected, drawingMode, traceMode, annotationMode,selectionBoxMode,labelMoveMode,editing, moving, snapping, selectedLocked,
+    layerFeatures, onMapClick, onTraceClick,onAnnotationClick,onSelectionBox,onLabelMove,onViewportChange,
     onGeometryPreview, onGeometryCommit, onSelectSavedFeature,
   });
   const renderRef = useRef({
@@ -262,11 +265,14 @@ export default function MapCanvas({
   };
   const drag = useRef<Drag | null>(null);
   const selectionDrag=useRef<{start:Position;end:Position}|null>(null);
+  const labelPointer=useRef<[number,number]|null>(null);
+  const labelDrag=useRef<{id:string;text:string;start:[number,number];
+    base:[number,number];font:number}|null>(null);
   const spatialSnap = useRef<PixelSnapIndex|null>(null);
   const [ready, setReady] = useState(false);
   eventRef.current = {
-    selected, drawingMode, traceMode, annotationMode,selectionBoxMode,editing, moving, snapping, selectedLocked,
-    layerFeatures, onMapClick, onTraceClick,onAnnotationClick,onSelectionBox,onViewportChange,
+    selected, drawingMode, traceMode, annotationMode,selectionBoxMode,labelMoveMode,editing, moving, snapping, selectedLocked,
+    layerFeatures, onMapClick, onTraceClick,onAnnotationClick,onSelectionBox,onLabelMove,onViewportChange,
     onGeometryPreview, onGeometryCommit, onSelectSavedFeature,
   };
 
@@ -331,6 +337,30 @@ export default function MapCanvas({
     }
     function beginDrag(event: MapMouseEvent) {
       spatialSnap.current=null;
+      if(eventRef.current.labelMoveMode){
+        const state=eventRef.current;
+        const found=hits(event).find(item=>
+          item.properties?.role==='saved'&&
+          state.layerFeatures.some(feature=>feature.id===String(item.properties?.id)));
+        const target=found?.properties?.id?state.layerFeatures.find(
+          item=>item.id===String(found.properties.id)):null;
+        if(target&&!target.locked){
+          const base:[number,number]=[
+            typeof target.properties.label_offset_x==='number'?
+              target.properties.label_offset_x:target.style.labels.offset_x,
+            typeof target.properties.label_offset_y==='number'?
+              target.properties.label_offset_y:target.style.labels.offset_y,
+          ];
+          labelPointer.current=[event.point.x,event.point.y];
+          labelDrag.current={
+            id:target.id,text:target.name,start:[event.point.x,event.point.y],
+            base,font:target.style.labels.font_size,
+          };
+          map.dragPan.disable();event.preventDefault();
+          map.getCanvas().style.cursor='grabbing';
+          return;
+        }
+      }
       if(eventRef.current.selectionBoxMode){
         selectionDrag.current={start:coordinates(event),end:coordinates(event)};
         map.dragPan.disable();event.preventDefault();
@@ -417,6 +447,19 @@ export default function MapCanvas({
       return hit.kind==='none'?point:hit.point;
     }
     function dragging(event: MapMouseEvent) {
+      if(labelDrag.current){
+        const drag=labelDrag.current;
+        labelPointer.current=[event.point.x,event.point.y];
+        const source=map.getSource('label-drag-preview') as GeoJSONSource|undefined;
+        if(source){
+          const geo=map.unproject([event.point.x,event.point.y]);
+          source.setData({type:'FeatureCollection',features:[{
+            type:'Feature',properties:{label:drag.text},
+            geometry:{type:'Point',coordinates:[geo.lng,geo.lat]},
+          }]});
+        }
+        return;
+      }
       if(selectionDrag.current){
         selectionDrag.current.end=coordinates(event);
         const a=selectionDrag.current.start,b=selectionDrag.current.end;
@@ -449,6 +492,25 @@ export default function MapCanvas({
       eventRef.current.onGeometryPreview(changed);
     }
     function finishDrag() {
+      if(labelDrag.current){
+        const drag=labelDrag.current;
+        labelDrag.current=null;map.dragPan.enable();
+        map.getCanvas().style.cursor='crosshair';
+        const source=map.getSource('label-drag-preview') as GeoJSONSource|undefined;
+        source?.setData({type:'FeatureCollection',features:[]});
+        // A drag is still a user-initiated feature revision, never a
+        // direct unversioned browser-only style mutation.
+        const current=labelPointer.current??drag.start;
+        labelPointer.current=null;
+        const offsetX=Math.max(-10,Math.min(10,
+          drag.base[0]+(current[0]-drag.start[0])/drag.font));
+        const offsetY=Math.max(-10,Math.min(10,
+          drag.base[1]+(current[1]-drag.start[1])/drag.font));
+        if(Math.hypot(offsetX-drag.base[0],offsetY-drag.base[1])>.05){
+          eventRef.current.onLabelMove(drag.id,offsetX,offsetY);
+        }
+        return;
+      }
       if(selectionDrag.current){
         const {start,end}=selectionDrag.current;
         selectionDrag.current=null;map.dragPan.enable();
@@ -481,7 +543,7 @@ export default function MapCanvas({
     function click(event: MapMouseEvent) {
       const state = eventRef.current;
       if (drag.current) return;
-      if (state.selectionBoxMode) return;
+      if (state.selectionBoxMode||state.labelMoveMode) return;
       if (state.annotationMode) state.onAnnotationClick(coordinates(event));
       else if (state.traceMode) state.onTraceClick(coordinates(event));
       else if (state.drawingMode) state.onMapClick(snapAt(coordinates(event), null));
@@ -575,6 +637,15 @@ export default function MapCanvas({
       if(map.getSource('workspace'))return;
       map.addSource('workspace', {
         type: 'geojson', data: { type: 'FeatureCollection', features: [] },
+      });
+      map.addSource('label-drag-preview',{
+        type:'geojson',data:{type:'FeatureCollection',features:[]},
+      });
+      map.addLayer({
+        id:'label-drag-preview-text',type:'symbol',source:'label-drag-preview',
+        layout:{'text-field':['get','label'],'text-font':['Open Sans Regular'],
+          'text-size':14,'text-allow-overlap':true},
+        paint:{'text-color':'#cf4e18','text-halo-color':'#fff','text-halo-width':2},
       });
       map.addSource('project-grid',{type:'geojson',
         data:{type:'FeatureCollection',features:[]}});
@@ -781,8 +852,8 @@ export default function MapCanvas({
     const map = mapRef.current;
     if (!map) return;
     map.doubleClickZoom[editing ? 'disable' : 'enable']();
-    map.getCanvas().style.cursor = drawingMode || traceMode || editing || annotationMode || selectionBoxMode ? 'crosshair' : '';
-  }, [editing, drawingMode, traceMode, annotationMode, selectionBoxMode,ready]);
+    map.getCanvas().style.cursor = drawingMode || traceMode || editing || annotationMode || selectionBoxMode || labelMoveMode ? 'crosshair' : '';
+  }, [editing, drawingMode, traceMode, annotationMode, selectionBoxMode,labelMoveMode,ready]);
 
   return <>
     <div aria-label="Interactive geospatial map" data-label-layer-ready={ready ? "true" : "false"} className="map-canvas" ref={container}/>
