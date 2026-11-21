@@ -148,7 +148,7 @@ def test_annotation_requires_valid_coordinates_and_printable_text():
         {"text":"X"*121,"position":[-83,40]},
         {"text":"Valid","position":[-181,40]},
         {"text":"Valid","position":[-83,91]},
-        {"text":"\\u0007","position":[-83,40]},
+        {"text":chr(7),"position":[-83,40]},
         {"text":"Valid","position":[-83]},
     ]:
         r=client.post(root+"/annotations",json=body)
