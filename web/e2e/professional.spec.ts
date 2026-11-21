@@ -8,6 +8,7 @@ test.beforeEach(async({page})=>{
 const API='http://127.0.0.1:8000';
 
 async function create(page:Page,name:string){
+  name=name+'-'+Date.now().toString(36);
   await page.goto('/');
   await page.getByLabel('New project name').fill(name);
   await page.getByRole('button',{name:'Create project'}).click();

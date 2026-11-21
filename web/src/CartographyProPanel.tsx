@@ -27,12 +27,16 @@ export default function CartographyProPanel(p:Props){
   const [projected,setProjected]=useState<string>('');
   const [classification,setClassification]=useState<string>('');
   const [busy,setBusy]=useState(false);
+  const [localStyle,setLocalStyle]=useState<GeoLayer|null>(null);
   const [error,setError]=useState('');
   const [notice,setNotice]=useState('');
-  const layer=p.workspace?.layers.find(x=>x.id===layerId)??p.workspace?.layers[0]??null;
+  const workspaceLayer=p.workspace?.layers.find(x=>x.id===layerId)??p.workspace?.layers[0]??null;
+  const layer=localStyle?.id===workspaceLayer?.id&&
+    localStyle.style_revision>=workspaceLayer.style_revision?
+    localStyle:workspaceLayer;
 
   useEffect(()=>{
-    if(!p.projectId){setCRS(null);p.onGrid(null);return;}
+    if(!p.projectId){setCRS(null);setLocalStyle(null);p.onGrid(null);return;}
     let cancelled=false;
     getProjectCRS(p.projectId).then(info=>{
       if(!cancelled){setCRS(info);setEPSG(info.epsg);}
@@ -60,9 +64,10 @@ export default function CartographyProPanel(p:Props){
   async function saveLabels(change:Partial<GeoLayer['style']['labels']>){
     if(!layer||!p.projectId)return;
     await run(async()=>{
-      await patchLayerStyle(p.projectId!,layer.id,{
+      const saved=await patchLayerStyle(p.projectId!,layer.id,{
         labels:change,expected_revision:layer.style_revision,
       });
+      setLocalStyle(saved);
       p.onChanged();setNotice('Advanced label placement saved.');
     });
   }
@@ -76,6 +81,7 @@ export default function CartographyProPanel(p:Props){
       setClassification(result.classification.classes+' graduated classes using '+
         result.classification.samples+' values; breaks: '+
         result.classification.breaks.map(x=>x.toFixed(2)).join(', '));
+      setLocalStyle(result.layer);
       p.onChanged();setNotice('Layer graduated colors updated.');
     });
   }
