@@ -179,13 +179,30 @@ export default function ProjectsPanel({
     labels?:Partial<GeoLayer['style']['labels']>;
     symbol?:Partial<GeoLayer['style']['symbol']>;
   }){
-    if(!selected||!activeLayer)return;
-    await run(async()=>{
-      await patchLayerStyle(selected,activeLayer.id,{
-        ...changes,expected_revision:activeLayer.style_revision,
+    if(!selected||!activeLayer||busy)return;
+    const projectId=selected,layer=activeLayer;
+    // React controlled inputs must update immediately. Revert from the
+    // authoritative server state if an optimistic style write is rejected.
+    setWorkspace(current=>current?{
+      ...current,
+      layers:current.layers.map(item=>item.id===layer.id?{
+        ...item,style:{
+          labels:{...item.style.labels,...changes.labels},
+          symbol:{...item.style.symbol,...changes.symbol},
+        },
+      }:item),
+    }:current);
+    setBusy(true);setError('');setInfo('');
+    try{
+      await patchLayerStyle(projectId,layer.id,{
+        ...changes,expected_revision:layer.style_revision,
       });
+      await reload(projectId);
       setInfo('Label and symbology settings saved.');
-    });
+    }catch(failure){
+      setError(failure instanceof Error?failure.message:'Could not save layer style.');
+      try{await reload(projectId);}catch{ /* Surface the original error. */ }
+    }finally{setBusy(false);}
   }
 
   function placeNote(event:FormEvent<HTMLFormElement>){
