@@ -170,7 +170,7 @@ test('P1 drag a saved point label and commit revisioned offset fields',async({pa
     return (await r.json()).layers[0].style.labels.rule_value;
   }).toBe('field');
   await page.getByLabel('Move map labels').click();
-  await expect(page.getByRole('button',{name:'Stop moving labels'})).toBeVisible();
+  await expect(page.getByLabel('Move map labels')).toContainText('Stop moving labels');
   const bbox=await map.boundingBox();
   expect(bbox).not.toBeNull();
   const x=bbox!.x+bbox!.width/2,y=bbox!.y+bbox!.height/2;
