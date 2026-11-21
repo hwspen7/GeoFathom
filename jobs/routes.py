@@ -37,8 +37,8 @@ def list_project_jobs(project_id:str,limit:int=Query(default=30,ge=1,le=100)):
     except StorageError as error:raise fail(error) from error
 
 @router.get("/{project_id}/jobs/{job_id}")
-def job_status(project_id:str,job_id:str):
-    try:return get_job(project_id,job_id)
+def job_status(project_id:str,job_id:str,include_result:bool=True):
+    try:return get_job(project_id,job_id,include_result=include_result)
     except StorageError as error:raise fail(error) from error
 
 @router.post("/{project_id}/jobs/{job_id}/cancel")

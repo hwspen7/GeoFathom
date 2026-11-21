@@ -147,3 +147,22 @@ scale/performance guarantees.
 - `tests/test_spatial.py`: shared-index close/query races and exact
   zero-tolerance fallback lookup.
 - `web/e2e/geoai.spec.ts`: full-resolution controls in the user interface.
+
+## Expanded acceptance runs
+
+- Linux CI sets `GEOFATHOM_STRESS_8K=1`: both synthetic 4K² and 8K²
+  full-resolution GeoTIFF analysis must preserve every classified pixel
+  across tile seams. Windows CI runs 4K and skips the optional 8K case.
+- `tests/test_tiled_raster.py`: diagonal-only pixel contact produces
+  separate valid polygons, and aborted scratch-budget tasks clean up.
+- `tests/test_background_jobs.py`: 1 MB results remain in a separate
+  SQLite result table; list polling is lightweight and job detail restores
+  the complete JSON. Progress writes are throttled.
+- `tests/test_spatial.py`: native readers can overlap safely with a
+  concurrent close; `GEOFATHOM_STRESS_MILLION_SEGMENTS=1` enables the
+  optional 1-million-segment / 10,000-query native stress test.
+- `tests/test_vision_runtime.py`: mocked CUDA I/O Binding API contract
+  plus operator-only real GPU acceptance if `GEOFATHOM_GPU_ACCEPTANCE_MODEL`
+  and configured model weights and CUDA hardware are available.
+- `benchmarks/native_pipeline.py`: repeatable per-hardware native vs
+  NumPy spectral and batched BVH throughput observations.

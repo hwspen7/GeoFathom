@@ -1,6 +1,7 @@
 #include "geometry.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <limits>
@@ -21,7 +22,13 @@ struct Index {
     std::vector<std::size_t> order;
     std::vector<Node> nodes;
 };
-bool finite_number(double a) noexcept { return std::isfinite(a); }
+// Reject extreme projected coordinates that can overflow squared metric
+// distances. Normal GIS coordinates are many orders below this bound.
+constexpr double kMaxMetricCoordinate=1e12;
+constexpr double kMaxTolerance=1e9;
+bool finite_number(double a) noexcept {
+    return std::isfinite(a) && std::abs(a)<=kMaxMetricCoordinate;
+}
 double dist_rect(double x,double y,const Node& n) noexcept {
     const double dx=x<n.minx?n.minx-x:(x>n.maxx?x-n.maxx:0.0);
     const double dy=y<n.miny?n.miny-y:(y>n.maxy?y-n.maxy:0.0);
@@ -94,17 +101,20 @@ extern "C" GEOFATHOM_API void* gf_spatial_index_build(
 extern "C" GEOFATHOM_API int gf_spatial_index_query(
     const void* handle,double x,double y,double tolerance,
     double* output) noexcept {
-    if(!handle || !output || !finite_number(x) || !finite_number(y) || !finite_number(tolerance)
-       || tolerance<0) return -1;
+    if(!handle || !output || !finite_number(x) || !finite_number(y) ||
+       !std::isfinite(tolerance) || tolerance<0 || tolerance>kMaxTolerance) return -1;
     const Index& index=*static_cast<const Index*>(handle);
     if(index.nodes.empty()) return -1;
     double best=tolerance*tolerance, px=x,py=y;
     std::size_t found=static_cast<std::size_t>(-1);
     try {
-        std::vector<int> stack{0};
-        while(!stack.empty()) {
-            const int node_id=stack.back();
-            stack.pop_back();
+        // BVH depth is bounded by log2(1,000,000/8); avoid an allocation
+        // per query and reuse the local call-frame stack for every batch item.
+        std::array<int,64> stack{};
+        std::size_t depth=1;
+        stack[0]=0;
+        while(depth!=0) {
+            const int node_id=stack[--depth];
             const Node& node=index.nodes[node_id];
             if(dist_rect(x,y,node)>best) continue;
             if(node.left==-1) {
@@ -119,8 +129,9 @@ extern "C" GEOFATHOM_API int gf_spatial_index_query(
             } else {
                 const double da=dist_rect(x,y,index.nodes[node.left]);
                 const double db=dist_rect(x,y,index.nodes[node.right]);
-                if(da<db) {stack.push_back(node.right);stack.push_back(node.left);}
-                else {stack.push_back(node.left);stack.push_back(node.right);}
+                if(depth+2>stack.size()) return -1;
+                if(da<db) {stack[depth++]=node.right;stack[depth++]=node.left;}
+                else {stack[depth++]=node.left;stack[depth++]=node.right;}
             }
         }
         if(found==static_cast<std::size_t>(-1)) return 0;
@@ -141,11 +152,11 @@ extern "C" GEOFATHOM_API int gf_spatial_index_query_batch(
     double tolerance, double* out_records, unsigned char* hit_flags) noexcept {
     if(!handle || !query_xy || !out_records || !hit_flags ||
        count==0 || count>1000000 || !std::isfinite(tolerance) ||
-       tolerance<0) return -1;
+       tolerance<0 || tolerance>kMaxTolerance) return -1;
     int matched=0;
     for(std::size_t i=0; i<count; ++i) {
         const double x=query_xy[i*2],y=query_xy[i*2+1];
-        if(!std::isfinite(x) || !std::isfinite(y)) return -1;
+        if(!finite_number(x) || !finite_number(y)) return -1;
         // Initialize every record; callers never see stale output bytes.
         double* record=out_records+i*4;
         record[0]=record[1]=record[2]=record[3]=0.0;

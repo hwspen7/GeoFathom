@@ -117,3 +117,34 @@ GIS runtime. The next implementation targets are:
 6. Expanded C ABI fuzzing and sanitizer checks across compilers and OSes.
 
 These are deliberately marked outstanding until implemented and tested.
+
+## Recent native and job-data improvements
+
+- BVH point queries use bounded stack storage, removing a heap allocation
+  per query, with finite projected-coordinate and tolerance validation.
+- NumPy float64 segment input is passed directly to native BVH construction
+  via a contiguous pointer, instead of creating a second Python list and
+  ctypes array for every endpoint.
+- Native reader leases permit concurrent lookups. Closing the index marks
+  it unavailable to new readers and waits for all in-flight queries before
+  freeing its native memory.
+- Corner-adjacent pixels use 4-connected raster polygonization to avoid
+  self-touching invalid rings; unexpected invalid polygon repair requires
+  conservation of polygonal area.
+- Streaming jobs preflight local disk scratch and cap fragmented masks before
+  GDAL polygonization; these checks do not constitute a hard process RSS limit.
+- SQLite worker progress uses a lightweight connection and checks cancellation
+  periodically rather than running schema initialization and a write on every
+  tile. Full-resolution operations share one process-local raster execution
+  gate. Large task results are stored separately and downloaded on demand.
+- Local imaging assets are hashed with SHA-256; reproducibility metadata
+  preserves the active analysis engine, model identifier and model hash.
+- The default Linux Python CI suite runs both synthetic 4K and 8K image
+  processing, but real-world image complexity, GPU memory pressure and
+  calibrated AI accuracy require additional acceptance runs.
+
+Performance measurements are available through
+`python benchmarks/native_pipeline.py --size 4096 --segments 100000`.
+The measurements are environment-specific and exclude GDAL I/O and GPU
+transfer; do not treat synthetic microbenchmark speedup as proof of whole
+pipeline performance.

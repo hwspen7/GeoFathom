@@ -14,6 +14,7 @@ from rasterio.transform import Affine
 from rasterio.vrt import WarpedVRT
 from rasterio.warp import transform_geom
 from shapely.geometry import shape, mapping
+from shapely.validation import make_valid
 
 from geometry.measure import measure_geometry, GeometryError
 from geometry.spectral import normalized_difference, classify_change
@@ -65,7 +66,7 @@ def _vector_features(labels, affine, crs, classes, max_features=MAX_FEATURES,
     active = labels != 0
     if active.any():
         for geom, value in shapes(labels.astype(np.uint8), mask=active,
-                                  transform=affine, connectivity=8):
+                                  transform=affine, connectivity=4):
             scanned += 1
             if scanned > 20000:
                 break
@@ -81,8 +82,16 @@ def _vector_features(labels, affine, crs, classes, max_features=MAX_FEATURES,
                         abs(affine.e) + abs(affine.b))
             if pixels > 100:
                 polygon = polygon.simplify(scale * .35, preserve_topology=True)
-            if polygon.is_empty or not polygon.is_valid:
-                continue
+            if polygon.is_empty:
+                raise RasterError("Raster polygonization produced an empty region.")
+            if not polygon.is_valid:
+                repaired = make_valid(polygon)
+                if (repaired.is_empty or not repaired.is_valid
+                        or repaired.geom_type not in ("Polygon", "MultiPolygon")
+                        or abs(repaired.area - polygon.area) >
+                        max(pixel_area * .001, abs(polygon.area) * 1e-8)):
+                    raise RasterError("Raster polygonization produced an unrepairable region.")
+                polygon = repaired
             candidates.append((pixels, klass, polygon))
     candidates.sort(key=lambda item: item[0], reverse=True)
     truncated = len(candidates) > max_features or scanned > 20000

@@ -145,6 +145,7 @@ export default function GeoAIAnalysisPanel(p:Props){
         source_images:result.source_images,
         analysis_engine:result.engine,
         model_id:result.model_id,
+        provenance:result.provenance,
         quality:'requires_user_review',
       },
     }));
@@ -262,7 +263,7 @@ export default function GeoAIAnalysisPanel(p:Props){
             <select aria-label="GeoAI pixel processing limit" value={maxPixels}
               onChange={e=>setMaxPixels(Number(e.target.value))}>
               <option value={16777216}>16.8 million</option>
-              <option value={64000000}>64 million</option>
+              <option value={67108864}>67.1 million (8K²)</option>
             </select>
           </label>
         </>:<label>Maximum processing dimension

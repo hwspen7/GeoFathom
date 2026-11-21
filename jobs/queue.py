@@ -7,13 +7,18 @@ successful). Read-only analytics preserve project data on failure.
 """
 from concurrent.futures import ThreadPoolExecutor
 from contextvars import ContextVar
+from contextlib import contextmanager
+from threading import BoundedSemaphore
+import sqlite3
+import time
 from datetime import datetime,timezone
 from threading import Lock
 from uuid import uuid4
 import json
 import os
 
-from storage.database import StorageError,_connect,_required_project,_now
+from storage.database import (StorageError,_connect,_required_project,
+                              _now,database_path)
 
 KINDS={"topology_qa","spatial_select","export_geojson","postgis_sync",
        "rebuild_index","spectral_index","spectral_change","semantic_segmentation"}
@@ -21,22 +26,55 @@ _POOL=ThreadPoolExecutor(max_workers=2,thread_name_prefix="geofathom-gis")
 _LOCK=Lock()
 _INITIALIZED=set()
 _ACTIVE_JOB=ContextVar("geofathom_current_gis_job", default=None)
+_ACTIVE_PROGRESS=ContextVar("geofathom_progress_throttle", default=None)
+# Limit simultaneous full-size raster tasks even when the general queue has
+# multiple worker threads. This gate is per process, not a distributed quota.
+_RASTER_GATE=BoundedSemaphore(1)
+
+
+@contextmanager
+def _job_db():
+    """Lightweight progress connection without repeated schema/rtree setup."""
+    c=sqlite3.connect(database_path(), timeout=5)
+    c.row_factory=sqlite3.Row
+    c.execute("PRAGMA busy_timeout=5000")
+    try:
+        yield c
+        c.commit()
+    except Exception:
+        c.rollback()
+        raise
+    finally:
+        c.close()
 
 
 def _progress(fraction):
-    """Publish monotone progress and honor cancellation at tile boundaries."""
+    """Throttle SQLite updates while polling for cooperative cancellation."""
     uid=_ACTIVE_JOB.get()
     if uid is None:
         return
+    state=_ACTIVE_PROGRESS.get()
+    if state is None:
+        return
     completed=max(10,min(95,10+int(80*float(fraction))))
-    with _connect() as c:
+    now=time.monotonic()
+    # Check cancellation every 0.2 seconds or every 5% progression, rather
+    # than opening a database connection on every input tile.
+    if completed-state["value"] < 5 and now-state["checked"] < .2:
+        return
+    with _job_db() as c:
         row=c.execute("SELECT progress,cancel_requested FROM gis_jobs WHERE id=?",
                       (uid,)).fetchone()
         if row is None or row["cancel_requested"]:
             raise RuntimeError("Running GIS operation was cancelled.")
-        if completed>row["progress"]:
+        if (completed > row["progress"] and
+                (completed-row["progress"] >= 5
+                 or now-state["committed"] >= .5)):
             c.execute("UPDATE gis_jobs SET progress=?,updated_at=? WHERE id=?",
                       (completed,_now(),uid))
+            state["value"]=completed
+            state["committed"]=now
+    state["checked"]=now
 
 
 
@@ -56,13 +94,20 @@ def _schema(c):
     )""")
     c.execute("""CREATE INDEX IF NOT EXISTS gis_jobs_project
                  ON gis_jobs(project_id,created_at)""")
+    c.execute("""CREATE TABLE IF NOT EXISTS gis_job_results(
+        job_id TEXT PRIMARY KEY REFERENCES gis_jobs(id) ON DELETE CASCADE,
+        content TEXT NOT NULL,
+        size_bytes INTEGER NOT NULL
+    )""")
 
 
 def _from_row(row):
     item=dict(row)
     item["payload"]=json.loads(item["payload"])
-    if item["result"] is not None:item["result"]=json.loads(item["result"])
     item["cancel_requested"]=bool(item["cancel_requested"])
+    result=item.pop("resolved_result",item.get("result"))
+    item["result"]=json.loads(result) if result is not None else None
+    item["has_result"]=bool(item.get("has_result",result is not None))
     return item
 
 
@@ -106,22 +151,40 @@ def queue_job(project_id,kind,payload):
     return get_job(project_id,uid)
 
 
-def get_job(project_id,job_id):
+def get_job(project_id,job_id,include_result=True):
     _ensure()
     with _connect() as c:
-        _required_project(c,project_id);_schema(c)
-        row=c.execute("SELECT * FROM gis_jobs WHERE id=? AND project_id=?",
-                      (job_id,project_id)).fetchone()
+        _required_project(c,project_id)
+        if include_result:
+            row=c.execute("""SELECT j.*,
+                COALESCE(r.content,j.result) AS resolved_result,
+                (r.job_id IS NOT NULL OR j.result IS NOT NULL) AS has_result
+                FROM gis_jobs j LEFT JOIN gis_job_results r ON r.job_id=j.id
+                WHERE j.id=? AND j.project_id=?""",
+                (job_id,project_id)).fetchone()
+        else:
+            row=c.execute("""SELECT j.id,j.project_id,j.kind,j.payload,j.status,
+                j.progress,NULL AS result,j.error,j.cancel_requested,
+                j.created_at,j.updated_at,
+                (r.job_id IS NOT NULL OR j.result IS NOT NULL) AS has_result
+                FROM gis_jobs j LEFT JOIN gis_job_results r ON r.job_id=j.id
+                WHERE j.id=? AND j.project_id=?""",
+                (job_id,project_id)).fetchone()
         if row is None:raise StorageError("Job not found.")
         return _from_row(row)
 
 
 def list_jobs(project_id,limit=30):
+    """Return metadata only, never load stored GeoJSON into polling results."""
     _ensure()
     with _connect() as c:
-        _required_project(c,project_id);_schema(c)
-        rows=c.execute("""SELECT * FROM gis_jobs WHERE project_id=?
-                   ORDER BY created_at DESC,id DESC LIMIT ?""",
+        _required_project(c,project_id)
+        rows=c.execute("""SELECT j.id,j.project_id,j.kind,j.payload,j.status,
+                   j.progress,NULL AS result,j.error,j.cancel_requested,
+                   j.created_at,j.updated_at,
+                   (r.job_id IS NOT NULL OR j.result IS NOT NULL) AS has_result
+                   FROM gis_jobs j LEFT JOIN gis_job_results r ON r.job_id=j.id
+                   WHERE j.project_id=? ORDER BY j.created_at DESC,j.id DESC LIMIT ?""",
                    (project_id,limit)).fetchall()
     return [_from_row(r) for r in rows]
 
@@ -238,12 +301,39 @@ def _worker(uid,path):
             project_id=row["project_id"];kind=row["kind"];payload=json.loads(row["payload"])
         try:
             active_token=_ACTIVE_JOB.set(uid)
+            progress_token=_ACTIVE_PROGRESS.set({
+                "value":10,"checked":time.monotonic(),
+                "committed":time.monotonic()})
             try:
-                outcome=_execute(kind,project_id,payload)
+                if (kind in {"spectral_index","spectral_change",
+                             "semantic_segmentation"}
+                        and payload.get("full_resolution") is True):
+                    with _RASTER_GATE:
+                        _progress(0)
+                        outcome=_execute(kind,project_id,payload)
+                else:
+                    outcome=_execute(kind,project_id,payload)
             finally:
+                _ACTIVE_PROGRESS.reset(progress_token)
                 _ACTIVE_JOB.reset(active_token)
+            if (kind in {"spectral_index","spectral_change","semantic_segmentation"}
+                    and isinstance(outcome,dict)):
+                from imagery.store import image_file, file_sha256
+                source_ids=outcome.get("source_images",[])
+                source_hashes={identifier:file_sha256(image_file(identifier))
+                               for identifier in source_ids}
+                provenance={"source_sha256":source_hashes,
+                            "analysis_engine":outcome.get("engine"),
+                            "task_kind":kind}
+                if kind=="semantic_segmentation":
+                    from vision.semantic import _manifest
+                    model=_manifest(payload["model_id"])
+                    provenance["model_sha256"]=file_sha256(model["model_path"])
+                    provenance["model_id"]=payload["model_id"]
+                outcome["provenance"]=provenance
             result=json.dumps(outcome,allow_nan=False)
-            if len(result.encode("utf-8"))>5_000_000:
+            result_bytes=len(result.encode("utf-8"))
+            if result_bytes>5_000_000:
                 raise StorageError("GIS job output exceeded 5 MB; narrow the query.")
             with _connect() as c:
                 row=c.execute("SELECT cancel_requested FROM gis_jobs WHERE id=?",(uid,)).fetchone()
@@ -252,9 +342,15 @@ def _worker(uid,path):
                     c.execute("UPDATE gis_jobs SET status='cancelled',progress=100,"
                               "updated_at=? WHERE id=?",(_now(),uid))
                 else:
+                    # Atomic state transition and result insert. Large results
+                    # no longer live in the frequently polled job metadata row.
+                    c.execute("""INSERT INTO gis_job_results(job_id,content,size_bytes)
+                        VALUES(?,?,?) ON CONFLICT(job_id) DO UPDATE SET
+                        content=excluded.content,size_bytes=excluded.size_bytes""",
+                        (uid,result,result_bytes))
                     c.execute("""UPDATE gis_jobs SET status='completed',
-                        progress=100,result=?,updated_at=? WHERE id=?""",
-                        (result,_now(),uid))
+                        progress=100,result=NULL,updated_at=? WHERE id=?""",
+                        (_now(),uid))
         except Exception as error:
             with _connect() as c:
                 row=c.execute("SELECT cancel_requested FROM gis_jobs WHERE id=?",

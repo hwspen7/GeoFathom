@@ -73,6 +73,10 @@ int main() {
     assert(out[0]==5 && out[1]==0 && out[3]==0);
     assert(gf_spatial_index_query(idx,200,200,1,out)==0);
     assert(gf_spatial_index_query(idx,5,0,-1,out)==-1);
+    assert(gf_spatial_index_query(idx,1e200,0,1,out)==-1);
+    assert(gf_spatial_index_query(idx,5,0,1e100,out)==-1);
+    constexpr double invalid_segments[]={1e200,0,10,0};
+    assert(gf_spatial_index_build(invalid_segments,1)==nullptr);
     // Vectorized native lookups agree with scalar BVH queries.
     constexpr double batch_queries[]={5,0.1, 50,50, 10.2,5};
     double records[12]={};

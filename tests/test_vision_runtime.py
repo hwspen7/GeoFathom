@@ -132,3 +132,65 @@ def test_model_rejects_nonfinite_logits_and_invalid_hard_class_ids(monkeypatch,t
         sem._predict_tile(np.zeros((1,3,512,512),dtype=np.float32),
                           {**config,"tile_size":512,"classes":list(range(32))},
                           "cpu")
+
+
+def test_cuda_io_binding_dispatch_with_mocked_onnx_session(monkeypatch,tmp_path):
+    from vision import semantic
+    model=tmp_path/"io.onnx"
+    model.write_bytes(b"only a mocked provider, no model weights")
+    monkeypatch.setenv("GEOFATHOM_VISION_IO_BINDING","1")
+    steps=[]
+    output=np.zeros((1,2,128,128),dtype=np.float32)
+    output[:,1]=3
+    class Bound:
+        def bind_cpu_input(self,name,tensor):
+            steps.append(("input",name,tensor.shape))
+        def bind_output(self,name,device):
+            steps.append(("output",name,device))
+        def copy_outputs_to_cpu(self):
+            steps.append(("transfer","cpu"))
+            return [output]
+    class Fake:
+        def get_inputs(self):
+            return [type("Input",(),{"name":"source"})()]
+        def get_outputs(self):
+            return [type("Output",(),{"name":"classes"})()]
+        def io_binding(self):
+            return Bound()
+        def run_with_iobinding(self,binding):
+            steps.append(("run","cuda"))
+        def run(self,*args):
+            raise AssertionError("CUDA I/O binding path must not call run()")
+    monkeypatch.setattr(semantic,"_session",lambda *args:Fake())
+    config={"model_path":model,"tile_size":128,"classes":["background","building"]}
+    labels,confidence=semantic._predict_tile(
+        np.zeros((1,3,128,128),dtype=np.float32),config,"cuda")
+    assert np.all(labels==1)
+    assert np.all(confidence>.9)
+    assert steps==[
+        ("input","source",(1,3,128,128)),
+        ("output","classes","cuda"),
+        ("run","cuda"),("transfer","cpu"),
+    ]
+
+
+def test_real_gpu_acceptance_requires_operator_installed_model(monkeypatch):
+    import os
+    from pathlib import Path
+    from vision import semantic
+    identifier=os.getenv("GEOFATHOM_GPU_ACCEPTANCE_MODEL")
+    if not identifier:
+        pytest.skip("Configure a real ONNX model and CUDA hardware to run GPU acceptance.")
+    monkeypatch.setenv("GEOFATHOM_VISION_DEVICE","cuda")
+    monkeypatch.setenv("GEOFATHOM_VISION_IO_BINDING","1")
+    config=semantic._manifest(identifier)
+    size=config["tile_size"]
+    tensor=np.zeros((1,3,size,size),dtype=np.float32)
+    start=time.perf_counter()
+    for _ in range(10):
+        labels,confidence=semantic._predict_tile(tensor,config,"cuda")
+        assert labels.shape==(size,size)
+        assert np.isfinite(confidence).all()
+    elapsed=time.perf_counter()-start
+    print(f"10 real ONNX CUDA inference passes: {elapsed:.3f}s")
+    assert elapsed>0

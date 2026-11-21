@@ -8,7 +8,11 @@ from dataclasses import dataclass
 from heapq import heappush, heapreplace
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from contextlib import contextmanager
 import math
+import os
+import shutil
+import tempfile
 
 import numpy as np
 import rasterio
@@ -18,14 +22,52 @@ from rasterio.vrt import WarpedVRT
 from rasterio.windows import Window
 from rasterio.warp import transform_geom
 from shapely.geometry import mapping, shape
+from shapely.validation import make_valid
 
 from geometry.measure import measure_geometry, GeometryError
 from geometry.spectral import normalized_difference, classify_change
 from imagery.raster import RasterError, _check
 
-MAX_PIXELS = 64_000_000
+MAX_PIXELS = 67_108_864
 MAX_COMPONENTS = 20_000
 MAX_RESULTS = 100
+MAX_BOUNDARY_TRANSITIONS = 1_000_000
+MAX_SCRATCH_MB = 512
+
+
+@contextmanager
+def _scratch(plan, prefix):
+    """Conservatively check free space and per-job scratch quota.
+
+    This is not a cross-process filesystem reservation.
+    """
+    configured = os.getenv("GEOFATHOM_RASTER_TEMP_DIR")
+    root = os.path.abspath(configured or tempfile.gettempdir())
+    os.makedirs(root, exist_ok=True)
+    try:
+        budget = int(os.getenv("GEOFATHOM_RASTER_SCRATCH_MB", "256"))
+    except ValueError as error:
+        raise RasterError("Invalid raster scratch quota.") from error
+    if not 16 <= budget <= MAX_SCRATCH_MB:
+        raise RasterError("Raster scratch quota must be between 16 and 512 MiB.")
+    needed = plan.width * plan.height * 2 + 8 * 1024 * 1024
+    if needed > budget * 1024 * 1024:
+        raise RasterError("Raster scratch quota is insufficient for this image.")
+    if shutil.disk_usage(root).free < needed:
+        raise RasterError("Insufficient free disk space for raster analysis.")
+    with TemporaryDirectory(prefix=prefix, dir=root) as temp:
+        yield Path(temp), budget * 1024 * 1024
+
+
+def _check_scratch(path, quota_bytes):
+    if path.stat().st_size > quota_bytes:
+        raise RasterError("Raster output exceeded the temporary-disk quota.")
+
+
+def _transitions(labels):
+    # Bound highly fragmented checkerboard-like masks before raster polygonization.
+    return int(np.count_nonzero(labels[:, 1:] != labels[:, :-1]) +
+               np.count_nonzero(labels[1:, :] != labels[:-1, :]))
 
 
 @dataclass(frozen=True)
@@ -79,7 +121,7 @@ def _disk_features(path, classes, max_features=MAX_RESULTS, min_pixels=9,
         if not pixel_area or not math.isfinite(pixel_area):
             raise RasterError("Raster transform cannot be polygonized.")
         for geom, category in shapes(band, mask=band,
-                                     connectivity=8, transform=src.transform):
+                                     connectivity=4, transform=src.transform):
             count += 1
             if progress is not None and count % 32 == 0:
                 progress(.94)
@@ -90,8 +132,19 @@ def _disk_features(path, classes, max_features=MAX_RESULTS, min_pixels=9,
                 continue
             polygon = shape(geom)
             pixels = int(round(polygon.area / pixel_area))
-            if pixels < min_pixels or not polygon.is_valid:
+            if pixels < min_pixels:
                 continue
+            # 4-connectivity keeps diagonal-only neighbors separate. An
+            # unexpected invalid ring is repaired only when polygonal area
+            # is conserved; otherwise fail rather than silently lose pixels.
+            if not polygon.is_valid:
+                repaired = make_valid(polygon)
+                if (repaired.is_empty or not repaired.is_valid
+                        or repaired.geom_type not in ("Polygon", "MultiPolygon")
+                        or abs(repaired.area - polygon.area) >
+                        max(pixel_area * .001, abs(polygon.area) * 1e-8)):
+                    raise RasterError("Raster polygonization produced an unrepairable region.")
+                polygon = repaired
             found += 1
             item = (pixels, count, klass, polygon)
             if len(heap) < max_features:
@@ -152,9 +205,10 @@ def spectral_index_tiled(path: Path, image_id: str, index: str,
                     src.tags().get("TIFFTAG_DATETIME"))
         crs = str(src.crs)
         valid_pixels = classified_pixels = 0
+        transitions = 0
         engine = None
-        with TemporaryDirectory(prefix="geofathom-spectral-") as temp:
-            destination = Path(temp) / "classification.tif"
+        with _scratch(plan, "geofathom-spectral-") as (temp, scratch_quota):
+            destination = temp / "classification.tif"
             with rasterio.open(destination, "w", driver="GTiff",
                                width=src.width, height=src.height,
                                count=1, dtype="uint8", crs=src.crs,
@@ -173,9 +227,15 @@ def spectral_index_tiled(path: Path, image_id: str, index: str,
                     elif engine != running_engine:
                         engine = "mixed-native-fallback"
                     labels = (accepted & (ratios >= threshold)).astype(np.uint8)
+                    transitions += _transitions(labels)
+                    if transitions > MAX_BOUNDARY_TRANSITIONS:
+                        raise RasterError("Raster mask is too fragmented for safe vectorization.")
                     target.write(labels, 1, window=window)
+                    if number % 16 == 0:
+                        _check_scratch(destination, scratch_quota)
                     valid_pixels += int(accepted.sum())
                     classified_pixels += int(labels.sum())
+            _check_scratch(destination, scratch_quota)
             if progress is not None:
                 progress(.93)
             features, truncated = _disk_features(
@@ -226,9 +286,10 @@ def spectral_change_tiled(before_path: Path, after_path: Path,
             after.tags().get("ACQUISITION_DATE") or after.tags().get("TIFFTAG_DATETIME"),
         ]
         valid_pixels = gain_pixels = loss_pixels = 0
+        transitions = 0
         engine = None
-        with TemporaryDirectory(prefix="geofathom-change-") as temp:
-            output = Path(temp) / "changes.tif"
+        with _scratch(plan, "geofathom-change-") as (temp, scratch_quota):
+            output = temp / "changes.tif"
             with WarpedVRT(after, crs=before.crs, transform=before.transform,
                            width=before.width, height=before.height,
                            resampling=Resampling.bilinear) as aligned:
@@ -255,12 +316,18 @@ def spectral_change_tiled(before_path: Path, after_path: Path,
                             engine = current_engine
                         elif engine != current_engine:
                             engine = "mixed-native-fallback"
+                        transitions += _transitions(labels)
+                        if transitions > MAX_BOUNDARY_TRANSITIONS:
+                            raise RasterError("Raster mask is too fragmented for safe vectorization.")
                         target.write(labels, 1, window=window)
+                        if number % 16 == 0:
+                            _check_scratch(output, scratch_quota)
                         valid_pixels += int((ov & nv).sum())
                         gain_pixels += int((labels == 1).sum())
                         loss_pixels += int((labels == 2).sum())
             if not valid_pixels:
                 raise RasterError("The dated rasters have no valid overlapping pixels.")
+            _check_scratch(output, scratch_quota)
             if progress is not None:
                 progress(.93)
             features, truncated = _disk_features(
@@ -326,9 +393,10 @@ def semantic_segmentation_tiled(path: Path, image_id: str,
         acquired = (src.tags().get("ACQUISITION_DATE") or
                     src.tags().get("TIFFTAG_DATETIME"))
         valid_pixels = classified_pixels = 0
+        transitions = 0
         sum_confidence = 0.
-        with TemporaryDirectory(prefix="geofathom-semantic-") as temp:
-            output = Path(temp) / "classes.tif"
+        with _scratch(plan, "geofathom-semantic-") as (temp, scratch_quota):
+            output = temp / "classes.tif"
             with rasterio.open(output, "w", driver="GTiff",
                                width=src.width, height=src.height,
                                count=1, dtype="uint8", crs=src.crs,
@@ -351,11 +419,17 @@ def semantic_segmentation_tiled(path: Path, image_id: str,
                                 (confidence[:rows, :cols] >= minimum_confidence))
                     current = np.where(accepted, labels[:rows, :cols],
                                        0).astype(np.uint8)
+                    transitions += _transitions(current)
+                    if transitions > MAX_BOUNDARY_TRANSITIONS:
+                        raise RasterError("Raster mask is too fragmented for safe vectorization.")
                     target.write(current, 1, window=window)
+                    if number % 16 == 0:
+                        _check_scratch(output, scratch_quota)
                     foreground = current != 0
                     valid_pixels += int(valid.sum())
                     classified_pixels += int(foreground.sum())
                     sum_confidence += float(confidence[:rows, :cols][foreground].sum())
+            _check_scratch(output, scratch_quota)
             if progress is not None:
                 progress(.93)
             features, truncated = _disk_features(

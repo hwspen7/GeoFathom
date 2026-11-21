@@ -182,3 +182,42 @@ def test_disk_backed_semantic_segmentation_merges_classes_across_tiles(
     assert result["features"][0]["properties"]["pixel_count"]==32768
     assert result["confidence_calibrated"] is False
     assert result["mean_model_confidence"]==pytest.approx(.9)
+
+
+def test_diagonal_regions_are_separate_valid_polygon_features(tmp_path):
+    from vision.tiled import _disk_features
+    from vision.geoai import _vector_features
+    from shapely.geometry import shape
+    mask=np.zeros((4,4),dtype=np.uint8)
+    mask[1,1]=1
+    mask[2,2]=1
+    path=tmp_path/"diagonal-mask.tif"
+    with rasterio.open(path,"w",driver="GTiff",width=4,height=4,count=1,
+                       dtype="uint8",crs="EPSG:4326",
+                       transform=AFFINE,nodata=0) as dst:
+        dst.write(mask,1)
+    features,truncated=_disk_features(path,{1:"test"},min_pixels=1)
+    assert truncated is False
+    assert len(features)==2
+    assert all(shape(f["geometry"]).is_valid for f in features)
+    assert sum(f["properties"]["pixel_count"] for f in features)==2
+    direct,limited=_vector_features(mask,AFFINE,"EPSG:4326",
+                                    {1:"test"},minimum_pixels=1)
+    assert len(direct)==2 and not limited
+
+
+def test_tiled_scratch_quota_is_enforced_and_temp_files_cleaned(monkeypatch,tmp_path):
+    path=raster(tmp_path,"scratch.tif",changed=True)
+    scratch=tmp_path/"scratch";scratch.mkdir()
+    monkeypatch.setenv("GEOFATHOM_RASTER_TEMP_DIR",str(scratch))
+    monkeypatch.setenv("GEOFATHOM_RASTER_SCRATCH_MB","8")
+    with pytest.raises(RasterError,match="quota"):
+        spectral_index_tiled(path,"x","ndvi",4,1,.3,
+                             tile_size=64,memory_mb=8)
+    monkeypatch.setenv("GEOFATHOM_RASTER_SCRATCH_MB","16")
+    with pytest.raises(RuntimeError,match="abort"):
+        spectral_index_tiled(path,"x","ndvi",4,1,.3,
+                             tile_size=64,memory_mb=8,
+                             progress=lambda x: (_ for _ in ()).throw(
+                                 RuntimeError("abort")) if x>.1 else None)
+    assert list(scratch.iterdir())==[]

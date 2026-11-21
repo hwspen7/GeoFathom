@@ -111,3 +111,59 @@ def test_zero_tolerance_shapely_fallback_hits_exact_line(monkeypatch):
         assert index.engine=="shapely-strtree"
         assert index.query(5.,0.,0.)["distance_m"]==0
         assert index.query_many([(5.,0.),(5.,.1)],0.)[1] is None
+
+
+def test_close_waits_for_concurrent_native_read_leases():
+    from threading import Event,Thread
+    from geometry.measure import GeometryError
+    index=SegmentIndex([((0.,0.),(10.,0.))])
+    first=Event();second=Event();release=Event();closed=Event()
+    def reader(signal):
+        with index._lease():
+            signal.set()
+            assert release.wait(5)
+            assert index.query(5.,0.,1.) is not None
+    a=Thread(target=reader,args=(first,))
+    b=Thread(target=reader,args=(second,))
+    a.start();b.start()
+    try:
+        assert first.wait(4) and second.wait(4)
+        closer=Thread(target=lambda:(index.close(),closed.set()))
+        closer.start()
+        assert not closed.wait(.03)
+        with pytest.raises(GeometryError,match="closed"):
+            # New readers cannot enter once close has taken ownership.
+            # close may still be waiting for the already running readers.
+            import time
+            for _ in range(300):
+                if index._closed:break
+                time.sleep(.001)
+            index.query(0.,0.,1.)
+    finally:
+        release.set()
+        a.join(5);b.join(5)
+        closer.join(5)
+    assert closed.is_set()
+
+
+def test_optional_million_segment_native_batch_stress(monkeypatch):
+    import os
+    import time
+    import numpy as np
+    if os.getenv("GEOFATHOM_STRESS_MILLION_SEGMENTS")!="1":
+        pytest.skip("Enable the million-segment memory and throughput test explicitly.")
+    size=1_000_000
+    positions=np.arange(size,dtype=np.float64)*3
+    segments=np.zeros((size,2,2),dtype=np.float64)
+    segments[:,0,0]=positions
+    segments[:,1,0]=positions
+    segments[:,1,1]=100
+    queries=np.column_stack((positions[::100]+.1,
+                             np.full(size//100,40.)))
+    started=time.perf_counter()
+    with SegmentIndex(segments) as index:
+        assert index.engine=="cpp-bvh"
+        results=index.query_many(queries,.2)
+        assert all(hit is not None for hit in results)
+    print(f"1 million segments / 10k queries: "
+          f"{time.perf_counter()-started:.3f}s")

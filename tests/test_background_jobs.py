@@ -160,3 +160,61 @@ def test_cancelled_running_job_does_not_become_failed_on_worker_exception(monkey
     assert result["status"]=="cancelled",result
     assert result["result"] is None
     assert result["error"] is None
+
+
+def test_large_results_are_not_loaded_into_background_polling(monkeypatch):
+    from jobs import queue
+    from storage.database import _connect
+    root=setup()
+    monkeypatch.setattr(queue,"_execute",
+                        lambda kind,project_id,payload:{"payload":"x"*1_000_000})
+    job=client.post(root+"/jobs",
+                    json={"kind":"export_geojson","payload":{}}).json()
+    uid=job["id"]
+    completed=finished(root,uid)
+    assert completed["result"]["payload"]=="x"*1_000_000
+    metadata=client.get(root+"/jobs")
+    assert metadata.status_code==200
+    assert len(metadata.content)<5_000
+    assert metadata.json()["jobs"][0]["has_result"] is True
+    assert metadata.json()["jobs"][0]["result"] is None
+    lightweight=client.get(root+"/jobs/"+uid+"?include_result=false").json()
+    assert lightweight["has_result"] is True and lightweight["result"] is None
+    assert client.get(root+"/jobs/"+uid).json()["result"]==completed["result"]
+    with _connect() as connection:
+        assert connection.execute(
+            "SELECT result FROM gis_jobs WHERE id=?",(uid,)).fetchone()[0] is None
+        saved=connection.execute(
+            "SELECT size_bytes FROM gis_job_results WHERE job_id=?",(uid,)).fetchone()[0]
+        assert saved>1_000_000
+
+
+def test_progress_throttles_database_connections_and_honors_cancel():
+    import time
+    from jobs import queue
+    from contextlib import contextmanager
+    from storage.database import _connect
+    root=setup()
+    uid=client.post(root+"/jobs",json={"kind":"export_geojson"}).json()["id"]
+    finished(root,uid)
+    visits=[]
+    original=queue._job_db
+    @contextmanager
+    def spy():
+        visits.append(1)
+        with original() as db:
+            yield db
+    queue._job_db=spy
+    state={"value":10,"checked":time.monotonic(),"committed":time.monotonic()}
+    token=queue._ACTIVE_JOB.set(uid)
+    statetoken=queue._ACTIVE_PROGRESS.set(state)
+    try:
+        for _ in range(1000):
+            queue._progress(.01)
+        assert len(visits)==0
+        queue._progress(.3)
+        assert len(visits)==1
+    finally:
+        queue._ACTIVE_PROGRESS.reset(statetoken)
+        queue._ACTIVE_JOB.reset(token)
+        queue._job_db=original

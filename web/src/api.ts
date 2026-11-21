@@ -878,6 +878,8 @@ export interface GeoAIResult extends GeoJSON.FeatureCollection {
   source_images:string[];source_crs:string;geometry_crs:string;
   valid_pixels:number;classified_pixels?:number;gain_pixels?:number;
   loss_pixels?:number;truncated:boolean;warning:string;
+  provenance?:{source_sha256:Record<string,string>;
+                model_sha256?:string;model_id?:string;task_kind?:string};
 }
 export function getVisionModels():Promise<VisionModels>{
   return request('/vision/models/segmentation');

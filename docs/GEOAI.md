@@ -166,3 +166,34 @@ These are per-process controls. In particular, the CUDA arena setting is
 not a hard VRAM allocation guarantee. Model logits and predicted labels are
 validated for shape, class range and non-finite values. Softmax values from
 unvalidated models are not assumed to be calibrated probabilities.
+
+## Boundary QA, result transport and CUDA I/O binding
+
+Raster polygonization now uses 4-connected regions to avoid an invalid
+self-touching ring when pixels meet only at a corner. An unexpected invalid
+polygon is repaired only when area is conserved; otherwise the task fails
+with a visible error rather than silently discarding the detected region.
+Very fragmented masks abort before expensive polygonization. Regions smaller
+than the configured minimum are still intentionally excluded; only the
+100 largest surviving regions are published per task.
+
+Raster background job outputs are stored in a separate SQLite
+`gis_job_results` table. `GET /projects/{id}/jobs` returns result-free
+metadata, and `GET /projects/{id}/jobs/{job_id}?include_result=false`
+checks a single task without transferring its full result. Completed tasks
+are retrieved via the full job endpoint once. Job artifacts retain SHA-256
+of the input imagery and, for ONNX analysis, the installed model file.
+Admin-controlled model paths remain server-side.
+
+An **optional** ONNX CUDA I/O Binding path can be enabled with
+`GEOFATHOM_VISION_IO_BINDING=1`. It binds CPU input tensors and allows
+ONNX Runtime to allocate CUDA output tensors before copying resulting
+classification data to CPU for GIS vectorization. This is **not zero-copy**
+and is only hardware-qualified when a real CUDA model acceptance test
+has been performed. See ONNX Runtime's device-binding documentation.
+
+The streaming process also enforces conservative scratch and fragmentation
+budgets. A configured temporary directory is removed after completion or
+failure. Disk free-space checks are local preflights, not a distributed
+disk reservation. The backend still needs a multi-process coordinator for
+cross-process leases and global quotas.

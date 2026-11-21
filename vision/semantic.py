@@ -136,7 +136,20 @@ def _predict_tile(tensor, config, device):
         inputs = session.get_inputs()
         if len(inputs) != 1:
             raise RasterError("Semantic model must accept exactly one image tensor.")
-        outputs = session.run(None, {inputs[0].name: tensor})
+        if device=="cuda" and os.getenv("GEOFATHOM_VISION_IO_BINDING","0")=="1":
+            # ONNX Runtime manages CUDA output allocation. Source pixels still
+            # originate on CPU and classifications return to CPU for GIS
+            # polygonization: this path is NOT a GPU zero-copy pipeline.
+            names=session.get_outputs()
+            if not names:
+                raise RasterError("Semantic model has no declared output.")
+            binding=session.io_binding()
+            binding.bind_cpu_input(inputs[0].name,tensor)
+            binding.bind_output(names[0].name,"cuda")
+            session.run_with_iobinding(binding)
+            outputs=binding.copy_outputs_to_cpu()
+        else:
+            outputs = session.run(None, {inputs[0].name: tensor})
         if not outputs:
             raise RasterError("Semantic model returned no output.")
         raw = outputs[0]

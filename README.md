@@ -232,3 +232,17 @@ docs/             Architecture, integration contracts, usage notes
 Public Nominatim and OpenStreetMap tile servers have usage policies. Configure a valid application identity and deploy dedicated or commercial providers for public/high-traffic use. Imagery analysis requires suitable imagery licenses.
 
 See [Architecture](docs/ARCHITECTURE.md) and [Providers](docs/PROVIDERS.md) for details.
+
+## Correctness and performance acceptance
+
+Raster masks use 4-neighbor connectivity to avoid silently dropping
+corner-touching invalid polygons. Full-size raster execution includes
+temporary-disk availability, fragmentation and cancellation checks.
+Task polling uses metadata-only responses with result JSON stored separately
+in SQLite; features retain source and model SHA-256 provenance.
+
+Synthetic 4K and 8K GeoTIFF processing is covered by Linux CI. The native
+BVH supports concurrent reader leases, bounded traversal stacks and direct
+NumPy double buffers. Optional million-segment, CUDA model and hardware
+throughput acceptance are documented in
+[the native engine guide](docs/NATIVE_ENGINE.md).

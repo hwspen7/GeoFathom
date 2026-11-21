@@ -91,6 +91,8 @@ def test_image_upload_and_map_preview(geotiff):
     assert imported.status_code == 201, imported.text
     image = imported.json()
     assert image["name"] == "sample.tif"
+    import hashlib
+    assert image["sha256"]==hashlib.sha256(geotiff.read_bytes()).hexdigest()
     assert image["preview_url"].endswith("/preview")
     assert len(image["corners"]) == 4
     assert client.get("/imagery").json()["count"] == 1

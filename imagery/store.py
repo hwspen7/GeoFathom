@@ -1,13 +1,31 @@
 """Local, bounded GeoTIFF library, with opaque IDs and no remote URL fetch."""
 
+import hashlib
 import json
 import os
+from functools import lru_cache
 from pathlib import Path
 from uuid import UUID, uuid4
 
 from .raster import RasterError, metadata
 
 _ROOT = Path(__file__).resolve().parent.parent
+
+
+@lru_cache(maxsize=128)
+def _fingerprint_file(path: str, size: int, modified_ns: int) -> str:
+    """Streaming checksum cached only for an unchanged source-file identity."""
+    digest=hashlib.sha256()
+    with open(path,"rb") as stream:
+        for block in iter(lambda:stream.read(1024*1024),b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def file_sha256(path: Path) -> str:
+    stat=path.stat()
+    return _fingerprint_file(str(path.resolve()),stat.st_size,stat.st_mtime_ns)
+
 
 
 def imagery_dir() -> Path:
@@ -34,6 +52,7 @@ def describe(identifier: str) -> dict:
     sidecar = path.with_suffix(".json")
     extra = json.loads(sidecar.read_text(encoding="utf-8")) if sidecar.exists() else {}
     return {**result, "id": identifier, "name": extra.get("name", identifier),
+            "sha256": extra.get("sha256") or file_sha256(path),
             "preview_url": f"/imagery/{identifier}/preview"}
 
 
@@ -58,7 +77,14 @@ def store_upload(temp_path: Path, filename: str) -> dict:
         raise RasterError("The local imagery catalog is full (100 files).")
     identifier = str(uuid4())
     final = root / f"{identifier}.tif"
+    checksum=file_sha256(temp_path)
     os.replace(temp_path, final)
-    sidecar = final.with_suffix(".json")
-    sidecar.write_text(json.dumps({"name": Path(filename).name[:160]}), encoding="utf-8")
+    sidecar=final.with_suffix(".json")
+    try:
+        sidecar.write_text(json.dumps({
+            "name":Path(filename).name[:160],"sha256":checksum,
+        }),encoding="utf-8")
+    except Exception:
+        final.unlink(missing_ok=True)
+        raise
     return describe(identifier)
