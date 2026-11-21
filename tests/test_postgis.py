@@ -76,6 +76,8 @@ def test_live_postgis_sync_gist_spatial_filter_revision_and_purge():
     assert page.json()["total"]==1
     assert page.json()["results"][0]["name"]=="inside"
     assert page.json()["indexed"] is True
+    assert page.json()["results"][0]["measurement"]["geometry_type"]=="Point"
+    assert page.json()["results"][0]["created_at"]
     revised=client.patch(root+"/features/"+a.json()["id"],json={
         "geometry":{"type":"Point","coordinates":[-80,40]},
         "expected_revision":0,

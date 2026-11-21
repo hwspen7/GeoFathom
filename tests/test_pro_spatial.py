@@ -84,6 +84,8 @@ def test_viewport_pagination_and_invalid_coordinates():
     assert page.json()["total"]==14
     assert len(page.json()["results"])==5
     assert page.json()["indexed"] is True
+    assert all(item["measurement"]["geometry_type"]=="Point"
+               for item in page.json()["results"])
     for bbox in [(2,0,1,1),(0,-92,1,1),(-190,0,2,1)]:
         bad=c.get(root+"/features/viewport",params=dict(zip(("west","south","east","north"),bbox)))
         assert bad.status_code==422
