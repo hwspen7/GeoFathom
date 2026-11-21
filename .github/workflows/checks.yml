@@ -103,3 +103,33 @@ jobs:
         env:
           GEOFATHOM_REQUIRE_NATIVE: '1'
         run: python -m pytest -q
+
+
+  postgis:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgis:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_USER: geofathom
+          POSTGRES_PASSWORD: geofathom_ci
+          POSTGRES_DB: geofathom
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U geofathom -d geofathom"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 15
+    env:
+      GEOFATHOM_TEST_POSTGIS_DSN: postgresql://geofathom:geofathom_ci@localhost:5432/geofathom
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install PostGIS integration dependencies
+        run: python -m pip install -e ".[dev,postgis]"
+      - name: Test real PostGIS sync, GiST indexed query and revision
+        run: python -m pytest -v tests/test_postgis.py
