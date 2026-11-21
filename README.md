@@ -20,7 +20,7 @@ native module has a correctness-preserving Shapely/Python fallback.
 
 The workspace now includes professional map PDF layouts, spatial rectangle
 and polygon selection, topological polygon-gap/overlap QA, Jenks/quantile
-graduated colors, advanced labels and callouts, project EPSG metadata/grid,
+graduated colors, advanced conditional labels, draggable label placement and callouts, project EPSG metadata/grid,
 OGC WMS/WMTS/WFS/Features connectors, an indexed SQLite R-tree, an optional
 PostGIS GiST mirror and a persistent local background task queue.
 

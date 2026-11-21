@@ -84,15 +84,23 @@ Endpoints:
 
 ### Advanced label rules
 
-Layer styling additionally provides font priority, offset in ems, optional
-label prefix/suffix, automatic or along-line placement, and callout
-connectors for displaced point features. Every setting is validated,
-persisted with a style revision, and rendered as plain MapLibre label
-expressions. Original label text is never evaluated as HTML/JavaScript.
+Layer styling provides font priority, offsets in ems, optional label
+prefix/suffix, automatic or along-line placement, callout connectors
+for displaced point features, and typed attribute predicates (equals,
+contains, numeric ≥ or ≤, exists). Every setting is validated and
+persisted with a style revision; text is never interpreted as HTML/JS.
 
-Note: this is not full QGIS PAL or ArcGIS Maplex. Full per-feature label
-drag handles, collision priorities spanning providers and nested
-expressions require a dedicated cartographic layout engine.
+**Drag-to-position:** open Advanced label placement, click **Move labels
+by dragging on map**, then drag a visible feature label or its point
+symbol. Releasing saves per-feature `label_offset_x` and
+`label_offset_y` attributes as a new revision, without modifying the
+underlying geographical coordinate. Individual offsets override the layer
+offset default. Both custom point annotations and attribute-generated
+point labels can be positioned, even if remote glyphs are slow to load.
+
+Note: this is not full QGIS PAL or ArcGIS Maplex. Automatic complex
+callout routing, font substitution for all writing systems and multi-
+provider label collision priorities remain limited.
 
 ### EPSG coordinate systems
 

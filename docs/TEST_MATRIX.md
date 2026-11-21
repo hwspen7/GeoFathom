@@ -105,3 +105,8 @@ for a full commercial desktop GIS.
   with a dedicated \`postgis\` GitHub Actions service job.
 - \`web/e2e/professional.spec.ts\`: actual Chromium map selection, PDF download,
   topology QA, graduated colors, project CRS and queued export.
+
+- \`tests/test_professional_p1.py\` and \`web/src/labels.test.ts\`:
+  safe conditional label filters and advanced typography.
+- \`web/e2e/professional.spec.ts\`: drag-to-position map label
+  stores per-feature offsets with revision history.
