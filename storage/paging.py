@@ -123,13 +123,56 @@ def bounding_candidates(project_id,bbox,layer_ids=None,visible_only=False,
 
 def page_features(project_id,bbox,limit=250,offset=0,layer_ids=None,
                   visible_only=True):
+    """True indexed SQL COUNT + LIMIT/OFFSET, no 25K candidate materialization.
+
+    Exact geometric relations belong to selection API. A viewport query
+    returns R-tree bounding-box matches for vector tiles or workspace
+    pagination without constructing thousands of Shapely geometries.
+    """
     if not 1<=limit<=1000 or not 0<=offset<=1_000_000:
         raise StorageError("Spatial page must have limit 1–1000 and offset at most 1 million.")
-    results=bounding_candidates(project_id,bbox,layer_ids,visible_only,max_candidates=25000)
-    total=len(results)
+    west,south,east,north=_bounds(bbox)
+    from .workspace import _schema,_default
     from geometry.measure import measure_geometry
-    page=results[offset:offset+limit]
-    for item in page:
+    with _connect() as conn:
+        _required_project(conn,project_id)
+        _schema(conn);_default(conn,project_id)
+        prepare_rtree(conn)
+        if layer_ids:
+            actual={r["id"] for r in conn.execute(
+                "SELECT id FROM geo_layers WHERE project_id=?",(project_id,))}
+            if any(lid not in actual for lid in layer_ids):
+                raise StorageError("Layer not found.")
+        from_clause=""" FROM features f
+            JOIN feature_bounds b ON b.feature_rowid=f.rowid
+            LEFT JOIN geo_layer_members m ON m.feature_id=f.id
+            JOIN geo_layers default_layer ON default_layer.id=(
+                SELECT id FROM geo_layers WHERE project_id=f.project_id
+                ORDER BY created_at,id LIMIT 1
+            )
+            LEFT JOIN geo_layers assigned ON assigned.id=m.layer_id
+            WHERE f.project_id=? AND b.maxx>=? AND b.minx<=?
+            AND b.maxy>=? AND b.miny<=?"""
+        params=[project_id,west,east,south,north]
+        if visible_only:
+            from_clause+=" AND COALESCE(assigned.visible,default_layer.visible)=1"
+        if layer_ids:
+            from_clause+=" AND COALESCE(m.layer_id,default_layer.id) IN ("+(
+                ",".join("?" for _ in layer_ids))+")"
+            params.extend(layer_ids)
+        total=conn.execute("SELECT count(*)"+from_clause,params).fetchone()[0]
+        rows=conn.execute(
+            """SELECT f.*,COALESCE(m.layer_id,default_layer.id) AS layer_id,
+              COALESCE((SELECT MAX(r.revision) FROM geo_feature_revisions r
+                WHERE r.feature_id=f.id),0) AS revision"""+
+            from_clause+" ORDER BY f.created_at,f.id LIMIT ? OFFSET ?",
+            [*params,limit,offset]).fetchall()
+    page=[]
+    for row in rows:
+        item=dict(row)
+        item["geometry"]=json.loads(item["geometry"])
+        item["properties"]=json.loads(item["properties"])
         item["measurement"]=measure_geometry(item["geometry"])
+        page.append(item)
     return {"results":page,"total":total,
             "limit":limit,"offset":offset,"indexed":True}
