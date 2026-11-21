@@ -30,7 +30,20 @@ def ensure_lease_schema(connection):
         name TEXT PRIMARY KEY, owner TEXT, expires REAL NOT NULL DEFAULT 0
     )""")
     connection.executemany("""INSERT OR IGNORE INTO gis_job_slots(name,owner,expires)
-        VALUES(?,NULL,0)""",[("raster",),("inference",)])
+        VALUES(?,NULL,0)""",[("raster",),("inference",),("accelerator",)])
+    # All processes sharing this local database use one persisted capacity.
+    # Reject inconsistent configuration rather than allocating extra slots.
+    connection.execute("""CREATE TABLE IF NOT EXISTS gis_job_config(
+        key TEXT PRIMARY KEY, value INTEGER NOT NULL)""")
+    count=int(os.getenv("GEOFATHOM_COMPUTE_SLOTS","2"))
+    if not 1<=count<=8:
+        raise ValueError("Compute slots must be 1–8.")
+    connection.execute("INSERT OR IGNORE INTO gis_job_config VALUES('compute_slots',?)",(count,))
+    saved=connection.execute("SELECT value FROM gis_job_config WHERE key='compute_slots'").fetchone()[0]
+    if saved!=count:
+        raise ValueError("Compute slot configuration differs from this database.")
+    connection.executemany("""INSERT OR IGNORE INTO gis_job_slots(name,owner,expires)
+        VALUES(?,NULL,0)""",[(f"compute:{i}",) for i in range(count)])
 
 
 def recover_expired(connection, now=None):
@@ -42,6 +55,20 @@ def recover_expired(connection, now=None):
         WHERE status='running' AND (lease_expires IS NULL OR lease_expires<?)""",(now,))
     connection.execute("""UPDATE gis_job_slots SET owner=NULL,expires=0
         WHERE expires<?""",(now,))
+
+
+def _resources(kind,payload):
+    result=[]
+    if kind in RASTER_KINDS and payload.get("full_resolution") is True:
+        result.append("raster")
+    if kind=="semantic_segmentation":
+        result.append("inference")
+    if ((kind=="semantic_segmentation" and
+            os.getenv("GEOFATHOM_VISION_DEVICE","cpu").lower()=="cuda")
+            or (kind in {"spectral_index","spectral_change","stac_ndvi"} and
+            os.getenv("GEOFATHOM_SPECTRAL_DEVICE","cpu").lower()=="cuda")):
+        result.append("accelerator")
+    return result
 
 
 def claim(connection,uid,owner,now=None):
@@ -61,11 +88,12 @@ def claim(connection,uid,owner,now=None):
         return None
     import json
     payload=json.loads(row["payload"])
-    resources=[]
-    if row["kind"] in RASTER_KINDS and payload.get("full_resolution") is True:
-        resources.append("raster")
-    if row["kind"]=="semantic_segmentation":
-        resources.append("inference")
+    slot=connection.execute("""SELECT name FROM gis_job_slots
+        WHERE name LIKE 'compute:%' AND (owner IS NULL OR expires<?)
+        ORDER BY name LIMIT 1""",(now,)).fetchone()
+    if slot is None:
+        return None
+    resources=[slot[0],*_resources(row["kind"],payload)]
     for resource in resources:
         acquired=connection.execute("""UPDATE gis_job_slots
             SET owner=?,expires=? WHERE name=?
@@ -95,11 +123,12 @@ def heartbeat(connection,uid,owner,now=None):
         return False
     import json
     payload=json.loads(row["payload"])
-    resources=[]
-    if row["kind"] in RASTER_KINDS and payload.get("full_resolution") is True:
-        resources.append("raster")
-    if row["kind"]=="semantic_segmentation":
-        resources.append("inference")
+    slot=connection.execute("""SELECT name FROM gis_job_slots
+        WHERE name LIKE 'compute:%' AND owner=? AND expires>=?""",
+        (owner,now)).fetchone()
+    if slot is None:
+        return False
+    resources=[slot[0],*_resources(row["kind"],payload)]
     for resource in resources:
         updated=connection.execute("""UPDATE gis_job_slots
             SET expires=? WHERE name=? AND owner=? AND expires>=?""",

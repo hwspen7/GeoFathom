@@ -24,7 +24,8 @@ _DEFAULT_ROOT = Path(__file__).resolve().parent.parent / "data" / "vision-models
 
 
 def model_directory():
-    return Path(os.getenv("GEOFATHOM_VISION_MODELS_DIR") or _DEFAULT_ROOT).expanduser().resolve()
+    from storage.snapshots import model_override
+    return model_override() or Path(os.getenv("GEOFATHOM_VISION_MODELS_DIR") or _DEFAULT_ROOT).expanduser().resolve()
 
 
 def _manifest(identifier):
@@ -51,6 +52,7 @@ def _manifest(identifier):
     bands = info.get("bands", [1, 2, 3])
     size = info.get("tile_size", 256)
     scale = info.get("input_scale", 255.0)
+    halo = info.get("halo", 0)
     mean = info.get("mean", [0] * len(bands) if isinstance(bands,list) else [])
     std = info.get("std", [1] * len(bands) if isinstance(bands,list) else [])
     if (not isinstance(classes, list) or not 2 <= len(classes) <= 32 or
@@ -60,6 +62,8 @@ def _manifest(identifier):
         len(set(bands)) != len(bands) or type(size) is not int
         or size not in (128, 256, 512)):
         raise RasterError("Model requires class names, three bands and a supported tile size.")
+    if type(halo) is not int or not 0 <= halo <= size // 4:
+        raise RasterError("Model halo must be 0 to one quarter of tile size.")
     if (not isinstance(scale, (float, int)) or not math.isfinite(scale)
         or not 0 < scale <= 65535):
         raise RasterError("Model input scale must be a positive finite number.")
@@ -72,7 +76,7 @@ def _manifest(identifier):
         raise RasterError("Model normalization standard deviations must be positive.")
     return {
         "id": identifier, "classes": classes, "bands": bands,
-        "tile_size": size, "input_scale": float(scale),
+        "tile_size": size, "halo": halo, "input_scale": float(scale),
         "mean": [float(x) for x in mean], "std": [float(x) for x in std],
         "description": str(info.get("description", ""))[:180],
         "runtime": "onnxruntime", "model_path": weights,

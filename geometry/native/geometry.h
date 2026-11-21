@@ -93,3 +93,32 @@ GEOFATHOM_API int gf_spectral_change(
     const float* after_index, const unsigned char* after_valid,
     std::size_t count, float threshold, unsigned char* out_class) noexcept;
 }
+
+// Bounded reusable CPU workers; the caller must destroy the handle only
+// after all calls finish. Each run has disjoint output pixel ranges.
+extern "C" {
+GEOFATHOM_API void* gf_cpu_runtime_create(unsigned threads) noexcept;
+GEOFATHOM_API void gf_cpu_runtime_destroy(void* runtime) noexcept;
+GEOFATHOM_API int gf_cpu_runtime_index(void* runtime,const float* a,
+    const float* b,const unsigned char* valid,std::size_t n,float* output,
+    unsigned char* mask) noexcept;
+GEOFATHOM_API int gf_cpu_runtime_change(void* runtime,const float* a,
+    const unsigned char* av,const float* b,const unsigned char* bv,
+    std::size_t n,float threshold,unsigned char* output) noexcept;
+}
+
+// Optional CUDA runtime: only exported by the CUDA-enabled library.
+#ifdef GEOFATHOM_NATIVE_CUDA
+extern "C" {
+GEOFATHOM_API void* gf_cuda_runtime_create(std::size_t n,int device) noexcept;
+GEOFATHOM_API void gf_cuda_runtime_destroy(void* g) noexcept;
+GEOFATHOM_API int gf_cuda_runtime_index(void* g,const float* a,const float* b,
+    const unsigned char* v,std::size_t n,float* out,unsigned char* mask) noexcept;
+GEOFATHOM_API int gf_cuda_runtime_change(void* g,const float* a,const unsigned char* av,
+    const float* b,const unsigned char* bv,std::size_t n,float t,unsigned char* mask) noexcept;
+}
+#endif
+
+// Exact horizontal and vertical label-edge count; bounded uint8 input.
+extern "C" GEOFATHOM_API int gf_mask_transitions(const unsigned char* data,
+    std::size_t width,std::size_t height) noexcept;

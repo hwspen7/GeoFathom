@@ -26,6 +26,7 @@ from shapely.validation import make_valid
 
 from geometry.measure import measure_geometry, GeometryError
 from geometry.spectral import normalized_difference, classify_change
+from geometry.transitions import count_transitions
 from imagery.raster import RasterError, _check
 
 MAX_PIXELS = 67_108_864
@@ -66,8 +67,7 @@ def _check_scratch(path, quota_bytes):
 
 def _transitions(labels):
     # Bound highly fragmented checkerboard-like masks before raster polygonization.
-    return int(np.count_nonzero(labels[:, 1:] != labels[:, :-1]) +
-               np.count_nonzero(labels[1:, :] != labels[:-1, :]))
+    return count_transitions(labels)
 
 
 @dataclass(frozen=True)
@@ -108,6 +108,22 @@ class TilePlan:
                              min(self.tile_size, self.height - row))
 
 
+def _preflight_mask(src, progress):
+    # Count edges across ALL processing seams before GDAL allocates shapes.
+    previous=None
+    total=0
+    for y in range(0,src.height,128):
+        chunk=src.read(1,window=Window(0,y,src.width,min(128,src.height-y)))
+        total+=_transitions(chunk)
+        if previous is not None:
+            total+=int(np.count_nonzero(previous!=chunk[0]))
+        if total>MAX_BOUNDARY_TRANSITIONS:
+            raise RasterError("Raster mask is too fragmented for safe vectorization.")
+        previous=chunk[-1].copy()
+        if progress is not None:
+            progress(.935)
+
+
 def _disk_features(path, classes, max_features=MAX_RESULTS, min_pixels=9,
                    progress=None):
     """GDAL stitches connected regions across disk blocks before polygonization."""
@@ -115,6 +131,7 @@ def _disk_features(path, classes, max_features=MAX_RESULTS, min_pixels=9,
     count = 0
     found = 0
     with rasterio.open(path) as src:
+        _preflight_mask(src,progress)
         band = rasterio.band(src, 1)
         pixel_area = abs(src.transform.a * src.transform.e -
                          src.transform.b * src.transform.d)
@@ -362,11 +379,12 @@ def semantic_segmentation_tiled(path: Path, image_id: str,
                                 memory_mb: int = 32, progress=None):
     """Disk-backed ONNX classification over the source pixel grid.
 
-    Tiles use each model's declared input dimensions. The model can produce
-    edge artifacts because this first streaming implementation does not add
-    contextual halos; only pixel-mask polygonization is globally connected.
+    Optional model-declared context halos are inferred but only the disjoint
+    cores are retained. This reduces, but cannot guarantee elimination of,
+    model edge artifacts.
     """
     import os
+    from .tiles import context_tiles
     from .semantic import _manifest, _predict_tile
     if (not math.isfinite(minimum_confidence)
             or not 0 <= minimum_confidence <= 1):
@@ -389,6 +407,9 @@ def semantic_segmentation_tiled(path: Path, image_id: str,
                         (len(config["bands"]) + len(config["classes"]) + 4) * 4)
         if bytes_needed > memory_mb * 1024 * 1024:
             raise RasterError("Model output tensors exceed the per-tile memory allowance.")
+        halo = config.get("halo", 0)
+        stride = plan.tile_size - 2 * halo
+        tile_count = math.ceil(src.width / stride) * math.ceil(src.height / stride)
         crs = str(src.crs)
         acquired = (src.tags().get("ACQUISITION_DATE") or
                     src.tags().get("TIFFTAG_DATETIME"))
@@ -403,23 +424,30 @@ def semantic_segmentation_tiled(path: Path, image_id: str,
                                transform=src.transform, nodata=0,
                                tiled=True, blockxsize=128, blockysize=128,
                                compress="deflate") as target:
-                for number, window in enumerate(plan.windows(), 1):
+                for number, tile in enumerate(context_tiles(src.width, src.height,
+                        plan.tile_size, halo), 1):
+                    window = tile.core
                     if progress is not None:
-                        progress((number - 1) / plan.count)
-                    raw, valid = _tile_bands(src, config["bands"], window)
-                    rows, cols = int(window.height), int(window.width)
+                        progress((number - 1) / tile_count)
+                    raw, valid = _tile_bands(src, config["bands"], tile.read)
+                    rows, cols = int(tile.read.height), int(tile.read.width)
                     normalized = (
                         np.nan_to_num(raw, nan=0., posinf=0., neginf=0.) /
                         config["input_scale"] - mean) / std
                     tensor = np.zeros((1, len(config["bands"]), plan.tile_size,
                                        plan.tile_size),
                                       dtype=np.float32)
-                    tensor[0, :, :rows, :cols] = normalized
+                    y, x = tile.input_row, tile.input_col
+                    tensor[0, :, y:y+rows, x:x+cols] = normalized
                     labels, confidence = _predict_tile(tensor, config, device)
-                    accepted = (valid & np.isfinite(confidence[:rows, :cols]) &
-                                (confidence[:rows, :cols] >= minimum_confidence))
-                    current = np.where(accepted, labels[:rows, :cols],
-                                       0).astype(np.uint8)
+                    core_valid = np.zeros((plan.tile_size, plan.tile_size), bool)
+                    core_valid[y:y+rows, x:x+cols] = valid
+                    valid = core_valid[tile.crop]
+                    confidence = confidence[tile.crop]
+                    labels = labels[tile.crop]
+                    accepted = (valid & np.isfinite(confidence) &
+                                (confidence >= minimum_confidence))
+                    current = np.where(accepted, labels, 0).astype(np.uint8)
                     transitions += _transitions(current)
                     if transitions > MAX_BOUNDARY_TRANSITIONS:
                         raise RasterError("Raster mask is too fragmented for safe vectorization.")
@@ -429,7 +457,7 @@ def semantic_segmentation_tiled(path: Path, image_id: str,
                     foreground = current != 0
                     valid_pixels += int(valid.sum())
                     classified_pixels += int(foreground.sum())
-                    sum_confidence += float(confidence[:rows, :cols][foreground].sum())
+                    sum_confidence += float(confidence[foreground].sum())
             _check_scratch(output, scratch_quota)
             if progress is not None:
                 progress(.93)
@@ -453,7 +481,8 @@ def semantic_segmentation_tiled(path: Path, image_id: str,
             "mean_model_confidence": sum_confidence / classified_pixels
                                      if classified_pixels else None,
             "confidence_calibrated": False,
-            "tile_count": plan.count, "tile_size": plan.tile_size,
+            "tile_count": tile_count, "tile_size": plan.tile_size,
+            "context_halo": halo,
             "memory_budget_mb": memory_mb, "truncated": truncated,
             "warning": "Model tiles may have edge artifacts and confidence "
                        "is not calibrated. Inspect polygon boundaries and "

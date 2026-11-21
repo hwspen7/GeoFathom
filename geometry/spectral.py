@@ -6,10 +6,13 @@ untrusted image addresses or pixel counts.
 """
 import ctypes
 import math
+import os
+from .cuda import handle as cuda_handle
 
 import numpy as np
 
 from .topology import _native
+from .runtime import handle as runtime_handle
 
 _MAX_PIXELS = 16 * 1024 * 1024
 
@@ -35,6 +38,11 @@ def normalized_difference(first, second, valid):
     result = np.zeros(a.shape, dtype=np.float32)
     output_valid = np.zeros(a.shape, dtype=np.uint8)
     lib = _native()
+    device = os.getenv("GEOFATHOM_SPECTRAL_DEVICE","cpu").lower()
+    if device not in ("cpu","cuda"):
+        raise ValueError("Spectral device must be cpu or cuda.")
+    if device=="cuda" and lib is None:
+        raise RuntimeError("Native CUDA library is unavailable.")
     if lib is not None and hasattr(lib, "gf_spectral_normalized_difference"):
         fn = lib.gf_spectral_normalized_difference
         fn.argtypes = [
@@ -43,13 +51,21 @@ def normalized_difference(first, second, valid):
             ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_uint8),
         ]
         fn.restype = ctypes.c_int
-        accepted = fn(_pointer(a, ctypes.c_float), _pointer(b, ctypes.c_float),
+        owner = cuda_handle(lib,a.size) if device=='cuda' else runtime_handle(lib)
+        args = ()
+        if owner is not None:
+            argtypes = fn.argtypes
+            fn = lib.gf_cuda_runtime_index if device=='cuda' else lib.gf_cpu_runtime_index
+            fn.argtypes = [ctypes.c_void_p] + argtypes
+            fn.restype = ctypes.c_int
+            args = (owner,)
+        accepted = fn(*args, _pointer(a, ctypes.c_float), _pointer(b, ctypes.c_float),
                       _pointer(mask, ctypes.c_uint8), a.size,
                       _pointer(result, ctypes.c_float),
                       _pointer(output_valid, ctypes.c_uint8))
         if accepted < 0:
             raise ValueError("Native spectral index computation rejected the input.")
-        return result, output_valid.astype(bool), "cpp-spectral"
+        return result, output_valid.astype(bool), "cuda-spectral" if device=="cuda" else "cpp-spectral"
 
     finite = (mask != 0) & np.isfinite(a) & np.isfinite(b)
     # Float64 intermediates match the native double-precision accumulation.
@@ -74,6 +90,11 @@ def classify_change(before, before_valid, after, after_valid, threshold):
     new_valid = np.ascontiguousarray(new_valid)
     labels = np.zeros(old.shape, dtype=np.uint8)
     lib = _native()
+    device = os.getenv("GEOFATHOM_SPECTRAL_DEVICE","cpu").lower()
+    if device not in ("cpu","cuda"):
+        raise ValueError("Spectral device must be cpu or cuda.")
+    if device=="cuda" and lib is None:
+        raise RuntimeError("Native CUDA library is unavailable.")
     if lib is not None and hasattr(lib, "gf_spectral_change"):
         fn = lib.gf_spectral_change
         fn.argtypes = [
@@ -82,14 +103,22 @@ def classify_change(before, before_valid, after, after_valid, threshold):
             ctypes.c_size_t, ctypes.c_float, ctypes.POINTER(ctypes.c_uint8),
         ]
         fn.restype = ctypes.c_int
-        changed = fn(_pointer(old, ctypes.c_float),
+        owner = cuda_handle(lib,old.size) if device=='cuda' else runtime_handle(lib)
+        args = ()
+        if owner is not None:
+            argtypes = fn.argtypes
+            fn = lib.gf_cuda_runtime_change if device=='cuda' else lib.gf_cpu_runtime_change
+            fn.argtypes = [ctypes.c_void_p] + argtypes
+            fn.restype = ctypes.c_int
+            args = (owner,)
+        changed = fn(*args, _pointer(old, ctypes.c_float),
                      _pointer(valid, ctypes.c_uint8),
                      _pointer(new, ctypes.c_float),
                      _pointer(new_valid, ctypes.c_uint8),
                      old.size, threshold, _pointer(labels, ctypes.c_uint8))
         if changed < 0:
             raise ValueError("Native change classification rejected the input.")
-        return labels, "cpp-spectral"
+        return labels, "cuda-spectral" if device=="cuda" else "cpp-spectral"
 
     usable = ((valid != 0) & (new_valid != 0) &
               np.isfinite(old) & np.isfinite(new))
