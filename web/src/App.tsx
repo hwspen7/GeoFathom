@@ -13,6 +13,7 @@ import MapCanvas, { type FocusPoint } from './MapCanvas';
 import SurveyTools from './SurveyTools';
 import ProfessionalPanel from './ProfessionalPanel';
 import SpatialToolsPanel from './SpatialToolsPanel';
+import CartographyProPanel from './CartographyProPanel';
 import { featureColor, legendEntries, DEFAULT_LAYER_STYLE } from './labels';
 import ImageCorrectionPanel, { type PromptMode } from './ImageCorrectionPanel';
 import {
@@ -81,6 +82,7 @@ export default function App() {
   const [selectionBox,setSelectionBox]=useState<[number,number,number,number]|null>(null);
   const [spatialSelected,setSpatialSelected]=useState<string[]>([]);
   const [qualityIssues,setQualityIssues]=useState<QualityIssue[]>([]);
+  const [projectGrid,setProjectGrid]=useState<GeoJSON.FeatureCollection|null>(null);
   const [linked,setLinked] = useState(false);
   const [pendingShared,setPendingShared] = useState<{
     preview:SharedTopologyPreview;old:[number,number];next:[number,number];
@@ -430,7 +432,7 @@ export default function App() {
     setGeometry(null);
     setPendingAnnotation(null);
     setSelectionBoxMode(false);setSelectionBox(null);
-    setSpatialSelected([]);setQualityIssues([]);
+    setSpatialSelected([]);setQualityIssues([]);setProjectGrid(null);
     setPromptMode(null);setPositivePoints([]);setNegativePoints([]);setBoxPoints([]);
     setPendingShared(null);
     lastValid.current = null;
@@ -743,6 +745,18 @@ export default function App() {
           </section>
 
           <section className="panel-section">
+            <div className="section-heading"><Layers3 size={16}/><span>Advanced cartography & EPSG</span></div>
+            <CartographyProPanel
+              projectId={activeProjectId}
+              workspace={projectWorkspace}
+              viewport={viewport}
+              selectedGeometry={geometry}
+              onChanged={()=>setRefreshToken(v=>v+1)}
+              onGrid={setProjectGrid}
+            />
+          </section>
+
+          <section className="panel-section">
             <div className="section-heading"><Search size={16} /><span>Find areas by size</span><span className="section-pill">Spatial query</span></div>
             <DiscoveryPanel viewport={viewport} busy={busy} onFound={(result: DiscoveryResponse) => {
               setDiscovered(result.results);
@@ -905,6 +919,7 @@ export default function App() {
             }}
             selectedIds={spatialSelected}
             qualityIssues={qualityIssues.map(issue=>issue.geometry)}
+            projectGrid={projectGrid}
             onTraceClick={async ([longitude, latitude]) => {
               if (promptMode!==null) {
                 const location:Position=[longitude,latitude];
