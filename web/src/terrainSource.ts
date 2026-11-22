@@ -66,3 +66,12 @@ export function describeTerrainBounds(bounds:TerrainBBox):string{
 export function preferredTerrainFetchScope(geometry:GeoJSON.Geometry|null):FetchScope{
  return geometry&&['Polygon','MultiPolygon'].includes(geometry.type)?'selection':'viewport';
 }
+
+/** A broad old DEM may geometrically cover a chosen campus parcel while
+ * obscuring it with miles of irrelevant imagery. Hide, but retain, that DEM. */
+export function terrainRasterFitsStudyArea(asset:Pick<RasterAsset,'bbox'>,target:TerrainBBox,maxExcess=2.5):boolean{
+ if(!terrainRasterMatchesTarget(asset,target))return false;
+ const a=asset.bbox,b=(a[2]-a[0])*(a[3]-a[1]);
+ const c=(target[2]-target[0])*(target[3]-target[1]);
+ return Number.isFinite(b)&&c>0&&b/c<=maxExcess;
+}

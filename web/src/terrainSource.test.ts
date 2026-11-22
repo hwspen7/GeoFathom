@@ -1,9 +1,14 @@
 import {describe,it,expect} from 'vitest';
-import {terrainFetchBounds,terrainRasterMatchesTarget,terrainGeometryBounds,terrainBoundsOverlap,terrainFetchBudget,preferredTerrainFetchScope} from './terrainSource';
+import {terrainFetchBounds,terrainRasterMatchesTarget,terrainGeometryBounds,terrainBoundsOverlap,terrainFetchBudget,preferredTerrainFetchScope,terrainRasterFitsStudyArea} from './terrainSource';
 
 const cmh:[number,number,number,number]=[-82.93,39.96,-82.85,40.03];
 const old={type:'Polygon' as const,coordinates:[[[-82.59,39.41],[-82.50,39.41],[-82.50,39.46],[-82.59,39.46],[-82.59,39.41]]]};
 describe('intent-safe DEM requests',()=>{
+ it('hides previously downloaded far-north DEM while retaining a tight campus DEM',()=>{
+  const main:[number,number,number,number]=[-83.045,39.990,-83.010,40.012];
+  expect(terrainRasterFitsStudyArea({bbox:[-83.084,39.988,-83.003,40.077]},main)).toBe(false);
+  expect(terrainRasterFitsStudyArea({bbox:[-83.048,39.988,-83.008,40.014]},main)).toBe(true);
+ });
  it('automatically downloads the selected OSU campus, not an unrelated large viewport',()=>{
   const campus:GeoJSON.Polygon={type:'Polygon',coordinates:[[[-83.042,39.986],[-83.012,39.986],[-83.012,40.01],[-83.042,40.01],[-83.042,39.986]]]};
   const huge:[number,number,number,number]=[-83.08,39.97,-82.99,40.06];

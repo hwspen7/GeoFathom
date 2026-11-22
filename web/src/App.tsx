@@ -15,7 +15,7 @@ import {loadDisplay,saveDisplay,areaText,distanceText,type AreaUnit} from './dis
 import {BASEMAPS,customBasemap,defaultCustom,preferredSatellite,mapTilerImagery,type BasemapId,type CustomBasemap} from './basemaps';
 import {ScratchHistory} from './scratchHistory';
 import {addRaster,changeRaster,selectDEM,hideDEMs,type RasterLayerView} from './rasterLayers';
-import {terrainContainsCenter,terrainGeometryBounds,terrainRasterMatchesTarget} from './terrainSource';
+import {terrainContainsCenter,terrainGeometryBounds,terrainRasterFitsStudyArea} from './terrainSource';
 import {PIN_LIMIT,readPinnedPlaces,writePinnedPlaces,pinPlace,unpinPlace,visibleGeometry} from './pinnedPlaces';
 import {studyParcels,suggestedParcel,parcelAt} from './studyArea';
 import {localMeasurement,localShape,readScratch,writeScratch,SCRATCH_LIMIT,OFFLINE_METHOD,type ScratchFeature} from './scratch';
@@ -386,7 +386,7 @@ export default function App() {
     setSelectedPlace(place);setScratchId(null);setPreview(null);setPendingShared(null);
     // Validate the selected campus parcel, not unrelated properties elsewhere.
     const requestedBounds=terrainGeometryBounds(target);
-    const matchesDEM=demLayer&&(requestedBounds?terrainRasterMatchesTarget(demLayer,requestedBounds):
+    const matchesDEM=demLayer&&(requestedBounds?terrainRasterFitsStudyArea(demLayer,requestedBounds):
       terrainContainsCenter(demLayer.bbox,[place.longitude,place.latitude,place.longitude,place.latitude]));
     if(demLayer&&!matchesDEM){
       setDemLayer(null);setRasterLayers(old=>hideDEMs(old));setExtentMode(false);setExtentGeometry(null);
