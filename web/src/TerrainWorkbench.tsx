@@ -63,7 +63,7 @@ type ProfileResult=Awaited<ReturnType<typeof terrainProfile>>;
 interface TerrainRecord {
  id:string;title:string;operation:Operation;source:RasterAsset;geometry:GeoJSON.Geometry;
  inputKey:string;visible:boolean;createdAt:number;saved?:boolean;opacity:number;
- resampling:'nearest'|'linear';
+ resampling:'nearest'|'linear';referenceSource?:RasterAsset;
  advanced?:AdvancedTerrainResult;slope?:TerrainResult;profile?:ProfileResult;
 }
 const modes:Array<{id:Operation;title:string}>=[
@@ -236,7 +236,9 @@ export default function TerrainWorkbench(p:Props){
    const controller=new AbortController();analysisRequest.current=controller;
    const ticket=++sequence.current;setBusy(true);setError('');setInfo('');
    const record:TerrainRecord={id:crypto.randomUUID(),title:modes.find(m=>m.id===operation)!.title,
-     operation,source:dem,geometry:structuredClone(analysisGeometry),inputKey,visible:true,opacity:.5,resampling:operation==='slope_map'||operation==='hillshade'?'linear':'nearest',createdAt:Date.now()};
+     operation,source:dem,geometry:structuredClone(analysisGeometry),inputKey,visible:true,opacity:.5,
+     referenceSource:operation==='dem_difference'?assets.find(a=>a.id===comparisonId):undefined,
+     resampling:operation==='slope_map'||operation==='hillshade'?'linear':'nearest',createdAt:Date.now()};
    try{
      if(operation==='profile')record.profile=await terrainProfile(dem.id,analysisGeometry,controller.signal);
      else if(operation==='slope')record.slope=await analyzeTerrain(dem.id,analysisGeometry,controller.signal);
@@ -253,7 +255,7 @@ export default function TerrainWorkbench(p:Props){
      });
      setRunHistory(old=>insertTerrainRun(old,summarizeTerrainRun(
        record.id,record.createdAt,record.operation,record.source,record.geometry,
-       physicalMetrics(record),
+       physicalMetrics(record),record.referenceSource,
      )));
      setSelectedRecord(record.id);latest.current.onHover(null);
    }catch(e){if(ticket===sequence.current&&!controller.signal.aborted)setError(e instanceof Error?e.message:'Terrain analysis failed.');}
@@ -516,6 +518,13 @@ export default function TerrainWorkbench(p:Props){
          <div>Run: {new Date(selected.createdAt).toLocaleString()} · ID {selected.id}</div>
          <div>Input DEM: {selected.source.name}</div>
          <div>Source ID: {selected.source.id}</div>
+         {selected.referenceSource&&<>
+           <div>Reference DEM: {selected.referenceSource.name}</div>
+           <div>Reference ID: {selected.referenceSource.id}</div>
+           <div>Reference CRS: {selected.referenceSource.crs}</div>
+           <div>Reference acquisition: {selected.referenceSource.acquired_at??'Not recorded'}</div>
+           <div>Reference provenance: {selected.referenceSource.provenance}</div>
+         </>}
          <div>Acquired: {selected.source.acquired_at??'Not recorded'}</div>
          <div>Grid: {selected.source.width} × {selected.source.height} · {selected.source.crs}</div>
          <div>Geographic footprint: {selected.source.bbox.map(n=>n.toFixed(5)).join(', ')}</div>

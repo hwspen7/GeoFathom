@@ -19,3 +19,18 @@ describe('scientific run metadata history',()=>{
   expect(items).toHaveLength(100);expect(items[0].id).toBe('fresh');
  });
 });
+
+
+describe('DEM change source lineage',()=>{
+ it('records the second DEM independently of the primary input',()=>{
+  const reference={...source,id:'reference',name:'Copernicus GLO-30',
+    crs:'EPSG:32610',acquired_at:'2025-01-01'};
+  const run=summarizeTerrainRun('comparison',180,'dem_difference',source,
+    {type:'Point',coordinates:[0,0]},{elevation_change_mean_m:2.5},reference);
+  expect(run.sourceId).toBe('a');
+  expect(run.referenceSourceId).toBe('reference');
+  expect(run.referenceSourceName).toBe('Copernicus GLO-30');
+  expect(run.referenceAcquiredAt).toBe('2025-01-01');
+  expect(JSON.stringify(run)).not.toMatch(/geotiff|preview_url|png/);
+ });
+});

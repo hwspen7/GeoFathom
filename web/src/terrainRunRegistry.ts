@@ -6,19 +6,23 @@ export interface TerrainRunReceipt{
  sourceBounds:[number,number,number,number];
  studyBounds:[number,number,number,number]|null;
  sourceAcquiredAt:string|null;metrics:Record<string,number>;
+ referenceSourceId?:string;referenceSourceName?:string;
+ referenceCRS?:string;referenceAcquiredAt?:string|null;
 }
 const LIMIT=100;
 const key=(projectId:string|null)=>'geofathom-terrain-run-history-v1:'+(projectId??'local');
 export function summarizeTerrainRun(
  id:string,createdAt:number,operation:string,source:RasterAsset,
- geometry:GeoJSON.Geometry,metrics:Record<string,number>,
+ geometry:GeoJSON.Geometry,metrics:Record<string,number>,reference?:RasterAsset,
 ):TerrainRunReceipt{
  const valid=Object.fromEntries(Object.entries(metrics)
    .filter(([,v])=>typeof v==='number'&&Number.isFinite(v)));
  return {id,createdAt,operation,sourceId:source.id,sourceName:source.name,
    provenance:source.provenance,crs:source.crs,grid:[source.width,source.height],
    sourceBounds:[...source.bbox],studyBounds:terrainGeometryBounds(geometry),
-   sourceAcquiredAt:source.acquired_at,metrics:valid};
+   sourceAcquiredAt:source.acquired_at,metrics:valid,
+   ...(reference?{referenceSourceId:reference.id,referenceSourceName:reference.name,
+     referenceCRS:reference.crs,referenceAcquiredAt:reference.acquired_at}:{})};
 }
 /** Preserve only compact scientific metadata, not base64 PNG/GeoTIFF payloads. */
 export function insertTerrainRun(history:TerrainRunReceipt[],run:TerrainRunReceipt):TerrainRunReceipt[]{

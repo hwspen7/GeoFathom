@@ -101,7 +101,10 @@ def prepare_dem(paths, mode, geometry=None, resolution_m=None, sampling='bilinea
             root=imagery_dir();root.mkdir(parents=True,exist_ok=True)
             with tempfile.NamedTemporaryFile(prefix='.dem-work-',suffix='.tif',dir=root,delete=False) as handle:
                 temporary=Path(handle.name)
-            provenance=(f'GeoFathom DEM {mode}; {len(paths)} local input(s); first-source overlap precedence; '
+            # Record opaque managed-library source IDs, not private paths.
+            input_ids=','.join(Path(source.name).stem for source in sources)
+            provenance=(f'GeoFathom DEM {mode}; source_image_ids={input_ids}; '
+                        'first-source overlap precedence; '
                         f'projected meter grid {res:g} m; {sampling} resampling. '
                         'NoData preserved. Input native resolution, epochs and vertical datums must be independently verified.')
             count=0
