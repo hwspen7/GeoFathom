@@ -38,12 +38,12 @@ def test_acceptance_counts_all_suites(tmp_path):
 def test_acceptance_generator_creates_valid_manifest(tmp_path):
     # The minimal Windows CI does not require ONNX; the hosted full CI and
     # hardware acceptance both install it, so exercise generation when present.
-    import importlib.util
     import os
     import json
-    if os.getenv("GEOFATHOM_REQUIRE_REAL_ONNX") != "1" and importlib.util.find_spec("onnx") is None:
-        return
-    import onnx
+    if os.getenv("GEOFATHOM_REQUIRE_REAL_ONNX") == "1":
+        import onnx
+    else:
+        onnx = pytest.importorskip("onnx")
     model = load_script("acceptance_model")
     directory = model.create(tmp_path)
     onnx.checker.check_model(onnx.load(str(directory / "gpu_acceptance.onnx")))
