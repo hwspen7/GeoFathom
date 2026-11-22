@@ -48,3 +48,37 @@ def test_lost_lease_terminates_hung_child(isolated_job,monkeypatch):
     finally:
         timer.cancel()
     assert list(root.iterdir())==[]
+
+
+def oversized_frame(send,path,uid,owner,kind,project,payload,scratch):
+    # The receiver rejects frames before allocating more than its IPC budget.
+    send.send_bytes(b"x" * 5_000_101)
+
+
+def test_large_ipc_message_is_rejected_and_child_reaped(isolated_job,monkeypatch):
+    db,uid,owner,project,root=isolated_job
+    monkeypatch.setattr(isolation,"_child_entry",oversized_frame)
+    with pytest.raises(RuntimeError,match="IPC"):
+        isolation.run_isolated(db,uid,owner,"export_geojson",project,{},Event())
+    assert list(root.iterdir())==[]
+
+
+def test_watchdog_remains_responsive_during_blocked_ipc_read():
+    from types import SimpleNamespace
+    import json
+    entered,release=Event(),Event()
+    def read(maxlength):
+        entered.set()
+        assert release.wait(5)
+        return json.dumps({"status":"ok","result":{"late":True}}).encode()
+    reader=isolation.ResultReader(SimpleNamespace(recv_bytes=read))
+    try:
+        assert entered.wait(2)
+        assert not reader.ready.wait(.05)
+        with pytest.raises(RuntimeError,match="not ready"):
+            reader.get()
+    finally:
+        release.set()
+        reader.thread.join(5)
+    assert reader.ready.is_set()
+    assert reader.get()=={"late":True}

@@ -15,7 +15,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from uuid import UUID,uuid4
 
-from .isolation import _limit,_terminate,_read_result
+from .isolation import _limit,ResultReader,cleanup_child
 from storage.versions import materialize,archive_inputs
 
 KINDS={"spectral_index","spectral_change","semantic_segmentation"}
@@ -222,8 +222,10 @@ def worker_once(broker,node,root):
     with TemporaryDirectory(prefix="geofathom-remote-") as scratch:
         receive,send=context.Pipe(duplex=False)
         process=context.Process(target=_remote_child,args=(send,spec,str(root),scratch))
+        reader=None
         try:
             process.start();send.close()
+            reader=ResultReader(receive)
             started=time.monotonic();renewed=started
             timeout=_limit("GEOFATHOM_RASTER_TIMEOUT_SECONDS",900,30,7200)
             budget=_limit("GEOFATHOM_RASTER_RSS_MB",2048,256,16384)*1024*1024
@@ -236,12 +238,17 @@ def worker_once(broker,node,root):
                     renewed=now
                 if now-started>timeout:
                     raise RuntimeError("Remote subprocess exceeded wall-time budget.")
-                if receive.poll(.15):
-                    result=_read_result(receive)
+                if reader.ready.wait(.15) or (not process.is_alive() and reader.ready.wait(.15)):
+                    if time.monotonic()-started>timeout:
+                        raise RuntimeError("Remote subprocess exceeded wall-time budget.")
+                    result=reader.get()
                     if not broker.finish(uid,owner,result=result):
                         raise RuntimeError("Remote node no longer owns the task.")
                     break
                 if not process.is_alive():
+                    # The pipe reader is still bounded by the watchdog.
+                    if reader.ready.wait(.15):
+                        continue
                     raise RuntimeError("Remote subprocess stopped without a result.")
                 try:
                     if monitor.memory_info().rss>budget:
@@ -256,9 +263,7 @@ def worker_once(broker,node,root):
             except Exception:
                 _LOG.warning("Distributed failure publication unavailable; lease will expire.", exc_info=True)
         finally:
-            if process.pid is not None:
-                _terminate(process);process.join(3);process.close()
-            send.close();receive.close()
+            cleanup_child(process,receive,send,reader)
     return True
 
 def main():

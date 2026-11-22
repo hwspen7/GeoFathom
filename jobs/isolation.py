@@ -10,6 +10,7 @@ import time
 import json
 from tempfile import TemporaryDirectory
 from pathlib import Path
+from threading import Event, Thread
 
 from storage.database import StorageError
 
@@ -86,6 +87,55 @@ def _read_result(receive):
     return message["result"]
 
 
+class ResultReader:
+    """Drain one bounded IPC frame off the watchdog thread.
+
+    A readable pipe may contain only the first bytes of a large message.
+    The parent must remain able to enforce cancellation and wall-time budgets
+    even when a failed child stops halfway through that message.
+    """
+    def __init__(self, receive):
+        self.ready = Event()
+        self.result = None
+        self.error = None
+        self.thread = Thread(target=self._read, args=(receive,),
+                             name="geofathom-ipc-reader", daemon=True)
+        self.thread.start()
+
+    def _read(self, receive):
+        try:
+            self.result = _read_result(receive)
+        except Exception as error:
+            self.error = error
+        finally:
+            self.ready.set()
+
+    def get(self):
+        if not self.ready.is_set():
+            raise RuntimeError("Raster subprocess IPC result is not ready.")
+        if self.error is not None:
+            raise self.error
+        return self.result
+
+
+def cleanup_child(process, receive, send, reader):
+    """Close both parent endpoints and reap the child after any outcome."""
+    try:
+        if process.pid is not None:
+            _terminate(process)
+            process.join(timeout=3)
+            if process.is_alive():
+                raise RuntimeError("Raster subprocess could not be terminated.")
+        process.close()
+    finally:
+        send.close()
+        # Closing the child's writer on termination wakes the background read.
+        # Join it before closing the receiving handle to avoid a handle race.
+        if reader is not None:
+            reader.thread.join(timeout=3)
+        receive.close()
+
+
 def run_isolated(path,uid,owner,kind,project_id,payload,lost):
     root=os.getenv("GEOFATHOM_SNAPSHOT_DIR") or os.getenv("GEOFATHOM_RASTER_TEMP_DIR")
     if root:
@@ -109,9 +159,11 @@ def _run_isolated(path,uid,owner,kind,project_id,payload,lost,scratch):
         args=(send,path,uid,owner,kind,project_id,payload,scratch),
         daemon=False)
     started=time.monotonic()
+    reader=None
     try:
         process.start()
         send.close()
+        reader=ResultReader(receive)
         try:
             monitor=psutil.Process(process.pid)
         except psutil.NoSuchProcess as error:
@@ -121,14 +173,18 @@ def _run_isolated(path,uid,owner,kind,project_id,payload,lost,scratch):
                 raise RuntimeError("Worker lease lost during raster processing.")
             if time.monotonic()-started > timeout:
                 raise RuntimeError("Raster processing exceeded the wall-time budget.")
-            if receive.poll(.15):
+            if reader.ready.wait(.15):
                 if lost.is_set():
                     raise RuntimeError("Worker lease lost during raster processing.")
-                return _read_result(receive)
+                if time.monotonic()-started > timeout:
+                    raise RuntimeError("Raster processing exceeded the wall-time budget.")
+                return reader.get()
             if not process.is_alive():
                 # Check for a late IPC write, then report any native crash.
-                if receive.poll(.05):
-                    return _read_result(receive)
+                if reader.ready.wait(.15):
+                    if lost.is_set():
+                        raise RuntimeError("Worker lease lost during raster processing.")
+                    return reader.get()
                 raise RuntimeError(f"Raster subprocess exited without a result ({process.exitcode}).")
             try:
                 if monitor.memory_info().rss > rss_mb*1024*1024:
@@ -148,9 +204,4 @@ def _run_isolated(path,uid,owner,kind,project_id,payload,lost,scratch):
             finally:
                 connection.close()
     finally:
-        if process.pid is not None:
-            _terminate(process)
-            process.join(timeout=3)
-            process.close()
-        send.close()
-        receive.close()
+        cleanup_child(process,receive,send,reader)

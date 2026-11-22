@@ -41,3 +41,17 @@ def test_refinement_rejects_prompts_outside_window(tmp_path):
     from imagery.raster import RasterError
     with pytest.raises(RasterError):
         refine_raster(path,"test",[120.0002,31.9998],[[121,32]],[],None,64)
+
+
+def test_last_pixel_anchor_uses_cell_not_out_of_bounds_rounding(monkeypatch,tmp_path):
+    path=tmp_path/"edge.tif"
+    transform=from_origin(120,32,.00001,.00001)
+    with rasterio.open(path,"w",driver="GTiff",width=64,height=64,count=3,
+                       dtype="uint8",crs="EPSG:4326",transform=transform) as dst:
+        dst.write(np.zeros((3,64,64),dtype=np.uint8))
+    def model(image,*args,**kwargs):
+        return np.ones(image.shape[:2],dtype=np.uint8),.8,"mock-sam"
+    monkeypatch.setattr(ref,"sam_mask",model)
+    position=list(transform*(63.75,63.75))
+    result=refine_raster(path,"edge",position,[position],[],None,64)
+    assert result["pixel_count"]>0

@@ -46,7 +46,9 @@ def refine_raster(path:Path,image_id:str,anchor:list[float],
     )
     if mask.shape!=image.shape[:2]:
         raise RasterError("SAM returned an invalid prediction mask dimension.")
-    if not mask[int(round(positive_xy[0][1])),int(round(positive_xy[0][0]))]:
+    # Inverse affine coordinates refer to pixel cells, not pixel centres.
+    # Rounding a valid coordinate near the last column could access width.
+    if not mask[int(positive_xy[0][1]),int(positive_xy[0][0])]:
         raise RasterError("The mask does not contain the positive anchor.")
     output=_vectorize(mask,affine,crs)
     return {

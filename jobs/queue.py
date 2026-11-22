@@ -459,9 +459,13 @@ def _worker(uid,path):
         stop.set()
         if thread is not None:
             thread.join(timeout=5)
-        if acquired:
-            # Never release a successor's slot. A stale owner releases only
-            # a row that still carries its exact unique token.
-            with _connect() as c:
-                release_slot(c,owner)
-        job_database_override.reset(token)
+        try:
+            if acquired:
+                # Never release a successor's slot. A stale owner releases only
+                # a row that still carries its exact unique token.
+                with _connect() as c:
+                    release_slot(c,owner)
+        finally:
+            # Even a database failure during slot cleanup must not poison the
+            # next job's ContextVar on this executor thread.
+            job_database_override.reset(token)
