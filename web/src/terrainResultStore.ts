@@ -98,7 +98,28 @@ export async function cacheTerrainResult(projectId:string|null,record:PersistedT
  const db=await openDatabase();
  const tx=db.transaction(STORE,'readwrite');
  const done=completed(tx);
- tx.objectStore(STORE).put(copy);
+ const store=tx.objectStore(STORE);
+ store.put(copy);
+ // A live calculation may supersede a previous unsaved result. Prune these
+ // cached superseded versions and enforce a per-project cap atomically; doing
+ // this only in React would leave hidden, unbounded GeoTIFF blobs on disk.
+ const key=projectKey(projectId);
+ const request=store.index('by_project').getAll(key);
+ request.onsuccess=()=>{
+  const versions=(request.result as IndexedResult[])
+   .sort((a,b)=>b.createdAt-a.createdAt);
+  const seenLiveKeys=new Set<string>();
+  let kept=0;
+  for(const item of versions){
+   const redundant=!item.saved&&seenLiveKeys.has(item.inputKey);
+   if(!item.saved)seenLiveKeys.add(item.inputKey);
+   if(redundant||kept>=LIMIT){
+    store.delete([key,item.id]);
+   }else{
+    kept++;
+   }
+  }
+ };
  await done;
 }
 
