@@ -36,9 +36,11 @@ def cross_sections(path,geometry,spacing,width,cancel=None):
             xx=p.x-offsets*dy/length;yy=p.y+offsets*dx/length
             lon,lat=transform(src.crs,"EPSG:4326",xx.tolist(),yy.tolist())
             samples=[]
-            for off,x,y,v in zip(offsets,lon,lat,src.sample(zip(xx,yy),indexes=1,masked=True)):
-                raw=v[0]
-                h=None if np.ma.is_masked(raw) or not np.isfinite(raw) else float(raw)
+            locations=list(zip(xx,yy))
+            for off,x,y,(px,py),v in zip(offsets,lon,lat,locations,src.sample(locations,indexes=1,masked=True)):
+                row,col=src.index(px,py);raw=v[0]
+                inside=0<=row<src.height and 0<=col<src.width
+                h=None if not inside or np.ma.is_masked(raw) or not np.isfinite(raw) else float(raw)
                 valid+=h is not None;missing+=h is None
                 samples.append({"distance_m":float(off+width),"offset_m":float(off),"elevation_m":h,"coordinate":[x,y]})
             sections.append({"station_m":float(station),"length_m":2*width,"samples":samples})

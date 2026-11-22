@@ -12,7 +12,7 @@ from geometry.measure import measure_geometry
 from imagery.raster import RasterError
 from .engine import _check_dem
 from .cancellation import checkpoint
-from .professional import SURFACES, surface
+from .professional import SURFACES, surface, d8_directions, D8
 
 def _window(path, geometry, maximum):
     measure_geometry(geometry)
@@ -194,30 +194,18 @@ def _visibility(z,valid,origin,affine,observer_height,target_height,cancel=None)
 def _watershed(z,valid,origin,affine,cancel=None):
     """D8 steepest descent, no depression filling; flat/sink cells terminate."""
     height,width=z.shape
-    downhill=np.full(z.shape,-1,dtype=np.int64)
-    best=np.zeros(z.shape,dtype=np.float64)
-    for dr,dc in ((-1,-1),(-1,0),(-1,1),(0,-1),(0,1),(1,-1),(1,0),(1,1)):
-        rs=slice(max(0,-dr),min(height,height-dr));cs=slice(max(0,-dc),min(width,width-dc))
-        rt=slice(max(0,dr),min(height,height+dr));ct=slice(max(0,dc),min(width,width+dc))
-        slope=(z[rs,cs]-z[rt,ct])/math.hypot(dr*affine.e,dc*affine.a)
-        good=valid[rs,cs]&valid[rt,ct]&(slope>best[rs,cs])
-        rr,cc=np.indices(slope.shape)
-        dest=(rr+rt.start)*width+cc+ct.start
-        best[rs,cs][good]=slope[good]
-        downhill[rs,cs][good]=dest[good]
-    upstream=[[] for _ in range(z.size)]
-    for index,dest in enumerate(downhill.flat):
-        if index%1024==0:checkpoint(cancel)
-        if dest>=0:upstream[int(dest)].append(index)
-    basin=np.zeros(z.size,bool)
-    queue=[origin[0]*width+origin[1]]
-    basin[queue[0]]=True
+    downhill,_=d8_directions(z,valid,abs(affine.a),abs(affine.e),cancel)
+    basin=np.zeros(z.shape,bool);basin[origin]=True
+    queue=[origin]
+    # Traverse reverse D8 edges directly instead of allocating one list per cell.
     while queue:
         checkpoint(cancel)
-        for index in upstream[queue.pop()]:
-            if not basin[index]:
-                basin[index]=True;queue.append(index)
-    return basin.reshape(z.shape)
+        r,c=queue.pop()
+        for dr,dc,_ in D8:
+            rr,cc=r+dr,c+dc
+            if 0<=rr<height and 0<=cc<width and not basin[rr,cc] and downhill[rr,cc]==r*width+c:
+                basin[rr,cc]=True;queue.append((rr,cc))
+    return basin
 
 def _polygon_parts(geometry):
     if geometry.geom_type=="Polygon":
@@ -270,6 +258,8 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
         result["raster"],result["metrics"],result["features"]=surface(z,valid,affine,crs,operation,reference,point,end_point,
             max_slope,min_elevation,max_elevation,max_tri,stream_cells,azimuth,altitude,_feature,_origin,cancel)
         result["warning"]="Projected source-grid product; nodata and incomplete neighborhoods excluded. D8 terminates at sinks/flats; suitability and path costs are screening estimates, not engineering certification."
+        if operation=="streams" and result["metrics"]["drainage_edges"]>result["metrics"]["vector_edges"]:
+            result["warning"]+=" Vector edge budget exceeded; full drainage raster remains available."
     elif operation=="contours":
         result["features"]=_contours(z,valid,affine,crs,boundary,interval,cancel)
         result["metrics"]={"contour_lines":sum(f["properties"]["contour_path_count"] for f in result["features"]),
@@ -323,7 +313,11 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
     else:
         step=max(1,math.ceil(max(z.shape)/128))
         heights=z[::step,::step];mask=valid[::step,::step]
+        first=mask[:-1,:-1]&mask[1:,:-1]&mask[:-1,1:]
+        second=mask[:-1,1:]&mask[1:,:-1]&mask[1:,1:]
+        if not (first.any() or second.any()):raise RasterError("No complete terrain mesh triangle in the sampled grid.")
         result["mesh"]={"rows":heights.shape[0],"cols":heights.shape[1],
+            "origin_xy":list(affine*(.5,.5)),"source_crs":str(crs),
             "dx_m":abs(affine.a)*step,"dy_m":abs(affine.e)*step,
             "heights":[float(v) if ok else None for v,ok in zip(heights.flat,mask.flat)]}
         if texture_path is not None:

@@ -161,3 +161,15 @@ def test_cross_sections_and_rgb_texture(dem,tmp_path):
     mesh=run_terrain(path,polygon,"mesh",texture_path=rgb)["mesh"]
     assert mesh["texture"]["coverage_pct"]==pytest.approx(100)
     assert mesh["texture"]["png"].startswith("data:image/png;base64,")
+
+def test_flat_aspect_and_out_of_bounds_profile(dem):
+    from terrain.engine import elevation_profile
+    path,polygon=dem
+    with rasterio.open(path,"r+") as ds:ds.write(np.full((20,20),42,dtype=np.float32),1)
+    result=run_terrain(path,polygon,"aspect_map")
+    assert result["metrics"]["directional_cells"]==0
+    assert result["metrics"]["flat_cells"]>0
+    t=Transformer.from_crs("EPSG:32617","EPSG:4326",always_xy=True)
+    line={"type":"LineString","coordinates":[t.transform(499900,4499900),t.transform(500100,4499900)]}
+    samples=elevation_profile(path,line,10)["samples"]
+    assert samples[0]["elevation_m"] is None and samples[-1]["elevation_m"]==42

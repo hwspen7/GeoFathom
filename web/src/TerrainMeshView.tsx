@@ -24,8 +24,13 @@ export function meshData(mesh:TerrainMesh){
 }
 export function meshOBJ(mesh:TerrainMesh){
  const d=meshData(mesh),rows=['# GeoFathom local DEM mesh; coordinates in meters, local origin'];
- for(let r=0;r<mesh.rows;r++)for(let c=0;c<mesh.cols;c++)rows.push('v '+(c*mesh.dx_m)+' '+(-r*mesh.dy_m)+' '+(mesh.heights[r*mesh.cols+c]??0));
- for(let i=0;i<d.triangles.length;i+=3)rows.push('f '+[d.triangles[i]+1,d.triangles[i+1]+1,d.triangles[i+2]+1].join(' '));
+ if(mesh.source_crs&&mesh.origin_xy)rows.push('# CRS '+mesh.source_crs+'; projected origin '+mesh.origin_xy.join(' '));
+ const indices=new Map<number,number>();
+ for(let r=0;r<mesh.rows;r++)for(let c=0;c<mesh.cols;c++){
+   const i=r*mesh.cols+c,h=mesh.heights[i];if(h===null||!Number.isFinite(h))continue;
+   indices.set(i,indices.size+1);rows.push('v '+(c*mesh.dx_m)+' '+(-r*mesh.dy_m)+' '+h);
+ }
+ for(let i=0;i<d.triangles.length;i+=3)rows.push('f '+[indices.get(d.triangles[i]),indices.get(d.triangles[i+1]),indices.get(d.triangles[i+2])].join(' '));
  return rows.join('\n')+'\n';
 }
 type Camera={angle:number;tilt:number;exaggeration:number;zoom:number;clip:number;wire:boolean;drape:boolean;panX:number;panY:number};

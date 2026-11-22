@@ -139,12 +139,14 @@ export function ResultPane({expanded,onClose,children}:{expanded:boolean;onClose
  return expanded?<dialog ref={ref} className="terrain-result-dialog" aria-label="Expanded terrain result" onCancel={e=>{e.preventDefault();onClose();}}>{panel}</dialog>:panel;
 }
 export function AspectRose({bins}:{bins:{label:string;color:string;cells:number}[]}){
- const max=Math.max(1,...bins.map(x=>x.cells));
+ const directions=bins.filter(b=>b.label!=='Flat'),flat=bins.find(b=>b.label==='Flat');
+ const max=Math.max(1,...directions.map(x=>x.cells));
  return <svg className="terrain-aspect-rose terrain-chart" viewBox="0 0 240 240" role="img" aria-label="Slope aspect rose">
    {[25,50,75,90].map(r=><circle key={r} cx="120" cy="120" r={r} fill="none" stroke="#c7d2da"/>)}
-   {bins.map((b,i)=>{const t=i*Math.PI/4,r=90*b.cells/max,a=t-.32,z=t+.32;
+   {directions.map((b,i)=>{const t=i*Math.PI/4,r=90*b.cells/max,a=t-.32,z=t+.32;
     return <g key={b.label}><path d={'M120 120 L'+(120+r*Math.sin(a))+' '+(120-r*Math.cos(a))+' A'+r+' '+r+' 0 0 1 '+(120+r*Math.sin(z))+' '+(120-r*Math.cos(z))+' Z'} fill={b.color}><title>{b.label}: {b.cells} cells</title></path>
     <text x={120+103*Math.sin(t)} y={124-103*Math.cos(t)} textAnchor="middle" fontSize="11">{b.label}</text></g>;})}
+   {flat&&<text x="120" y="238" textAnchor="middle" fontSize="9">Flat: {flat.cells} cells</text>}
  </svg>;
 }
 export function SectionPlot({sections,onHover}:{sections:NonNullable<import('./api').AdvancedTerrainResult['sections']>;onHover:(p:Position|null)=>void}){

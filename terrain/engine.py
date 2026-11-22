@@ -151,10 +151,12 @@ def elevation_profile(path,geometry,samples=80,cancel=None):
         xs,ys=transform("EPSG:4326",src.crs,
                         [p[0] for p in interpolated],[p[1] for p in interpolated])
         heights=[]
-        for sample in src.sample(zip(xs,ys),indexes=1,masked=True):
+        locations=list(zip(xs,ys))
+        for (x,y),sample in zip(locations,src.sample(locations,indexes=1,masked=True)):
             checkpoint(cancel)
-            value=sample[0]
-            heights.append(None if np.ma.is_masked(value) or not np.isfinite(value)
+            row,col=src.index(x,y);value=sample[0]
+            inside=0<=row<src.height and 0<=col<src.width
+            heights.append(None if not inside or np.ma.is_masked(value) or not np.isfinite(value)
                            else float(value))
         return {"samples":[{"distance_m":float(d),"elevation_m":h,"coordinate":p}
                            for d,h,p in zip(distances,heights,interpolated)],

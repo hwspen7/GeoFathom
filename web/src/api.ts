@@ -971,7 +971,7 @@ export type TerrainOperation='contours'|'volume'|'visibility'|'watershed'|'mesh'
 export interface TerrainRaster {png:string;geotiff:string;corners:[[number,number],[number,number],[number,number],[number,number]];legend:{label:string;color:string;cells:number}[];width:number;height:number;valid_cells:number}
 export interface TerrainRasterLayer {id:string;raster:TerrainRaster}
 export interface TerrainDistributionBin {lower_m:number;upper_m:number;cells:number;area_m2:number;cumulative_pct:number}
-export interface TerrainMesh {rows:number;cols:number;dx_m:number;dy_m:number;heights:Array<number|null>;texture?:{png:string;coverage_pct:number}}
+export interface TerrainMesh {rows:number;cols:number;dx_m:number;dy_m:number;heights:Array<number|null>;origin_xy?:[number,number];source_crs?:string;texture?:{png:string;coverage_pct:number}}
 export interface AdvancedTerrainResult {
   operation:TerrainOperation;source_crs:string;valid_cells:number;missing_cells:number;
   cell_area_m2:number;metrics:Record<string,number>;warning:string;

@@ -55,3 +55,15 @@ def test_categorical_classes():
     assert labels[2]=="E"
     classes,_,_=classification(np.array([[-1.,0.,1.,np.nan]]),"cutfill_map")
     assert classes.tolist()==[[0,1,2,-1]]
+
+def test_flat_aspect_and_watershed_share_receiver_graph():
+    from terrain.advanced import _watershed
+    z=np.array([[7.,7.,7.],[8.,8.,6.],[9.,5.,4.]])
+    valid=np.ones_like(z,bool)
+    _,_,accum=d8_flow(z,valid,10,10)
+    for r in range(3):
+        for c in range(3):
+            basin=_watershed(z,valid,(r,c),from_origin(0,30,10,10))
+            assert basin.sum()==accum[r,c]
+    classes,labels,_=classification(np.array([[-1.,np.nan,22.5]]),"aspect_map")
+    assert labels[-1]=="Flat" and classes.tolist()==[[8,-1,1]]

@@ -10,7 +10,7 @@ from PIL import Image
 from rasterio.io import MemoryFile
 from rasterio.warp import calculate_default_transform, reproject, Resampling, transform
 from rasterio.transform import array_bounds
-from shapely.geometry import LineString
+from shapely.geometry import LineString, MultiLineString
 from imagery.raster import RasterError
 from .cancellation import checkpoint
 
@@ -49,8 +49,8 @@ def derivatives(z, valid, dx, dy):
     return {k:pad(v) for k,v in {"slope_map":slope,"aspect_map":aspect,"tri":tri,
              "tpi":tpi,"curvature":lap,"east":e,"south":s}.items()}
 
-def d8_flow(z, valid, dx, dy, cancel=None):
-    """Strict downhill D8: flats and depressions terminate; counts include own cell."""
+def d8_directions(z, valid, dx, dy, cancel=None):
+    """Steepest strictly downhill receiver; deterministic tie order shared by all products."""
     h,w=z.shape
     dst=np.full(z.shape,-1,dtype=np.int64)
     direction=np.zeros(z.shape,dtype=np.float64)
@@ -64,6 +64,11 @@ def d8_flow(z, valid, dx, dy, cancel=None):
         rr,cc=np.indices(drop.shape)
         best[rs,cs][good]=drop[good];dst[rs,cs][good]=((rr+rt.start)*w+cc+ct.start)[good]
         direction[rs,cs][good]=code
+    return dst,np.where(valid,direction,np.nan)
+
+def d8_flow(z, valid, dx, dy, cancel=None):
+    """Strict downhill D8; accumulation includes each cell itself."""
+    dst,direction=d8_directions(z,valid,dx,dy,cancel)
     cells=np.flatnonzero(valid.ravel())
     order=cells[np.argsort(z.ravel()[cells],kind="stable")[::-1]]
     accum=valid.ravel().astype(np.int64)
@@ -72,7 +77,7 @@ def d8_flow(z, valid, dx, dy, cancel=None):
         if i%4096==0:checkpoint(cancel)
         target=flat[index]
         if target>=0:accum[target]+=accum[index]
-    return dst,np.where(valid,direction,np.nan),np.where(valid,accum.reshape(z.shape),np.nan)
+    return dst,direction,np.where(valid,accum.reshape(z.shape),np.nan)
 
 def least_cost(z,valid,start,end,dx,dy,max_grade,cancel=None):
     """Dijkstra on raster cell centres; no diagonal corner cutting through nodata."""
@@ -120,8 +125,10 @@ def classification(values,operation):
     if operation=="slope_map":
         edges=[0,5,15,25,35,45,90];labels=["0–5°","5–15°","15–25°","25–35°","35–45°","45–90°"]
     elif operation=="aspect_map":
-        edges=[0,45,90,135,180,225,270,315,360];labels=["N","NE","E","SE","S","SW","W","NW"]
-        return np.where(finite,np.floor(((values+22.5)%360)/45),-1).astype(np.int16),labels,(*COLORS,"#743a9b","#278577")
+        labels=["N","NE","E","SE","S","SW","W","NW","Flat"]
+        return np.where(finite,np.where(values<0,8,np.floor(((values+22.5)%360)/45)),-1).astype(np.int16),labels,(*COLORS,"#743a9b","#278577","#a6adb4")
+    elif operation=="hillshade":
+        edges=[0,43,85,128,170,213,255];labels=["0–43","43–85","85–128","128–170","170–213","213–255"]
     elif operation=="flow_direction":
         codes=[0,64,128,1,2,4,8,16,32]
         classes=np.full(values.shape,-1,dtype=np.int16)
@@ -163,6 +170,14 @@ def raster_product(values,operation,affine,crs,cancel=None):
               dst_transform=target,dst_crs="EPSG:3857",dst_nodata=-1,resampling=Resampling.nearest)
     rgba=np.zeros((th,tw,4),dtype=np.uint8)
     for i,color in enumerate(colors):rgba[preview==i]=(*_hex(color),255)
+    if operation=="hillshade":
+        # Continuous grayscale relief; preserve nodata transparency.
+        brightness=np.full((th,tw),np.nan,dtype=np.float32)
+        reproject(values.astype(np.float32),brightness,src_transform=affine,src_crs=crs,src_nodata=float("nan"),
+                  dst_transform=target,dst_crs="EPSG:3857",dst_nodata=float("nan"),resampling=Resampling.bilinear)
+        good=np.isfinite(brightness)&(preview>=0)
+        rgba[:]=0;rgba[good,:3]=np.repeat(np.clip(brightness[good],0,255).astype(np.uint8)[:,None],3,axis=1)
+        rgba[good,3]=255
     sink=io.BytesIO();Image.fromarray(rgba).save(sink,format="PNG")
     west,south,east,north=array_bounds(th,tw,target)
     xs,ys=transform("EPSG:3857","EPSG:4326",[west,east,east,west],[north,north,south,south])
@@ -193,14 +208,18 @@ def surface(z,valid,affine,crs,operation,reference,point,end_point,max_slope,
             stream=(values==1).ravel()
             # Trace each edge once; cap the vector output while preserving the full raster.
             indices=np.flatnonzero(stream&(dst.ravel()>=0))
-            if len(indices)<=4000:
-                for index in indices:
-                    target=int(dst.ravel()[index])
-                    if not stream[target]:continue
-                    r,c=divmod(int(index),z.shape[1]);rr,cc=divmod(target,z.shape[1])
-                    a=affine*(c+.5,r+.5);b=affine*(cc+.5,rr+.5)
-                    features.append(feature(LineString([a,b]),crs,{"name":"Drainage edge","color":"#167bb8"}))
-            metrics={"stream_cells":int(stream.sum()),"stream_threshold_cells":stream_cells}
+            indices=indices[stream[dst.ravel()[indices]]]
+            if len(indices)<=20000:
+                for start in range(0,len(indices),256):
+                    checkpoint(cancel)
+                    lines=[]
+                    for index in indices[start:start+256]:
+                        target=int(dst.ravel()[index])
+                        r,c=divmod(int(index),z.shape[1]);rr,cc=divmod(target,z.shape[1])
+                        lines.append([affine*(c+.5,r+.5),affine*(cc+.5,rr+.5)])
+                    features.append(feature(MultiLineString(lines),crs,{"name":"Drainage network","color":"#167bb8"}))
+            metrics={"stream_cells":int(stream.sum()),"stream_threshold_cells":stream_cells,
+                     "drainage_edges":int(len(indices)),"vector_edges":int(len(indices)) if features else 0}
     elif operation=="least_cost":
         start=origin(point,crs,affine,valid);end=origin(end_point,crs,affine,valid)
         if start==end:raise RasterError("Route endpoints must occupy different cells.")
@@ -226,10 +245,15 @@ def surface(z,valid,affine,crs,operation,reference,point,end_point,max_slope,
             values=np.where(good,passed.astype(float),np.nan)
             metrics={"suitable_area_m2":float((values==1).sum()*cell),
                      "suitable_pct":float(100*(values==1).sum()/good.sum())}
+        elif operation=="aspect_map":
+            values=np.where(np.isfinite(d["slope_map"])&~np.isfinite(d["aspect_map"]),-1,d["aspect_map"])
         else:values=d[operation]
     if not np.isfinite(values).any():raise RasterError("No valid cells for this terrain product.")
     product=raster_product(values,operation,affine,crs,cancel)
     metrics.update({"product_valid_cells":product["valid_cells"],
                     "product_min":float(np.nanmin(values)),"product_max":float(np.nanmax(values)),
                     "product_mean":float(np.nanmean(values))})
+    if operation=="aspect_map":
+        angles=values[np.isfinite(values)&(values>=0)]
+        metrics={"flat_cells":int((values==-1).sum()),"directional_cells":int(angles.size),"product_valid_cells":product["valid_cells"]}
     return product,metrics,features
