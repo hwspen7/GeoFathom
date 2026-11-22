@@ -113,7 +113,7 @@ export default function TerrainWorkbench(p:Props){
  const [endLon,setEndLon]=useState(''),[endLat,setEndLat]=useState('');
  const [comparisonId,setComparisonId]=useState('');
  const [demProcessMode,setDemProcessMode]=useState<DEMProcessMode>('clip'),[processSecond,setProcessSecond]=useState('');
- const [processResolution,setProcessResolution]=useState('30'),[processSampling,setProcessSampling]=useState<'nearest'|'bilinear'>('bilinear');
+ const [processResolution,setProcessResolution]=useState('30'),[processSampling,setProcessSampling]=useState<'nearest'|'bilinear'|'average'>('bilinear');
  const [maxSlope,setMaxSlope]=useState('30'),[minElevation,setMinElevation]=useState('-12000'),[maxElevation,setMaxElevation]=useState('12000'),[maxTri,setMaxTri]=useState('100');
  const [streamCells,setStreamCells]=useState('100'),[azimuth,setAzimuth]=useState('315'),[altitude,setAltitude]=useState('45');
  const [fillSinks,setFillSinks]=useState(true),[considerCurvature,setConsiderCurvature]=useState(true),[refractionCoeff,setRefractionCoeff]=useState('0.13');
@@ -420,8 +420,8 @@ export default function TerrainWorkbench(p:Props){
            <option value="">Choose second DEM</option>{assets.filter(a=>a.bands===1&&a.id!==dem.id).map(a=><option key={a.id} value={a.id}>{a.name}</option>)}
          </select></label>}
          <label>Output grid (m)<input aria-label="DEM processing resolution" type="number" min="1" max="1000" step="any" value={processResolution} onChange={e=>setProcessResolution(e.target.value)}/></label>
-         <label>Sampling<select aria-label="DEM processing sampling" value={processSampling} onChange={e=>setProcessSampling(e.target.value as 'nearest'|'bilinear')}>
-           <option value="bilinear">Bilinear</option><option value="nearest">Nearest</option>
+         <label>Sampling<select aria-label="DEM processing sampling" value={processSampling} onChange={e=>setProcessSampling(e.target.value as 'nearest'|'bilinear'|'average')}>
+           <option value="bilinear">Bilinear</option><option value="nearest">Nearest</option><option value="average">Area-weighted average (coarsen)</option>
          </select></label>
          <button disabled={!p.connected||fetching||importing||demProcessMode==='clip'&&!['Polygon','MultiPolygon'].includes(p.geometry?.type??'')||demProcessMode==='mosaic'&&(!processSecond||processSecond===dem.id)}
            onClick={()=>void processDEM()}>{importing?'Processing…':'Create processed DEM'}</button>

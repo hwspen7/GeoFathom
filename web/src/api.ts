@@ -985,7 +985,7 @@ export function advancedTerrain(body:{image_id:string;geometry:GeoJSON.Geometry;
 export type DEMProcessMode='clip'|'mosaic'|'resample';
 export async function prepareDEM(body:{
   image_ids:string[];mode:DEMProcessMode;resolution_m:number;
-  sampling:'nearest'|'bilinear';geometry?:GeoJSON.Geometry|null
+  sampling:'nearest'|'bilinear'|'average';geometry?:GeoJSON.Geometry|null
 },token:string,signal?:AbortSignal):Promise<{
   asset:RasterAsset;operation:DEMProcessMode;valid_cells:number;total_cells:number;
   resolution_m:number;warning:string
