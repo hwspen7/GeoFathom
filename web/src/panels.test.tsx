@@ -24,7 +24,7 @@ const polygon:GeoJSON.Polygon={type:'Polygon',coordinates:[[[10,20],[10.01,20],[
 const image:RasterAsset={id:'scene',name:'Test image',width:100,height:80,bands:4,
   crs:'EPSG:4326',bbox,corners:[[10,20],[10.01,20],[10.01,20.01],[10,20.01]],
   preview_url:'/imagery/scene/preview',acquired_at:null,provenance:'test'};
-const change=(label:string,value:string)=>fireEvent.change(screen.getByLabelText(label),{target:{value}});
+const change=(label:string|RegExp,value:string)=>fireEvent.change(screen.getByLabelText(label),{target:{value}});
 const click=(name:string|RegExp)=>fireEvent.click(screen.getByRole('button',{name}));
 const openDetails=(container:HTMLElement)=>container.querySelectorAll('details').forEach(node=>node.open=true);
 
