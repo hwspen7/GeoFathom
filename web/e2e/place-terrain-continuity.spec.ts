@@ -175,7 +175,17 @@ test('OSU disconnected mapped properties default to campus, with inspectable edi
  // Click a real rendered map vertex. Selecting it must not mutate the shape.
  const pixels=JSON.parse((await map.getAttribute('data-edit-handle-pixels'))||'[]') as number[][];
  const rect=(await map.boundingBox())!;
- await page.mouse.click(rect.x+pixels[2][0],rect.y+pixels[2][1]);
+ // All geometry edit handles must remain directly accessible. A floating
+ // map overlay must not intercept pointer events intended for a vertex.
+ await expect(page.getByRole('button',{name:'Toggle map legend'})).toBeDisabled();
+ const x=rect.x+pixels[2][0],y=rect.y+pixels[2][1];
+ const pointerTarget=await page.evaluate(({x,y})=>{
+   const element=document.elementFromPoint(x,y);
+   return {inMap:Boolean(element?.closest('.map-canvas')),
+     tag:element?.tagName??'none',classes:element?.className?.toString()??'none'};
+ },{x,y});
+ expect(pointerTarget.inMap,JSON.stringify({x,y,pointerTarget})).toBe(true);
+ await page.mouse.click(x,y);
  await expect(page.getByLabel('Boundary node',{exact:true})).toHaveValue('2');
  await expect(page.getByLabel('Pinned places').getByRole('button',{name:'Select pinned The Ohio State University'})).toBeVisible();
  await page.getByLabel('Boundary node',{exact:true}).selectOption('1');
