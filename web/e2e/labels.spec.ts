@@ -35,6 +35,13 @@ async function savedWorkspace(page:import('@playwright/test').Page,id:string) {
 }
 
 test('style labels by field, persist symbol settings and reload the workspace',async({page})=>{
+  // MapLibre does not accept feature data expressions in text-allow-overlap.
+  // Preserve per-feature overlap behavior without invalid style definitions.
+  const invalidStyles:string[]=[];
+  page.on('console',message=>{
+    if(message.type()==='error'&&message.text().includes('text-allow-overlap: data expressions not supported'))
+      invalidStyles.push(message.text());
+  });
   const id=await project(page,'Labeling integration');
   const map=page.getByLabel('Interactive geospatial map');
   await expect(map).toHaveAttribute('data-label-layer-ready','true',{timeout:25000});
@@ -78,6 +85,7 @@ test('style labels by field, persist symbol settings and reload the workspace',a
   await expect(page.getByLabel('Map legend',{exact:true})).toContainText('Measurements');
   await page.getByLabel('Toggle map legend').click();
   await expect(page.getByLabel('Map legend',{exact:true})).not.toBeVisible();
+  expect(invalidStyles).toEqual([]);
 });
 
 test('label field edits are queued during an in-flight style mutation',async({page})=>{
