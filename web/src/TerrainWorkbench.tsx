@@ -262,6 +262,21 @@ export default function TerrainWorkbench(p:Props){
        observer_height:Number(height),target_height:Number(target),end_point:operation==='least_cost'?[Number(endLon),Number(endLat)]:null,
        max_slope:Number(maxSlope),min_elevation:Number(minElevation),max_elevation:Number(maxElevation),max_tri:Number(maxTri),stream_cells:Number(streamCells),azimuth:Number(azimuth),altitude:Number(altitude),section_spacing:Number(sectionSpacing),section_width:Number(sectionWidth),fill_sinks:fillSinks,consider_curvature:considerCurvature,refraction_coeff:Number(refractionCoeff),comparison_image_id:operation==='dem_difference'?comparisonId:null,texture_image_id:operation==='mesh'&&drape&&p.imageRaster&&p.imageRaster.bands>=3?p.imageRaster.id:null},controller.signal);
      if(ticket!==sequence.current||controller.signal.aborted)return;
+     // Commit scientific data before reporting a completed run. An immediate
+     // reload or project switch must never race a pending cache write.
+     let cached=false;
+     try{
+       await cacheTerrainResult(p.projectId,record);
+       cached=true;
+       if(alive.current)setResultCacheError('');
+     }catch(error){
+       if(alive.current)setResultCacheError(error instanceof Error?error.message:'Terrain cache write failed.');
+     }
+     if(ticket!==sequence.current||controller.signal.aborted){
+       // A superseded/cancelled result must not reappear from the cache.
+       if(cached)await deleteTerrainResult(p.projectId,record.id);
+       return;
+     }
      setRecords(old=>{
        const kept=old.filter(r=>r.inputKey!==inputKey||r.saved);
        // Show only the newest derived raster by default. Older results remain
@@ -273,11 +288,6 @@ export default function TerrainWorkbench(p:Props){
        physicalMetrics(record),record.referenceSource,
      )));
      setSelectedRecord(record.id);latest.current.onHover(null);
-     // Store the entire georeferenced raster/profile/mesh payload without
-     // truncation. A quota failure leaves the current result exportable.
-     void cacheTerrainResult(p.projectId,record).catch(error=>{
-       if(alive.current)setResultCacheError(error instanceof Error?error.message:'Terrain cache write failed.');
-     });
    }catch(e){if(ticket===sequence.current&&!controller.signal.aborted)setError(e instanceof Error?e.message:'Terrain analysis failed.');}
    finally{if(ticket===sequence.current){setBusy(false);analysisRequest.current=null;}}
  }
