@@ -84,6 +84,7 @@ interface Props {
     original:GeoJSON.Geometry;bearing_deg:number;distance_m:number;
   }) => void;
   onSelectSavedFeature: (id: string) => void;
+  onDeselect:()=>void;
 }
 
 function mapStyle():StyleSpecification{
@@ -238,7 +239,7 @@ export default function MapCanvas({
   promptPositive,promptNegative,promptBox,annotationMode,onAnnotationClick,
   selectionBoxMode,onSelectionBox,selectedIds,qualityIssues,projectGrid,externalTiles,
   labelMoveMode,onLabelMove,
-  onGeometryPreview, onGeometryCommit, onSelectSavedFeature,
+  onGeometryPreview, onGeometryCommit, onSelectSavedFeature,onDeselect,
 }: Props) {
   const container = useRef<HTMLDivElement>(null);
   const coordinateRef = useRef<HTMLDivElement>(null);
@@ -249,7 +250,7 @@ export default function MapCanvas({
   const eventRef = useRef({
     selected,selectedFeatureId,drawingMode, traceMode, annotationMode,selectionBoxMode,labelMoveMode,editing, moving,edgeMoving, snapping, selectedLocked,
     layerFeatures, onMapClick,onFinishDrawing,terrainPicking,onTerrainPick,onContextMenu,onEditingError, onTraceClick,onAnnotationClick,onSelectionBox,onLabelMove,onViewportChange,
-    onGeometryPreview, onGeometryCommit, onSelectSavedFeature,
+    onGeometryPreview, onGeometryCommit, onSelectSavedFeature,onDeselect,
   });
   const renderRef = useRef({
     selected,vertices,drawingMode,discovered,layerFeatures,editing,
@@ -269,7 +270,7 @@ export default function MapCanvas({
   eventRef.current = {
     selected,selectedFeatureId,drawingMode, traceMode, annotationMode,selectionBoxMode,labelMoveMode,editing, moving,edgeMoving, snapping, selectedLocked,
     layerFeatures, onMapClick,onFinishDrawing,terrainPicking,onTerrainPick,onContextMenu,onEditingError, onTraceClick,onAnnotationClick,onSelectionBox,onLabelMove,onViewportChange,
-    onGeometryPreview, onGeometryCommit, onSelectSavedFeature,
+    onGeometryPreview, onGeometryCommit, onSelectSavedFeature,onDeselect,
   };
 
   useEffect(() => {
@@ -575,6 +576,7 @@ export default function MapCanvas({
       else if (!state.editing) {
         const feature = hits(event).find(f => f.properties?.role === 'saved');
         if (feature?.properties?.id) state.onSelectSavedFeature(String(feature.properties.id));
+        else if(!hits(event).some(f=>f.properties?.role==='selected'))state.onDeselect();
       }
     }
     function removeByRightClick(event: MapMouseEvent) {

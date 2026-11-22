@@ -298,7 +298,7 @@ export default function ProjectsPanel({
     if(!window.confirm('Delete this feature from the project?'))return;
     await run(async()=>{
       await deleteProjectFeature(selected,current.id);
-      onFeatureDeleted();
+      if(selection.current===selected&&featureIdentity.current===current.id)onFeatureDeleted();
       setInfo('Feature deleted.');
     });
   }
@@ -621,7 +621,7 @@ export default function ProjectsPanel({
                   } else if (selected) void loadHistory(selected, current.id, true);
                 }}><History size={13}/> Versions</button>
                 <button aria-label="Delete selected map feature"
-                  onClick={()=>void deleteSelected()} disabled={busy||locked}>Delete</button>
+                  data-project-delete onClick={()=>void deleteSelected()} disabled={busy||locked}>Delete</button>
               </div>
               {history && (
                 <div className="version-list">

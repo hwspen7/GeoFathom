@@ -11,6 +11,7 @@ import {
 } from './api';
 import MapCanvas, { type FocusPoint } from './MapCanvas';
 import {BASEMAPS,customBasemap,defaultCustom,type BasemapId,type CustomBasemap} from './basemaps';
+import {ScratchHistory} from './scratchHistory';
 import {localMeasurement,localShape,readScratch,writeScratch,SCRATCH_LIMIT,OFFLINE_METHOD,type ScratchFeature} from './scratch';
 import SurveyTools from './SurveyTools';
 import ProfessionalPanel from './ProfessionalPanel';
@@ -48,7 +49,12 @@ export default function App() {
   const [candidates, setCandidates] = useState<Place[]>([]);
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
   const [geometry, setGeometry] = useState<GeoJSON.Geometry | null>(null);
-  const [scratch,setScratch]=useState<ScratchFeature[]>(readScratch);
+  const [scratch,setScratchState]=useState<ScratchFeature[]>(readScratch);
+  const scratchHistory=useRef<ScratchHistory|null>(null);
+  if(!scratchHistory.current)scratchHistory.current=new ScratchHistory(scratch);
+  function setScratch(update:(old:ScratchFeature[])=>ScratchFeature[]){
+    setScratchState(scratchHistory.current!.change(update));
+  }
   const [scratchId,setScratchId]=useState<string|null>(null);
   const [scratchStorageError,setScratchStorageError]=useState(false);
   const [measurement, setMeasurement] = useState<Measurement | null>(null);
@@ -161,7 +167,7 @@ export default function App() {
     timeline.current=new GeometryTimeline();timeline.current.push(item.geometry);setHistoryPulse(v=>v+1);
     lastValid.current=structuredClone(item.geometry);setGeometry(item.geometry);setMeasurement(item.measurement);
     setGeometrySource('Local scratch');setFeatureProperties({source_type:'user_drawn',draft_name:item.name});
-    setPreview(null);setPendingShared(null);setLinked(false);setDrawingMode(null);setVertices([]);
+    setPreview(null);setPendingShared(null);setLinked(false);setDrawingMode(null);setVertices([]);setTerrainPicking(false);
     setEditing(false);setEdgeMoving(false);setMoving(false);setTraceMode(false);setPromptMode(null);
     setSelectionBoxMode(false);setLabelMoveMode(false);setPendingAnnotation(null);
     setSelectedPlace(null);setSplitParts([]);setError('');setMessage('Selected '+item.name);
@@ -239,7 +245,8 @@ export default function App() {
   function openStoredFeature(feature: WorkspaceFeature) {
     // A callback from a previous project may finish after navigation.
     if (feature.project_id !== projectIdentity.current) return;
-    geometrySequence.current++;
+    geometrySequence.current++;setBusy(false);setTerrainPicking(false);setTraceMode(false);setPromptMode(null);
+    setPendingAnnotation(null);setSelectionBoxMode(false);setLabelMoveMode(false);
     if (featureIdentity.current !== feature.id) {
       timeline.current = new GeometryTimeline();
       setLinked(false);
@@ -286,7 +293,9 @@ export default function App() {
 
   async function selectPlace(place: Place) {
     const sequence = ++geometrySequence.current;
-    setSelectedPlace(place);setScratchId(null);
+    setSelectedPlace(place);setScratchId(null);setPreview(null);setPendingShared(null);
+    timeline.current=new GeometryTimeline();lastValid.current=null;setHistoryPulse(v=>v+1);
+    setTerrainPicking(false);setPromptMode(null);setPendingAnnotation(null);setSelectionBoxMode(false);setLabelMoveMode(false);
     setSelectedFeatureId(null);
     setLinked(false);
     setEditing(false);setEdgeMoving(false);
@@ -520,7 +529,7 @@ export default function App() {
         }catch(error){setError(error instanceof Error?error.message:String(error));return;}
       }
       setError(failure instanceof Error ? failure.message : 'Drawing failed.');
-    } finally { setBusy(false); }
+    } finally { if(sequence===geometrySequence.current)setBusy(false); }
   }
 
   async function numericShape(mode: string, body: {
@@ -638,9 +647,39 @@ export default function App() {
     const [west,south,east,north]=measurement.bounds;
     setFocus({longitude:(west+east)/2,latitude:(south+north)/2,bbox:[west,south,east,north],key:Date.now()});
   }
-  function removeLocal(){
-    if(!scratchId||busy||drawingMode)return;
-    setScratch(old=>old.filter(f=>f.id!==scratchId));clearWorkspace();setContextMenu(null);
+  function deselect(){
+    geometrySequence.current++;setBusy(false);setGeometry(null);setMeasurement(null);
+    setScratchId(null);setSelectedFeatureId(null);featureIdentity.current=null;setSelectedPlace(null);
+    setDrawingMode(null);setVertices([]);setEditing(false);setMoving(false);setEdgeMoving(false);setLinked(false);
+    setPreview(null);setPendingShared(null);setPromptMode(null);setTraceMode(false);setPendingAnnotation(null);
+    setTerrainPicking(false);setSelectionBoxMode(false);setLabelMoveMode(false);setSplitParts([]);
+    lastValid.current=null;timeline.current=new GeometryTimeline();setHistoryPulse(v=>v+1);
+    setGeometrySource('');setFeatureProperties({});setContextMenu(null);setError('');
+  }
+  function historyStep(redo=false){
+    if(busy||drawingMode)return;
+    if(selectedFeatureId){
+      if(selectedLocked)return;
+      const history=timeline.current;
+      if(redo?history.canRedo:history.canUndo)applyHistory(redo?history.redo():history.undo());
+      return;
+    }
+    const history=scratchHistory.current!;
+    if(!(redo?history.canRedo:history.canUndo))return;
+    const before=history.current;
+    const after=redo?history.redo():history.undo();
+    setScratchState(after);
+    const changed=after.find(item=>item.visible&&JSON.stringify(before.find(old=>old.id===item.id))!==JSON.stringify(item));
+    const selected=after.find(item=>item.id===scratchId&&item.visible);
+    if(changed||selected)selectScratch((changed??selected)!,false);
+    else deselect();
+    setMessage(redo?'Local operation redone.':'Local operation undone.');
+  }
+  function removeLocal(id:string|null=scratchId){
+    if(!id||busy||drawingMode)return;
+    setScratch(old=>old.filter(f=>f.id!==id));
+    if(id===scratchId)deselect();
+    setContextMenu(null);setMessage('Local feature deleted · Ctrl Z to restore.');
   }
   function saveSelection(){
     if(!geometry||busy||drawingMode||preview||pendingShared)return;
@@ -664,9 +703,9 @@ export default function App() {
           event.preventDefault();
           if(busy)return;
           if(drawingMode){if(!event.shiftKey)setVertices(value=>value.slice(0,-1));return;}
-          applyHistory(event.shiftKey?timeline.current.redo():timeline.current.undo());
+          historyStep(event.shiftKey);
         }else if(event.key.toLowerCase()==='y'){
-          event.preventDefault();if(!busy&&!drawingMode)applyHistory(timeline.current.redo());
+          event.preventDefault();if(!busy&&!drawingMode)historyStep(true);
         }
         return;
       }
@@ -689,7 +728,9 @@ export default function App() {
       else if(key==='f'){event.preventDefault();fitSelection();}
       else if(key==='s'){event.preventDefault();setSnapping(v=>!v);}
       else if(key==='t'){event.preventDefault();revealPanel('tools-terrain');}
-      else if(key==='delete'&&scratchId&&!drawingMode){event.preventDefault();removeLocal();}
+      else if(key==='delete'&&!drawingMode&&(scratchId||selectedFeatureId)){
+        event.preventDefault();if(scratchId)removeLocal();else document.querySelector<HTMLButtonElement>('[data-project-delete]')?.click();
+      }
       else if(key==='?'){event.preventDefault();setShortcutHelp(true);}
     }
     function outside(event:MouseEvent){
@@ -771,7 +812,7 @@ export default function App() {
                 if(projectIdentity.current!==id){
                   projectIdentity.current=id;
                   projectEpoch.current++;
-                  geometrySequence.current++;
+                  geometrySequence.current++;setBusy(false);setTerrainPicking(false);setTerrainOrigin(null);setTerrainHover(null);
                   // Keep an explicitly unsaved draft when creating a project,
                   // but never carry a saved feature or its undo stack across
                   // project identities.
@@ -793,8 +834,8 @@ export default function App() {
                 setActiveProjectId(id);
               }}
               onOpen={openStoredFeature}
-              onSavedDraft={()=>{if(scratchId)setScratch(old=>old.filter(f=>f.id!==scratchId));setScratchId(null);}}
-              onFeatureDeleted={clearWorkspace}
+              onSavedDraft={()=>{if(scratchId)setScratchState(scratchHistory.current!.checkpoint(scratchHistory.current!.current.filter(f=>f.id!==scratchId)));setScratchId(null);}}
+              onFeatureDeleted={deselect}
               onPlaceAnnotation={(projectId,layerId,text)=>{
                 setPendingAnnotation({projectId,layerId,text});
                 setDrawingMode(null);setTraceMode(false);setPromptMode(null);
@@ -812,12 +853,12 @@ export default function App() {
               <div className="scratch-list" aria-label="Local drawings">
                 {scratch.map(item=><div key={item.id} className={'scratch-row '+(scratchId===item.id?'active':'')}>
                   <input type="checkbox" aria-label={'Show '+item.name} checked={item.visible} onChange={event=>{
-                    if(!event.target.checked&&scratchId===item.id)clearWorkspace();
+                    if(!event.target.checked&&scratchId===item.id)deselect();
                     setScratch(old=>old.map(f=>f.id===item.id?{...f,visible:event.target.checked}:f));
                   }}/>
                   <button onClick={()=>{setScratch(old=>old.map(f=>f.id===item.id?{...f,visible:true}:f));selectScratch(item);}}>{item.name}</button>
                   <button title={'Delete '+item.name} aria-label={'Delete '+item.name} onClick={()=>{
-                    if(scratchId===item.id)clearWorkspace();setScratch(old=>old.filter(f=>f.id!==item.id));
+                    removeLocal(item.id);
                   }}>×</button>
                 </div>)}
               </div>
@@ -862,10 +903,7 @@ export default function App() {
             <DiscoveryPanel viewport={viewport} busy={busy} onFound={(result: DiscoveryResponse) => {
               setDiscovered(result.results);
               setCandidates(result.results);
-              setSelectedPlace(null);
-              setGeometry(null);
-              setMeasurement(null);
-              setSelectedFeatureId(null);
+              deselect();
               setMessage(result.results.length
                 ? 'Found ' + result.results.length + ' mapped features. ' + result.warning
                 : 'No mapped features matched the filter. ' + result.warning);
@@ -901,7 +939,7 @@ export default function App() {
             terrainPicking={terrainPicking} terrainMarker={activeTool==='tools-terrain'?(terrainHover??terrainOrigin):null}
             terrainResults={terrainVisible?terrainFeatures:[]}
             onTerrainPick={position=>{setTerrainOrigin(position);setTerrainPicking(false);setMessage('Terrain point selected.');}}
-            onContextMenu={(x,y)=>setContextMenu({x,y})}
+            onContextMenu={(x,y)=>setContextMenu({x,y})} onDeselect={deselect}
             onEditingError={setError}
             editing={editing} moving={moving} edgeMoving={edgeMoving} snapping={snapping}
             selectedLocked={selectedLocked}
@@ -1168,7 +1206,7 @@ export default function App() {
               {selectedPlace && <p className="data-source">Data: {selectedPlace.source} · {selectedPlace.boundary_status === 'mapped' ? 'Mapped outline' : 'Coordinates only'}</p>}
               <div className="analysis-actions">
                 <button onClick={exportGeoJSON} disabled={!geometry}><Download size={15} /> Export GeoJSON</button>
-                <button onClick={clearWorkspace}><RotateCcw size={15} /> Clear</button>
+                <button onClick={deselect}><RotateCcw size={15} /> Deselect</button>
               </div>
             </div>
           </section>
@@ -1196,15 +1234,15 @@ export default function App() {
                 }
                 setLinked(enabled);if(enabled)setEdgeMoving(false);setPendingShared(null);
               }}
-              canUndo={timeline.current.canUndo && historyPulse >= 0}
-              canRedo={timeline.current.canRedo && historyPulse >= 0}
+              canUndo={(selectedFeatureId?timeline.current.canUndo:scratchHistory.current!.canUndo) && historyPulse >= 0}
+              canRedo={(selectedFeatureId?timeline.current.canRedo:scratchHistory.current!.canRedo) && historyPulse >= 0}
               saved={activeProjectId ? projectWorkspace?.features ?? [] : []}
               onStart={startDrawing}
               onFinish={() => { if(!busy)void finishDrawing(); }}
               onCancel={() => { geometrySequence.current++;setBusy(false);setError('');setDrawingMode(null); setVertices([]);setMessage('Drawing cancelled.'); }}
               onUndoPoint={() => setVertices(value => value.slice(0,-1))}
-              onUndo={() => applyHistory(timeline.current.undo())}
-              onRedo={() => applyHistory(timeline.current.redo())}
+              onUndo={()=>historyStep()}
+              onRedo={()=>historyStep(true)}
               onEdit={(active, shouldMove) => {
                 if (selectedLocked) {
                   setError('Unlock the feature layer before editing.');
@@ -1502,7 +1540,7 @@ export default function App() {
         <button role="menuitem" disabled={!geometry||selectedLocked||busy} onClick={()=>editMode('move')}>Move feature <kbd>M</kbd></button>
         <button role="menuitem" disabled={!measurement} onClick={()=>{fitSelection();setContextMenu(null);}}>Fit selection <kbd>F</kbd></button>
         <button role="menuitem" disabled={!geometry||busy||!!preview} onClick={()=>{setContextMenu(null);saveSelection();}}>Save / export <kbd>Ctrl S</kbd></button>
-        <button role="menuitem" disabled={!scratchId||busy} onClick={removeLocal}>Delete local drawing <kbd>Del</kbd></button>
+        <button role="menuitem" disabled={(!scratchId&&!selectedFeatureId)||busy||selectedLocked} onClick={()=>{if(scratchId)removeLocal();else{setContextMenu(null);document.querySelector<HTMLButtonElement>('[data-project-delete]')?.click();}}}>Delete feature <kbd>Del</kbd></button>
         <button role="menuitem" onClick={()=>{setContextMenu(null);revealPanel('tools-terrain');}}>Terrain <kbd>T</kbd></button>
       </div>}
       {shortcutHelp&&<div className="gis-dialog-shade" onClick={()=>setShortcutHelp(false)}>
