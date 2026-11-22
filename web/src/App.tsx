@@ -94,6 +94,9 @@ export default function App() {
   const [terrainFeatures,setTerrainFeatures]=useState<GeoJSON.Feature[]>([]);
   const [terrainRasters,setTerrainRasters]=useState<TerrainRasterLayer[]>([]);
   const [terrainFetchTarget,setTerrainFetchTarget]=useState<[number,number,number,number]|null>(null);
+  // A profile line is an independent analysis input, never the selected airport polygon.
+  const [terrainProfileLine,setTerrainProfileLine]=useState<GeoJSON.LineString|null>(null);
+  const [terrainLineDrawing,setTerrainLineDrawing]=useState(false);
   const [terrainVisible,setTerrainVisible]=useState(true);
   const [showLayers,setShowLayers]=useState(true);
   const [terrainPicking,setTerrainPicking]=useState(false);
@@ -302,6 +305,7 @@ export default function App() {
   }
 
   function revealPanel(id:string){
+    if(terrainLineDrawing){setTerrainLineDrawing(false);setDrawingMode(null);setVertices([]);}
     setShowTools(true);setActiveTool(id);if(id!=='tools-terrain'){setTerrainPicking(false);setTerrainHover(null);}
     requestAnimationFrame(()=>document.getElementById(id)?.scrollIntoView({block:'nearest'}));
   }
@@ -420,6 +424,21 @@ export default function App() {
     }
   }
 
+  function startTerrainLine(){
+    if(busy)return;
+    // Deliberately retain geometry, measurement, selectedPlace, search candidates,
+    // scratch selection and all existing map layers.
+    geometrySequence.current++;
+    setTerrainLineDrawing(true);
+    setDrawingMode('line');setVertices([]);
+    setEditing(false);setMoving(false);setEdgeMoving(false);
+    setTerrainPicking(false);setTerrainHover(null);setTraceMode(false);
+    setPromptMode(null);setPendingAnnotation(null);setSelectionBoxMode(false);setLabelMoveMode(false);
+    setExtentMode(false);setExtentGeometry(null);
+    setError('');
+    setMessage('Draw a terrain profile line. The selected location and study area stay in place.');
+  }
+
   function startDrawing(next: Exclude<ShapeMode, null>) {
     if(busy)return;
     if(!['hole','split'].includes(next)&&scratch.length>=SCRATCH_LIMIT){setError('Local drawing limit reached. Save or export drawings and remove unused ones.');return;}
@@ -435,6 +454,7 @@ export default function App() {
       return;
     }
     geometrySequence.current++;
+    setTerrainLineDrawing(false);
     setDrawingMode(next);setEdgeMoving(false);setTerrainPicking(false);setTerrainHover(null);setExtentMode(false);
     setTraceMode(false);
     setPromptMode(null);setPendingAnnotation(null);setSelectionBoxMode(false);setLabelMoveMode(false);
@@ -469,6 +489,26 @@ export default function App() {
   async function finishDrawing(points:Position[]=vertices) {
     if (!drawingMode||busy) return;
     const mode = drawingMode;
+    if(terrainLineDrawing){
+      if(mode!=='line'||points.length<2){setError('Place at least two profile line points.');return;}
+      const line:GeoJSON.LineString={type:'LineString',coordinates:points};
+      const ticket=++geometrySequence.current;setBusy(true);setError('');
+      try{
+        // This measurement validates the path without replacing the original selection.
+        await measureGeometry(line);
+        if(ticket!==geometrySequence.current)return;
+        setTerrainProfileLine(line);setTerrainLineDrawing(false);
+        setDrawingMode(null);setVertices([]);
+        setMessage('Profile line ready. Your selected study area remains unchanged.');
+      }catch(failure){
+        if(ticket!==geometrySequence.current)return;
+        if(backendUnavailable(failure)){
+          setTerrainProfileLine(line);setTerrainLineDrawing(false);setDrawingMode(null);setVertices([]);
+          setMessage('Profile line saved locally; connect the API before running terrain analysis.');
+        }else setError(failure instanceof Error?failure.message:'Invalid profile line.');
+      }finally{if(ticket===geometrySequence.current)setBusy(false);}
+      return;
+    }
     const required = mode==='point'?1:['polygon','hole'].includes(mode) ? 3 : 2;
     if (points.length < required) {
       setError('Add more points before finishing.');
@@ -606,6 +646,7 @@ export default function App() {
   function clearWorkspace() {
     geometrySequence.current++;
     setGeometry(null);setScratchId(null);setBusy(false);setTerrainPicking(false);setTerrainOrigin(null);setTerrainHover(null);
+    setTerrainProfileLine(null);setTerrainLineDrawing(false);
     setPendingAnnotation(null);
     setSelectionBoxMode(false);setSelectionBox(null);
     setSpatialSelected([]);setQualityIssues([]);setProjectGrid(null);
@@ -682,6 +723,7 @@ export default function App() {
   }
   function deselect(){
     geometrySequence.current++;setBusy(false);setGeometry(null);setMeasurement(null);
+    setTerrainProfileLine(null);setTerrainLineDrawing(false);
     setScratchId(null);setSelectedFeatureId(null);featureIdentity.current=null;setSelectedPlace(null);
     setDrawingMode(null);setVertices([]);setEditing(false);setMoving(false);setEdgeMoving(false);setLinked(false);
     setPreview(null);setPendingShared(null);setPromptMode(null);setTraceMode(false);setPendingAnnotation(null);
@@ -1012,7 +1054,7 @@ export default function App() {
             selected={geometry} drawingMode={drawingMode} vertices={vertices}
             terrainPicking={terrainPicking} terrainMarker={showTools&&activeTool==='tools-terrain'?(terrainHover??terrainOrigin):null}
             preservePlaceSelection={!!selectedPlace}
-            terrainResults={terrainVisible?terrainFeatures:[]} terrainRasters={terrainVisible?terrainRasters:[]}
+            terrainResults={[...(terrainVisible?terrainFeatures:[]),...(terrainProfileLine?[{type:'Feature' as const,geometry:terrainProfileLine,properties:{name:'Profile measurement line',color:'#d26b2f'}}]:[])]} terrainRasters={terrainVisible?terrainRasters:[]}
             terrainFetchTarget={showTools&&activeTool==='tools-terrain'?terrainFetchTarget:null}
             onTerrainPick={position=>{setTerrainOrigin(position);setTerrainPicking(false);setMessage('Terrain point selected.');}}
             onContextMenu={(x,y)=>setContextMenu({x,y})} onDeselect={deselect}
@@ -1491,7 +1533,8 @@ export default function App() {
             <div className="section-heading"><Layers3 size={16}/><span>Terrain analysis</span></div>
             <TerrainWorkbench key={'terrain-'+(activeProjectId??'no-project')} projectId={activeProjectId}
               active={activeTool==='tools-terrain'&&showTools}
-              geometry={preview||drawingMode?null:extentMode?extentGeometry:geometry} raster={demLayer} imageRaster={imageLayer} viewport={viewport}
+              geometry={preview||drawingMode&&!terrainLineDrawing?null:extentMode?extentGeometry:geometry}
+              profileGeometry={terrainProfileLine} raster={demLayer} imageRaster={imageLayer} viewport={viewport}
               connected={Boolean(capabilities)} localImport={capabilities?.local_raster_import===true}
               refreshToken={refreshToken+connectionRetry} origin={terrainOrigin} picking={terrainPicking}
               onSelectRaster={asset=>{
@@ -1503,7 +1546,8 @@ export default function App() {
                 // Users can explicitly choose Fit in the raster layer panel.
                 setMessage(asset?'DEM selected: '+asset.name+' · current map position retained.':'Elevation source cleared; downloaded files are retained.');
               }}
-              onDraw={line=>{setExtentMode(false);setExtentGeometry(null);startDrawing(line?'line':'polygon');}}
+              onDraw={line=>{if(line)startTerrainLine();else{setExtentMode(false);setExtentGeometry(null);startDrawing('polygon');}}}
+              onClearProfile={()=>setTerrainProfileLine(null)}
               extentMode={extentMode} onUseSelection={()=>setExtentMode(false)}
               onUseExtent={()=>{
                 if(!demLayer)return;

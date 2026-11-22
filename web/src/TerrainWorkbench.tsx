@@ -85,10 +85,10 @@ const names:Record<string,string>={cut_m3:'Cut',fill_m3:'Fill',net_cut_m3:'Net c
  upstream_cells:'Upstream cells',upstream_grid_area_m2:'Catchment area',minimum_m:'Lowest elevation',maximum_m:'Highest elevation',mean_m:'Mean elevation',median_m:'Median elevation',stddev_m:'Standard deviation',p10_m:'10th percentile',p90_m:'90th percentile',relief_m:'Relief',hypsometric_integral:'Hypsometric integral',circular_mean_aspect_deg:'Mean downslope bearing',product_min:'Minimum',product_max:'Maximum',product_mean:'Mean'};
 const fmt=(n:number)=>n.toLocaleString('en-US',{maximumFractionDigits:2});
 interface Props{
- projectId:string|null;geometry:GeoJSON.Geometry|null;raster:RasterAsset|null;imageRaster?:RasterAsset|null;active:boolean;connected:boolean;
+ projectId:string|null;geometry:GeoJSON.Geometry|null;profileGeometry?:GeoJSON.LineString|null;raster:RasterAsset|null;imageRaster?:RasterAsset|null;active:boolean;connected:boolean;
  viewport:[number,number,number,number]|null;
  localImport:boolean;refreshToken:number;origin:Position|null;picking:boolean;
- onSelectRaster:(r:RasterAsset|null)=>void;onDraw:(line:boolean)=>void;onUseExtent:()=>void;onPick:()=>void;
+ onSelectRaster:(r:RasterAsset|null)=>void;onDraw:(line:boolean)=>void;onClearProfile?:()=>void;onUseExtent:()=>void;onPick:()=>void;
  onFetchTarget?:(bbox:TerrainBBox|null)=>void;
  extentMode:boolean;onUseSelection:()=>void;
  onHover:(point:Position|null)=>void;onPreview:(g:GeoJSON.Feature[])=>void;onRasterPreview?:(layers:TerrainRasterLayer[])=>void;onSaved:()=>void;
@@ -127,9 +127,11 @@ export default function TerrainWorkbench(p:Props){
  const area=p.geometry?.type==='Polygon'||p.geometry?.type==='MultiPolygon';
  const needsPoint=operation==='watershed'||operation==='visibility'||operation==='least_cost';
  const lineOperation=operation==='profile'||operation==='cross_sections';
- const correctShape=lineOperation?p.geometry?.type==='LineString':area;
+ const analysisGeometry=lineOperation?p.profileGeometry:p.geometry;
+ const correctShape=lineOperation?analysisGeometry?.type==='LineString':area;
  const dem=p.raster?.bands===1?p.raster:null;
- const sourceMismatch=!!dem&&!!selectedGeometry&&!terrainBoundsOverlap(dem.bbox,selectedGeometry);
+ const analysisBounds=useMemo(()=>terrainGeometryBounds(analysisGeometry??null),[analysisGeometry]);
+ const sourceMismatch=!!dem&&!!analysisBounds&&!terrainBoundsOverlap(dem.bbox,analysisBounds);
  const mapMismatch=!!dem&&!!p.viewport&&!terrainBoundsOverlap(dem.bbox,p.viewport);
  const verified=!!dem&&(/Copernicus DEM GLO-|USGS 3DEP Bare Earth DEM/.test(dem.provenance)||verticalConfirmed);
  const validNumber=(value:string,min:number,max:number)=>value.trim()!==''&&Number.isFinite(Number(value))&&Number(value)>=min&&Number(value)<=max;
@@ -143,7 +145,7 @@ export default function TerrainWorkbench(p:Props){
    (!needsPoint||validNumber(lon,-180,180)&&validNumber(lat,-90,90))&&
    (operation!=='visibility'||validNumber(height,0,1000)&&validNumber(target,0,1000));
  const canRun=operation!==null&&p.connected&&verified&&!!correctShape&&!sourceMismatch&&!mapMismatch&&parametersValid;
- const inputKey=JSON.stringify([dem?.id,p.geometry,operation,interval,reference,lon,lat,height,target,endLon,endLat,maxSlope,minElevation,maxElevation,maxTri,streamCells,azimuth,altitude,sectionSpacing,sectionWidth,drape,drape?p.imageRaster?.id:null]);
+ const inputKey=JSON.stringify([dem?.id,analysisGeometry,operation,interval,reference,lon,lat,height,target,endLon,endLat,maxSlope,minElevation,maxElevation,maxTri,streamCells,azimuth,altitude,sectionSpacing,sectionWidth,drape,drape?p.imageRaster?.id:null]);
  const inputsChanged=!!selected&&selected.inputKey!==inputKey;
  useEffect(()=>{
    setVerticalConfirmed(false);sourceIntent.current++;
@@ -172,7 +174,7 @@ export default function TerrainWorkbench(p:Props){
    sequence.current++;analysisRequest.current?.abort();analysisRequest.current=null;setBusy(false);
  }
  async function run(){
-   if(!operation||!canRun||!dem||!p.geometry||analysisRequest.current)return;
+   if(!operation||!canRun||!dem||!analysisGeometry||analysisRequest.current)return;
    if(records.length>=24&&!records.some(r=>r.inputKey===inputKey&&!r.saved)){
      setLive(false);setError('Result limit reached (24). Export or remove a result before another calculation.');return;
    }
@@ -182,11 +184,11 @@ export default function TerrainWorkbench(p:Props){
    const controller=new AbortController();analysisRequest.current=controller;
    const ticket=++sequence.current;setBusy(true);setError('');setInfo('');
    const record:TerrainRecord={id:crypto.randomUUID(),title:modes.find(m=>m.id===operation)!.title,
-     operation,source:dem,geometry:structuredClone(p.geometry),inputKey,visible:true,createdAt:Date.now()};
+     operation,source:dem,geometry:structuredClone(analysisGeometry),inputKey,visible:true,createdAt:Date.now()};
    try{
-     if(operation==='profile')record.profile=await terrainProfile(dem.id,p.geometry,controller.signal);
-     else if(operation==='slope')record.slope=await analyzeTerrain(dem.id,p.geometry,controller.signal);
-     else record.advanced=await advancedTerrain({image_id:dem.id,geometry:p.geometry,operation,
+     if(operation==='profile')record.profile=await terrainProfile(dem.id,analysisGeometry,controller.signal);
+     else if(operation==='slope')record.slope=await analyzeTerrain(dem.id,analysisGeometry,controller.signal);
+     else record.advanced=await advancedTerrain({image_id:dem.id,geometry:analysisGeometry,operation,
        interval:Number(interval),reference:Number(reference),point:needsPoint?[Number(lon),Number(lat)]:null,
        observer_height:Number(height),target_height:Number(target),end_point:operation==='least_cost'?[Number(endLon),Number(endLat)]:null,
        max_slope:Number(maxSlope),min_elevation:Number(minElevation),max_elevation:Number(maxElevation),max_tri:Number(maxTri),stream_cells:Number(streamCells),azimuth:Number(azimuth),altitude:Number(altitude),section_spacing:Number(sectionSpacing),section_width:Number(sectionWidth),texture_image_id:operation==='mesh'&&drape&&p.imageRaster&&p.imageRaster.bands>=3?p.imageRaster.id:null},controller.signal);
@@ -322,10 +324,11 @@ export default function TerrainWorkbench(p:Props){
    {operation&&<div className="professional-form">
      <div className="survey-action-bar">
        <button onClick={()=>p.onDraw(lineOperation)}>{lineOperation?'Draw profile line':'Draw study area'}</button>
+       {lineOperation&&p.profileGeometry&&<button onClick={p.onClearProfile}>Remove profile line</button>}
        {!lineOperation&&<button disabled={!dem} aria-pressed={p.extentMode} onClick={p.onUseExtent}>DEM extent</button>}
        {p.extentMode&&<button onClick={p.onUseSelection}>Use selection</button>}
      </div>
-     <small className="compact-notice">{correctShape?(p.extentMode?'✓ DEM footprint':'✓ Geometry selected'):lineOperation?'Select or draw a line':'Select or draw a polygon'}</small>
+     <small className="compact-notice">{correctShape?(lineOperation?'✓ Independent profile line':p.extentMode?'✓ DEM footprint':'✓ Geometry selected'):lineOperation?'Draw a profile line; the selected area stays on the map':'Select or draw a polygon'}</small>
      {operation==='contours'&&<label>Interval (m)<input aria-label="Contour interval" type="number" min=".01" step="any" value={interval} onChange={e=>setInterval(e.target.value)}/></label>}
      {(operation==='volume'||operation==='cutfill_map')&&<label>Reference elevation (m)<input aria-label="Reference elevation" type="number" step="any" value={reference} onChange={e=>setReference(e.target.value)}/></label>}
      {operation==='cross_sections'&&<div className="area-fields"><label>Station spacing (m)<input type="number" value={sectionSpacing} onChange={e=>setSectionSpacing(e.target.value)}/></label><label>Half-width (m)<input type="number" value={sectionWidth} onChange={e=>setSectionWidth(e.target.value)}/></label></div>}
