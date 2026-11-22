@@ -230,14 +230,14 @@ export default function TerrainWorkbench(p:Props){
        setInfo('Download completed, but the target changed. Old DEM was not selected.');
        return;
      }
-     if(!terrainRasterMatchesTarget(data.asset,bbox)){
+     if(JSON.stringify(data.requested_bbox)!==JSON.stringify(bbox)||!terrainRasterMatchesTarget(data.asset,bbox)){
        throw Error('Downloaded DEM does not cover the displayed target coordinates. Source rejected.');
      }
      setAssets(old=>[data.asset,...old.filter(item=>item.id!==data.asset.id)]);
      latest.current.onSelectRaster(data.asset);
      setSourceInfo((resolution<30?'USGS 3DEP · requested '+resolution+' m grid':'GLO-'+resolution+' · DSM')+
        ' · '+data.valid_cells+'/'+data.total_cells+' cells'+(data.missing_tiles.length?' · partial coverage':'')+
-       ' · center '+((bbox[0]+bbox[2])/2).toFixed(5)+', '+((bbox[1]+bbox[3])/2).toFixed(5));
+       ' · '+data.valid_coverage_pct.toFixed(1)+'% valid · center '+((bbox[0]+bbox[2])/2).toFixed(5)+', '+((bbox[1]+bbox[3])/2).toFixed(5));
      if(data.warning)setInfo(data.warning);
    }catch(e){if(alive.current&&ticket===sourceIntent.current)setError(e instanceof Error?e.message:String(e));}
    finally{if(alive.current)setFetching(false);}

@@ -97,7 +97,7 @@ def _read_usgs(bbox,resolution):
     epsg=crs.split(":")[1]
     params={"bbox":",".join(map(str,bounds)),"bboxSR":epsg,"imageSR":epsg,
             "size":f"{width},{height}","format":"tiff","pixelType":"F32","noData":"-9999",
-            "interpolation":"RSP_BilinearInterpolation","renderingRule":'{"rasterFunction":"None"}',"f":"image"}
+            "interpolation":"RSP_BilinearInterpolation","f":"image"}
     content=bytearray()
     try:
         with httpx.stream("GET",USGS_EXPORT,params=params,timeout=httpx.Timeout(30.,connect=8.),follow_redirects=False) as response:
@@ -107,11 +107,12 @@ def _read_usgs(bbox,resolution):
                 if len(content)>32*1024*1024:raise RasterError("USGS DEM response exceeded 32 MiB.")
         with MemoryFile(bytes(content)) as memory:
             with memory.open() as source:
-                if source.count!=1 or not source.crs or source.width>2048 or source.height>2048:
-                    raise RasterError("Unexpected USGS elevation raster.")
+                if source.count!=1 or not source.crs or source.width!=width or source.height!=height:
+                    raise RasterError("USGS returned an unexpected raster band count or grid size.")
                 destination=np.full((height,width),_NODATA,dtype=np.float32)
-                reproject(rasterio.band(source,1),destination,dst_transform=affine,dst_crs=crs,
-                          dst_nodata=_NODATA,resampling=Resampling.bilinear,num_threads=1,warp_mem_limit=32)
+                reproject(rasterio.band(source,1),destination,src_nodata=source.nodata if source.nodata is not None else _NODATA,
+                          dst_transform=affine,dst_crs=crs,dst_nodata=_NODATA,
+                          resampling=Resampling.bilinear,num_threads=1,warp_mem_limit=32)
     except (httpx.HTTPError,rasterio.errors.RasterioError) as error:
         raise RasterError("USGS 3DEP elevation unavailable; no elevations were fabricated.") from error
     valid=np.isfinite(destination)&(destination!=_NODATA)
@@ -140,9 +141,10 @@ def fetch_dem_subset(bbox,resolution):
             output.write(array,1)
             output.update_tags(SOURCE=provenance,VERTICAL_UNIT="meter")
         label=f"USGS 3DEP {resolution} m grid" if usgs else f"Copernicus GLO-{resolution}"
-        asset=store_upload(temporary,f"{label} {bbox[0]:.4f},{bbox[1]:.4f}.tif",provenance)
+        asset=store_upload(temporary,f"{label} {bbox[0]:.6f},{bbox[1]:.6f}.tif",provenance)
         return {"asset":asset,"resolution_m":resolution,"valid_cells":count,"total_cells":int(array.size),
-                "missing_tiles":missing,"warning":("3DEP bare-earth DEM; requested grid spacing is not proof of native resolution or survey-grade accuracy." if usgs else "DSM, not bare-earth DTM. Source coverage and elevation accuracy vary; not survey-grade.")}
+                "missing_tiles":missing,"requested_bbox":list(bbox),"valid_coverage_pct":100*count/int(array.size),
+                "warning":("3DEP bare-earth DEM; requested grid spacing is not proof of native resolution or survey-grade accuracy." if usgs else "DSM, not bare-earth DTM. Source coverage and elevation accuracy vary; not survey-grade.")}
     finally:
         if temporary is not None:temporary.unlink(missing_ok=True)
         _FETCH_SLOT.release()

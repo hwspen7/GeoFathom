@@ -27,6 +27,8 @@ def test_real_raster_reprojection_and_persistent_provenance(tmp_path,monkeypatch
     monkeypatch.setenv("GEOFATHOM_IMAGERY_DIR",str(tmp_path/"library"))
     result=fetch_dem_subset((121.49,31.2,121.51,31.22),30)
     assert result["resolution_m"]==30 and result["valid_cells"]==result["total_cells"]
+    assert result["requested_bbox"]==[121.49,31.2,121.51,31.22]
+    assert result["valid_coverage_pct"]==100
     assert "Copernicus DEM GLO-30" in result["asset"]["provenance"]
     from imagery.store import image_file,describe
     uid=result["asset"]["id"]
@@ -74,11 +76,23 @@ def test_usgs_remote_export_contract_and_error(monkeypatch):
     def stream(method,url,**kwargs):
         assert method=="GET" and url==public_dem.USGS_EXPORT
         assert kwargs["params"]["pixelType"]=="F32"
+        # Raw meter elevations must not activate any color, hillshade or slope renderer.
+        assert "renderingRule" not in kwargs["params"]
         assert kwargs["params"]["size"]==f"{w},{h}" and not kwargs["follow_redirects"]
         yield httpx.Response(200,content=data,request=httpx.Request("GET",url))
     monkeypatch.setattr(public_dem.httpx,"stream",stream)
     array,_,_,count,_=public_dem._read_usgs(bbox,3)
     assert count==w*h and np.allclose(array,220)
+    @contextmanager
+    def wrong_grid(method,url,**kwargs):
+        with MemoryFile() as wrong:
+            with wrong.open(driver="GTiff",width=w//2,height=h,count=1,dtype="float32",
+                            crs=crs,transform=affine,nodata=-9999) as ds:
+                ds.write(np.full((h,w//2),220,np.float32),1)
+            yield httpx.Response(200,content=wrong.read(),request=httpx.Request("GET",url))
+    monkeypatch.setattr(public_dem.httpx,"stream",wrong_grid)
+    with pytest.raises(RasterError,match="unexpected raster band count or grid size"):
+        public_dem._read_usgs(bbox,3)
     @contextmanager
     def failure(method,url,**kwargs):
         yield httpx.Response(503,request=httpx.Request("GET",url))

@@ -994,7 +994,7 @@ export function compareAreas(left:GeoJSON.Geometry,right:GeoJSON.Geometry):Promi
 }
 
 export function fetchPublicDEM(bbox:[number,number,number,number],resolution_m:1|3|10|30|90,token:string):Promise<{
- asset:RasterAsset;resolution_m:number;valid_cells:number;total_cells:number;missing_tiles:string[];warning:string
+ asset:RasterAsset;resolution_m:number;valid_cells:number;total_cells:number;missing_tiles:string[];warning:string;requested_bbox:[number,number,number,number];valid_coverage_pct:number
 }>{
  const headers:Record<string,string>={'Content-Type':'application/json'};
  if(token)headers['X-GeoFathom-Admin-Token']=token;else headers['X-GeoFathom-Local-Import']='1';
