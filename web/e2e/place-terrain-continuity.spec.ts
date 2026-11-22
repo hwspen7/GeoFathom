@@ -162,7 +162,7 @@ test('OSU disconnected mapped properties default to campus, with inspectable edi
  await expect(page.getByLabel('DEM download target')).toContainText('N 40.01240°');
  // Reproduce an ordinary user workflow with the floating legend open.
  // Entering edit mode must make every actual geometry handle clickable.
- await page.getByRole('button',{name:'Toggle map legend'}).click();
+ // The normal map, survey and cartography workflows keep the legend visible.
  await expect(page.locator('.map-legend-items')).toBeVisible();
  await page.getByRole('button',{name:'Edit boundary nodes'}).click();
  await expect(page.locator('.map-legend-items')).toHaveCount(0);
@@ -201,6 +201,11 @@ test('OSU disconnected mapped properties default to campus, with inspectable edi
   {timeout:18000}).toBe('-83.0105000');
  await expect(page.getByLabel('Pinned places').getByRole('button',{name:'Select pinned The Ohio State University'})).toBeVisible();
  await expect(page.getByLabel('DEM download target')).toContainText('N 40.01240°');
+ // Editing temporarily hides the legend but must retain the user's
+ // expanded/collapsed preference when editing ends.
+ await page.getByRole('button',{name:'Edit boundary nodes'}).click();
+ await expect(page.getByRole('button',{name:'Toggle map legend'})).toBeEnabled();
+ await expect(page.locator('.map-legend-items')).toBeVisible();
 });
 
 test('Hong Kong airport area uses global DEM provider and stays within enlarged budget',async({page})=>{
