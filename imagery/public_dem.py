@@ -112,6 +112,8 @@ def _read_usgs(bbox,resolution,cancel=None):
             with memory.open() as source:
                 if source.count!=1 or not source.crs or source.width!=width or source.height!=height:
                     raise RasterError("USGS returned an unexpected raster band count or grid size.")
+                if source.dtypes[0] not in {"float32","float64"}:
+                    raise RasterError("USGS returned a display raster, not raw floating-point elevation.")
                 destination=np.full((height,width),_NODATA,dtype=np.float32)
                 reproject(rasterio.band(source,1),destination,src_nodata=source.nodata if source.nodata is not None else _NODATA,
                           dst_transform=affine,dst_crs=crs,dst_nodata=_NODATA,
@@ -119,6 +121,8 @@ def _read_usgs(bbox,resolution,cancel=None):
     except (httpx.HTTPError,rasterio.errors.RasterioError) as error:
         raise RasterError("USGS 3DEP elevation unavailable; no elevations were fabricated.") from error
     valid=np.isfinite(destination)&(destination!=_NODATA)
+    if valid.any() and np.any((destination[valid]<-12000)|(destination[valid]>10000)):
+        raise RasterError("USGS DEM contains implausible elevation values; no dataset was saved.")
     if not valid.any():raise RasterError("No valid USGS 3DEP elevations returned.")
     return destination,crs,affine,int(valid.sum()),[]
 

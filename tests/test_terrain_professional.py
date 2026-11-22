@@ -67,3 +67,9 @@ def test_flat_aspect_and_watershed_share_receiver_graph():
             assert basin.sum()==accum[r,c]
     classes,labels,_=classification(np.array([[-1.,np.nan,22.5]]),"aspect_map")
     assert labels[-1]=="Flat" and classes.tolist()==[[8,-1,1]]
+
+def test_circular_mean_wraps_north_and_omits_ambiguous_opposites():
+    from terrain.professional import circular_mean_degrees
+    assert circular_mean_degrees([359,1])==pytest.approx(0)
+    assert circular_mean_degrees([0,180]) is None
+    assert circular_mean_degrees([]) is None

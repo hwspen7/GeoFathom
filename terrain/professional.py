@@ -114,6 +114,14 @@ def least_cost(z,valid,start,end,dx,dy,max_grade,cancel=None):
     path.reverse()
     return path,float(dist[end])
 
+def circular_mean_degrees(angles):
+    """Return an angular mean only when the resultant direction is well-defined."""
+    if not len(angles):return None
+    radians=np.deg2rad(angles)
+    east=float(np.sin(radians).mean());north=float(np.cos(radians).mean())
+    if math.hypot(east,north)<1e-8:return None
+    return float(np.rad2deg(np.arctan2(east,north))%360)
+
 def _hex(value):
     return tuple(int(value[i:i+2],16) for i in (1,3,5))
 
@@ -257,9 +265,8 @@ def surface(z,valid,affine,crs,operation,reference,point,end_point,max_slope,
         metrics.update({"flat_cells":int((values==-1).sum()),
                         "directional_cells":int(angles.size),"product_valid_cells":product["valid_cells"]})
         if angles.size:
-            radians=np.deg2rad(angles)
-            metrics["circular_mean_aspect_deg"]=float(np.rad2deg(np.arctan2(np.sin(radians).mean(),
-                np.cos(radians).mean()))%360)
+            bearing=circular_mean_degrees(angles)
+            if bearing is not None:metrics["circular_mean_aspect_deg"]=bearing
     else:
         metrics.update({"product_valid_cells":product["valid_cells"],
                         "product_min":float(np.nanmin(values)),"product_max":float(np.nanmax(values)),

@@ -94,6 +94,16 @@ def test_usgs_remote_export_contract_and_error(monkeypatch):
     with pytest.raises(RasterError,match="unexpected raster band count or grid size"):
         public_dem._read_usgs(bbox,3)
     @contextmanager
+    def rendered_gray(method,url,**kwargs):
+        with MemoryFile() as colorized:
+            with colorized.open(driver="GTiff",width=w,height=h,count=1,dtype="uint8",
+                                crs=crs,transform=affine) as ds:
+                ds.write(np.full((h,w),180,dtype=np.uint8),1)
+            yield httpx.Response(200,content=colorized.read(),request=httpx.Request("GET",url))
+    monkeypatch.setattr(public_dem.httpx,"stream",rendered_gray)
+    with pytest.raises(RasterError,match="display raster"):
+        public_dem._read_usgs(bbox,3)
+    @contextmanager
     def failure(method,url,**kwargs):
         yield httpx.Response(503,request=httpx.Request("GET",url))
     monkeypatch.setattr(public_dem.httpx,"stream",failure)
