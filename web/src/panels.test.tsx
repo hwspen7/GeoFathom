@@ -99,6 +99,8 @@ describe('survey controls',()=>{
     click('Polygon');click('Line');click('Rectangle');click('Circle');click('Trace network');
     expect(p.onStart).toHaveBeenCalledTimes(5);
     rerender(<SurveyTools {...p} geometry={polygon} mode="polygon" points={[[10,20]]} canUndo canRedo/>);
+    expect((screen.getByRole('button',{name:'Finish'}) as HTMLButtonElement).disabled).toBe(true);
+    rerender(<SurveyTools {...p} geometry={polygon} mode="polygon" points={[[10,20],[11,20],[11,21]]} canUndo canRedo/>);
     click('Cut hole');click('Split line');click('Finish');
     fireEvent.click(screen.getByTitle('Remove last point'));fireEvent.click(screen.getByTitle('Cancel'));
     click('Vertices');click('Move');click('Snap ON');click('Undo');click('Redo');click('Copy');
@@ -113,7 +115,7 @@ describe('survey controls',()=>{
     render(<SurveyTools {...p} geometry={polygon} saved={[{id:'reference',name:'Parcel'} as WorkspaceFeature]}/>);
     click('Apply exact geometry');expect(p.onAddPoint).not.toHaveBeenCalled();
     change('Longitude','0');change('Latitude','22');click('Apply exact geometry');
-    expect(p.onAddPoint).toHaveBeenCalledWith([0,22]);
+    expect(p.onNumeric).toHaveBeenLastCalledWith('point',{vertices:[[0,22]]});
     change('Numeric construction mode','rectangle');change('Opposite longitude','1');change('Opposite latitude','23');
     click('Apply exact geometry');expect(p.onNumeric).toHaveBeenLastCalledWith('rectangle',{vertices:[[0,22],[1,23]],radius_m:100,bearing_deg:90,length_m:100});
     change('Numeric construction mode','circle');change('Radius or length in meters','500');

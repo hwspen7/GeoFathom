@@ -382,3 +382,18 @@ export function measurementAnchor(g:GeoJSON.Geometry):Position|null{
   }
   return best??paths[0][0]??null;
 }
+
+/** Translate both endpoints of a segment, preserving ring closure. */
+export function moveEdge(g:GeoJSON.Geometry,path:GeometryPath,bearing:number,distance:number):GeoJSON.Geometry{
+  const result=copyGeometry(g),ring=ringAt(result,path);
+  if(!ring||!editableIndex(result,ring,path.vertex))return result;
+  const closed=isClosed(result),size=closed?ring.length-1:ring.length;
+  const next=closed?(path.vertex+1)%size:path.vertex+1;
+  if(next>=size)return result;
+  for(const i of [path.vertex,next]){
+    const moved=translateSpherical({type:'Point',coordinates:ring[i]},bearing,distance) as GeoJSON.Point;
+    ring[i]=moved.coordinates as Position;
+  }
+  if(closed)closeRing(ring);
+  return result;
+}

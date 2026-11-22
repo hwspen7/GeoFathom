@@ -1,5 +1,5 @@
 import {describe,it,expect} from 'vitest';
-import {drawingPreview,measurementAnchor,approximateMeasurement,moveVertex,verticesOf} from './editing';
+import {drawingPreview,measurementAnchor,approximateMeasurement,moveVertex,verticesOf,moveEdge} from './editing';
 describe('interactive geometry',()=>{
  it('previews a closed rectangle from the pointer before finish',()=>{
   const g=drawingPreview('rectangle',[[0,0]],[.001,.001]);
@@ -22,4 +22,14 @@ describe('interactive geometry',()=>{
   const p=measurementAnchor(g)!;
   expect(p[0]>2&&p[0]<8&&p[1]>2&&p[1]<8).toBe(false);
  });
+});
+
+it('moves both endpoints of a closing edge without changing point count',()=>{
+ const g:GeoJSON.Polygon={type:'Polygon',coordinates:[[[0,0],[.01,0],[.01,.01],[0,.01],[0,0]]]};
+ const moved=moveEdge(g,{polygon:0,ring:0,vertex:3},90,10) as GeoJSON.Polygon;
+ expect(moved.coordinates[0]).toHaveLength(5);
+ expect(moved.coordinates[0][0]).toEqual(moved.coordinates[0][4]);
+ expect(moved.coordinates[0][0][0]).toBeGreaterThan(0);
+ expect(moved.coordinates[0][3][0]).toBeGreaterThan(0);
+ expect(moved.coordinates[0][1]).toEqual(g.coordinates[0][1]);
 });

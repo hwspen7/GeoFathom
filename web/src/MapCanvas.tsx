@@ -10,7 +10,7 @@ import type { ExternalTile } from './DataServicesPanel';
 import type { Measurement,LayerStyle } from './api';
 import {
   addVertex, moveVertex, removeVertex, translateSpherical, geodesicDrag, pathsOf,
-  verticesOf, type GeometryPath, type Position, type ShapeMode,
+  verticesOf,moveEdge, type GeometryPath, type Position, type ShapeMode,
 } from './editing';
 
 export interface FocusPoint {
@@ -52,6 +52,7 @@ interface Props {
   onTraceClick: (position: Position) => void;
   editing: boolean;
   moving: boolean;
+  edgeMoving:boolean;
   snapping: boolean;
   selectedLocked: boolean;
   layerFeatures: MapLayerFeature[];
@@ -107,7 +108,7 @@ function featureCollection(
   for (const saved of layerFeatures) {
     if (!saved.visible || (selected&&editing&&saved.id===selectedFeatureId)) continue;
     features.push({
-      type: 'Feature', geometry: saved.geometry,
+      type: 'Feature', geometry: selected&&saved.id===selectedFeatureId?selected:saved.geometry,
       properties: {
         role:'saved',id:saved.id,color:selectedIds.includes(saved.id)?'#f59e0b':saved.color,
         spatialSelected:selectedIds.includes(saved.id),
@@ -216,13 +217,13 @@ type Drag = {
   original: GeoJSON.Geometry;
   last: GeoJSON.Geometry;
   path: GeometryPath | null;
-  kind: 'vertex' | 'feature';
+  kind: 'vertex' | 'feature' | 'edge';
 };
 
 export default function MapCanvas({
   selected,drawingMode,vertices,focus,basemap,measurement,showMeasurements,selectedFeatureId,rasterOpacity,onMapClick,
   onViewportChange, discovered, imageLayer, traceMode, onTraceClick,
-  editing, moving, snapping, selectedLocked, layerFeatures,
+  editing, moving,edgeMoving, snapping, selectedLocked, layerFeatures,
   promptPositive,promptNegative,promptBox,annotationMode,onAnnotationClick,
   selectionBoxMode,onSelectionBox,selectedIds,qualityIssues,projectGrid,externalTiles,
   labelMoveMode,onLabelMove,
@@ -235,7 +236,7 @@ export default function MapCanvas({
   const cursorTick=useRef(0);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const eventRef = useRef({
-    selected,selectedFeatureId,drawingMode, traceMode, annotationMode,selectionBoxMode,labelMoveMode,editing, moving, snapping, selectedLocked,
+    selected,selectedFeatureId,drawingMode, traceMode, annotationMode,selectionBoxMode,labelMoveMode,editing, moving,edgeMoving, snapping, selectedLocked,
     layerFeatures, onMapClick, onTraceClick,onAnnotationClick,onSelectionBox,onLabelMove,onViewportChange,
     onGeometryPreview, onGeometryCommit, onSelectSavedFeature,
   });
@@ -255,7 +256,7 @@ export default function MapCanvas({
   const spatialSnap = useRef<PixelSnapIndex|null>(null);
   const [ready, setReady] = useState(false);
   eventRef.current = {
-    selected,selectedFeatureId,drawingMode, traceMode, annotationMode,selectionBoxMode,labelMoveMode,editing, moving, snapping, selectedLocked,
+    selected,selectedFeatureId,drawingMode, traceMode, annotationMode,selectionBoxMode,labelMoveMode,editing, moving,edgeMoving, snapping, selectedLocked,
     layerFeatures, onMapClick, onTraceClick,onAnnotationClick,onSelectionBox,onLabelMove,onViewportChange,
     onGeometryPreview, onGeometryCommit, onSelectSavedFeature,
   };
@@ -395,12 +396,18 @@ export default function MapCanvas({
       let kind: Drag['kind'] | null = null;
       if (handle || fallback) {
         path = handle ? nodePath(handle.properties) : fallback!.path;
-        if (handle?.properties?.role === 'edit-midpoint' || fallback?.midpoint) {
-          first = addVertex(first, path, coordinates(event));
-          path = { ...path, vertex: path.vertex + 1 };
-          state.onGeometryPreview(first);
+        const midpoint=handle?.properties?.role==='edit-midpoint'||fallback?.midpoint;
+        if(state.edgeMoving){
+          if(!midpoint)return;
+          kind='edge';
+        }else{
+          if(midpoint){
+            first=addVertex(first,path,coordinates(event));
+            path={...path,vertex:path.vertex+1};
+            state.onGeometryPreview(first);
+          }
+          kind='vertex';
         }
-        kind = 'vertex';
       } else if (
         state.moving && features.some(f => f.properties?.role === 'selected')
       ) {
@@ -483,7 +490,10 @@ export default function MapCanvas({
       if (current.kind === 'feature') {
         const delta=geodesicDrag(current.start,coordinate);
         changed=translateSpherical(current.original,delta.bearing_deg,delta.distance_m);
-      } else {
+      } else if(current.kind==='edge'){
+        const delta=geodesicDrag(current.start,coordinate);
+        changed=moveEdge(current.original,current.path!,delta.bearing_deg,delta.distance_m);
+      }else{
         changed = moveVertex(current.original, current.path!, snapAt(coordinate, current.path));
       }
       current.last = changed;
@@ -554,7 +564,7 @@ export default function MapCanvas({
     }
     function removeByRightClick(event: MapMouseEvent) {
       const state = eventRef.current;
-      if (!state.editing || state.selectedLocked || !state.selected) return;
+      if (!state.editing || state.edgeMoving || state.selectedLocked || !state.selected) return;
       const feature = hits(event).find(f => f.properties?.role === 'edit-vertex');
       if (!feature) return;
       event.preventDefault();
@@ -564,7 +574,7 @@ export default function MapCanvas({
     }
     function insertByDoubleClick(event: MapMouseEvent) {
       const state = eventRef.current;
-      if (!state.editing || state.selectedLocked || !state.selected) return;
+      if (!state.editing || state.edgeMoving || state.selectedLocked || !state.selected) return;
       const edges = verticesOf(state.selected).filter(p => p.midpoint);
       if (!edges.length) return;
       const pixel = event.point;
@@ -628,6 +638,7 @@ export default function MapCanvas({
     map.on('mousemove', dragging);
     map.on('mousemove',displayCoordinates);
     map.on('mouseup', finishDrag);
+    window.addEventListener('mouseup',finishDrag);
     map.on('contextmenu', removeByRightClick);
     map.on('dblclick', insertByDoubleClick);
     // Install local workspace layers as soon as the style is parsed. Waiting
@@ -749,6 +760,7 @@ export default function MapCanvas({
       map.off('mousemove', dragging);
       map.off('mousemove',displayCoordinates);
       map.off('mouseup', finishDrag);
+      window.removeEventListener('mouseup',finishDrag);
       map.dragPan.enable();
       mapRef.current = null;
       map.remove();

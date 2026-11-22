@@ -34,6 +34,8 @@ interface Props {
   onDuplicate: () => void;
   linked: boolean;
   toolbarTarget?: HTMLElement|null;
+  edgeMoving?:boolean;
+  onEdgeMove?:(active:boolean)=>void;
   busy?:boolean;
   locked?:boolean;
   onLinked: (enabled:boolean) => void;
@@ -54,7 +56,7 @@ export default function SurveyTools({
   mode, geometry, points, editing, moving, snapping, canUndo, canRedo, saved,
   onStart, onFinish, onCancel, onUndoPoint, onUndo, onRedo, onEdit,
   onSnapping, onAddPoint, onNumeric, onOverlay, onDuplicate, linked, onLinked,
-  toolbarTarget,busy=false,locked=false,
+  toolbarTarget,busy=false,locked=false,edgeMoving=false,onEdgeMove,
 }: Props) {
   const [longitude, setLongitude] = useState('');
   const [latitude, setLatitude] = useState('');
@@ -106,10 +108,12 @@ export default function SurveyTools({
         </div>
       )}
       <div className="survey-action-bar">
-        <button title="Edit vertices" disabled={!geometry||locked||busy} className={editing && !moving ? 'active' : ''}
-          onClick={() => onEdit(!editing || moving, false)}><Pencil size={14}/> Vertices</button>
+        <button title="Edit vertices" disabled={!geometry||locked||busy} className={editing && !moving && !edgeMoving ? 'active' : ''}
+          onClick={() => onEdit(!editing || moving || edgeMoving, false)}><Pencil size={14}/> Vertices</button>
         <button title="Move whole shape" disabled={!geometry||locked||busy} className={moving ? 'active' : ''}
           onClick={() => onEdit(!moving, !moving)}><MousePointer2 size={14}/> Move</button>
+        {onEdgeMove&&<button title="Drag a segment midpoint to move both endpoints" disabled={!geometry||locked||busy||geometry.type==='Point'} className={edgeMoving?'active':''}
+          onClick={()=>onEdgeMove(!edgeMoving)}><Ruler size={14}/> Edge</button>}
         <button title="Snap to nearby vertices" className={snapping ? 'active' : ''}
           onClick={() => onSnapping(!snapping)}>Snap {snapping ? 'ON' : 'OFF'}</button>
       </div>

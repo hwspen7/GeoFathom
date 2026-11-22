@@ -465,7 +465,8 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .desktop-gis .panel-section{padding:10px 0;border-top:1px solid #d9dfe4}
 .desktop-gis .panel-section:first-child{border-top:0}
 .desktop-gis .section-heading{margin-bottom:8px;font:600 12px 'Segoe UI',system-ui,sans-serif;letter-spacing:0;color:#314b5f}
-.desktop-gis .section-pill,.desktop-gis .project-hint,.desktop-gis .discovery-explainer,.desktop-gis .discovery-caution{display:none}
+.desktop-gis .section-pill,.desktop-gis .discovery-explainer{display:none}
+.desktop-gis .project-hint,.desktop-gis .discovery-caution{font-size:11px;line-height:1.4;margin:4px 0;color:#526270}
 .desktop-gis input,.desktop-gis select,.desktop-gis textarea,.desktop-gis button{border-radius:3px!important}
 .desktop-gis .analysis-card{padding:7px;border-radius:3px;box-shadow:none}
 .desktop-gis .metric{padding:7px 0;gap:2px}

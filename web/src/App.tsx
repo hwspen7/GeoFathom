@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import {
   ArrowRight, Compass, Download, Globe2, Layers3, MapPin,
-  MousePointer2, Pencil, RotateCcw, Search, Send, Sparkles,
+  Pencil, RotateCcw, Search, Send, Sparkles,
   Wifi, WifiOff,
 } from 'lucide-react';
 
@@ -78,6 +78,7 @@ export default function App() {
   const [featureProperties, setFeatureProperties] = useState<Record<string, unknown>>({});
   const [editing, setEditing] = useState(false);
   const [moving, setMoving] = useState(false);
+  const [edgeMoving,setEdgeMoving]=useState(false);
   const [snapping, setSnapping] = useState(true);
   const [projectWorkspace, setProjectWorkspace] = useState<GeoWorkspace | null>(null);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
@@ -200,7 +201,7 @@ export default function App() {
     setDiscovered([]);
     setSplitParts([]);
     setDrawingMode(null);
-    setEditing(false);
+    setEditing(false);setEdgeMoving(false);
     setMoving(false);
     const [west, south, east, north] = feature.measurement.bounds;
     setFocus({
@@ -243,7 +244,7 @@ export default function App() {
     setSelectedPlace(place);
     setSelectedFeatureId(null);
     setLinked(false);
-    setEditing(false);
+    setEditing(false);setEdgeMoving(false);
     setMoving(false);
     setSplitParts([]);
     setDrawingMode(null);
@@ -354,7 +355,7 @@ export default function App() {
       return;
     }
     geometrySequence.current++;
-    setDrawingMode(next);
+    setDrawingMode(next);setEdgeMoving(false);
     setTraceMode(false);
     setPromptMode(null);setPendingAnnotation(null);setSelectionBoxMode(false);setLabelMoveMode(false);
     if (!operation) {
@@ -377,7 +378,7 @@ export default function App() {
       setMeasurement(null);
       setSplitParts([]);
     }
-    setEditing(false);
+    setEditing(false);setEdgeMoving(false);
     setMoving(false);
     setSelectedPlace(null);
     setCandidates([]);
@@ -517,7 +518,7 @@ export default function App() {
     setSelectedFeatureId(null);
     setSplitParts([]);
     setPreview(null);
-    setEditing(false);
+    setEditing(false);setEdgeMoving(false);
     setMoving(false);
     setMeasurement(null);
     setDrawingMode(null);
@@ -562,7 +563,7 @@ export default function App() {
         event.target instanceof HTMLSelectElement||event.ctrlKey||event.metaKey)return;
       if(event.key==='Escape'){
         geometrySequence.current++;setDrawingMode(null);setVertices([]);
-        setEditing(false);setMoving(false);setTraceMode(false);setPromptMode(null);
+        setEditing(false);setEdgeMoving(false);setMoving(false);setTraceMode(false);setPromptMode(null);
         setSelectionBoxMode(false);setLabelMoveMode(false);setPendingAnnotation(null);
         if(preview||pendingShared){setGeometry(lastValid.current);setPreview(null);setPendingShared(null);}
       }else if(drawingMode&&!busy&&event.key==='Enter'){
@@ -631,7 +632,7 @@ export default function App() {
               onPlaceAnnotation={(projectId,layerId,text)=>{
                 setPendingAnnotation({projectId,layerId,text});
                 setDrawingMode(null);setTraceMode(false);setPromptMode(null);
-                setEditing(false);setMoving(false);
+                setEditing(false);setEdgeMoving(false);setMoving(false);
                 setMessage('Click the map where the annotation should be placed.');
               }}
             />
@@ -700,7 +701,7 @@ export default function App() {
         <div className="map-wrap">
           <MapCanvas
             selected={geometry} drawingMode={drawingMode} vertices={vertices}
-            editing={editing} moving={moving} snapping={snapping}
+            editing={editing} moving={moving} edgeMoving={edgeMoving} snapping={snapping}
             selectedLocked={selectedLocked}
             layerFeatures={[...(projectWorkspace?.features ?? []),
               ...pagedFeatures.filter(feature=>!(projectWorkspace?.features??[])
@@ -810,7 +811,7 @@ export default function App() {
                 timeline.current.push(result.geometry);
                 setHistoryPulse(value => value + 1);
                 setSelectedFeatureId(null);
-                setEditing(false);
+                setEditing(false);setEdgeMoving(false);
                 setMeasurement(result.measurement);
                 setSelectedPlace(null);
                 setCandidates([]);
@@ -966,6 +967,11 @@ export default function App() {
             <div className="section-heading"><Pencil size={16} /><span>Survey & geometry editor</span><span className="section-pill">Precision</span></div>
             <SurveyTools
               toolbarTarget={toolbarTarget} busy={busy} locked={selectedLocked}
+              edgeMoving={edgeMoving} onEdgeMove={active=>{
+                setEdgeMoving(active);setEditing(active);setMoving(false);setLinked(false);
+                setDrawingMode(null);setVertices([]);setTraceMode(false);setPromptMode(null);
+                setPendingAnnotation(null);setSelectionBoxMode(false);setLabelMoveMode(false);
+              }}
               mode={drawingMode}
               geometry={geometry}
               points={vertices}
@@ -978,7 +984,7 @@ export default function App() {
                   setError('Open a saved feature to use linked vertex editing.');
                   return;
                 }
-                setLinked(enabled);setPendingShared(null);
+                setLinked(enabled);if(enabled)setEdgeMoving(false);setPendingShared(null);
               }}
               canUndo={timeline.current.canUndo && historyPulse >= 0}
               canRedo={timeline.current.canRedo && historyPulse >= 0}
@@ -993,7 +999,7 @@ export default function App() {
                 if (selectedLocked) {
                   setError('Unlock the feature layer before editing.');
                 } else {
-                  setEditing(active); setMoving(shouldMove);
+                  setEdgeMoving(false);setEditing(active); setMoving(shouldMove);
                   setDrawingMode(null); setVertices([]);setTraceMode(false);setPromptMode(null);setPendingAnnotation(null);setSelectionBoxMode(false);setLabelMoveMode(false);
                 }
               }}
@@ -1066,7 +1072,7 @@ export default function App() {
               tracing={traceMode}
               onTracing={(enabled) => {
                 setTraceMode(enabled);
-                if (enabled) {setRasterVisible(true);setDrawingMode(null);setVertices([]);setEditing(false);setMoving(false);setPendingAnnotation(null);setSelectionBoxMode(false);setLabelMoveMode(false);setPromptMode(null);}
+                if (enabled) {setRasterVisible(true);setDrawingMode(null);setVertices([]);setEditing(false);setEdgeMoving(false);setMoving(false);setPendingAnnotation(null);setSelectionBoxMode(false);setLabelMoveMode(false);setPromptMode(null);}
               }}
               settings={traceSettings}
               onSettings={setTraceSettings}
@@ -1084,7 +1090,7 @@ export default function App() {
               enabled={Boolean(imageLayer)}
               mode={promptMode}
               onMode={mode=>{
-                setRasterVisible(true);setPromptMode(mode);setTraceMode(false);setDrawingMode(null);setEditing(false);setMoving(false);setPendingAnnotation(null);setSelectionBoxMode(false);setLabelMoveMode(false);
+                setRasterVisible(true);setPromptMode(mode);setTraceMode(false);setDrawingMode(null);setEditing(false);setEdgeMoving(false);setMoving(false);setPendingAnnotation(null);setSelectionBoxMode(false);setLabelMoveMode(false);
               }}
               positive={positivePoints}
               negative={negativePoints}
@@ -1111,7 +1117,7 @@ export default function App() {
                   timeline.current.push(refined.geometry);
                   setHistoryPulse(x=>x+1);
                   setMeasurement(refined.measurement);
-                  setSelectedFeatureId(null);setEditing(false);
+                  setSelectedFeatureId(null);setEditing(false);setEdgeMoving(false);
                   setGeometrySource('Local SAM 2 refinement · '+imageLayer.name);
                   setFeatureProperties({
                     source_type:'image_derived',image_id:imageLayer.id,
@@ -1161,7 +1167,7 @@ export default function App() {
               onBoxMode={active=>{
                 setSelectionBoxMode(active);
                 if(active){
-                  setDrawingMode(null);setEditing(false);
+                  setDrawingMode(null);setEditing(false);setEdgeMoving(false);
                   setMoving(false);setTraceMode(false);setPromptMode(null);
                   setPendingAnnotation(null);
                 }
@@ -1191,7 +1197,7 @@ export default function App() {
                 setLabelMoveMode(active);
                 if(active){
                   setSelectionBoxMode(false);setTraceMode(false);
-                  setDrawingMode(null);setEditing(false);setMoving(false);
+                  setDrawingMode(null);setEditing(false);setEdgeMoving(false);setMoving(false);
                   setPromptMode(null);setPendingAnnotation(null);
                 }
               }}
@@ -1237,7 +1243,7 @@ export default function App() {
       </div>
       <footer className="gis-status" role="status">
         <span>{error?<span className="error">{error}</span>:busy?'Processing…':message}</span>
-        <span>{drawingMode?'Draw · '+drawingMode:editing?(moving?'Move feature':'Edit vertices'):'Select / pan'} · WGS84</span>
+        <span>{drawingMode?'Draw · '+drawingMode:editing?(moving?'Move feature':edgeMoving?'Move edge':'Edit vertices'):'Select / pan'} · WGS84</span>
       </footer>
     </div>
   );
