@@ -42,8 +42,8 @@ def prepare_dem(paths, mode, geometry=None, resolution_m=None, sampling='bilinea
         raise RasterError('Choose mosaic, clip, or resample.')
     if not 1 <= len(paths) <= 4 or (mode=='mosaic' and len(paths)<2) or (mode!='mosaic' and len(paths)!=1):
         raise RasterError('Mosaic needs 2–4 DEMs; clip and resample need exactly one.')
-    if sampling not in {'nearest','bilinear'}:
-        raise RasterError('Resampling must be nearest or bilinear.')
+    if sampling not in {'nearest','bilinear','average'}:
+        raise RasterError('Resampling must be nearest, bilinear or average.')
     if resolution_m is not None and (not isfinite(resolution_m) or not 1 <= resolution_m <= 1000):
         raise RasterError('Output grid resolution must be 1–1,000 meters.')
     if mode=='clip':
@@ -95,7 +95,8 @@ def prepare_dem(paths, mode, geometry=None, resolution_m=None, sampling='bilinea
             if width<1 or height<1 or width>_MAX_SIDE or height>_MAX_SIDE or width*height>_MAX_PIXELS:
                 raise RasterError('DEM processing exceeds 32 million pixels or 8192 per side; choose a coarser output grid.')
             affine=from_origin(x0,y1,res,res)
-            method=Resampling.nearest if sampling=='nearest' else Resampling.bilinear
+            method={'nearest':Resampling.nearest,'bilinear':Resampling.bilinear,
+                    'average':Resampling.average}[sampling]
             checkpoint(cancel)
             root=imagery_dir();root.mkdir(parents=True,exist_ok=True)
             with tempfile.NamedTemporaryFile(prefix='.dem-work-',suffix='.tif',dir=root,delete=False) as handle:
