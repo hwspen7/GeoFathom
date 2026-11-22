@@ -173,4 +173,30 @@ with tempfile.TemporaryDirectory() as directory:
  await page.getByLabel('DEM elevation layer').selectOption('');
  await expect(page.getByLabel('DEM elevation layer')).toHaveValue('');
  await expect(page.getByRole('button',{name:'Run terrain operation'})).toBeDisabled();
+ // Full scientific outputs, not only run receipts, survive a hard reload.
+ // Restored layers are hidden until explicitly enabled on the map.
+ await page.reload();
+ await page.getByRole('navigation',{name:'Workspace tools'}).getByRole('button',{name:'Terrain',exact:true}).click();
+ const restored=page.getByLabel('Analysis result layers');
+ await expect(restored.getByRole('button',{name:/Cross sections ·/})).toBeVisible();
+ await expect(restored.getByRole('button',{name:/Slope map ·/})).toBeVisible();
+ await expect(map).toHaveAttribute('data-terrain-raster-count','0');
+ await restored.getByRole('button',{name:/Cross sections ·/}).click();
+ await expect(page.getByRole('button',{name:'All sections CSV'})).toBeVisible();
+ await restored.getByRole('button',{name:/Slope map ·/}).click();
+ await expect(page.getByAltText('Derived terrain raster')).toBeVisible();
+ const cachedRaster=page.waitForEvent('download');
+ await page.getByRole('button',{name:'GeoTIFF',exact:true}).click();
+ expect((await cachedRaster).suggestedFilename()).toBe('slope_map.tif');
+ // Removing a result removes it from IndexedDB as well as React memory.
+ await restored.getByRole('button',{name:'Remove result Slope map'}).click();
+ await expect(restored.getByRole('button',{name:/Slope map ·/})).toHaveCount(0);
+ await page.reload();
+ await page.getByRole('navigation',{name:'Workspace tools'}).getByRole('button',{name:'Terrain',exact:true}).click();
+ await expect(page.getByLabel('Analysis result layers').getByRole('button',{name:/Slope map ·/})).toHaveCount(0);
+ // Results from one project must never be visible in a different project.
+ const another=await page.request.post(API+'/projects',{data:{name:'Independent terrain project '+Date.now()}});
+ expect(another.status()).toBe(201);
+ await page.getByLabel('Active project').selectOption((await another.json()).id);
+ await expect(page.getByLabel('Analysis result layers')).toHaveCount(0);
 });
