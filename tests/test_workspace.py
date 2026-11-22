@@ -203,3 +203,35 @@ def test_parallel_first_workspace_load_has_one_default_layer():
         snapshots=list(workers.map(workspace,[project]*8))
     assert all(len(item["layers"])==1 and item["total"]==0 for item in snapshots)
     assert len({item["layers"][0]["id"] for item in snapshots})==1
+
+
+def test_trash_is_project_scoped_and_restores_identity_and_revisions():
+    root,fid=setup()
+    changed=client.patch(root+"/features/"+fid,json={"name":"Updated parcel","expected_revision":0})
+    assert changed.status_code==200
+    assert client.delete(root+"/features/"+fid+"?expected_revision=0").status_code==409
+    assert client.delete(root+"/features/"+fid+"?expected_revision=1").status_code==204
+    assert client.get(root+"/workspace").json()["total"]==0
+    trash=client.get(root+"/trash").json()
+    assert trash["total"]==1 and trash["items"][0]["feature_id"]==fid
+    other=client.post("/projects",json={"name":"Other"}).json()["id"]
+    assert client.get("/projects/"+other+"/trash").json()["total"]==0
+    assert client.post("/projects/"+other+"/trash/"+fid+"/restore").status_code==404
+    layer=trash["items"][0]["layer_id"]
+    assert client.patch(root+"/layers/"+layer,json={"locked":True}).status_code==200
+    assert client.post(root+"/trash/"+fid+"/restore").status_code==409
+    assert client.patch(root+"/layers/"+layer,json={"locked":False}).status_code==200
+    restored=client.post(root+"/trash/"+fid+"/restore")
+    assert restored.status_code==200,restored.text
+    assert restored.json()["id"]==fid and restored.json()["revision"]==2
+    assert restored.json()["name"]=="Updated parcel"
+    assert client.get(root+"/trash").json()["total"]==0
+    assert [v["revision"] for v in client.get(root+"/features/"+fid+"/history").json()["versions"]]==[2,1,0]
+
+def test_large_atomic_feature_batch_over_100_is_not_silently_truncated():
+    root,_=setup()
+    data={"features":[{"name":str(i),"geometry":{"type":"Point","coordinates":[i/1000,1]}} for i in range(130)]}
+    result=client.post(root+"/features/batch",json=data)
+    assert result.status_code==201,result.text
+    assert result.json()["created"]==130
+    assert client.get(root+"/workspace").json()["total"]==131

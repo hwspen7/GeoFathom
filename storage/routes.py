@@ -107,10 +107,12 @@ def features(project_id: str, limit: int = Query(200, ge=1, le=200), offset: int
 
 
 @router.delete("/{project_id}/features/{feature_id}", status_code=204)
-def remove_feature(project_id: str, feature_id: str) -> None:
+def remove_feature(project_id: str, feature_id: str, expected_revision: int | None = Query(default=None,ge=0)) -> None:
     try:
-        delete_feature_guarded(project_id, feature_id)
+        delete_feature_guarded(project_id, feature_id,expected_revision)
     except StorageError as error:
+        if "conflict" in str(error).lower():
+            raise HTTPException(status_code=409,detail=str(error)) from error
         raise _missing(error) from error
 
 

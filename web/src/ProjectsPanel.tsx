@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 
 import {
-  copyProjectFeature, createLayer, deleteProjectFeature, exportProject, getFeatureHistory, getProjects,
+  copyProjectFeature, createLayer, deleteProjectFeature, exportProject, getFeatureHistory, getProjects,getProjectTrash,restoreDeletedFeature,type TrashedFeature,
   getWorkspace, newProject, patchLayer, restoreFeature, saveProjectFeature,
   saveFeatureBatch, patchLayerStyle, updateProjectFeature, type GeoLayer, type GeoWorkspace, type Project,
   type WorkspaceFeature, type FeatureHistory,
@@ -47,6 +47,10 @@ export default function ProjectsPanel({
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
   const [busy, setBusy] = useState(false);
+  const [trash,setTrash]=useState<TrashedFeature[]>([]);
+  const [trashOpen,setTrashOpen]=useState(false);
+  const [trashTotal,setTrashTotal]=useState(0);
+  const [trashPulse,setTrashPulse]=useState(0);
   const notify = useRef(onWorkspace);
   notify.current = onWorkspace;
   const selection = useRef('');
@@ -66,7 +70,7 @@ export default function ProjectsPanel({
     setSelected(id);
     setWorkspace(null);
     setLayerId('');
-    setHistory(null);
+    setHistory(null);setTrash([]);setTrashTotal(0);setTrashOpen(false);
     setError('');
     setInfo('');
   }, []);
@@ -293,13 +297,29 @@ export default function ProjectsPanel({
     });
   }
 
+  useEffect(()=>{
+    if(!selected||!trashOpen)return;
+    let alive=true;
+    getProjectTrash(selected).then(result=>{if(alive&&selection.current===selected){setTrash(result.items);setTrashTotal(result.total);}})
+      .catch(cause=>{if(alive&&selection.current===selected)setError(String(cause));});
+    return()=>{alive=false;};
+  },[selected,trashOpen,trashPulse,refreshToken]);
+  async function restoreTrash(item:TrashedFeature){
+    if(!selected||busy)return;
+    await run(async()=>{
+      const restored=await restoreDeletedFeature(selected,item.feature_id);
+      if(selection.current===selected){setTrashPulse(v=>v+1);onOpen(restored);setInfo('Deleted feature restored with its revision history.');}
+    });
+  }
   async function deleteSelected(){
     if(!selected||!current||locked)return;
-    if(!window.confirm('Delete this feature from the project?'))return;
+    if(!window.confirm('Move this feature to the project trash? It can be restored.'))return;
     await run(async()=>{
-      await deleteProjectFeature(selected,current.id);
-      if(selection.current===selected&&featureIdentity.current===current.id)onFeatureDeleted();
-      setInfo('Feature deleted.');
+      await deleteProjectFeature(selected,current.id,current.revision);
+      if(selection.current===selected){
+        if(featureIdentity.current===current.id)onFeatureDeleted();
+        setTrashPulse(v=>v+1);setInfo('Feature moved to project trash.');
+      }
     });
   }
 
@@ -339,6 +359,12 @@ export default function ProjectsPanel({
             {projects.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}
           </select>
 
+          <details open={trashOpen} onToggle={e=>setTrashOpen(e.currentTarget.open)}>
+            <summary>Project trash {trashOpen?'· '+trashTotal:''}</summary>
+            {trashOpen&&!trash.length&&<small className="compact-notice">No deleted features</small>}
+            {trash.map(item=><div key={item.feature_id} className="survey-action-bar"><span>{item.name}</span>
+              <button disabled={busy} onClick={()=>void restoreTrash(item)}>Restore</button></div>)}
+          </details>
           <div className="layer-header"><Layers3 size={14} /> Layers</div>
           {selected && !workspace && !error && <p role="status">Loading selected project…</p>}
           {workspace?.layers.map(layer => (

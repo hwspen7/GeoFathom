@@ -2,13 +2,13 @@
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from .database import StorageError
 from .workspace import (
     add_in_layer, add_layer, copy_feature, edit_layer, feature_history, layers,
-    remove_layer, restore_version, update_feature, workspace,
+    remove_layer, restore_version, update_feature, workspace,trash_features,restore_deleted_feature,
 )
 
 router = APIRouter(prefix="/projects", tags=["layer-editor"])
@@ -120,3 +120,16 @@ def add_features_batch(project_id: str,body: BatchFeatures) -> dict:
         return add_in_layer(project_id,[item.model_dump() for item in body.features],body.layer_id)
     except StorageError as error:
         raise error_response(error) from error
+
+
+
+@router.get("/{project_id}/trash")
+def deleted_features(project_id:str,limit:int=Query(100,ge=1,le=100),offset:int=Query(0,ge=0)):
+    try:return trash_features(project_id,limit,offset)
+    except StorageError as error:raise error_response(error) from error
+
+
+@router.post("/{project_id}/trash/{feature_id}/restore")
+def restore_deleted(project_id:str,feature_id:str):
+    try:return restore_deleted_feature(project_id,feature_id)
+    except StorageError as error:raise error_response(error) from error

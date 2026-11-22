@@ -689,9 +689,9 @@ export function addMapAnnotation(
 }
 
 
-export async function deleteProjectFeature(projectId:string,featureId:string):Promise<void> {
+export async function deleteProjectFeature(projectId:string,featureId:string,expectedRevision?:number):Promise<void> {
   const response=await rawRequest('/projects/'+encodeURIComponent(projectId)+
-    '/features/'+encodeURIComponent(featureId),{method:'DELETE'});
+    '/features/'+encodeURIComponent(featureId)+(expectedRevision===undefined?'':'?expected_revision='+expectedRevision),{method:'DELETE'});
   if(!response.ok) throw await responseError(response, 'Could not delete the selected map feature.');
 }
 
@@ -996,4 +996,12 @@ export function fetchPublicDEM(bbox:[number,number,number,number],resolution_m:3
  const headers:Record<string,string>={'Content-Type':'application/json'};
  if(token)headers['X-GeoFathom-Admin-Token']=token;else headers['X-GeoFathom-Local-Import']='1';
  return request('/imagery/dem/fetch',{method:'POST',headers,body:JSON.stringify({bbox,resolution_m})});
+}
+
+export interface TrashedFeature{feature_id:string;layer_id:string;name:string;deleted_at:string}
+export function getProjectTrash(id:string):Promise<{items:TrashedFeature[];total:number}>{
+ return request('/projects/'+encodeURIComponent(id)+'/trash');
+}
+export function restoreDeletedFeature(projectId:string,featureId:string):Promise<WorkspaceFeature>{
+ return request('/projects/'+encodeURIComponent(projectId)+'/trash/'+encodeURIComponent(featureId)+'/restore',{method:'POST'});
 }

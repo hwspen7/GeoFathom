@@ -44,6 +44,15 @@ def _schema(conn):
       created_at TEXT NOT NULL,
       PRIMARY KEY(feature_id, revision)
     );
+    CREATE TABLE IF NOT EXISTS geo_feature_trash (
+      feature_id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      layer_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      deleted_at TEXT NOT NULL,
+      payload TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS geo_feature_trash_project ON geo_feature_trash(project_id,deleted_at);
     """)
 
 
@@ -358,14 +367,73 @@ def copy_feature(project_id,feature_id):
         return {**new,"layer_id":layer["id"],"revision":0}
 
 
-def delete_feature_guarded(project_id, feature_id):
-    """Check the layer lock and delete the feature in the same transaction."""
+def delete_feature_guarded(project_id, feature_id, expected_revision=None):
+    """Move a feature, its exact identity and all revisions to project trash atomically."""
     with _connect() as c:
         _schema(c)
         c.execute("BEGIN IMMEDIATE")
         _required_project(c, project_id)
-        _feature(c, project_id, feature_id)
-        if _feature_layer(c, project_id, feature_id)["locked"]:
+        original=_feature(c,project_id,feature_id)
+        layer=_feature_layer(c,project_id,feature_id)
+        if layer["locked"]:
             raise StorageError("The feature layer is locked.")
+        current=_revision(c,feature_id)
+        if expected_revision is not None and expected_revision!=current:
+            raise StorageError("Revision conflict. Reload the latest feature.")
+        history=[dict(row) for row in c.execute(
+            "SELECT * FROM geo_feature_revisions WHERE feature_id=? ORDER BY revision",(feature_id,))]
+        payload=json.dumps({"feature":original,"history":history},allow_nan=False)
+        if len(payload)>64_000_000:
+            raise StorageError("Feature history exceeds the recoverable trash record budget.")
+        c.execute("INSERT INTO geo_feature_trash VALUES(?,?,?,?,?,?)",
+            (feature_id,project_id,layer["id"],original["name"],_now(),payload))
         c.execute("DELETE FROM features WHERE id=? AND project_id=?", (feature_id, project_id))
         c.execute("UPDATE projects SET updated_at=? WHERE id=?", (_now(), project_id))
+
+
+def trash_features(project_id,limit=100,offset=0):
+    with _connect() as c:
+        _schema(c)
+        _required_project(c,project_id)
+        rows=c.execute("""SELECT feature_id,layer_id,name,deleted_at FROM geo_feature_trash
+            WHERE project_id=? ORDER BY deleted_at DESC,feature_id LIMIT ? OFFSET ?""",
+            (project_id,limit,offset)).fetchall()
+        total=c.execute("SELECT count(*) FROM geo_feature_trash WHERE project_id=?",(project_id,)).fetchone()[0]
+        return {"items":[dict(row) for row in rows],"total":total}
+
+
+def restore_deleted_feature(project_id,feature_id):
+    """Restore the same feature ID and revisions, recording a new restore revision."""
+    with _connect() as c:
+        _schema(c)
+        c.execute("BEGIN IMMEDIATE")
+        _required_project(c,project_id)
+        row=c.execute("SELECT * FROM geo_feature_trash WHERE project_id=? AND feature_id=?",
+            (project_id,feature_id)).fetchone()
+        if row is None:raise StorageError("Deleted feature not found.")
+        layer=_layer(c,project_id,row["layer_id"])
+        if layer["locked"]:raise StorageError("The original feature layer is locked.")
+        if c.execute("SELECT 1 FROM features WHERE id=?",(feature_id,)).fetchone():
+            raise StorageError("Feature identity conflict.")
+        data=json.loads(row["payload"])
+        f=data["feature"]
+        geometry=json.loads(f["geometry"]);properties=json.loads(f["properties"])
+        measured=measure_geometry(geometry)
+        c.execute("""INSERT INTO features(id,project_id,name,geometry,properties,source,created_at)
+            VALUES(?,?,?,?,?,?,?)""",(feature_id,project_id,f["name"],f["geometry"],f["properties"],f["source"],f["created_at"]))
+        c.execute("INSERT INTO geo_layer_members VALUES(?,?,?)",(project_id,feature_id,layer["id"]))
+        history=data["history"]
+        for rev in history:
+            c.execute("INSERT INTO geo_feature_revisions VALUES(?,?,?,?,?,?,?)",
+                (feature_id,rev["revision"],rev["name"],rev["geometry"],rev["properties"],rev["source"],rev["created_at"]))
+        if not history:
+            c.execute("INSERT INTO geo_feature_revisions VALUES(?,?,?,?,?,?,?)",
+                (feature_id,0,f["name"],f["geometry"],f["properties"],f["source"],f["created_at"]))
+        revision=max((rev["revision"] for rev in history),default=0)+1
+        stamp=_now()
+        c.execute("INSERT INTO geo_feature_revisions VALUES(?,?,?,?,?,?,?)",
+            (feature_id,revision,f["name"],f["geometry"],f["properties"],f["source"],stamp))
+        c.execute("DELETE FROM geo_feature_trash WHERE feature_id=? AND project_id=?",(feature_id,project_id))
+        c.execute("UPDATE projects SET updated_at=? WHERE id=?",(stamp,project_id))
+        return {**f,"geometry":geometry,"properties":properties,"measurement":measured,
+            "layer_id":layer["id"],"revision":revision}
