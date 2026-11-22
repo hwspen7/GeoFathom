@@ -173,3 +173,31 @@ def test_flat_aspect_and_out_of_bounds_profile(dem):
     line={"type":"LineString","coordinates":[t.transform(499900,4499900),t.transform(500100,4499900)]}
     samples=elevation_profile(path,line,10)["samples"]
     assert samples[0]["elevation_m"] is None and samples[-1]["elevation_m"]==42
+
+
+def test_slope_product_handles_over_one_million_pixels_end_to_end(tmp_path):
+    # Regression: downloading a larger DEM is not useful if its normal slope
+    # operation still refuses the historical 1024x1024 analysis window.
+    from pyproj import Transformer
+    side=1040
+    cell_m=10
+    west,north=500000,4500000
+    path=tmp_path/"large-flat-terrain.tif"
+    affine=from_origin(west,north,cell_m,cell_m)
+    with rasterio.open(path,"w",driver="GTiff",width=side,height=side,count=1,
+                       dtype="float32",crs="EPSG:32617",transform=affine,
+                       nodata=-9999,compress="deflate") as target:
+        target.write(np.full((side,side),220,dtype=np.float32),1)
+    conv=Transformer.from_crs("EPSG:32617","EPSG:4326",always_xy=True)
+    margin=4
+    coords=[(west+margin,north-margin),
+            (west+side*cell_m-margin,north-margin),
+            (west+side*cell_m-margin,north-side*cell_m+margin),
+            (west+margin,north-side*cell_m+margin),
+            (west+margin,north-margin)]
+    polygon={"type":"Polygon","coordinates":[[conv.transform(x,y) for x,y in coords]]}
+    result=run_terrain(path,polygon,"slope_map")
+    assert result["valid_cells"]>1_000_000
+    assert result["raster"]["valid_cells"]>1_000_000
+    assert result["metrics"]["product_max"]==pytest.approx(0,abs=1e-6)
+    assert result["raster"]["width"]>=1024
