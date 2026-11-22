@@ -967,7 +967,7 @@ export async function downloadGISJob(projectId:string,id:string):Promise<void>{
 }
 
 
-export type TerrainOperation='contours'|'volume'|'visibility'|'watershed'|'mesh'|'distribution'|'elevation'|'slope_map'|'aspect_map'|'hillshade'|'tri'|'tpi'|'curvature'|'flow_direction'|'flow_accumulation'|'streams'|'suitability'|'cutfill_map'|'least_cost'|'cross_sections';
+export type TerrainOperation='dem_difference'|'contours'|'volume'|'visibility'|'watershed'|'mesh'|'distribution'|'elevation'|'slope_map'|'aspect_map'|'hillshade'|'tri'|'tpi'|'curvature'|'flow_direction'|'flow_accumulation'|'streams'|'suitability'|'cutfill_map'|'least_cost'|'cross_sections';
 export interface TerrainRaster {png:string;geotiff:string;corners:[[number,number],[number,number],[number,number],[number,number]];legend:{label:string;color:string;cells:number}[];width:number;height:number;valid_cells:number}
 export interface TerrainRasterLayer {id:string;title:string;raster:TerrainRaster;opacity:number;resampling:'nearest'|'linear'}
 export interface TerrainDistributionBin {lower_m:number;upper_m:number;cells:number;area_m2:number;cumulative_pct:number}
@@ -978,7 +978,7 @@ export interface AdvancedTerrainResult {
   features:Array<GeoJSON.Feature<GeoJSON.Geometry,Record<string,unknown>>>;mesh?:TerrainMesh;distribution?:TerrainDistributionBin[];raster?:TerrainRaster;sections?:{station_m:number;length_m:number;samples:{distance_m:number;offset_m:number;elevation_m:number|null;coordinate:[number,number]}[]}[];
 }
 export function advancedTerrain(body:{image_id:string;geometry:GeoJSON.Geometry;operation:TerrainOperation;
-  interval:number;reference:number;point:[number,number]|null;observer_height:number;target_height:number;end_point?:[number,number]|null;max_slope?:number;min_elevation?:number;max_elevation?:number;max_tri?:number;stream_cells?:number;azimuth?:number;altitude?:number;section_spacing?:number;section_width?:number;texture_image_id?:string|null;fill_sinks?:boolean;consider_curvature?:boolean;refraction_coeff?:number},signal?:AbortSignal):Promise<AdvancedTerrainResult>{
+  interval:number;reference:number;point:[number,number]|null;observer_height:number;target_height:number;end_point?:[number,number]|null;max_slope?:number;min_elevation?:number;max_elevation?:number;max_tri?:number;stream_cells?:number;azimuth?:number;altitude?:number;section_spacing?:number;section_width?:number;texture_image_id?:string|null;fill_sinks?:boolean;consider_curvature?:boolean;refraction_coeff?:number;comparison_image_id?:string|null},signal?:AbortSignal):Promise<AdvancedTerrainResult>{
   return request('/terrain/advanced',{signal,method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
 }
 
