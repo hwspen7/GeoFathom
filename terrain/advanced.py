@@ -343,7 +343,10 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
         mask=_watershed(flow_z,valid,origin,affine,cancel)
         result["features"]=_mask_features(mask,affine,crs,"D8 contributing area",cancel)
         result["metrics"]={"upstream_cells":int(mask.sum()),"upstream_grid_area_m2":int(mask.sum())*cell}
-        result["warning"]="D8 contributing area within the selected grid; sinks/flats terminate and external upstream areas are not included."
+        result["warning"]=("D8 contributing area within the selected grid; the working DEM was depression-filled and flat cells routed. "
+                           if conditioned is not None else
+                           "D8 contributing area within the selected grid; unconditioned sinks and flats terminate. "
+                           )+"External upstream areas are never included."
     else:
         # Interactive WebGL2 preview: preserve up to 256 samples per axis.
         # Original source DEM and raster exports are never downsampled here.
