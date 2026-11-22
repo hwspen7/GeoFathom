@@ -73,3 +73,18 @@ def test_circular_mean_wraps_north_and_omits_ambiguous_opposites():
     assert circular_mean_degrees([359,1])==pytest.approx(0)
     assert circular_mean_degrees([0,180]) is None
     assert circular_mean_degrees([]) is None
+
+
+def test_directional_curvature_of_quadratic_surface():
+    # Variation in x only has longitudinal curvature but zero plan curvature.
+    z=np.tile(np.arange(7,dtype=float)**2,(7,1))
+    valid=np.ones_like(z,bool)
+    result=derivatives(z,valid,10,10)
+    assert result["profile_curvature"][3,3]>0
+    assert result["plan_curvature"][3,3]==pytest.approx(0,abs=1e-12)
+    assert result["curvature"][3,3]==pytest.approx(0.02)
+    assert np.isnan(result["profile_curvature"][0]).all()
+    # Exactly flat terrain has no defined aspect or directional curvature.
+    flat=derivatives(np.full((7,7),10.),valid,10,10)
+    assert np.isnan(flat["plan_curvature"][3,3])
+    assert np.isnan(flat["profile_curvature"][3,3])

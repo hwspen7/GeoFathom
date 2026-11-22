@@ -71,13 +71,13 @@ const modes:Array<{id:Operation;title:string}>=[
  {id:'volume',title:'Cut / fill'},{id:'visibility',title:'Viewshed'},{id:'watershed',title:'Watershed (D8)'},{id:'mesh',title:'3D terrain'},
  {id:'distribution',title:'Elevation distribution'},
  {id:'elevation',title:'Elevation map'},{id:'slope_map',title:'Slope map'},{id:'aspect_map',title:'Aspect map'},{id:'hillshade',title:'Hillshade'},
- {id:'tri',title:'Ruggedness (TRI)'},{id:'tpi',title:'Position (TPI)'},{id:'curvature',title:'Curvature (Laplacian)'},
+ {id:'tri',title:'Ruggedness (TRI)'},{id:'tpi',title:'Position (TPI)'},{id:'curvature',title:'Curvature (Laplacian)'},{id:'plan_curvature',title:'Plan curvature'},{id:'profile_curvature',title:'Profile curvature'},
  {id:'flow_direction',title:'Flow direction'},{id:'flow_accumulation',title:'Flow accumulation'},{id:'streams',title:'Drainage network'},
  {id:'cutfill_map',title:'Cut / fill map'},{id:'suitability',title:'Site suitability'},{id:'least_cost',title:'Least-cost route'},{id:'cross_sections',title:'Cross sections'}
 ];
 const categories:Record<string,Operation[]>={
  Quick:['slope','profile','contours','volume','visibility','watershed','mesh','distribution'],
- Surface:['elevation','slope_map','aspect_map','hillshade','tri','tpi','curvature','distribution','contours','dem_difference'],
+ Surface:['elevation','slope_map','aspect_map','hillshade','tri','tpi','curvature','plan_curvature','profile_curvature','distribution','contours','dem_difference'],
  Hydrology:['flow_direction','flow_accumulation','streams','watershed'],
  Engineering:['profile','cross_sections','volume','cutfill_map','suitability','least_cost'],
 };
@@ -559,7 +559,8 @@ export default function TerrainWorkbench(p:Props){
        <div className="terrain-metrics">{Object.entries(result.metrics).map(([k,v])=><div key={k}><span>{names[k]??k.replaceAll('_',' ')}</span><strong>{fmt(v)} {units[k]??(['product_min','product_max','product_mean'].includes(k)?(
           ['elevation','tpi','tri','cutfill_map','dem_difference'].includes(result.operation)?'m':
           ['slope_map','aspect_map'].includes(result.operation)?'°':
-          result.operation==='flow_accumulation'?'cells':''):'')}</strong></div>)}</div>
+          result.operation==='flow_accumulation'?'cells':
+           ['curvature','plan_curvature','profile_curvature'].includes(result.operation)?'m⁻¹':''):'')}</strong></div>)}</div>
        {result.operation==='volume'&&<MetricBars label="Earthwork volume (m³)" values={[{name:'Cut',value:result.metrics.cut_m3,color:'#b87848'},{name:'Fill',value:result.metrics.fill_m3,color:'#3b82ab'}]}/>}
        {result.operation==='visibility'&&<MetricBars label="Visibility (cells)" values={[{name:'Visible',value:result.metrics.visible_cells,color:'#34885c'},{name:'Unknown',value:result.metrics.unknown_cells,color:'#9099a2'},{name:'Hidden',value:Math.max(0,result.valid_cells-result.metrics.visible_cells-result.metrics.unknown_cells),color:'#c17d55'}]}/>}
        {result.operation==='watershed'&&<MetricBars label="Catchment (cells)" values={[{name:'Upstream',value:result.metrics.upstream_cells,color:'#3687b9'},{name:'Other',value:Math.max(0,result.valid_cells-result.metrics.upstream_cells),color:'#9ba7ad'}]}/>}

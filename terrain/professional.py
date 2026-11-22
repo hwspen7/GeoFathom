@@ -15,7 +15,7 @@ from imagery.raster import RasterError
 from .cancellation import checkpoint
 
 SURFACES = {"elevation", "slope_map", "aspect_map", "hillshade", "tri", "tpi",
-            "curvature", "flow_direction", "flow_accumulation", "streams",
+            "curvature", "plan_curvature", "profile_curvature", "flow_direction", "flow_accumulation", "streams",
             "suitability", "cutfill_map", "least_cost"}
 D8 = ((-1,0,64),(-1,1,128),(0,1,1),(1,1,2),(1,0,4),
       (1,-1,8),(0,-1,16),(-1,-1,32))
@@ -44,13 +44,25 @@ def derivatives(z, valid, dx, dy):
     aspect=np.where(gradient>1e-12,aspect,np.nan)
     tri=np.sqrt(((p-c[:,:,None,None])**2).sum(axis=(-1,-2)))
     tpi=c-(p.sum(axis=(-1,-2))-c)/8
-    lap=(p[:,:,1,0]+p[:,:,1,2]-2*c)/dx**2+(p[:,:,0,1]+p[:,:,2,1]-2*c)/dy**2
+    zxx=(p[:,:,1,0]+p[:,:,1,2]-2*c)/dx**2
+    zyy=(p[:,:,0,1]+p[:,:,2,1]-2*c)/dy**2
+    zxy=(p[:,:,2,2]-p[:,:,2,0]-p[:,:,0,2]+p[:,:,0,0])/(4*dx*dy)
+    lap=zxx+zyy
+    # Profile/plan curvature in inverse meters. A horizontal cell has
+    # undefined slope direction, so directional curvature remains NoData.
+    squared=e*e+s*s
+    with np.errstate(divide="ignore",invalid="ignore"):
+        profile_curvature=(e*e*zxx+2*e*s*zxy+s*s*zyy)/(squared*(1+squared)**1.5)
+        plan_curvature=(s*s*zxx-2*e*s*zxy+e*e*zyy)/squared**1.5
+    profile_curvature=np.where(squared>1e-12,profile_curvature,np.nan)
+    plan_curvature=np.where(squared>1e-12,plan_curvature,np.nan)
     def pad(a):
         out=np.full(z.shape,np.nan)
         out[1:-1,1:-1]=np.where(good,a,np.nan)
         return out
     return {k:pad(v) for k,v in {"slope_map":slope,"aspect_map":aspect,"tri":tri,
-             "tpi":tpi,"curvature":lap,"east":e,"south":s}.items()}
+             "tpi":tpi,"curvature":lap,"plan_curvature":plan_curvature,
+             "profile_curvature":profile_curvature,"east":e,"south":s}.items()}
 
 def d8_directions(z, valid, dx, dy, cancel=None):
     """Steepest strictly downhill receiver; deterministic tie order shared by all products."""

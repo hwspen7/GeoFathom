@@ -264,7 +264,7 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
     # Independent analysis budgets. Local surface derivatives can use large
     # grids; visibility ray tracing and catchment/path traversals remain bounded.
     simple_large={"dem_difference","elevation","slope_map","aspect_map","hillshade","tri","tpi",
-                  "curvature","cutfill_map","suitability","volume","distribution"}
+                  "curvature","plan_curvature","profile_curvature","cutfill_map","suitability","volume","distribution"}
     extended=operation in simple_large
     maximum=4096 if extended else 512 if operation=="visibility" else 1024
     max_cells=8_000_000 if extended else 262_144 if operation=="visibility" else 1_000_000
@@ -341,7 +341,9 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
         result["metrics"]={"upstream_cells":int(mask.sum()),"upstream_grid_area_m2":int(mask.sum())*cell}
         result["warning"]="D8 contributing area within the selected grid; sinks/flats terminate and external upstream areas are not included."
     else:
-        step=max(1,math.ceil(max(z.shape)/128))
+        # Interactive WebGL2 preview: preserve up to 256 samples per axis.
+        # Original source DEM and raster exports are never downsampled here.
+        step=max(1,math.ceil(max(z.shape)/256))
         heights=z[::step,::step];mask=valid[::step,::step]
         first=mask[:-1,:-1]&mask[1:,:-1]&mask[:-1,1:]
         second=mask[:-1,1:]&mask[1:,:-1]&mask[1:,1:]
