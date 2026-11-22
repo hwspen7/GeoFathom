@@ -59,6 +59,8 @@ export default function ProjectsPanel({
   const initializedSelection=useRef(false);
   const requestSequence = useRef(0);
   const styleWriting=useRef(false);
+  type LayerStyleUpdate={labels?:Partial<GeoLayer['style']['labels']>;symbol?:Partial<GeoLayer['style']['symbol']>};
+  const queuedStyleWrites=useRef<Array<{projectId:string;layerId:string;changes:LayerStyleUpdate}>>([]);
   const historySequence = useRef(0);
   const featureIdentity = useRef(selectedFeatureId);
   featureIdentity.current = selectedFeatureId;
@@ -248,35 +250,57 @@ export default function ProjectsPanel({
     await run(async () => { await patchLayer(selected, layer.id, update); });
   }
 
-  async function styleLayer(changes:{
-    labels?:Partial<GeoLayer['style']['labels']>;
-    symbol?:Partial<GeoLayer['style']['symbol']>;
-  }){
-    if(!selected||!activeLayer||busy||styleWriting.current)return;
+  async function flushLayerStyleWrites(){
+    if(styleWriting.current)return;
     styleWriting.current=true;
-    const projectId=selected,layer=activeLayer;
-    // React controlled inputs must update immediately. Revert from the
-    // authoritative server state if an optimistic style write is rejected.
-    setWorkspace(current=>current?{
-      ...current,
-      layers:current.layers.map(item=>item.id===layer.id?{
-        ...item,style:{
-          labels:{...item.style.labels,...changes.labels},
-          symbol:{...item.style.symbol,...changes.symbol},
-        },
-      }:item),
-    }:current);
     setBusy(true);setError('');setInfo('');
     try{
-      await patchLayerStyle(projectId,layer.id,{
-        ...changes,expected_revision:layer.style_revision,
-      });
-      await reload(projectId);
-      setInfo('Label and symbology settings saved.');
-    }catch(failure){
-      setError(failure instanceof Error?failure.message:'Could not save layer style.');
-      try{await reload(projectId);}catch{ /* Surface the original error. */ }
-    }finally{styleWriting.current=false;setBusy(false);}
+      while(queuedStyleWrites.current.length){
+        const job=queuedStyleWrites.current.shift()!;
+        // Never apply a pending write to a different project identity.
+        if(selection.current!==job.projectId)continue;
+        try{
+          // Obtain the server's latest revision for every serialized mutation.
+          // A pending blur event is not dropped merely because another save is active.
+          const current=await getWorkspace(job.projectId);
+          if(selection.current!==job.projectId)continue;
+          const layer=current.layers.find(l=>l.id===job.layerId);
+          if(!layer)throw Error('Layer no longer exists.');
+          await patchLayerStyle(job.projectId,job.layerId,{
+            ...job.changes,expected_revision:layer.style_revision,
+          });
+          if(selection.current===job.projectId){
+            await reload(job.projectId);
+            setInfo('Label and symbology settings saved.');
+          }
+        }catch(failure){
+          if(selection.current===job.projectId){
+            setError(failure instanceof Error?failure.message:'Could not save layer style.');
+            try{await reload(job.projectId);}catch{ /* Preserve original write error. */ }
+          }
+        }
+      }
+    }finally{
+      styleWriting.current=false;
+      setBusy(false);
+      // A project switch during a save must still load its own workspace.
+      if(selection.current)void reload(selection.current).catch(()=>setError('Could not refresh project layers.'));
+      if(queuedStyleWrites.current.length)void flushLayerStyleWrites();
+    }
+  }
+
+  async function styleLayer(changes:LayerStyleUpdate){
+    if(!selected||!activeLayer||selection.current!==selected)return;
+    const projectId=selected,layerId=activeLayer.id;
+    // Optimistic changes are visible immediately; the queue serializes writes.
+    setWorkspace(current=>current?{...current,
+      layers:current.layers.map(item=>item.id===layerId?{...item,style:{
+        labels:{...item.style.labels,...changes.labels},
+        symbol:{...item.style.symbol,...changes.symbol},
+      }}:item),
+    }:current);
+    queuedStyleWrites.current.push({projectId,layerId,changes});
+    void flushLayerStyleWrites();
   }
 
   function placeNote(event:FormEvent<HTMLFormElement>){

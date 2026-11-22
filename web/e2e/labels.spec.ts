@@ -80,6 +80,22 @@ test('style labels by field, persist symbol settings and reload the workspace',a
   await expect(page.getByLabel('Map legend',{exact:true})).not.toBeVisible();
 });
 
+test('label field edits are queued during an in-flight style mutation',async({page})=>{
+  const id=await project(page,'Concurrent label editing');
+  const map=page.getByLabel('Interactive geospatial map');
+  await expect(map).toHaveAttribute('data-label-layer-ready','true',{timeout:25000});
+  await page.locator('.layer-cartography summary').click();
+  const enabled=page.getByLabel('Enable layer labels');
+  await enabled.check();
+  const field=page.getByLabel('Label source field');
+  await field.fill('category');
+  await field.press('Tab');
+  await expect.poll(async()=>{
+    const w=await savedWorkspace(page,id);
+    return {enabled:w.layers[0].style.labels.enabled,field:w.layers[0].style.labels.field};
+  },{timeout:25000}).toEqual({enabled:true,field:'category'});
+});
+
 test('click to create, rename, revise and delete a permanent map note',async({page})=>{
   const id=await project(page,'Annotation integration');
   const map=page.getByLabel('Interactive geospatial map');
