@@ -923,7 +923,7 @@ export default function App() {
                 <button title="Remove layer; original library file is retained" aria-label={'Remove raster '+layer.asset.name} onClick={()=>{
                   geometrySequence.current++;setBusy(false);setRasterLayers(old=>old.filter(l=>l.asset.id!==layer.asset.id));
                   if(imageLayer?.id===layer.asset.id){setImageLayer(null);setTraceMode(false);setPromptMode(null);setPositivePoints([]);setNegativePoints([]);setBoxPoints([]);}
-                  if(demLayer?.id===layer.asset.id){setDemLayer(null);setExtentMode(false);setExtentGeometry(null);setTerrainPicking(false);setTerrainOrigin(null);setTerrainHover(null);setTerrainFeatures([]);}
+                  if(demLayer?.id===layer.asset.id){setDemLayer(null);setExtentMode(false);setExtentGeometry(null);setTerrainPicking(false);setTerrainOrigin(null);setTerrainHover(null);}
                   setMessage('Raster removed from map. Source retained in library.');
                 }}>Remove</button></div>
               </div>)}
@@ -1475,7 +1475,7 @@ export default function App() {
                 setSelectionBoxMode(false);setLabelMoveMode(false);setPendingAnnotation(null);
               }}
               onHover={setTerrainHover}
-              onPreview={value=>{if(projectCurrent()){setTerrainFeatures(value);if(value.length)setTerrainVisible(true);}}}
+              onPreview={value=>{if(projectCurrent())setTerrainFeatures(value);}}
               onSaved={()=>{if(projectCurrent())setRefreshToken(v=>v+1);}}/>
           </section>
 

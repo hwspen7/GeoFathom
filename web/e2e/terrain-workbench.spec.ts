@@ -32,6 +32,7 @@ with tempfile.TemporaryDirectory() as directory:
  await page.getByLabel('Active project').selectOption(id);
  await page.getByRole('navigation',{name:'Workspace tools'}).getByRole('button',{name:'Terrain',exact:true}).click();
  await page.getByLabel('DEM elevation layer').selectOption(fixture.id);
+ await page.getByLabel('Confirm DEM meter elevations').check();
  await page.getByRole('button',{name:/DEM study area/}).click();
  await page.getByRole('navigation',{name:'Workspace tools'}).getByRole('button',{name:'Terrain',exact:true}).click();
  const tools=page.getByLabel('Terrain tools');
@@ -73,6 +74,7 @@ with tempfile.TemporaryDirectory() as directory:
  await page.reload();
  await page.getByRole('navigation',{name:'Workspace tools'}).getByRole('button',{name:'Terrain',exact:true}).click();
  await page.getByLabel('DEM elevation layer').selectOption(fixture.id);
+ await page.getByLabel('Confirm DEM meter elevations').check();
  await page.getByRole('button',{name:/DEM profile line/}).click();
  await page.getByLabel('Terrain tools').getByRole('button',{name:'Elevation profile',exact:true}).click();
  await page.getByRole('button',{name:'Run terrain operation'}).click();

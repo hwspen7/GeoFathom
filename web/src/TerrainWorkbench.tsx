@@ -55,14 +55,20 @@ function MeshView({mesh}:{mesh:TerrainMesh}){
 }
 
 type Operation=TerrainOperation|'slope'|'profile';
+type ProfileResult=Awaited<ReturnType<typeof terrainProfile>>;
+interface TerrainRecord {
+ id:string;title:string;operation:Operation;source:RasterAsset;geometry:GeoJSON.Geometry;
+ inputKey:string;visible:boolean;createdAt:number;
+ advanced?:AdvancedTerrainResult;slope?:TerrainResult;profile?:ProfileResult;
+}
 const modes:Array<{id:Operation;title:string}>=[
  {id:'slope',title:'Slope / aspect'},{id:'profile',title:'Elevation profile'},{id:'contours',title:'Contours'},
  {id:'volume',title:'Cut / fill'},{id:'visibility',title:'Viewshed'},{id:'watershed',title:'Watershed (D8)'},{id:'mesh',title:'3D terrain'}
 ];
 const units:Record<string,string>={cut_m3:'m³',fill_m3:'m³',net_cut_m3:'m³',covered_grid_area_m2:'m²',reference_elevation_m:'m',
- contour_lines:'',contour_levels:'',interval_m:'m',visible_cells:'',visible_grid_area_m2:'m²',unknown_cells:'',upstream_cells:'',upstream_grid_area_m2:'m²',minimum_m:'m',maximum_m:'m'};
+ contour_lines:'',contour_levels:'',dataset_overlap_pct:'%',valid_grid_pct:'%',interval_m:'m',visible_cells:'',visible_grid_area_m2:'m²',unknown_cells:'',upstream_cells:'',upstream_grid_area_m2:'m²',minimum_m:'m',maximum_m:'m'};
 const names:Record<string,string>={cut_m3:'Cut',fill_m3:'Fill',net_cut_m3:'Net cut',covered_grid_area_m2:'Grid area',reference_elevation_m:'Reference',
- contour_lines:'Contour paths',contour_levels:'Elevation levels',interval_m:'Interval',visible_cells:'Visible cells',visible_grid_area_m2:'Visible area',unknown_cells:'Unknown cells',
+ contour_lines:'Contour paths',contour_levels:'Elevation levels',dataset_overlap_pct:'DEM footprint coverage',valid_grid_pct:'Valid grid coverage',interval_m:'Interval',visible_cells:'Visible cells',visible_grid_area_m2:'Visible area',unknown_cells:'Unknown cells',
  upstream_cells:'Upstream cells',upstream_grid_area_m2:'Catchment area',minimum_m:'Lowest elevation',maximum_m:'Highest elevation'};
 const fmt=(n:number)=>n.toLocaleString('en-US',{maximumFractionDigits:2});
 interface Props{
@@ -79,8 +85,14 @@ export default function TerrainWorkbench(p:Props){
  const [resolution,setResolution]=useState<30|90>(30),[fetching,setFetching]=useState(false),[sourceInfo,setSourceInfo]=useState('');
  const [interval,setInterval]=useState('10'),[reference,setReference]=useState('0');
  const [lon,setLon]=useState(''),[lat,setLat]=useState(''),[height,setHeight]=useState('1.7'),[target,setTarget]=useState('0');
- const [result,setResult]=useState<AdvancedTerrainResult|null>(null),[slope,setSlope]=useState<TerrainResult|null>(null);
- const [profile,setProfile]=useState<Awaited<ReturnType<typeof terrainProfile>>|null>(null);
+ const [records,setRecords]=useState<TerrainRecord[]>([]);
+ const [selectedRecord,setSelectedRecord]=useState<string|null>(null);
+ const selected=records.find(r=>r.id===selectedRecord);
+ const result=selected?.advanced??null,slope=selected?.slope??null,profile=selected?.profile??null;
+ const analysisRequest=useRef<AbortController|null>(null);
+ const alive=useRef(true);
+ const sourceIntent=useRef(0);
+ const [verticalConfirmed,setVerticalConfirmed]=useState(false);
  const [live,setLive]=useState(false),[busy,setBusy]=useState(false),[importing,setImporting]=useState(false);
  const [error,setError]=useState(''),[info,setInfo]=useState('');
  const sequence=useRef(0),latest=useRef(p);latest.current=p;
@@ -88,7 +100,18 @@ export default function TerrainWorkbench(p:Props){
  const needsPoint=operation==='watershed'||operation==='visibility';
  const correctShape=operation==='profile'?p.geometry?.type==='LineString':area;
  const dem=p.raster?.bands===1?p.raster:null;
- const canRun=p.connected&&!!dem&&!!correctShape&&(!needsPoint||!!lon.trim()&&!!lat.trim());
+ const verified=!!dem&&(/Copernicus DEM GLO-/.test(dem.provenance)||verticalConfirmed);
+ const validNumber=(value:string,min:number,max:number)=>value.trim()!==''&&Number.isFinite(Number(value))&&Number(value)>=min&&Number(value)<=max;
+ const parametersValid=(operation!=='contours'||validNumber(interval,.01,1e6))&&
+   (operation!=='volume'||validNumber(reference,-12000,12000))&&
+   (!needsPoint||validNumber(lon,-180,180)&&validNumber(lat,-90,90))&&
+   (operation!=='visibility'||validNumber(height,0,1000)&&validNumber(target,0,1000));
+ const canRun=p.connected&&verified&&!!correctShape&&parametersValid;
+ const inputKey=JSON.stringify([dem?.id,p.geometry,operation,interval,reference,lon,lat,height,target]);
+ const inputsChanged=!!selected&&selected.inputKey!==inputKey;
+ useEffect(()=>{setVerticalConfirmed(false);sourceIntent.current++;},[dem?.id]);
+ // Published result layers are independent from the currently selected input.
+ useEffect(()=>{latest.current.onPreview(records.filter(r=>r.visible).flatMap(r=>r.advanced?.features??[]));},[records]);
  useEffect(()=>{
    if(!p.active||!p.connected)return;
    let current=true;
@@ -97,51 +120,59 @@ export default function TerrainWorkbench(p:Props){
    return()=>{current=false;};
  },[p.active,p.connected,p.refreshToken]);
  useEffect(()=>{if(p.origin){setLon(String(p.origin[0]));setLat(String(p.origin[1]));}},[p.origin]);
- function resetResult(){
-   setResult(null);setSlope(null);setProfile(null);setInfo('');
-   latest.current.onPreview([]);latest.current.onHover(null);
+ function cancelAnalysis(){
+   sequence.current++;analysisRequest.current?.abort();analysisRequest.current=null;setBusy(false);
  }
  async function run(){
    if(!canRun||!dem||!p.geometry)return;
-   const ticket=++sequence.current;setBusy(true);setError('');resetResult();
+   // A live run replaces only the previous run with identical input, never
+   // hidden or historical results from different source geometry.
+   analysisRequest.current?.abort();
+   const controller=new AbortController();analysisRequest.current=controller;
+   const ticket=++sequence.current;setBusy(true);setError('');setInfo('');
+   const record:TerrainRecord={id:crypto.randomUUID(),title:modes.find(m=>m.id===operation)!.title,
+     operation,source:dem,geometry:structuredClone(p.geometry),inputKey,visible:true,createdAt:Date.now()};
    try{
-     if(operation==='profile'){
-       const value=await terrainProfile(dem.id,p.geometry);
-       if(ticket===sequence.current)setProfile(value);
-     }else if(operation==='slope'){
-       const value=await analyzeTerrain(dem.id,p.geometry);
-       if(ticket===sequence.current)setSlope(value);
-     }else{
-       const value=await advancedTerrain({image_id:dem.id,geometry:p.geometry,operation,
-         interval:Number(interval),reference:Number(reference),point:needsPoint?[Number(lon),Number(lat)]:null,
-         observer_height:Number(height),target_height:Number(target)});
-       if(ticket!==sequence.current)return;
-       setResult(value);latest.current.onPreview(value.features);
-     }
-   }catch(e){if(ticket===sequence.current)setError(e instanceof Error?e.message:'Terrain analysis failed.');}
-   finally{if(ticket===sequence.current)setBusy(false);}
+     if(operation==='profile')record.profile=await terrainProfile(dem.id,p.geometry,controller.signal);
+     else if(operation==='slope')record.slope=await analyzeTerrain(dem.id,p.geometry,controller.signal);
+     else record.advanced=await advancedTerrain({image_id:dem.id,geometry:p.geometry,operation,
+       interval:Number(interval),reference:Number(reference),point:needsPoint?[Number(lon),Number(lat)]:null,
+       observer_height:Number(height),target_height:Number(target)},controller.signal);
+     if(ticket!==sequence.current||controller.signal.aborted)return;
+     setRecords(old=>{
+       const kept=old.filter(r=>r.inputKey!==inputKey);
+       return [...kept,record];
+     });
+     setSelectedRecord(record.id);latest.current.onHover(null);
+   }catch(e){if(ticket===sequence.current&&!controller.signal.aborted)setError(e instanceof Error?e.message:'Terrain analysis failed.');}
+   finally{if(ticket===sequence.current){setBusy(false);analysisRequest.current=null;}}
  }
  useEffect(()=>{
-   sequence.current++;setBusy(false);setError('');resetResult();
-   if(!live||!canRun)return;
+   cancelAnalysis();setError('');setInfo('');latest.current.onHover(null);
+   if(!live||!canRun||!p.active)return;
    const timer=window.setTimeout(()=>void run(),450);
-   return()=>{window.clearTimeout(timer);sequence.current++;};
- },[p.projectId,p.geometry,dem?.id,operation,interval,reference,lon,lat,height,target,live,p.connected]);
- useEffect(()=>()=>{sequence.current++;},[]);
+   return()=>{window.clearTimeout(timer);sequence.current++;analysisRequest.current?.abort();};
+ },[inputKey,live,p.connected,p.active,verified]);
+ useEffect(()=>{
+   alive.current=true;
+   return()=>{alive.current=false;sequence.current++;sourceIntent.current++;analysisRequest.current?.abort();};
+ },[]);
  async function importDEM(e:ChangeEvent<HTMLInputElement>){
    const file=e.target.files?.[0];e.target.value='';if(!file)return;
+   const ticket=++sourceIntent.current;
    setImporting(true);setError('');
    try{
      if(!p.localImport&&!token.trim())throw Error('Enter import access token.');
      const item=await uploadImagery(file,token);
+     if(!alive.current||ticket!==sourceIntent.current)return;
      if(item.bands!==1)throw Error('Select a single-band DEM, not RGB imagery.');
      setAssets(old=>[item,...old.filter(v=>v.id!==item.id)]);
      latest.current.onSelectRaster(item);
-   }catch(e){setError(e instanceof Error?e.message:String(e));}
-   finally{setImporting(false);}
+   }catch(e){if(alive.current&&ticket===sourceIntent.current)setError(e instanceof Error?e.message:String(e));}
+   finally{if(alive.current)setImporting(false);}
  }
  async function fetchDEM(){
-   if(!p.connected||fetching)return;
+   if(!p.connected||fetching||importing)return;
    let bbox=p.viewport;
    if(p.geometry){
      const points=p.geometry.type==='LineString'?p.geometry.coordinates:p.geometry.type==='Polygon'?p.geometry.coordinates.flat():p.geometry.type==='MultiPolygon'?p.geometry.coordinates.flat(2):null;
@@ -152,25 +183,28 @@ export default function TerrainWorkbench(p:Props){
      }
    }
    if(!bbox)return;
+   const ticket=++sourceIntent.current;
    setFetching(true);setError('');setSourceInfo('');
    try{
      if(!p.localImport&&!token.trim())throw Error('Enter import access token.');
      const data=await fetchPublicDEM(bbox,resolution,token);
+     if(!alive.current||ticket!==sourceIntent.current)return;
      setAssets(old=>[data.asset,...old.filter(item=>item.id!==data.asset.id)]);
      latest.current.onSelectRaster(data.asset);
      setSourceInfo('GLO-'+resolution+' · '+data.valid_cells+'/'+data.total_cells+' cells · DSM'+(data.missing_tiles.length?' · partial coverage':''));
-   }catch(e){setError(e instanceof Error?e.message:String(e));}
-   finally{setFetching(false);}
+   }catch(e){if(alive.current&&ticket===sourceIntent.current)setError(e instanceof Error?e.message:String(e));}
+   finally{if(alive.current)setFetching(false);}
  }
  async function save(){
-   if(!p.projectId||!dem||!result||result.features.length>100)return;
+   if(!p.projectId||!selected||!result||result.features.length>512)return;
    const ticket=sequence.current;setBusy(true);setError('');
+   const source=selected.source;
    try{
      const saved=await saveFeatureBatch(p.projectId,result.features.map((f,i)=>({
        geometry:f.geometry,name:String(f.properties.name||result.operation)+' '+(i+1),
-       source:'DEM '+dem.name,properties:{...f.properties,source_image:dem.id,operation:result.operation}
+       source:'DEM '+source.name,properties:{...f.properties,source_image:source.id,operation:result.operation}
      })));
-     if(ticket===sequence.current){setInfo('Saved '+saved.created+' terrain features.');latest.current.onSaved();}
+     if(alive.current){latest.current.onSaved();if(ticket===sequence.current)setInfo('Saved '+saved.created+' terrain features.');}
    }catch(e){if(ticket===sequence.current)setError(e instanceof Error?e.message:'Save failed.');}
    finally{if(ticket===sequence.current)setBusy(false);}
  }
@@ -178,24 +212,26 @@ export default function TerrainWorkbench(p:Props){
    const payload=result?.features.length?{type:'FeatureCollection',features:result.features}:result??slope??profile;
    if(!payload)return;
    const link=document.createElement('a'),url=URL.createObjectURL(new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}));
-   link.href=url;link.download='terrain-'+operation+(result?.features.length?'.geojson':'.json');link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+   link.href=url;link.download='terrain-'+(selected?.operation??operation)+(result?.features.length?'.geojson':'.json');link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
  }
  return <div className="terrain-workbench professional-panel">
    <div className="terrain-source">
      <label>Elevation layer<select aria-label="DEM elevation layer" value={dem?.id??''}
-       onChange={e=>{const found=assets.find(item=>item.id===e.target.value);if(found)p.onSelectRaster(found);}}>
+       disabled={fetching||importing}
+       onChange={e=>{const found=assets.find(item=>item.id===e.target.value);if(found){sourceIntent.current++;p.onSelectRaster(found);}}}>
        <option value="">Select DEM</option>
        {[...assets,...(dem&&!assets.some(a=>a.id===dem.id)?[dem]:[])].map(asset=><option key={asset.id} value={asset.id}>{asset.name}</option>)}
      </select></label>
      {!p.localImport&&<details className="access-settings"><summary>Import access</summary><input type="password" aria-label="DEM import token" value={token} onChange={e=>setToken(e.target.value)}/></details>}
      <label className="raster-upload" title="Single-band DEM GeoTIFF, projected in meters, with meter elevations"><Mountain size={14}/> {importing?'Importing…':'Import DEM'}
-       <input type="file" aria-label="Import DEM" accept=".tif,.tiff" disabled={importing||!p.connected} onChange={e=>void importDEM(e)}/></label>
+       <input type="file" aria-label="Import DEM" accept=".tif,.tiff" disabled={importing||fetching||!p.connected} onChange={e=>void importDEM(e)}/></label>
      <div className="area-fields">
        <select aria-label="Public DEM resolution" value={resolution} onChange={e=>setResolution(Number(e.target.value) as 30|90)}><option value={30}>GLO-30 · 30 m</option><option value={90}>GLO-90 · 90 m</option></select>
        <button disabled={!p.connected||!p.viewport||fetching||importing} title="Download real Copernicus DEM for selected shape or current map extent" onClick={()=>void fetchDEM()}>{fetching?'Fetching…':'Fetch DEM'}</button>
      </div>
      {sourceInfo&&<small className="compact-notice" title="Copernicus DEM is a digital surface model including buildings and vegetation. Public coverage varies.">{sourceInfo}</small>}
-     {dem&&<small className="compact-notice" title={dem.provenance}>{dem.width} × {dem.height} · {dem.crs} · m</small>}
+     {dem&&<small className="compact-notice" title={dem.provenance}>{dem.width} × {dem.height} · {dem.crs} · elevation m</small>}
+     {dem&&!/Copernicus DEM GLO-/.test(dem.provenance)&&<label className="gis-check"><input aria-label="Confirm DEM meter elevations" type="checkbox" checked={verticalConfirmed} onChange={e=>setVerticalConfirmed(e.target.checked)}/> Confirm single-band meter elevations</label>}
    </div>
    <div className="terrain-command-grid" aria-label="Terrain tools">
      {modes.map(mode=><button key={mode.id} type="button" aria-pressed={operation===mode.id} onClick={()=>setOperation(mode.id)}>{mode.title}</button>)}
@@ -221,12 +257,25 @@ export default function TerrainWorkbench(p:Props){
        <label>Target (m)<input aria-label="Target height" type="number" min="0" value={target} onChange={e=>setTarget(e.target.value)}/></label></div>}
      </>}
      <div className="terrain-run-row"><button className="primary-tool" disabled={!canRun||busy} onClick={()=>void run()}>{busy?'Calculating…':'Run terrain operation'}</button>
+       {busy&&<button onClick={()=>{setLive(false);cancelAnalysis();setInfo('Analysis request cancelled.');}}>Cancel</button>}
        <label><input aria-label="Live terrain updates" type="checkbox" checked={live} onChange={e=>setLive(e.target.checked)}/> Live</label></div>
      {!p.connected&&<small className="compact-notice">API offline</small>}
      {!dem&&<small className="compact-notice">DEM required</small>}
+     {dem&&!verified&&<small className="compact-notice">Confirm elevation units before analysis</small>}
+     {!parametersValid&&<small className="discovery-error">Check numeric parameters</small>}
    </div>
+   {!!records.length&&<section className="terrain-run-list" aria-label="Analysis result layers">
+     <div className="section-heading">Analysis results · {records.length}</div>
+     {records.map(record=><div key={record.id} className={'scratch-row '+(selectedRecord===record.id?'active':'')}>
+       <input type="checkbox" aria-label={'Show '+record.title+' '+record.id} checked={record.visible} disabled={!record.advanced?.features.length}
+         onChange={e=>setRecords(old=>old.map(r=>r.id===record.id?{...r,visible:e.target.checked}:r))}/>
+       <button title={record.source.name} onClick={()=>{setSelectedRecord(record.id);setInfo('');latest.current.onHover(null);}}>{record.title} · {new Date(record.createdAt).toLocaleTimeString()}</button>
+       <button aria-label={'Remove result '+record.title} onClick={()=>{setRecords(old=>old.filter(r=>r.id!==record.id));if(selectedRecord===record.id)setSelectedRecord(null);}}>×</button>
+     </div>)}
+   </section>}
    {(result||slope||profile)&&<section className="terrain-output" aria-label="Terrain results">
-     <div className="section-heading">Results <button onClick={exportResult} title="Export result data">Export</button></div>
+     <div className="section-heading">{selected?.title} <button onClick={exportResult} title="Export result data">Export</button></div>
+     <small className="compact-notice">{selected?.source.name}{inputsChanged?' · previous inputs':''}</small>
      {slope&&<><div className="terrain-metrics">
        <div><span>Elevation range</span><strong>{fmt(slope.elevation_min_m)}–{fmt(slope.elevation_max_m)} m</strong></div>
        <div><span>Mean elevation</span><strong>{fmt(slope.elevation_mean_m)} m</strong></div>
@@ -238,13 +287,13 @@ export default function TerrainWorkbench(p:Props){
      {profile&&<ProfilePlot samples={profile.samples} length={profile.length_m} onHover={p.onHover}/>}
      {result&&<>
        <div className="terrain-metrics">{Object.entries(result.metrics).map(([k,v])=><div key={k}><span>{names[k]??k.replaceAll('_',' ')}</span><strong>{fmt(v)} {units[k]??''}</strong></div>)}</div>
-       {operation==='volume'&&<MetricBars label="Earthwork volume (m³)" values={[{name:'Cut',value:result.metrics.cut_m3,color:'#b87848'},{name:'Fill',value:result.metrics.fill_m3,color:'#3b82ab'}]}/>}
-       {operation==='visibility'&&<MetricBars label="Visibility (cells)" values={[{name:'Visible',value:result.metrics.visible_cells,color:'#34885c'},{name:'Unknown',value:result.metrics.unknown_cells,color:'#9099a2'},{name:'Hidden',value:Math.max(0,result.valid_cells-result.metrics.visible_cells-result.metrics.unknown_cells),color:'#c17d55'}]}/>}
-       {operation==='watershed'&&<MetricBars label="Catchment (cells)" values={[{name:'Upstream',value:result.metrics.upstream_cells,color:'#3687b9'},{name:'Other',value:Math.max(0,result.valid_cells-result.metrics.upstream_cells),color:'#9ba7ad'}]}/>}
+       {result.operation==='volume'&&<MetricBars label="Earthwork volume (m³)" values={[{name:'Cut',value:result.metrics.cut_m3,color:'#b87848'},{name:'Fill',value:result.metrics.fill_m3,color:'#3b82ab'}]}/>}
+       {result.operation==='visibility'&&<MetricBars label="Visibility (cells)" values={[{name:'Visible',value:result.metrics.visible_cells,color:'#34885c'},{name:'Unknown',value:result.metrics.unknown_cells,color:'#9099a2'},{name:'Hidden',value:Math.max(0,result.valid_cells-result.metrics.visible_cells-result.metrics.unknown_cells),color:'#c17d55'}]}/>}
+       {result.operation==='watershed'&&<MetricBars label="Catchment (cells)" values={[{name:'Upstream',value:result.metrics.upstream_cells,color:'#3687b9'},{name:'Other',value:Math.max(0,result.valid_cells-result.metrics.upstream_cells),color:'#9ba7ad'}]}/>}
        {result.mesh&&<MeshView mesh={result.mesh}/>}
        <small className="compact-notice" title={result.warning}>{result.valid_cells} valid · {result.missing_cells} missing · Method ⓘ</small>
-       {result.features.length>0&&<div className="survey-action-bar"><button disabled={!p.projectId||busy||result.features.length>100} title={result.features.length>100?'Export GeoJSON for results exceeding the atomic project batch limit.':'Save to project'} onClick={()=>void save()}>Save terrain features</button>
-         <button onClick={()=>p.onPreview(result.features)}>Show on map</button><button onClick={()=>p.onPreview([])}>Hide</button></div>}
+       {result.features.length>0&&<div className="survey-action-bar"><button disabled={!p.projectId||busy||result.features.length>512} title={result.features.length>512?'Export GeoJSON for results exceeding the atomic project batch limit.':'Save to project'} onClick={()=>void save()}>Save terrain features</button>
+         <button onClick={()=>setRecords(old=>old.map(r=>r.id===selectedRecord?{...r,visible:true}:r))}>Show on map</button><button onClick={()=>setRecords(old=>old.map(r=>r.id===selectedRecord?{...r,visible:false}:r))}>Hide</button></div>}
      </>}
    </section>}
    {info&&<p className="project-info">{info}</p>}{error&&<p className="discovery-error" role="alert">{error}</p>}

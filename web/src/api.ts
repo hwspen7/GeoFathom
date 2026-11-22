@@ -82,8 +82,9 @@ async function rawRequest(path: string, init?: RequestInit): Promise<Response> {
   const fast=/^\/(measure|edit\/|health|capabilities|projects(?:\/|$))/.test(path);
   try{
     return await fetch(API_URL+path,{...init,headers:sessionHeaders(init?.headers),
-      signal:init?.signal??AbortSignal.timeout(fast?12000:120000)});
+      signal:init?.signal?AbortSignal.any([init.signal,AbortSignal.timeout(fast?12000:120000)]):AbortSignal.timeout(fast?12000:120000)});
   }catch(error){
+    if(init?.signal?.aborted)throw new DOMException('Request cancelled','AbortError');
     const detail=error instanceof Error?error.message:String(error);
     throw new ApiError('API connection failed. Start GeoFathom backend and reconnect. ('+detail+')',null);
   }
@@ -581,17 +582,17 @@ export interface TerrainResult {
   elevation_relief_m:number;mean_slope_deg:number;mean_aspect_deg:number|null;
   maximum_slope_deg:number;valid_pixels:number;engine:string;warning:string;
 }
-export function analyzeTerrain(imageId:string,geometry:GeoJSON.Geometry):Promise<TerrainResult> {
+export function analyzeTerrain(imageId:string,geometry:GeoJSON.Geometry,signal?:AbortSignal):Promise<TerrainResult> {
   return request('/terrain/analyze',{
-    method:'POST',headers:{'Content-Type':'application/json'},
+    signal,method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({image_id:imageId,geometry,vertical_unit:'meter'}),
   });
 }
-export function terrainProfile(imageId:string,geometry:GeoJSON.Geometry):Promise<{
+export function terrainProfile(imageId:string,geometry:GeoJSON.Geometry,signal?:AbortSignal):Promise<{
   samples:Array<{distance_m:number;elevation_m:number|null;coordinate?:[number,number]}>;length_m:number;warning:string;
 }> {
   return request('/terrain/profile',{
-    method:'POST',headers:{'Content-Type':'application/json'},
+    signal,method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({image_id:imageId,geometry,samples:80}),
   });
 }
@@ -974,8 +975,8 @@ export interface AdvancedTerrainResult {
   features:Array<GeoJSON.Feature<GeoJSON.Geometry,Record<string,unknown>>>;mesh?:TerrainMesh;
 }
 export function advancedTerrain(body:{image_id:string;geometry:GeoJSON.Geometry;operation:TerrainOperation;
-  interval:number;reference:number;point:[number,number]|null;observer_height:number;target_height:number}):Promise<AdvancedTerrainResult>{
-  return request('/terrain/advanced',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  interval:number;reference:number;point:[number,number]|null;observer_height:number;target_height:number},signal?:AbortSignal):Promise<AdvancedTerrainResult>{
+  return request('/terrain/advanced',{signal,method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
 }
 
 export function bufferGeometry(geometry:GeoJSON.Geometry,distance_m:number):Promise<EditResponse&{warning:string}>{
