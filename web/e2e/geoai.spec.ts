@@ -8,6 +8,7 @@ test.beforeEach(async({page})=>{
 
 test('GeoAI controls expose distinct spectral, change and model workflows',async({page})=>{
   await page.goto('/');
+    await page.getByRole('navigation',{name:'Workspace tools'}).getByRole('button',{name:'Raster / AI',exact:true}).click();
   await page.getByText('GeoAI raster analysis & change detection').click();
   const mode=page.getByLabel('GeoAI analysis operation');
   await expect(mode).toBeVisible();
@@ -33,6 +34,7 @@ test('GeoAI controls expose distinct spectral, change and model workflows',async
 test('Remote STAC COG analysis exposes fixed catalog and cloud mask controls',
   async({page})=>{
     await page.goto('/');
+    await page.getByRole('navigation',{name:'Workspace tools'}).getByRole('button',{name:'Raster / AI',exact:true}).click();
     await page.getByText('GeoAI raster analysis & change detection').click();
     await page.getByLabel('GeoAI analysis operation').selectOption('stac_ndvi');
     await expect(page.getByLabel('Remote STAC collection'))

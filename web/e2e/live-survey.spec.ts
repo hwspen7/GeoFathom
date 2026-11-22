@@ -23,8 +23,8 @@ test('toolbar offers live area, exact dimensions and basemap switching',async({p
  await expect(label).toHaveText(exact!);
  await page.getByLabel('Basemap',{exact:true}).selectOption('blank');
  await expect(label).toHaveText(exact!);
- await page.getByLabel('Map dimensions').uncheck();
+ await page.getByLabel('Map dimensions',{exact:true}).uncheck();
  await expect(label).toHaveCount(0);
- await page.getByLabel('Map dimensions').check();
+ await page.getByLabel('Map dimensions',{exact:true}).check();
  await expect(label).toHaveCount(1);
 });

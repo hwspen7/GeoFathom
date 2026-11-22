@@ -43,6 +43,7 @@ test('professional spatial QA detects overlap and prints a valid real PDF',async
   expect(other.status()).toBe(201);
   await page.reload();
   await expect(page.getByLabel('Active project')).toHaveValue(id);
+  await page.getByRole('navigation',{name:'Workspace tools'}).getByRole('button',{name:'Analysis',exact:true}).click();
   await page.locator('details').filter({hasText:'Topology quality inspection'})
     .locator('summary').click();
   await page.getByLabel('Run topology QA').click();
@@ -75,6 +76,7 @@ test('graduated choropleth writes real breaks; CRS grid converts and persists',a
     await add(page,id,'Asset '+i,{type:'Point',coordinates:[i*.002,22]},
       {height});
   await page.reload();
+  await page.getByRole('navigation',{name:'Workspace tools'}).getByRole('button',{name:'Cartography',exact:true}).click();
   await page.locator('details').filter({hasText:'Graduated numeric choropleth'})
     .locator('summary').click();
   await page.getByLabel('Graduated numeric field').fill('height');
@@ -105,6 +107,7 @@ test('P2 jobs and optional backend status work without configuring cloud service
   const id=await create(page,'P2 background workflows');
   await add(page,id,'Field A',rectangle(0,22));
   await page.reload();
+  await page.getByRole('navigation',{name:'Workspace tools'}).getByRole('button',{name:'Data',exact:true}).click();
   await page.locator('details').filter({hasText:'Persistent background GIS jobs'})
     .locator('summary').click();
   await page.getByLabel('Background GIS job type').selectOption('export_geojson');
@@ -135,6 +138,7 @@ test('drawing selection rectangle selects actual saved map features',async({page
   await page.reload();
   const map=page.getByLabel('Interactive geospatial map');
   await expect(map).toHaveAttribute('data-label-layer-ready','true',{timeout:25000});
+  await page.getByRole('navigation',{name:'Workspace tools'}).getByRole('button',{name:'Analysis',exact:true}).click();
   await page.locator('details').filter({hasText:'Select by location'})
     .locator('summary').click();
   await page.getByLabel('Draw selection rectangle').click();
@@ -164,6 +168,7 @@ test('P1 drag a saved point label and commit revisioned offset fields',async({pa
     const r=await page.request.get(API+'/projects/'+id+'/workspace');
     return (await r.json()).layers[0].style.labels.enabled;
   }).toBe(true);
+  await page.getByRole('navigation',{name:'Workspace tools'}).getByRole('button',{name:'Cartography',exact:true}).click();
   await page.locator('details').filter({hasText:'Advanced label placement & callouts'})
     .locator('summary').click();
   await page.getByLabel('Label rule field').fill('category');

@@ -63,6 +63,8 @@ export default function App() {
   const [basemap,setBasemap]=useState<BasemapId>('street');
   const [toolbarTarget,setToolbarTarget]=useState<HTMLDivElement|null>(null);
   const [showTools,setShowTools]=useState(true);
+  const [activeTool,setActiveTool]=useState('tools-survey');
+  const [terrainFeatures,setTerrainFeatures]=useState<GeoJSON.Geometry[]>([]);
   const [showMeasurements,setShowMeasurements]=useState(true);
   const [rasterVisible,setRasterVisible]=useState(true);
   const [rasterOpacity,setRasterOpacity]=useState(.88);
@@ -232,8 +234,8 @@ export default function App() {
 
 
   function revealPanel(id:string){
-    setShowTools(true);
-    requestAnimationFrame(()=>document.getElementById(id)?.scrollIntoView({block:'start'}));
+    setShowTools(true);setActiveTool(id);
+    requestAnimationFrame(()=>document.getElementById(id)?.scrollIntoView({block:'nearest'}));
   }
 
   useEffect(() => {
@@ -510,7 +512,7 @@ export default function App() {
     setSelectionBoxMode(false);setSelectionBox(null);
     setSpatialSelected([]);setQualityIssues([]);setProjectGrid(null);
     setLabelMoveMode(false);
-    setExternalFeatures([]);setPagedFeatures([]);
+    setExternalFeatures([]);setTerrainFeatures([]);setPagedFeatures([]);
     setPromptMode(null);setPositivePoints([]);setNegativePoints([]);setBoxPoints([]);
     setPendingShared(null);
     lastValid.current = null;
@@ -582,12 +584,26 @@ export default function App() {
         <div className="gis-brand"><Globe2 size={19}/> <strong>GeoFathom</strong></div>
         <nav aria-label="Workspace tools" className="gis-menu">
           {([['Survey','tools-survey'],['GIS','tools-gis'],['Analysis','tools-spatial'],['Raster / AI','tools-raster'],['Cartography','tools-style'],['Data','tools-services'],['Assistant','tools-ai']] as const).map(([title,id])=>
-            <button key={id} onClick={()=>revealPanel(id)}>{title}</button>)}
+            <button key={id} aria-pressed={activeTool===id&&showTools} onClick={()=>revealPanel(id)}>{title}</button>)}
         </nav>
         <button className="gis-inspector-toggle" aria-pressed={showTools} onClick={()=>setShowTools(v=>!v)}>Inspector</button>
         <span className="gis-connection">{capabilities?<Wifi size={14}/>:<WifiOff size={14}/>} {capabilities?'Connected':'Offline'}</span>
       </header>
-      <div className="gis-toolbar" aria-label="Survey toolbar" ref={setToolbarTarget}/>
+      <div className="gis-toolbar" aria-label="Survey toolbar">
+        <div className="gis-navigation-tools">
+          <button aria-label="Pan and select" title="Pan and select · Esc" onClick={()=>{
+            geometrySequence.current++;setDrawingMode(null);setVertices([]);setEditing(false);setEdgeMoving(false);
+            setMoving(false);setTraceMode(false);setPromptMode(null);setSelectionBoxMode(false);setLabelMoveMode(false);
+            setPendingAnnotation(null);if(preview||pendingShared){setGeometry(lastValid.current);setPreview(null);setPendingShared(null);}
+          }}>Pan</button>
+          <button disabled={!measurement||!!preview} title="Zoom to selected geometry" onClick={()=>{
+            if(!measurement)return;
+            const [west,south,east,north]=measurement.bounds;
+            setFocus({longitude:(west+east)/2,latitude:(south+north)/2,bbox:[west,south,east,north],key:Date.now()});
+          }}>Fit selection</button>
+        </div>
+        <div className="gis-survey-commands" ref={setToolbarTarget}/>
+      </div>
       <div className="gis-body">
         <aside className="sidebar gis-layers">
           <div className="dock-heading"><Layers3 size={15}/> Project / Layers</div>
@@ -595,7 +611,7 @@ export default function App() {
           <section className="panel-section">
             <div className="section-heading"><Layers3 size={16} /><span>Projects & saved geometry</span></div>
             <ProjectsPanel
-              geometry={preview || pendingShared ? null : geometry}
+              geometry={busy || preview || pendingShared || drawingMode ? null : geometry}
               featureName={selectedPlace?.name || 'Custom boundary'}
               featureSource={geometrySource || selectedPlace?.source || 'User drawn'}
               featureProperties={featureProperties}
@@ -621,7 +637,7 @@ export default function App() {
                     setHistoryPulse(value=>value+1);
                   }
                   setPendingAnnotation(null);setPendingShared(null);setLinked(false);
-                  setPagedFeatures([]);setExternalFeatures([]);setExternalTiles([]);
+                  setPagedFeatures([]);setExternalFeatures([]);setTerrainFeatures([]);setExternalTiles([]);
                   setSpatialSelected([]);setQualityIssues([]);setProjectGrid(null);
                   setSelectionBox(null);setSelectionBoxMode(false);setLabelMoveMode(false);
                 }
@@ -645,7 +661,7 @@ export default function App() {
               <select aria-label="Basemap" value={basemap} onChange={event=>setBasemap(event.target.value as BasemapId)}>
                 {BASEMAPS.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}
               </select>
-              <label className="gis-check"><input type="checkbox" checked={showMeasurements} onChange={e=>setShowMeasurements(e.target.checked)}/> Map dimensions</label>
+              <label className="gis-check"><input aria-label="Map dimensions" type="checkbox" checked={showMeasurements} onChange={e=>setShowMeasurements(e.target.checked)}/> Map dimensions</label>
               {imageLayer&&<><label className="gis-check"><input type="checkbox" checked={rasterVisible} onChange={e=>setRasterVisible(e.target.checked)}/> {imageLayer.name}</label>
               <label>Raster opacity <input aria-label="Raster opacity" type="range" min="0" max="1" step=".05" value={rasterOpacity} onChange={e=>setRasterOpacity(Number(e.target.value))}/></label></>}
             </section>
@@ -842,7 +858,7 @@ export default function App() {
               }
             }}
             discovered={[...discovered.map(place => place.geometry).filter((item): item is GeoJSON.Geometry => item !== null),
-              ...externalFeatures,...splitParts.slice(1)]}
+              ...externalFeatures,...terrainFeatures,...splitParts.slice(1)]}
             annotationMode={Boolean(pendingAnnotation)}
             onAnnotationClick={async position=>{
               if(!pendingAnnotation||busy||pendingAnnotation.projectId!==projectIdentity.current)return;
@@ -964,7 +980,7 @@ export default function App() {
             </div>
           </section>
 
-          <section id="tools-survey" className="panel-section">
+          <section id="tools-survey" hidden={activeTool!=='tools-survey'} className="panel-section">
             <div className="section-heading"><Pencil size={16} /><span>Survey & geometry editor</span><span className="section-pill">Precision</span></div>
             <SurveyTools
               toolbarTarget={toolbarTarget} busy={busy} locked={selectedLocked}
@@ -1054,7 +1070,7 @@ export default function App() {
          </section>
 
 
-          <section id="tools-raster" className="panel-section">
+          <section id="tools-raster" hidden={activeTool!=='tools-raster'} className="panel-section">
             <div className="section-heading"><Layers3 size={16} /><span>Georeferenced imagery</span></div>
             <RasterPanel
               asset={imageLayer}
@@ -1138,7 +1154,7 @@ export default function App() {
          </section>
 
 
-          <section id="tools-gis" className="panel-section">
+          <section id="tools-gis" hidden={activeTool!=='tools-gis'} className="panel-section">
             <div className="section-heading"><Layers3 size={16}/><span>Professional GIS tools</span></div>
             <ProfessionalPanel
               key={activeProjectId ?? 'no-project'}
@@ -1154,11 +1170,11 @@ export default function App() {
               }}
             />
             <TerrainWorkbench key={activeProjectId??'no-project'} projectId={activeProjectId} geometry={geometry}
-              raster={imageLayer} onPreview={value=>{if(projectCurrent())setExternalFeatures(value);}}
+              raster={imageLayer} onPreview={value=>{if(projectCurrent())setTerrainFeatures(value);}}
               onSaved={()=>{if(projectCurrent())setRefreshToken(v=>v+1);}}/>
           </section>
 
-          <section id="tools-spatial" className="panel-section">
+          <section id="tools-spatial" hidden={activeTool!=='tools-spatial'} className="panel-section">
             <div className="section-heading"><Layers3 size={16}/><span>GIS selection, QA & print layout</span></div>
             <SpatialToolsPanel
               key={activeProjectId ?? 'no-project'}
@@ -1186,7 +1202,7 @@ export default function App() {
             />
           </section>
 
-          <section id="tools-style" className="panel-section">
+          <section id="tools-style" hidden={activeTool!=='tools-style'} className="panel-section">
             <div className="section-heading"><Layers3 size={16}/><span>Advanced cartography & EPSG</span></div>
             <CartographyProPanel
               key={activeProjectId ?? 'no-project'}
@@ -1208,7 +1224,7 @@ export default function App() {
             />
           </section>
 
-          <section id="tools-services" className="panel-section">
+          <section id="tools-services" hidden={activeTool!=='tools-services'} className="panel-section">
             <div className="section-heading"><Layers3 size={16}/><span>OGC, indexed stores & background jobs</span></div>
             <DataServicesPanel
               key={activeProjectId ?? 'no-project'}
@@ -1223,7 +1239,7 @@ export default function App() {
           </section>
 
 
-          <section id="tools-ai" className="panel-section">
+          <section id="tools-ai" hidden={activeTool!=='tools-ai'} className="panel-section">
             <div className="section-heading"><Sparkles size={16} /><span>Ask GeoFathom</span><span className="section-pill">Assistant</span></div>
             <ModelControls modelId={modelId} onChange={setModelId} />
             <form onSubmit={runAssistant} className="prompt-form">

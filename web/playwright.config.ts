@@ -1,6 +1,9 @@
 import { defineConfig,devices } from '@playwright/test';
+import {resolve} from 'node:path';
 
 const freshServer = !!process.env.CI || process.env.GEOFATHOM_E2E_FRESH === '1';
+const testDatabase=process.env.GEOFATHOM_E2E_DATABASE_PATH||'data/e2e-geofathom.sqlite';
+const testImagery=resolve('..',testDatabase)+'.imagery';
 
 export default defineConfig({
   testDir:'./e2e',
@@ -29,7 +32,8 @@ export default defineConfig({
       timeout:90_000,reuseExistingServer:!freshServer,
       stderr:'pipe',
       env:{...process.env,
-        GEOFATHOM_DATABASE_PATH:process.env.GEOFATHOM_E2E_DATABASE_PATH || 'data/e2e-geofathom.sqlite',
+        GEOFATHOM_DATABASE_PATH:testDatabase,
+        GEOFATHOM_IMAGERY_DIR:testImagery,
         GEOFATHOM_CORS_ORIGINS:'http://localhost:5173',
       },
     },

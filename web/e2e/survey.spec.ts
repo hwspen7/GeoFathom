@@ -71,6 +71,7 @@ test('survey editor draws, repositions vertices, supports undo and saves project
 
 test('professional GIS panel exposes attributes, vector formats and DEM analysis',async({page})=>{
   await page.goto('/');
+  await page.getByRole('navigation',{name:'Workspace tools'}).getByRole('button',{name:'GIS',exact:true}).click();
   await expect(page.getByText('Professional GIS tools')).toBeVisible();
   await page.getByText(/Attribute table/).click();
   await expect(page.getByLabel('Attribute search field')).toBeVisible();
@@ -85,6 +86,7 @@ test('import KML, query the attribute table and persist a bulk property update',
   await page.goto('/');
   await page.getByLabel('New project name').fill('Vector browser test');
   await page.getByRole('button',{name:'Create project'}).click();
+  await page.getByRole('navigation',{name:'Workspace tools'}).getByRole('button',{name:'GIS',exact:true}).click();
   await page.getByText('GIS file import / export').click();
   const xml='<?xml version="1.0" encoding="UTF-8"?>'+
     '<kml xmlns="http://www.opengis.net/kml/2.2"><Document><Placemark>'+
