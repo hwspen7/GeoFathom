@@ -740,6 +740,7 @@ export default function App() {
           <section className="panel-section">
             <div className="section-heading"><Layers3 size={16}/><span>GIS selection, QA & print layout</span></div>
             <SpatialToolsPanel
+              key={activeProjectId ?? 'no-project'}
               projectId={activeProjectId}
               geometry={geometry}
               viewport={viewport}

@@ -38,7 +38,10 @@ test('professional spatial QA detects overlap and prints a valid real PDF',async
   const id=await create(page,'P0 quality and PDF');
   await add(page,id,'Parcel A',rectangle(0,22));
   await add(page,id,'Parcel B',rectangle(.015,22));
+  const other=await page.request.post(API+'/projects',{data:{name:'Unrelated empty QA project '+id}});
+  expect(other.status()).toBe(201);
   await page.reload();
+  await expect(page.getByLabel('Active project')).toHaveValue(id);
   await page.locator('details').filter({hasText:'Topology quality inspection'})
     .locator('summary').click();
   await page.getByLabel('Run topology QA').click();

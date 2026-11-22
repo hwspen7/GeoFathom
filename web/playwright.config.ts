@@ -7,8 +7,9 @@ export default defineConfig({
   timeout:45_000,
   expect:{timeout:12_000},
   fullyParallel:false,
-  workers:process.env.CI?1:undefined,
-  retries:process.env.CI?1:0,
+  // Exercise independent browser sessions against the same backend in CI.
+  workers:process.env.GEOFATHOM_E2E_WORKERS ? Number(process.env.GEOFATHOM_E2E_WORKERS) : (process.env.CI?1:undefined),
+  retries:0,
   reporter:process.env.CI?'github':'list',
   use:{
     baseURL:'http://localhost:5173',

@@ -63,7 +63,13 @@ test('style labels by field, persist symbol settings and reload the workspace',a
     const w=await savedWorkspace(page,id);
     return w.layers[0].style.symbol.fill_opacity;
   }).toBe(.6);
+  // Another browser may create a newer project before this tab reloads.
+  const other=await page.request.post('http://127.0.0.1:8000/projects',{
+    data:{name:'Concurrent unrelated project '+id},
+  });
+  expect(other.status()).toBe(201);
   await page.reload();
+  await expect(page.getByLabel('Active project')).toHaveValue(id);
   await page.locator('.layer-cartography summary').click();
   await expect(page.getByLabel('Enable layer labels')).toBeChecked();
   await expect(page.getByLabel('Label font size')).toHaveValue('18');

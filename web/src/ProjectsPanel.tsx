@@ -11,6 +11,8 @@ import {
   type WorkspaceFeature, type FeatureHistory,
 } from './api';
 
+import {rememberProject,restoreProject,storedProject} from './projectSelection';
+
 interface Props {
   geometry: GeoJSON.Geometry | null;
   featureName: string;
@@ -45,35 +47,75 @@ export default function ProjectsPanel({
   const [busy, setBusy] = useState(false);
   const notify = useRef(onWorkspace);
   notify.current = onWorkspace;
+  const selection = useRef('');
+  const requestSequence = useRef(0);
 
-  useEffect(() => {
-    getProjects().then(list => {
-      setProjects(list);
-      setSelected(current => list.find(p => p.id === current) ? current : (list[0]?.id ?? ''));
-    }).catch(() => setError('Cannot load saved projects.'));
+  const chooseProject = useCallback((id: string) => {
+    if (selection.current === id) return;
+    // Invalidate outstanding reads synchronously, before React commits the switch.
+    selection.current = id;
+    requestSequence.current++;
+    rememberProject(id);
+    setSelected(id);
+    setWorkspace(null);
+    setLayerId('');
+    setHistory(null);
+    setError('');
+    setInfo('');
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    getProjects().then(list => {
+      if (cancelled || selection.current) return;
+      setProjects(list);
+      const id = restoreProject(list, storedProject());
+      rememberProject(id);
+      chooseProject(id);
+    }).catch(() => {
+      if (!cancelled && !selection.current) setError('Cannot load saved projects.');
+    });
+    return () => { cancelled = true; };
+  }, [chooseProject]);
+
   const reload = useCallback(async (projectId: string): Promise<GeoWorkspace> => {
+    // Old mutation callbacks may still request a refresh; never publish them.
+    const current = selection.current === projectId;
+    const sequence = current ? ++requestSequence.current : -1;
     const result = await getWorkspace(projectId);
-    setWorkspace(result);
-    setLayerId(id => result.layers.some(l => l.id === id) ? id : (result.layers[0]?.id ?? ''));
+    if (selection.current === projectId && sequence === requestSequence.current) {
+      setWorkspace(result);
+      setLayerId(id => result.layers.some(l => l.id === id) ? id : (result.layers[0]?.id ?? ''));
+    }
     return result;
   }, []);
 
   useEffect(() => {
-    if (!selected) { setWorkspace(null); return; }
-    reload(selected).catch(() => setError('Cannot load project layers.'));
+    if (!selected) return;
+    let cancelled = false;
+    reload(selected).catch(() => {
+      if (!cancelled && selection.current === selected) setError('Cannot load project layers.');
+    });
+    return () => { cancelled = true; };
   }, [selected, reload, refreshToken]);
 
-  useEffect(() => { notify.current(workspace, selected || null); }, [workspace, selected]);
+  // Publish only a loaded workspace. QA and export must not target a project
+  // before its data is available, or see the previous project's workspace.
+  useEffect(() => {
+    notify.current(workspace, workspace ? selected : null);
+  }, [workspace, selected]);
 
   useEffect(() => {
-    if (!selected || !selectedFeatureId) {
-      setHistory(null);
-      return;
+    let cancelled = false;
+    setHistory(null);
+    if (selected && selectedFeatureId) {
+      getFeatureHistory(selected, selectedFeatureId).then(result => {
+        if (!cancelled && selection.current === selected) setHistory(result);
+      }).catch(() => {
+        if (!cancelled) setHistory(null);
+      });
     }
-    getFeatureHistory(selected, selectedFeatureId)
-      .then(setHistory).catch(() => setHistory(null));
+    return () => { cancelled = true; };
   }, [selected, selectedFeatureId, refreshToken]);
 
   useEffect(()=>{
@@ -96,8 +138,7 @@ export default function ProjectsPanel({
     try {
       const created = await newProject(draftName.trim());
       setProjects(await getProjects());
-      setSelected(created.id);
-      setWorkspace(null);
+      chooseProject(created.id);
       setDraftName('');
       setInfo('Project created.');
     } catch (cause) { setError(String(cause)); }
@@ -273,12 +314,13 @@ export default function ProjectsPanel({
       </form>
       {projects.length > 0 && (
         <>
-          <select aria-label="Active project" value={selected}
-            onChange={event => { setSelected(event.target.value); setWorkspace(null); }}>
+          <select aria-label="Active project" value={selected} disabled={busy}
+            onChange={event => chooseProject(event.target.value)}>
             {projects.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}
           </select>
 
           <div className="layer-header"><Layers3 size={14} /> Layers</div>
+          {selected && !workspace && !error && <p role="status">Loading selected project…</p>}
           {workspace?.layers.map(layer => (
             <div key={layer.id} className="layer-row">
               <button aria-label={layer.visible ? 'Hide layer' : 'Show layer'}
