@@ -115,7 +115,7 @@ def least_cost(z,valid,start,end,dx,dy,max_grade,cancel=None):
             # Both orthogonal neighbours must be traversable before a
             # diagonal step. Checking only one side permits a route to pass
             # through the corner of an impassable/no-data cell.
-            if dr and dc and not (valid[r,cc+dc] and valid[r+dr,c]):
+            if dr and dc and not (valid[r,cc] and valid[rr,c]):
                 continue
             horizontal=math.hypot(dr*dy,dc*dx)
             rise=float(z[rr,cc]-z[r,c]);grade=math.degrees(math.atan(abs(rise)/horizontal))
