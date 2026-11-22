@@ -112,9 +112,8 @@ def least_cost(z,valid,start,end,dx,dy,max_grade,cancel=None):
         for dr,dc,_ in D8:
             rr,cc=r+dr,c+dc
             if not (0<=rr<h and 0<=cc<w and valid[rr,cc]):continue
-            # Both orthogonal neighbours must be traversable before a
-            # diagonal step. Checking only one side permits a route to pass
-            # through the corner of an impassable/no-data cell.
+            # Both orthogonal neighbors of a diagonal move must be valid;
+            # this avoids crossing between two blocked/no-data cells.
             if dr and dc and not (valid[r,cc] and valid[rr,c]):
                 continue
             horizontal=math.hypot(dr*dy,dc*dx)
