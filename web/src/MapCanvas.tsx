@@ -729,16 +729,23 @@ export default function MapCanvas({
       const view=renderRef.current;
       if(!view.editing||!view.selected){
         container.current.setAttribute('data-rendered-handle-pixels','[]');
+        container.current.setAttribute('data-edit-handle-pixels','[]');
         return;
       }
       const pixels:Position[]=[];
+      const all:Position[]=[];
       for(const handle of verticesOf(view.selected).filter(node=>!node.midpoint)){
         const point=map.project(handle.point as maplibregl.LngLatLike);
+        all.push([point.x,point.y]);
         const matched=map.queryRenderedFeatures(point,{
           layers:['workspace-points'],
         }).some(item=>item.properties?.role==='edit-vertex');
         if(matched)pixels.push([point.x,point.y]);
       }
+      // Refresh test/diagnostic handle locations after the camera finishes
+      // animating. The React geometry effect alone can expose stale pixels
+      // when a searched place triggers fitBounds concurrently.
+      container.current.setAttribute('data-edit-handle-pixels',JSON.stringify(all));
       container.current.setAttribute('data-rendered-handle-pixels',JSON.stringify(pixels));
     }
     map.on('idle',inspectRenderedHandles);
