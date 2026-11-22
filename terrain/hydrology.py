@@ -27,6 +27,10 @@ def condition_dem(elevations, valid, cancel=None):
         raise ValueError("Valid DEM cells must contain finite elevations.")
     height, width = elevations.shape
     working = np.asarray(elevations, dtype=np.float64).copy()
+    # Track real depression fill separately from the artificial one-ULP
+    # routing gradient. A flat plateau must not report fabricated earthwork
+    # depth or volume merely because its cells now drain deterministically.
+    physical = working.copy()
     visited = ~valid.copy()
     outlets = np.zeros_like(valid, dtype=bool)
     outlets[0, :] |= valid[0, :]
@@ -58,13 +62,18 @@ def condition_dem(elevations, valid, cancel=None):
             visited[rr, cc] = True
             if not valid[rr, cc]:
                 continue
+            physical[rr, cc] = max(float(physical[rr, cc]),float(physical[r, c]))
             next_height = max(float(working[rr, cc]), nextafter(elevation, inf))
             working[rr, cc] = next_height
             heappush(heap, (next_height, rr, cc))
-    changes = working[valid] - np.asarray(elevations, dtype=np.float64)[valid]
+    original = np.asarray(elevations, dtype=np.float64)[valid]
+    # Volumes represent depression filling only, not numerical flat routing.
+    changes = physical[valid] - original
+    routing_adjustments = working[valid] > physical[valid]
     return working, {
         "conditioned_cells": int(np.count_nonzero(changes > 0)),
         "maximum_fill_depth_m": float(changes.max(initial=0)),
         "total_fill_depth_m": float(changes.sum()),
         "outlet_cells": int(outlets.sum()),
+        "flat_routing_cells": int(np.count_nonzero(routing_adjustments)),
     }
