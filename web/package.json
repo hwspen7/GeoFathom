@@ -7,7 +7,7 @@
     "build": "tsc -b && vite build",
     "typecheck": "tsc -b",
     "preview": "vite preview",
-    "test": "vitest run src",
+    "test": "vitest run src && node --test scripts/revision.test.mjs",
     "test:e2e": "playwright test",
     "test:coverage": "node scripts/coverage.mjs unit",
     "test:e2e:coverage": "node scripts/coverage.mjs browser",
