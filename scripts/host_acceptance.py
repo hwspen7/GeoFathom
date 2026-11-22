@@ -222,10 +222,13 @@ def main():
             for key in ("GEOFATHOM_TEST_POSTGIS_DSN", "GEOFATHOM_GPU_ACCEPTANCE_MODEL"):
                 web_env.pop(key, None)
             for command in (["npm.cmd", "ci", "--no-audit", "--no-fund"],
-                            ["npm.cmd", "run", "build"], ["npm.cmd", "test"],
+                            ["npm.cmd", "run", "build"], ["npm.cmd", "run", "test:coverage"],
                             ["npx.cmd", "playwright", "install", "chromium"],
                             ["npm.cmd", "run", "test:e2e"]):
                 run(command, web_env, ROOT / "web")
+            from quality_report import frontend_coverage
+            shutil.copytree(ROOT / "web" / "coverage", out / "web-coverage")
+            report["web_coverage"] = frontend_coverage(out / "web-coverage" / "coverage-summary.json")
             report["stages"].append("Web build, unit and browser E2E")
         report["passed"] = True
         report["scope"] = "backend-and-hardware" if args.skip_web else "backend-hardware-and-web"

@@ -207,3 +207,10 @@ python scripts/quality_report.py --python coverage.json --native native-coverage
 Release coverage targets are 95% Python statements, 90% Python branches,
 90% native CPU lines, 90% frontend statements and 85% frontend branches.
 These are gates to satisfy using measured reports, not asserted achievements.
+
+
+Frontend coverage uses the same locked Vitest version and coverage provider:
+`cd web; npm ci; npm run test:coverage`. The resulting summary includes all
+uncovered application files, so high coverage of three geometry helper suites
+must not be mistaken for high coverage of the whole UI. Browser E2E reports
+are separate from unit coverage.

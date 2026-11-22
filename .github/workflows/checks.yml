@@ -103,13 +103,9 @@ jobs:
       - name: Unit test precision editor and survey geometry
         working-directory: web
         run: npm test
-      - name: Resolve exact frontend coverage provider lock
+      - name: Collect frontend coverage using locked provider
         working-directory: web
-        run: |
-          npm install --package-lock-only --ignore-scripts --save-dev --save-exact "@vitest/coverage-v8@$(node -p "require('./package-lock.json').packages['node_modules/vitest'].version")"
-          node -e 'const fs=require("fs"),cp=require("child_process");const old=JSON.parse(cp.execSync("git show HEAD:web/package-lock.json",{encoding:"utf8"}));const next=JSON.parse(fs.readFileSync("package-lock.json","utf8"));const added=Object.fromEntries(Object.entries(next.packages).filter(([k,v])=>JSON.stringify(old.packages[k])!==JSON.stringify(v)));const removed=Object.keys(old.packages).filter(k=>!(k in next.packages));console.log("WEB_COVERAGE_LOCK_PATCH="+JSON.stringify({added,removed}));'
-          npm ci --no-audit --no-fund
-          npx vitest run src --coverage --coverage.reporter=json-summary --coverage.reporter=text --coverage.reporter=html
+        run: npm run test:coverage
       - uses: actions/upload-artifact@v4
         if: always()
         with:
