@@ -82,3 +82,49 @@ def test_numbered_migration_and_future_version_rejection(tmp_path,monkeypatch):
     with pytest.raises(RuntimeError,match="newer"):
         with _connect():
             pass
+
+
+def test_concurrent_cold_start_creates_every_project_and_index(monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+    from fastapi.testclient import TestClient
+    from core.main import app
+    monkeypatch.setenv("GEOFATHOM_AUTH_MODE","local")
+    barrier=Barrier(16)
+    def create(i):
+        with TestClient(app,raise_server_exceptions=True) as client:
+            barrier.wait(timeout=15)
+            result=client.post("/projects",json={"name":f"Cold start {i}"})
+            assert result.status_code==201,result.text
+            uid=result.json()["id"]
+            point=client.post(f"/projects/{uid}/features",json={
+                "name":"Point","source":"test",
+                "geometry":{"type":"Point","coordinates":[i,20]}})
+            assert point.status_code==201,point.text
+            return uid
+    with ThreadPoolExecutor(max_workers=16) as pool:
+        ids=list(pool.map(create,range(16)))
+    assert len(set(ids))==16
+    with _connect() as db:
+        assert db.execute("PRAGMA user_version").fetchone()[0]==2
+        assert db.execute("PRAGMA journal_mode").fetchone()[0]=="wal"
+        assert db.execute("SELECT count(*) FROM projects").fetchone()[0]==16
+        assert db.execute("SELECT count(*) FROM feature_bounds").fetchone()[0]==16
+        assert db.execute("PRAGMA integrity_check").fetchone()[0]=="ok"
+        assert not db.execute("PRAGMA foreign_key_check").fetchall()
+
+
+def test_failed_bootstrap_rolls_back_schema_and_can_retry(monkeypatch):
+    original=paging.prepare_rtree
+    def fail(connection):
+        original(connection)
+        raise RuntimeError("injected initialization failure")
+    monkeypatch.setattr(paging,"prepare_rtree",fail)
+    with pytest.raises(RuntimeError,match="injected initialization"):
+        create_project("Uncommitted")
+    from storage.database import database_path
+    with sqlite3.connect(database_path()) as db:
+        assert db.execute("PRAGMA user_version").fetchone()[0]==0
+        assert not db.execute("SELECT name FROM sqlite_master WHERE name IN ('projects','features','feature_bounds')").fetchall()
+    monkeypatch.setattr(paging,"prepare_rtree",original)
+    assert create_project("Recovered")["name"]=="Recovered"

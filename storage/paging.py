@@ -35,27 +35,27 @@ def prepare_rtree(conn:sqlite3.Connection)->None:
     """
     if not conn.in_transaction:
         register_rtree_functions(conn)
-    conn.executescript("""
-    CREATE VIRTUAL TABLE IF NOT EXISTS feature_bounds USING rtree(
+    # execute() preserves the caller's transaction; executescript() would
+    # implicitly commit before installing the triggers.
+    conn.execute("""CREATE VIRTUAL TABLE IF NOT EXISTS feature_bounds USING rtree(
       feature_rowid,minx,maxx,miny,maxy
-    );
-    CREATE TRIGGER IF NOT EXISTS feature_bounds_insert AFTER INSERT ON features
+    )""")
+    conn.execute("""CREATE TRIGGER IF NOT EXISTS feature_bounds_insert AFTER INSERT ON features
     BEGIN
       INSERT OR REPLACE INTO feature_bounds VALUES(
         new.rowid,geo_minx(new.geometry),geo_maxx(new.geometry),
         geo_miny(new.geometry),geo_maxy(new.geometry)
       );
-    END;
-    CREATE TRIGGER IF NOT EXISTS feature_bounds_update AFTER UPDATE OF geometry ON features
+    END""")
+    conn.execute("""CREATE TRIGGER IF NOT EXISTS feature_bounds_update AFTER UPDATE OF geometry ON features
     BEGIN
       INSERT OR REPLACE INTO feature_bounds VALUES(
         new.rowid,geo_minx(new.geometry),geo_maxx(new.geometry),
         geo_miny(new.geometry),geo_maxy(new.geometry)
       );
-    END;
-    CREATE TRIGGER IF NOT EXISTS feature_bounds_delete AFTER DELETE ON features
-    BEGIN DELETE FROM feature_bounds WHERE feature_rowid=old.rowid; END;
-    """)
+    END""")
+    conn.execute("""CREATE TRIGGER IF NOT EXISTS feature_bounds_delete AFTER DELETE ON features
+    BEGIN DELETE FROM feature_bounds WHERE feature_rowid=old.rowid; END""")
     # Backfill old databases without scanning/reparsing their features on
     # every API query (index count is checked once per connection).
     count=conn.execute("SELECT count(*) FROM features").fetchone()[0]

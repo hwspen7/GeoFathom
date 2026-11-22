@@ -7,6 +7,8 @@ Use a configured writable path; local deployments default to data/geofathom.sqli
 import json
 import os
 import sqlite3
+import time
+from threading import RLock
 from contextvars import ContextVar
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -18,6 +20,7 @@ from geometry.measure import GeometryError, measure_geometry
 
 _ROOT = Path(__file__).resolve().parent.parent
 job_database_override:ContextVar[str|None]=ContextVar("geofathom_job_database",default=None)
+_bootstrap_lock = RLock()
 
 
 class StorageError(ValueError):
@@ -49,30 +52,52 @@ def _connect() -> Iterator[sqlite3.Connection]:
         from .paging import register_rtree_functions,prepare_rtree
         register_rtree_functions(connection)
         if connection.execute("PRAGMA user_version").fetchone()[0] < 1:
-            connection.execute("PRAGMA journal_mode = WAL")
-            connection.executescript(
-                """
-            CREATE TABLE IF NOT EXISTS projects (
-                id TEXT PRIMARY KEY,
-                name TEXT NOT NULL,
-                description TEXT NOT NULL DEFAULT '',
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            );
-            CREATE TABLE IF NOT EXISTS features (
-                id TEXT PRIMARY KEY,
-                project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-                name TEXT NOT NULL,
-                geometry TEXT NOT NULL,
-                properties TEXT NOT NULL,
-                source TEXT NOT NULL,
-                created_at TEXT NOT NULL
-            );
-            CREATE INDEX IF NOT EXISTS features_project_id_idx ON features(project_id);
-                """
-            )
-            prepare_rtree(connection)
-            connection.execute("PRAGMA user_version = 1")
+            # Multiple first requests may reach a fresh database concurrently.
+            # Serialize the WAL transition locally, then use SQLite's write
+            # lock and recheck the marker for cross-process initialization.
+            with _bootstrap_lock:
+                if connection.execute("PRAGMA user_version").fetchone()[0] < 1:
+                    deadline = time.monotonic() + 10
+                    while True:
+                        try:
+                            mode = connection.execute("PRAGMA journal_mode = WAL").fetchone()[0]
+                            if mode.lower() != "wal":
+                                raise RuntimeError("SQLite WAL initialization failed.")
+                            break
+                        except sqlite3.OperationalError as error:
+                            # SQLite may reject a journal-mode transition
+                            # immediately, despite the configured busy timeout.
+                            if (getattr(error, "sqlite_errorcode", 0) & 255
+                                    not in (sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED)
+                                    or time.monotonic() >= deadline):
+                                raise
+                            time.sleep(.025)
+                    connection.execute("BEGIN IMMEDIATE")
+                    if connection.execute("PRAGMA user_version").fetchone()[0] < 1:
+                        connection.execute("""
+                            CREATE TABLE IF NOT EXISTS projects (
+                                id TEXT PRIMARY KEY,
+                                name TEXT NOT NULL,
+                                description TEXT NOT NULL DEFAULT '',
+                                created_at TEXT NOT NULL,
+                                updated_at TEXT NOT NULL
+                            )
+                        """)
+                        connection.execute("""
+                            CREATE TABLE IF NOT EXISTS features (
+                                id TEXT PRIMARY KEY,
+                                project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                                name TEXT NOT NULL,
+                                geometry TEXT NOT NULL,
+                                properties TEXT NOT NULL,
+                                source TEXT NOT NULL,
+                                created_at TEXT NOT NULL
+                            )
+                        """)
+                        connection.execute("CREATE INDEX IF NOT EXISTS features_project_id_idx ON features(project_id)")
+                        prepare_rtree(connection)
+                        connection.execute("PRAGMA user_version = 1")
+                    connection.commit()
         from .migrations import migrate
         migrate(connection)
         yield connection

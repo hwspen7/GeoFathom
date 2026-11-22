@@ -8,7 +8,7 @@ test('project switch clears selected saved geometry and cannot undo into another
   const suffix=Date.now().toString(36)+'-'+Math.random().toString(36).slice(2);
   async function create(name:string){
     const response=await page.request.post(API+'/projects',{data:{name:name+' '+suffix}});
-    expect(response.status()).toBe(201);
+    expect(response.status(),await response.text()).toBe(201);
     return (await response.json()).id as string;
   }
   const first=await create('Source project');
@@ -17,7 +17,7 @@ test('project switch clears selected saved geometry and cannot undo into another
     name:'Isolated parcel '+suffix,geometry:{type:'Polygon',coordinates:[[[10,20],[10.01,20],[10.01,20.01],[10,20]]]},
     source:'Test',
   }});
-  expect(original.status()).toBe(201);
+  expect(original.status(),await original.text()).toBe(201);
   await page.goto('/');
   const select=page.getByLabel('Active project');
   await expect(select.locator('option[value="'+first+'"]')).toHaveCount(1);
@@ -45,7 +45,7 @@ test('delayed authoritative geometry validation cannot publish after project swi
   const suffix=Date.now().toString(36)+'-'+Math.random().toString(36).slice(2);
   async function create(name:string){
     const response=await page.request.post(API+'/projects',{data:{name:name+' '+suffix}});
-    expect(response.status()).toBe(201);
+    expect(response.status(),await response.text()).toBe(201);
     return (await response.json()).id as string;
   }
   const first=await create('Pending geometry');

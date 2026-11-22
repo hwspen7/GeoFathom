@@ -23,8 +23,16 @@ export const test=base.extend({
     finally{
       if(!page.isClosed()){
         const records=await page.evaluate(()=>{
-          const old=JSON.parse(sessionStorage.getItem('__gf_coverage_documents')||'[]');
           const current=(window as typeof window & {__coverage__?:unknown}).__coverage__;
+          // A request-only failure may leave the page at about:blank.
+          // Such a document has no application coverage and storage is denied.
+          if (location.protocol !== 'http:' && location.protocol !== 'https:') return [];
+          let old:unknown[]=[];
+          try {
+            old=JSON.parse(sessionStorage.getItem('__gf_coverage_documents')||'[]');
+          } catch(error) {
+            if (!(error instanceof DOMException) || error.name!=='SecurityError') throw error;
+          }
           return current?[...old,current]:old;
         });
         mkdirSync(dir,{recursive:true});
