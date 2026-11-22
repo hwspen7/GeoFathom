@@ -198,3 +198,33 @@ def test_dem_clip_with_multiple_tiles_and_no_data_outside_polygon(source_dems,tm
     assert processed['valid_cells']==int(np.isfinite(snapshot['array']).sum())
     assert np.isnan(snapshot['array']).any()
     assert np.isnan(snapshot['nodata'])
+
+
+
+def test_area_average_downsampling_preserves_block_means(tmp_path,monkeypatch):
+    # Coarsening a 4x4 native DEM to a 2x2 output grid uses weighted
+    # source-cell averages rather than merely sampling four locations.
+    source=tmp_path/'input.tif'
+    native=np.arange(16,dtype=np.float32).reshape(4,4)
+    grid=from_origin(500003,4500007,10,10)
+    _write_dem_fixture(source,native,grid)
+    monkeypatch.setattr(dem_processing,'imagery_dir',lambda:tmp_path)
+    result={}
+    def capture(path,name,provenance):
+        with rasterio.open(path) as src:
+            result['data']=src.read(1)
+            result['transform']=src.transform
+        return {'width':2,'height':2}
+    monkeypatch.setattr(dem_processing,'store_upload',capture)
+    output=dem_processing.prepare_dem([source],'resample',
+                                      resolution_m=20,sampling='average')
+    assert output['resolution_m']==20
+    assert result['transform']==from_origin(500003,4500007,20,20)
+    np.testing.assert_allclose(result['data'],[[2.5,4.5],[10.5,12.5]])
+
+
+def test_invalid_dem_resampling_is_rejected_before_file_creation(source_dems):
+    sources,_=source_dems
+    with pytest.raises(RasterError,match='nearest, bilinear or average'):
+        dem_processing.prepare_dem([sources[0]],'resample',resolution_m=10,
+                                   sampling='cubic')
