@@ -50,9 +50,14 @@ export function ProfilePlot({samples,length,onHover}:{samples:ProfileSample[];le
 }
 export function MetricBars({label,values,max}:{label:string;values:Array<{name:string;value:number;color:string}>;max?:number}){
  const scale=max??Math.max(1,...values.map(v=>v.value));
- return <div className="terrain-bars" role="img" aria-label={label}>
-   <small>{label}</small>{values.map(v=><div key={v.name}><span>{v.name}</span><div className="terrain-bar-track"><span style={{width:Math.max(0,Math.min(100,v.value/scale*100))+'%',background:v.color}}/></div><strong>{fmt(v.value)}</strong></div>)}
- </div>;
+ const height=24+values.length*22;
+ return <svg className="terrain-chart metric-chart" role="img" aria-label={label} viewBox={'0 0 345 '+height}>
+   <text x="4" y="13" fontSize="10" fill="#526270">{label}</text>
+   {values.map((v,i)=><g key={v.name}><text x="4" y={30+i*22} fontSize="10" fill="#263340">{v.name}</text>
+    <rect x="97" y={19+i*22} width="169" height="13" fill="#dce3e7"/>
+    <rect x="97" y={19+i*22} width={Math.max(0,Math.min(169,169*v.value/scale))} height="13" fill={v.color}/>
+    <text x="340" y={30+i*22} fontSize="10" fill="#263340" textAnchor="end">{fmt(v.value)}</text></g>)}
+ </svg>;
 }
 
 /** Full-resolution cell histogram and cumulative valid-area curve. */
@@ -94,7 +99,8 @@ function chartCanvas(node:Element):Promise<HTMLCanvasElement>{
  if(node instanceof HTMLCanvasElement)return Promise.resolve(node);
  return new Promise((resolve,reject)=>{
    const img=new Image(),svg=node instanceof SVGElement;
-   const data=svg?new Blob([new XMLSerializer().serializeToString(node)],{type:'image/svg+xml;charset=utf-8'}):null;
+   let data:Blob|null=null;
+   if(svg){const copy=node.cloneNode(true) as SVGSVGElement;const vb=copy.viewBox.baseVal;copy.setAttribute('width',String(vb.width||600));copy.setAttribute('height',String(vb.height||300));copy.setAttribute('xmlns','http://www.w3.org/2000/svg');data=new Blob([new XMLSerializer().serializeToString(copy)],{type:'image/svg+xml;charset=utf-8'});}
    const url=data?URL.createObjectURL(data):(node as HTMLImageElement).src;
    img.onload=()=>{const c=document.createElement('canvas');c.width=svg?1200:img.naturalWidth;c.height=svg?Math.max(1,Math.round(1200*img.naturalHeight/img.naturalWidth)):img.naturalHeight;const ctx=c.getContext('2d');if(!ctx){if(data)URL.revokeObjectURL(url);reject(Error('Canvas unavailable'));return;}ctx.fillStyle='white';ctx.fillRect(0,0,c.width,c.height);ctx.drawImage(img,0,0,c.width,c.height);if(data)URL.revokeObjectURL(url);resolve(c);};
    img.onerror=()=>{if(data)URL.revokeObjectURL(url);reject(Error('Unable to render plot'));};img.src=url;
@@ -118,9 +124,12 @@ export function chartPDF(jpeg:Uint8Array,width:number,height:number){
 }
 export function ResultPane({expanded,onClose,children}:{expanded:boolean;onClose:()=>void;children:ReactNode}){
  const ref=useRef<HTMLDialogElement>(null),content=useRef<HTMLElement>(null),[error,setError]=useState('');
+ const [plots,setPlots]=useState<string[]>([]),[plot,setPlot]=useState(0);
+ const selector='svg.terrain-chart, .terrain-profile-chart svg, .dem-mesh canvas, .terrain-profile-chart img';
+ useEffect(()=>{if(!expanded)return;const names=Array.from(content.current?.querySelectorAll(selector)??[]).map(n=>n.getAttribute('aria-label')??n.getAttribute('alt')??'Plot');setPlots(old=>JSON.stringify(old)===JSON.stringify(names)?old:names);setPlot(i=>Math.min(i,Math.max(0,names.length-1)));},[expanded,children]);
  useEffect(()=>{if(expanded&&ref.current&&!ref.current.open)ref.current.showModal();},[expanded]);
  async function exportPlot(format:string){
-   const node=content.current?.querySelector('svg.terrain-chart, .terrain-profile-chart svg, .dem-mesh canvas, .terrain-profile-chart img, .terrain-aspect-rose');
+   const node=content.current?.querySelectorAll(selector)[plot];
    if(!node){setError('No graphical plot in this result. Use data export.');return;}
    try{
      setError('');
@@ -134,7 +143,7 @@ export function ResultPane({expanded,onClose,children}:{expanded:boolean;onClose
    }catch(e){setError(e instanceof Error?e.message:String(e));}
  }
  const panel=<section ref={content} className="terrain-output" aria-label="Terrain results">{children}
-   {expanded&&<div className="survey-action-bar">{['SVG','PNG','PDF'].map(format=><button key={format} onClick={()=>void exportPlot(format)}>{format}</button>)}</div>}
+   {expanded&&<div className="survey-action-bar"><select aria-label="Plot to export" value={plot} onChange={e=>setPlot(Number(e.target.value))}>{plots.map((name,i)=><option key={i} value={i}>{name}</option>)}</select>{['SVG','PNG','PDF'].map(format=><button key={format} onClick={()=>void exportPlot(format)}>{format}</button>)}</div>}
    {error&&<small role="alert">{error}</small>}</section>;
  return expanded?<dialog ref={ref} className="terrain-result-dialog" aria-label="Expanded terrain result" onCancel={e=>{e.preventDefault();onClose();}}>{panel}</dialog>:panel;
 }

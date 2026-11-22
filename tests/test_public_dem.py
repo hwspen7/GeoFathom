@@ -57,3 +57,31 @@ def test_usgs_grid_and_provenance(tmp_path,monkeypatch):
     assert "native source resolution varies" in result["asset"]["provenance"]
     with rasterio.open(image_file(result["asset"]["id"])) as ds:
         assert ds.transform.a==1 and np.allclose(ds.read(1),220)
+
+def test_usgs_remote_export_contract_and_error(monkeypatch):
+    from contextlib import contextmanager
+    import httpx
+    from rasterio.io import MemoryFile
+    from imagery import public_dem
+    bbox=(-83.001,39.999,-83.,40.)
+    crs,affine,w,h=_grid(bbox,3)
+    with MemoryFile() as memory:
+        with memory.open(driver="GTiff",width=w,height=h,count=1,dtype="float32",
+                         crs=crs,transform=affine,nodata=-9999) as ds:
+            ds.write(np.full((h,w),220,np.float32),1)
+        data=memory.read()
+    @contextmanager
+    def stream(method,url,**kwargs):
+        assert method=="GET" and url==public_dem.USGS_EXPORT
+        assert kwargs["params"]["pixelType"]=="F32"
+        assert kwargs["params"]["size"]==f"{w},{h}" and not kwargs["follow_redirects"]
+        yield httpx.Response(200,content=data,request=httpx.Request("GET",url))
+    monkeypatch.setattr(public_dem.httpx,"stream",stream)
+    array,_,_,count,_=public_dem._read_usgs(bbox,3)
+    assert count==w*h and np.allclose(array,220)
+    @contextmanager
+    def failure(method,url,**kwargs):
+        yield httpx.Response(503,request=httpx.Request("GET",url))
+    monkeypatch.setattr(public_dem.httpx,"stream",failure)
+    with pytest.raises(RasterError,match="unavailable"):public_dem._read_usgs(bbox,3)
+    with pytest.raises(RasterError,match="outside"):public_dem._read_usgs((120,30,120.001,30.001),3)

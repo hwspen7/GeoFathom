@@ -71,6 +71,12 @@ const modes:Array<{id:Operation;title:string}>=[
  {id:'flow_direction',title:'Flow direction'},{id:'flow_accumulation',title:'Flow accumulation'},{id:'streams',title:'Drainage network'},
  {id:'cutfill_map',title:'Cut / fill map'},{id:'suitability',title:'Site suitability'},{id:'least_cost',title:'Least-cost route'},{id:'cross_sections',title:'Cross sections'}
 ];
+const categories:Record<string,Operation[]>={
+ Quick:['slope','profile','contours','volume','visibility','watershed','mesh','distribution'],
+ Surface:['elevation','slope_map','aspect_map','hillshade','tri','tpi','curvature','distribution','contours'],
+ Hydrology:['flow_direction','flow_accumulation','streams','watershed'],
+ Engineering:['profile','cross_sections','volume','cutfill_map','suitability','least_cost'],
+};
 const units:Record<string,string>={cut_m3:'m³',fill_m3:'m³',net_cut_m3:'m³',covered_grid_area_m2:'m²',reference_elevation_m:'m',
  contour_lines:'',contour_levels:'',dataset_overlap_pct:'%',valid_grid_pct:'%',interval_m:'m',visible_cells:'',visible_grid_area_m2:'m²',unknown_cells:'',upstream_cells:'',upstream_grid_area_m2:'m²',minimum_m:'m',maximum_m:'m',mean_m:'m',median_m:'m',stddev_m:'m',p10_m:'m',p90_m:'m',relief_m:'m'};
 const names:Record<string,string>={cut_m3:'Cut',fill_m3:'Fill',net_cut_m3:'Net cut',covered_grid_area_m2:'Grid area',reference_elevation_m:'Reference',
@@ -88,6 +94,7 @@ interface Props{
 export default function TerrainWorkbench(p:Props){
  // Opening Terrain never preselects a calculation.
  const [operation,setOperation]=useState<Operation|null>(null);
+ const [category,setCategory]=useState('Quick');
  const [assets,setAssets]=useState<RasterAsset[]>([]),[token,setToken]=useState('');
  const [resolution,setResolution]=useState<1|3|10|30|90>(30),[fetching,setFetching]=useState(false),[sourceInfo,setSourceInfo]=useState('');
  const [interval,setInterval]=useState('10'),[reference,setReference]=useState('0');
@@ -129,7 +136,7 @@ export default function TerrainWorkbench(p:Props){
  const inputsChanged=!!selected&&selected.inputKey!==inputKey;
  useEffect(()=>{setVerticalConfirmed(false);sourceIntent.current++;},[dem?.id]);
  // Published result layers are independent from the currently selected input.
- useEffect(()=>{latest.current.onPreview(records.filter(r=>r.visible).flatMap(r=>r.advanced?.features??[]));latest.current.onRasterPreview?.(records.flatMap(r=>r.visible&&r.advanced?.raster?[{id:r.id,raster:r.advanced.raster}]:[]));},[records]);
+ useEffect(()=>{latest.current.onPreview(records.filter(r=>r.visible).flatMap(r=>r.advanced?.features??[]));latest.current.onRasterPreview?.(records.flatMap(r=>r.visible&&r.advanced?.raster?[{id:r.id,title:r.title,raster:r.advanced.raster}]:[]));},[records]);
  useEffect(()=>{
    if(!p.active||!p.connected)return;
    let current=true;
@@ -142,7 +149,7 @@ export default function TerrainWorkbench(p:Props){
    sequence.current++;analysisRequest.current?.abort();analysisRequest.current=null;setBusy(false);
  }
  async function run(){
-   if(!operation||!canRun||!dem||!p.geometry||busy)return;
+   if(!operation||!canRun||!dem||!p.geometry||analysisRequest.current)return;
    if(records.length>=24&&!records.some(r=>r.inputKey===inputKey&&!r.saved)){
      setLive(false);setError('Result limit reached (24). Export or remove a result before another calculation.');return;
    }
@@ -159,7 +166,7 @@ export default function TerrainWorkbench(p:Props){
      else record.advanced=await advancedTerrain({image_id:dem.id,geometry:p.geometry,operation,
        interval:Number(interval),reference:Number(reference),point:needsPoint?[Number(lon),Number(lat)]:null,
        observer_height:Number(height),target_height:Number(target),end_point:operation==='least_cost'?[Number(endLon),Number(endLat)]:null,
-       max_slope:Number(maxSlope),min_elevation:Number(minElevation),max_elevation:Number(maxElevation),max_tri:Number(maxTri),stream_cells:Number(streamCells),azimuth:Number(azimuth),altitude:Number(altitude),section_spacing:Number(sectionSpacing),section_width:Number(sectionWidth),texture_image_id:operation==='mesh'&&drape?p.imageRaster?.id??null:null},controller.signal);
+       max_slope:Number(maxSlope),min_elevation:Number(minElevation),max_elevation:Number(maxElevation),max_tri:Number(maxTri),stream_cells:Number(streamCells),azimuth:Number(azimuth),altitude:Number(altitude),section_spacing:Number(sectionSpacing),section_width:Number(sectionWidth),texture_image_id:operation==='mesh'&&drape&&p.imageRaster&&p.imageRaster.bands>=3?p.imageRaster.id:null},controller.signal);
      if(ticket!==sequence.current||controller.signal.aborted)return;
      setRecords(old=>{
        const kept=old.filter(r=>r.inputKey!==inputKey||r.saved);
@@ -255,10 +262,11 @@ export default function TerrainWorkbench(p:Props){
      {dem&&<small className="compact-notice" title={dem.provenance}>{dem.width} × {dem.height} · {dem.crs} · elevation m</small>}
      {dem&&!/Copernicus DEM GLO-|USGS 3DEP Bare Earth DEM/.test(dem.provenance)&&<label className="gis-check"><input aria-label="Confirm DEM meter elevations" type="checkbox" checked={verticalConfirmed} onChange={e=>setVerticalConfirmed(e.target.checked)}/> Confirm single-band meter elevations</label>}
    </div>
+   <label className="terrain-category">Tool group <select aria-label="Terrain tool group" value={category} onChange={e=>{setCategory(e.target.value);setOperation(null);setLive(false);setPickEnd(false);}}>{Object.keys(categories).map(name=><option key={name}>{name}</option>)}</select></label>
    <div className="terrain-command-grid" aria-label="Terrain tools">
-     {modes.map(mode=><button key={mode.id} type="button" aria-pressed={operation===mode.id} onClick={()=>{setOperation(old=>old===mode.id?null:mode.id);if(operation===mode.id)setLive(false);}}>{mode.title}</button>)}
+     {modes.filter(mode=>categories[category].includes(mode.id)).map(mode=><button key={mode.id} type="button" aria-pressed={operation===mode.id} onClick={()=>{setOperation(old=>old===mode.id?null:mode.id);if(operation===mode.id)setLive(false);}}>{mode.title}</button>)}
    </div>
-   <select aria-label="Advanced terrain operation" className="visually-hidden" tabIndex={-1} value={operation??''} onChange={e=>setOperation(e.target.value?e.target.value as Operation:null)}>
+   <select aria-label="Advanced terrain operation" className="visually-hidden" tabIndex={-1} value={operation??''} onChange={e=>{const value=e.target.value as Operation;setOperation(value||null);if(value&&!categories[category].includes(value))setCategory(Object.keys(categories).find(c=>categories[c].includes(value))??'Quick');}}>
      <option value="">Select operation</option>
      {modes.map(mode=><option key={mode.id} value={mode.id}>{mode.title}</option>)}
    </select>

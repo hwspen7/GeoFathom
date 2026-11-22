@@ -1210,6 +1210,7 @@ export default function App() {
               {scratch.some(f=>f.visible)&&<div className="map-legend-item"><span className="legend-swatch" style={{background:'#168047'}}/><span>Local drawings · {scratch.filter(f=>f.visible).length}</span></div>}
               {rasterLayers.filter(l=>l.visible).map(l=><div key={l.asset.id} className="map-legend-item"><span className="legend-swatch" style={{background:'#a8adb0'}}/><span>{l.kind==='dem'?'DEM':'Raster'} · {l.asset.name}</span></div>)}
               {terrainVisible&&(terrainFeatures.length+terrainRasters.length)>0&&<div className="map-legend-item"><span className="legend-swatch" style={{background:'#d7b65e'}}/><span>Terrain results · {terrainFeatures.length+terrainRasters.length}</span></div>}
+              {terrainVisible&&terrainRasters.map(item=><details key={item.id} className="terrain-map-legend"><summary>{item.title}</summary>{item.raster.legend.map(bin=><div key={bin.label} className="map-legend-item"><span className="legend-swatch" style={{background:bin.color}}/><span>{bin.label}</span></div>)}</details>)}
               {!(projectWorkspace?.layers??[]).some(layer=>Boolean(layer.visible))&&!scratch.some(f=>f.visible)&&!rasterLayers.some(l=>l.visible)&&!(terrainFeatures.length+terrainRasters.length)&&
                 <small>No visible overlays</small>}
             </div>}
