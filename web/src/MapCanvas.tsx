@@ -751,6 +751,31 @@ export default function MapCanvas({
       }
     };
     window.addEventListener('keydown',onEscape);
+    // Native pointer selection complements MapLibre's synthetic map events.
+    // MapLibre may suppress a click after dragging is disabled/re-enabled on
+    // the same gesture, and a source worker can be behind the visible geometry.
+    // Resolve the currently selected vertex directly from the pointer and
+    // the *authoritative geometry* before map gesture handlers run. Navigation
+    // controls retain their own pointer semantics.
+    const inspectVertexPointer=(event:PointerEvent)=>{
+      const state=eventRef.current;
+      if(event.button!==0||!state.editing||state.moving||state.edgeMoving||
+         state.selectedLocked||!state.selected||state.terrainPicking||
+         state.selectionBoxMode||state.labelMoveMode||state.drawingMode)return;
+      if(event.target instanceof Element&&event.target.closest('.maplibregl-ctrl'))return;
+      const rect=map.getCanvasContainer().getBoundingClientRect();
+      const pointer={x:event.clientX-rect.left,y:event.clientY-rect.top};
+      const hit=nearestEditableHandle(state.selected,pointer,
+        coordinate=>map.project(coordinate as maplibregl.LngLatLike),'vertex');
+      if(import.meta.env.DEV&&container.current){
+        container.current.setAttribute('data-edit-native-hit',
+          hit?JSON.stringify(hit.path):'none');
+        container.current.setAttribute('data-edit-native-pointer',
+          JSON.stringify([pointer.x,pointer.y]));
+      }
+      if(hit)state.onSelectBoundaryNode?.(hit.path);
+    };
+    map.getContainer().addEventListener('pointerdown',inspectVertexPointer,true);
     map.on('click', click);
     map.on('mousedown', beginDrag);
     map.on('mousemove', dragging);
@@ -911,6 +936,7 @@ export default function MapCanvas({
     const resize=new ResizeObserver(()=>map.resize());resize.observe(container.current);
     return () => {
       resize.disconnect();
+      map.getContainer().removeEventListener('pointerdown',inspectVertexPointer,true);
       map.off('zoomend',refreshZoomLabels);
       map.off('idle',inspectRenderedHandles);
       map.off('sourcedata',inspectWorkspaceSource);
