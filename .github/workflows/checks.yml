@@ -106,6 +106,12 @@ jobs:
       - name: Unit test precision editor and survey geometry
         working-directory: web
         run: npm test
+      - name: Resolve component and shared instrumentation dependencies
+        working-directory: web
+        run: |
+          npm install --package-lock-only --ignore-scripts --save-dev --save-exact istanbul-lib-instrument@6.0.3 jsdom@26.1.0 @testing-library/react@16.3.0 @testing-library/dom@10.4.1 @testing-library/user-event@14.6.1 istanbul-lib-coverage@3.2.2 istanbul-lib-report@3.0.1 istanbul-reports@3.2.0
+          node -e 'const fs=require("fs"),cp=require("child_process");const old=JSON.parse(cp.execSync("git show HEAD:web/package-lock.json",{encoding:"utf8"}));const next=JSON.parse(fs.readFileSync("package-lock.json","utf8"));console.log("WEB_COMPONENT_LOCK_PATCH="+JSON.stringify({added:Object.fromEntries(Object.entries(next.packages).filter(([k,v])=>JSON.stringify(old.packages[k])!==JSON.stringify(v))),removed:Object.keys(old.packages).filter(k=>!(k in next.packages))}));'
+          npm ci --no-audit --no-fund
       - name: Collect frontend coverage using locked provider
         working-directory: web
         run: npm run test:coverage
