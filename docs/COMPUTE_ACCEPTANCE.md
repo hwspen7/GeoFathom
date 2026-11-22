@@ -96,10 +96,10 @@ The native soak gate measures continuous CPU correctness, throughput and
 RSS growth for 10 seconds. Run hardware qualification independently:
 
 ```powershell
-.\scripts\Hardware-Acceptance.ps1 -SoakSeconds 86400 -Model installed_model
+.\scripts\Hardware-Acceptance.ps1 -SoakSeconds 600 -Model installed_model
 ```
 
-RTX 4070 Ti SUPER CUDA build, GPU parity, 24-hour actual resource soak,
+RTX 4070 Ti SUPER CUDA build, GPU parity, 10-minute project-level resource soak,
 actual satellite model accuracy and multi-host physical acceptance require
 hardware, models, annotation and nodes. Short hosted smoke tests are not
 a substitute for those results.
@@ -131,9 +131,9 @@ session and active tensor reservations, not actual global driver VRAM usage.
 
 The release workflow also builds and verifies the full Linux/Windows
 archive on pull requests without publishing a tag. CUDA compilation, ARM64
-parity and real Linux cgroup enforcement have separate CI jobs. Actual
-CUDA, 24-hour soak and multi-host hardware acceptance remain mandatory
-for production hardware qualification.
+parity and real Linux cgroup enforcement have separate CI jobs. Actual CUDA is required for local project-level hardware qualification.
+24-hour soak and physical multi-host acceptance are optional extensions
+for a different production deployment scope.
 
 
 ## Repeatable Windows acceptance

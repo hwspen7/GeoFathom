@@ -331,18 +331,28 @@ def can_delete_feature(project_id,feature_id):
 
 
 def copy_feature(project_id,feature_id):
+    # The source lock check, snapshot and copy write belong to one
+    # transaction; a concurrent layer change cannot intervene.
     with _connect() as c:
-        _required_project(c,project_id)
         _schema(c)
+        c.execute("BEGIN IMMEDIATE")
+        _required_project(c,project_id)
         original=_feature(c,project_id,feature_id)
         layer=_feature_layer(c,project_id,feature_id)
         if layer["locked"]: raise StorageError("The selected feature layer is locked.")
-    return add_in_layer(project_id,[{
-        "name":original["name"]+" copy",
-        "geometry":json.loads(original["geometry"]),
-        "properties":{**json.loads(original["properties"]),"copied_from":feature_id},
-        "source":original["source"],
-    }],layer["id"])["results"][0]
+        props={**json.loads(original["properties"]),"copied_from":feature_id}
+        if len(json.dumps(props,allow_nan=False))>100000:
+            raise StorageError("Feature properties are too large.")
+        try:
+            new=_record_feature(c,project_id,json.loads(original["geometry"]),
+                (original["name"][:195]+" copy").strip(),original["source"],props)
+        except (GeometryError,TypeError,ValueError) as error:
+            raise StorageError(str(error)) from error
+        c.execute("INSERT INTO geo_layer_members(project_id,feature_id,layer_id) VALUES(?,?,?)",
+                  (project_id,new["id"],layer["id"]))
+        c.execute("UPDATE projects SET updated_at=? WHERE id=?",(_now(),project_id))
+        return {**new,"layer_id":layer["id"],"revision":0}
+
 
 def delete_feature_guarded(project_id, feature_id):
     """Check the layer lock and delete the feature in the same transaction."""

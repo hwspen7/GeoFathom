@@ -103,6 +103,11 @@ export default function App() {
   // merely the request that happens to finish last.
   const geometrySequence = useRef(0);
   const projectIdentity = useRef<string | null>(null);
+  const projectEpoch = useRef(0);
+  const renderEpoch = projectEpoch.current;
+  // Even switching A -> B -> A must invalidate old A callbacks.
+  const projectCurrent = () => projectEpoch.current === renderEpoch &&
+    projectIdentity.current === activeProjectId;
   const featureIdentity = useRef<string | null>(null);
   const [historyPulse, setHistoryPulse] = useState(0);
 
@@ -277,8 +282,10 @@ export default function App() {
     if (query.length < 2) return;
     setBusy(true);
     setError('');
+    const sequence=++geometrySequence.current;
     try {
       const found = await searchPlaces(query);
+      if(sequence!==geometrySequence.current)return;
       setCandidates(found);
       if (found.length) {
         await selectPlace(found[0]);
@@ -300,8 +307,10 @@ export default function App() {
     setBusy(true);
     setError('');
     setAssistantQuery(query);
+    const sequence=++geometrySequence.current;
     try {
       const answer = await interpret(query, viewport, modelId);
+      if(sequence!==geometrySequence.current)return;
       setModelUsed(answer.model_used);
       setToolSteps((answer.steps || []).map(step => step.tool + ' · ' + step.status));
       setCandidates(answer.results);
@@ -339,6 +348,13 @@ export default function App() {
     setDrawingMode(next);
     setTraceMode(false);
     if (!operation) {
+      if(featureIdentity.current){
+        timeline.current=new GeometryTimeline();
+        lastValid.current=null;
+        setHistoryPulse(value=>value+1);
+      }
+      setLinked(false);
+      setPendingShared(null);
       setGeometrySource('User drawn');
       setFeatureProperties({ source_type: 'user_drawn' });
     } else {
@@ -594,7 +610,7 @@ export default function App() {
               saved={activeProjectId ? projectWorkspace?.features ?? [] : []}
               onStart={startDrawing}
               onFinish={() => { void finishDrawing(); }}
-              onCancel={() => { setDrawingMode(null); setVertices([]); }}
+              onCancel={() => { geometrySequence.current++; setDrawingMode(null); setVertices([]); }}
               onUndoPoint={() => setVertices(value => value.slice(0,-1))}
               onUndo={() => applyHistory(timeline.current.undo())}
               onRedo={() => applyHistory(timeline.current.redo())}
@@ -641,7 +657,7 @@ export default function App() {
                         [item.id,item.revision]));
                       await applyTopology(activeProjectId,pendingShared.old,pendingShared.next,expected);
                       const updated=await getWorkspace(activeProjectId);
-                      if(projectIdentity.current!==activeProjectId)return;
+                      if(!projectCurrent())return;
                       setProjectWorkspace(updated);
                       const reopened=updated.features.find(item=>item.id===selectedFeatureId);
                       if(reopened)openStoredFeature(reopened);
@@ -660,8 +676,10 @@ export default function App() {
             <RasterPanel
               asset={imageLayer}
               onSelect={(asset) => {
+                geometrySequence.current++;
                 setImageLayer(asset);
                 setTraceMode(false);
+                setPromptMode(null);setPositivePoints([]);setNegativePoints([]);setBoxPoints([]);
                 const [west, south, east, north] = asset.bbox;
                 setFocus({
                   longitude: (west + east) / 2, latitude: (south + north) / 2,
@@ -682,7 +700,7 @@ export default function App() {
               key={activeProjectId ?? 'no-project'}
               projectId={activeProjectId}
               image={imageLayer}
-              onPreview={setExternalFeatures}
+              onPreview={value=>{if(projectCurrent())setExternalFeatures(value);}}
               onSaved={()=>setRefreshToken(value=>value+1)}
             />
  
@@ -701,7 +719,8 @@ export default function App() {
                 setBoxPoints([]);setPromptMode(null);
               }}
               onRefine={async()=>{
-                if(!imageLayer||positivePoints.length===0)return;
+                if(!imageLayer||positivePoints.length===0||busy)return;
+                const sequence=++geometrySequence.current;
                 setBusy(true);setError('');
                 try{
                   const refined=await refineRaster({
@@ -710,6 +729,7 @@ export default function App() {
                     box:boxPoints.length===2?boxPoints:null,
                     window_size:traceSettings.window_size,
                   });
+                  if(sequence!==geometrySequence.current)return;
                   setGeometry(refined.geometry);
                   lastValid.current=structuredClone(refined.geometry);
                   timeline.current.push(refined.geometry);
@@ -737,7 +757,7 @@ export default function App() {
           <section className="panel-section">
             <div className="section-heading"><Layers3 size={16} /><span>Projects & saved geometry</span></div>
             <ProjectsPanel
-              geometry={geometry}
+              geometry={preview || pendingShared ? null : geometry}
               featureName={selectedPlace?.name || 'Custom boundary'}
               featureSource={geometrySource || selectedPlace?.source || 'User drawn'}
               featureProperties={featureProperties}
@@ -748,6 +768,7 @@ export default function App() {
               onWorkspace={(data, id) => {
                 if(projectIdentity.current!==id){
                   projectIdentity.current=id;
+                  projectEpoch.current++;
                   geometrySequence.current++;
                   // Keep an explicitly unsaved draft when creating a project,
                   // but never carry a saved feature or its undo stack across
@@ -805,7 +826,7 @@ export default function App() {
               geometry={geometry}
               viewport={viewport}
               selectedIds={spatialSelected}
-              onSelected={setSpatialSelected}
+              onSelected={value=>{if(projectCurrent())setSpatialSelected(value);}}
               boxMode={selectionBoxMode}
               onBoxMode={active=>{
                 setSelectionBoxMode(active);
@@ -816,8 +837,8 @@ export default function App() {
                 }
               }}
               box={selectionBox}
-              onBox={setSelectionBox}
-              onIssues={setQualityIssues}
+              onBox={value=>{if(projectCurrent())setSelectionBox(value);}}
+              onIssues={value=>{if(projectCurrent())setQualityIssues(value);}}
               onOpen={id=>{
                 const item=projectWorkspace?.features.find(f=>f.id===id);
                 if(item)openStoredFeature(item);
@@ -834,7 +855,7 @@ export default function App() {
               viewport={viewport}
               selectedGeometry={geometry}
               onChanged={()=>setRefreshToken(v=>v+1)}
-              onGrid={setProjectGrid}
+              onGrid={value=>{if(projectCurrent())setProjectGrid(value);}}
               labelMoveMode={labelMoveMode}
               onLabelMoveMode={active=>{
                 setLabelMoveMode(active);
@@ -854,9 +875,9 @@ export default function App() {
               projectId={activeProjectId}
               viewport={viewport}
               drawnGeometry={geometry}
-              onTiles={setExternalTiles}
-              onPreview={setExternalFeatures}
-              onPage={setPagedFeatures}
+              onTiles={value=>{if(projectCurrent())setExternalTiles(value);}}
+              onPreview={value=>{if(projectCurrent())setExternalFeatures(value);}}
+              onPage={value=>{if(projectCurrent())setPagedFeatures(value);}}
               onRefresh={()=>setRefreshToken(value=>value+1)}
             />
           </section>
@@ -997,10 +1018,13 @@ export default function App() {
               };
             })}
             onGeometryPreview={next => {
+              if(!projectCurrent())return;
+              geometrySequence.current++;
               setGeometry(next);
               setPreview(approximateMeasurement(next));
             }}
             onGeometryCommit={(next,movement) => {
+              if(!projectCurrent())return;
               if(!movement){void commitGeometry(next);return;}
               if(selectedLocked){setError('Unlock the feature layer.');return;}
               const sequence=++geometrySequence.current;
@@ -1050,7 +1074,7 @@ export default function App() {
                   label_offset_x:dx,label_offset_y:dy},
                 expected_revision:current.revision,
               }).then(updated=>{
-                if(projectIdentity.current!==activeProjectId)return;
+                if(!projectCurrent())return;
                 setRefreshToken(value=>value+1);
                 if(selectedFeatureId===id)openStoredFeature(updated);
                 setMessage('Label position stored as a new feature revision.');
@@ -1067,6 +1091,7 @@ export default function App() {
                 return;
               }
               if (!imageLayer || busy) return;
+              const sequence=++geometrySequence.current;
               setBusy(true);
               setError('');
               try {
@@ -1074,6 +1099,7 @@ export default function App() {
                   image_id: imageLayer.id, longitude, latitude,
                   ...traceSettings,
                 });
+                if(sequence!==geometrySequence.current)return;
                 setGeometry(result.geometry);
                 lastValid.current = structuredClone(result.geometry);
                 timeline.current.push(result.geometry);
@@ -1118,7 +1144,7 @@ export default function App() {
                 const {projectId,layerId,text}=pendingAnnotation;
                 const created=await addMapAnnotation(projectId,text,position,layerId);
                 const latest=await getWorkspace(projectId);
-                if(projectIdentity.current!==projectId)return;
+                if(!projectCurrent()||projectIdentity.current!==projectId)return;
                 setProjectWorkspace(latest);
                 setRefreshToken(value=>value+1);
                 const opened=latest.features.find(feature=>feature.id===created.id);
