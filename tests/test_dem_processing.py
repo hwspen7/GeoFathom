@@ -180,9 +180,11 @@ def test_dem_clip_with_multiple_tiles_and_no_data_outside_polygon(source_dems,tm
     sources,_=source_dems
     monkeypatch.setattr(dem_processing,'_BLOCK',2)
     transform=Transformer.from_crs('EPSG:32617','EPSG:4326',always_xy=True)
+    # A triangular clip leaves NoData in the bounding rectangle, including
+    # across block seams, instead of relying on exact box-edge rounding.
     ring=[transform.transform(x,y) for x,y in [
-        (500000,4500000),(500030,4500000),(500030,4499970),
-        (500000,4499970),(500000,4500000)]]
+        (500000,4500000),(500050,4500000),(500000,4499950),
+        (500000,4500000)]]
     polygon={'type':'Polygon','coordinates':[ring]}
     snapshot={}
     def retain(path,name,provenance):
@@ -192,6 +194,7 @@ def test_dem_clip_with_multiple_tiles_and_no_data_outside_polygon(source_dems,tm
         return {'width':snapshot['array'].shape[1]}
     monkeypatch.setattr(dem_processing,'store_upload',retain)
     processed=dem_processing.prepare_dem([sources[1]],'clip',polygon,10)
-    assert 1<=processed['valid_cells']<=9
-    assert np.all(np.isfinite(snapshot['array'][0:2,0:2]))
+    assert 1<=processed['valid_cells']<25
+    assert processed['valid_cells']==int(np.isfinite(snapshot['array']).sum())
+    assert np.isnan(snapshot['array']).any()
     assert np.isnan(snapshot['nodata'])
