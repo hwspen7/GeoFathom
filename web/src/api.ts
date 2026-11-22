@@ -988,3 +988,11 @@ export function compareAreas(left:GeoJSON.Geometry,right:GeoJSON.Geometry):Promi
   return request('/analysis/compare',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({left,right})});
 }
+
+export function fetchPublicDEM(bbox:[number,number,number,number],resolution_m:30|90,token:string):Promise<{
+ asset:RasterAsset;resolution_m:number;valid_cells:number;total_cells:number;missing_tiles:string[];warning:string
+}>{
+ const headers:Record<string,string>={'Content-Type':'application/json'};
+ if(token)headers['X-GeoFathom-Admin-Token']=token;else headers['X-GeoFathom-Local-Import']='1';
+ return request('/imagery/dem/fetch',{method:'POST',headers,body:JSON.stringify({bbox,resolution_m})});
+}

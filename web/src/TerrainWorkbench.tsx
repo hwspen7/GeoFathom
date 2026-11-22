@@ -1,6 +1,6 @@
 import {useEffect,useRef,useState,type ChangeEvent} from 'react';
 import {Mountain} from 'lucide-react';
-import {advancedTerrain,saveFeatureBatch,analyzeTerrain,terrainProfile,listImagery,uploadImagery,type TerrainResult,type TerrainMesh,type TerrainOperation,type AdvancedTerrainResult,type RasterAsset} from './api';
+import {advancedTerrain,saveFeatureBatch,analyzeTerrain,terrainProfile,listImagery,uploadImagery,fetchPublicDEM,type TerrainResult,type TerrainMesh,type TerrainOperation,type AdvancedTerrainResult,type RasterAsset} from './api';
 import {ProfilePlot,MetricBars} from './TerrainCharts';
 import type {Position} from './editing';
 import {measurementAnchor} from './editing';
@@ -67,6 +67,7 @@ const names:Record<string,string>={cut_m3:'Cut',fill_m3:'Fill',net_cut_m3:'Net c
 const fmt=(n:number)=>n.toLocaleString('en-US',{maximumFractionDigits:2});
 interface Props{
  projectId:string|null;geometry:GeoJSON.Geometry|null;raster:RasterAsset|null;active:boolean;connected:boolean;
+ viewport:[number,number,number,number]|null;
  localImport:boolean;refreshToken:number;origin:Position|null;picking:boolean;
  onSelectRaster:(r:RasterAsset)=>void;onDraw:(line:boolean)=>void;onUseExtent:()=>void;onPick:()=>void;
  onHover:(point:Position|null)=>void;onPreview:(g:GeoJSON.Geometry[])=>void;onSaved:()=>void;
@@ -74,6 +75,7 @@ interface Props{
 export default function TerrainWorkbench(p:Props){
  const [operation,setOperation]=useState<Operation>('slope');
  const [assets,setAssets]=useState<RasterAsset[]>([]),[token,setToken]=useState('');
+ const [resolution,setResolution]=useState<30|90>(30),[fetching,setFetching]=useState(false),[sourceInfo,setSourceInfo]=useState('');
  const [interval,setInterval]=useState('10'),[reference,setReference]=useState('0');
  const [lon,setLon]=useState(''),[lat,setLat]=useState(''),[height,setHeight]=useState('1.7'),[target,setTarget]=useState('0');
  const [result,setResult]=useState<AdvancedTerrainResult|null>(null),[slope,setSlope]=useState<TerrainResult|null>(null);
@@ -137,6 +139,28 @@ export default function TerrainWorkbench(p:Props){
    }catch(e){setError(e instanceof Error?e.message:String(e));}
    finally{setImporting(false);}
  }
+ async function fetchDEM(){
+   if(!p.connected||fetching)return;
+   let bbox=p.viewport;
+   if(p.geometry){
+     const points=p.geometry.type==='LineString'?p.geometry.coordinates:p.geometry.type==='Polygon'?p.geometry.coordinates.flat():p.geometry.type==='MultiPolygon'?p.geometry.coordinates.flat(2):null;
+     if(points?.length){
+       const lon=points.map(pt=>pt[0]),lat=points.map(pt=>pt[1]);
+       const w=Math.min(...lon),s=Math.min(...lat),e=Math.max(...lon),n=Math.max(...lat);
+       bbox=[w-.0004,s-.0004,e+.0004,n+.0004];
+     }
+   }
+   if(!bbox)return;
+   setFetching(true);setError('');setSourceInfo('');
+   try{
+     if(!p.localImport&&!token.trim())throw Error('Enter import access token.');
+     const data=await fetchPublicDEM(bbox,resolution,token);
+     setAssets(old=>[data.asset,...old.filter(item=>item.id!==data.asset.id)]);
+     latest.current.onSelectRaster(data.asset);
+     setSourceInfo('GLO-'+resolution+' · '+data.valid_cells+'/'+data.total_cells+' cells · DSM'+(data.missing_tiles.length?' · partial coverage':''));
+   }catch(e){setError(e instanceof Error?e.message:String(e));}
+   finally{setFetching(false);}
+ }
  async function save(){
    if(!p.projectId||!dem||!result)return;
    const ticket=sequence.current;setBusy(true);setError('');
@@ -165,7 +189,12 @@ export default function TerrainWorkbench(p:Props){
      {!p.localImport&&<details className="access-settings"><summary>Import access</summary><input type="password" aria-label="DEM import token" value={token} onChange={e=>setToken(e.target.value)}/></details>}
      <label className="raster-upload" title="Single-band DEM GeoTIFF, projected in meters, with meter elevations"><Mountain size={14}/> {importing?'Importing…':'Import DEM'}
        <input type="file" aria-label="Import DEM" accept=".tif,.tiff" disabled={importing||!p.connected} onChange={e=>void importDEM(e)}/></label>
-     {dem&&<small className="compact-notice">{dem.width} × {dem.height} · {dem.crs} · meter elevations required</small>}
+     <div className="area-fields">
+       <select aria-label="Public DEM resolution" value={resolution} onChange={e=>setResolution(Number(e.target.value) as 30|90)}><option value={30}>GLO-30 · 30 m</option><option value={90}>GLO-90 · 90 m</option></select>
+       <button disabled={!p.connected||!p.viewport||fetching||importing} title="Download real Copernicus DEM for selected shape or current map extent" onClick={()=>void fetchDEM()}>{fetching?'Fetching…':'Fetch DEM'}</button>
+     </div>
+     {sourceInfo&&<small className="compact-notice" title="Copernicus DEM is a digital surface model including buildings and vegetation. Public coverage varies.">{sourceInfo}</small>}
+     {dem&&<small className="compact-notice" title={dem.provenance}>{dem.width} × {dem.height} · {dem.crs} · m</small>}
    </div>
    <div className="terrain-command-grid" aria-label="Terrain tools">
      {modes.map(mode=><button key={mode.id} type="button" aria-pressed={operation===mode.id} onClick={()=>setOperation(mode.id)}>{mode.title}</button>)}

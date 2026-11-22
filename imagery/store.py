@@ -52,7 +52,7 @@ def describe(identifier: str) -> dict:
     result = metadata(path)
     sidecar = path.with_suffix(".json")
     extra = json.loads(sidecar.read_text(encoding="utf-8")) if sidecar.exists() else {}
-    return {**result, "id": identifier, "name": extra.get("name", identifier),
+    return {**result, **({"provenance":extra["provenance"]} if extra.get("provenance") else {}), "id": identifier, "name": extra.get("name", identifier),
             "sha256": extra.get("sha256") or file_sha256(path),
             "preview_url": f"/imagery/{identifier}/preview"}
 
@@ -69,7 +69,7 @@ def list_images() -> dict:
     return {"images": images, "count": len(images)}
 
 
-def store_upload(temp_path: Path, filename: str) -> dict:
+def store_upload(temp_path: Path, filename: str, provenance: str | None = None) -> dict:
     """Validate metadata before moving the uploaded file into the managed library."""
     metadata(temp_path)
     root = imagery_dir()
@@ -83,7 +83,7 @@ def store_upload(temp_path: Path, filename: str) -> dict:
     sidecar=final.with_suffix(".json")
     try:
         sidecar.write_text(json.dumps({
-            "name":Path(filename).name[:160],"sha256":checksum,
+            "name":Path(filename).name[:160],"sha256":checksum,"provenance":provenance,
         }),encoding="utf-8")
     except Exception:
         final.unlink(missing_ok=True)

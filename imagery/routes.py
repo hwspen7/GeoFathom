@@ -72,12 +72,7 @@ def image_tile(image_id:str,level:int,x:int,y:int):
         raise HTTPException(status_code=422,detail=str(error)) from error
 
 
-@router.post("/upload", status_code=201)
-async def upload_image(
-    request: Request,
-    file: UploadFile = File(...),
-    token: str | None = Header(default=None, alias="X-GeoFathom-Admin-Token"),
-) -> dict:
+def require_raster_import(request: Request, token: str | None):
     # A single-user local desktop may import its own imagery without a
     # model-management token. Deployed/explicitly protected servers retain
     # the administrator check. A non-simple header prevents cross-site forms.
@@ -95,6 +90,13 @@ async def upload_image(
         except PermissionError as error:
             raise HTTPException(status_code=403, detail=str(error)) from error
 
+@router.post("/upload", status_code=201)
+async def upload_image(
+    request: Request,
+    file: UploadFile = File(...),
+    token: str | None = Header(default=None, alias="X-GeoFathom-Admin-Token"),
+) -> dict:
+    require_raster_import(request, token)
     if not file.filename or not file.filename.lower().endswith((".tif", ".tiff")):
         raise HTTPException(status_code=422, detail="Upload a georeferenced .tif/.tiff file.")
     root = imagery_dir()
@@ -138,3 +140,21 @@ async def public_imagery_search(body: CatalogSearchRequest) -> dict:
         raise HTTPException(status_code=422, detail=str(error)) from error
     except (httpx.HTTPError, ValueError) as error:
         raise HTTPException(status_code=503, detail="Public imagery catalog is unavailable.") from error
+
+
+
+class DEMFetchRequest(BaseModel):
+    bbox: tuple[float,float,float,float]
+    resolution_m: int = 30
+
+
+@router.post("/dem/fetch",status_code=201)
+async def fetch_dem(body:DEMFetchRequest,request:Request,
+    token:str|None=Header(default=None,alias="X-GeoFathom-Admin-Token")):
+    """Fetch a bounded, projected subset from the fixed public Copernicus DEM source."""
+    require_raster_import(request,token)
+    from .public_dem import fetch_dem_subset
+    try:
+        return await run_in_threadpool(fetch_dem_subset,body.bbox,body.resolution_m)
+    except RasterError as error:
+        raise HTTPException(status_code=422,detail=str(error)) from error

@@ -948,7 +948,7 @@ export default function MapCanvas({
     if (!map) return;
     map.doubleClickZoom[editing||drawingMode ? 'disable' : 'enable']();
     map.getCanvas().style.cursor = drawingMode || traceMode || editing || annotationMode || selectionBoxMode || labelMoveMode || terrainPicking ? 'crosshair' : '';
-  }, [editing, drawingMode, traceMode, annotationMode, selectionBoxMode,labelMoveMode,ready]);
+  }, [editing, drawingMode, traceMode, annotationMode, selectionBoxMode,labelMoveMode,terrainPicking,ready]);
 
   useEffect(()=>{
     const map=mapRef.current;if(!ready||!map||!terrainMarker)return;
