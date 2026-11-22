@@ -60,3 +60,9 @@ export function describeTerrainBounds(bounds:TerrainBBox):string{
  const [w,s,e,n]=bounds;
  return `W ${w.toFixed(5)}° · S ${s.toFixed(5)}° · E ${e.toFixed(5)}° · N ${n.toFixed(5)}°`;
 }
+
+/** A selected real area is the intended DEM request by default.
+ * A geocoded point has no area and therefore uses the current map view. */
+export function preferredTerrainFetchScope(geometry:GeoJSON.Geometry|null):FetchScope{
+ return geometry&&['Polygon','MultiPolygon'].includes(geometry.type)?'selection':'viewport';
+}
