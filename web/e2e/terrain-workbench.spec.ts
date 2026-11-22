@@ -81,6 +81,10 @@ with tempfile.TemporaryDirectory() as directory:
  await expect(page.getByLabel('Slope edge cells explanation')).toContainText('boundary cells excluded');
  const opacity=page.getByLabel('Terrain raster opacity');
  await expect(opacity).toHaveValue('50');
+ await expect(page.getByLabel('Terrain raster resampling')).toHaveValue('linear');
+ await expect(map).toHaveAttribute('data-terrain-raster-resampling','linear');
+ await page.getByLabel('Terrain raster resampling').selectOption('nearest');
+ await expect(map).toHaveAttribute('data-terrain-raster-resampling','nearest');
  await opacity.fill('25');
  await expect(map).toHaveAttribute('data-terrain-raster-opacity','0.25');
  const download=page.waitForEvent('download');await page.getByRole('button',{name:'GeoTIFF',exact:true}).click();

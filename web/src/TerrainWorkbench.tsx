@@ -61,6 +61,7 @@ type ProfileResult=Awaited<ReturnType<typeof terrainProfile>>;
 interface TerrainRecord {
  id:string;title:string;operation:Operation;source:RasterAsset;geometry:GeoJSON.Geometry;
  inputKey:string;visible:boolean;createdAt:number;saved?:boolean;opacity:number;
+ resampling:'nearest'|'linear';
  advanced?:AdvancedTerrainResult;slope?:TerrainResult;profile?:ProfileResult;
 }
 const modes:Array<{id:Operation;title:string}>=[
@@ -179,7 +180,7 @@ export default function TerrainWorkbench(p:Props){
  useEffect(()=>()=>{fetchAbort.current?.abort();},[fetchKey]);
  useEffect(()=>()=>{latest.current.onFetchTarget?.(null);},[]);
  // Published result layers are independent from the currently selected input.
- useEffect(()=>{latest.current.onPreview(records.filter(r=>r.visible).flatMap(r=>r.advanced?.features??[]));latest.current.onRasterPreview?.(records.flatMap(r=>r.visible&&r.advanced?.raster?[{id:r.id,title:r.title,raster:r.advanced.raster,opacity:r.opacity}]:[]));},[records]);
+ useEffect(()=>{latest.current.onPreview(records.filter(r=>r.visible).flatMap(r=>r.advanced?.features??[]));latest.current.onRasterPreview?.(records.flatMap(r=>r.visible&&r.advanced?.raster?[{id:r.id,title:r.title,raster:r.advanced.raster,opacity:r.opacity,resampling:r.resampling}]:[]));},[records]);
  useEffect(()=>{
    if(!p.active||!p.connected)return;
    let current=true;
@@ -202,7 +203,7 @@ export default function TerrainWorkbench(p:Props){
    const controller=new AbortController();analysisRequest.current=controller;
    const ticket=++sequence.current;setBusy(true);setError('');setInfo('');
    const record:TerrainRecord={id:crypto.randomUUID(),title:modes.find(m=>m.id===operation)!.title,
-     operation,source:dem,geometry:structuredClone(analysisGeometry),inputKey,visible:true,opacity:.5,createdAt:Date.now()};
+     operation,source:dem,geometry:structuredClone(analysisGeometry),inputKey,visible:true,opacity:.5,resampling:operation==='slope_map'||operation==='hillshade'?'linear':'nearest',createdAt:Date.now()};
    try{
      if(operation==='profile')record.profile=await terrainProfile(dem.id,analysisGeometry,controller.signal);
      else if(operation==='slope')record.slope=await analyzeTerrain(dem.id,analysisGeometry,controller.signal);
@@ -415,6 +416,17 @@ export default function TerrainWorkbench(p:Props){
              value={Math.round((selected?.opacity??.5)*100)}
              onChange={e=>{const opacity=Number(e.target.value)/100;setRecords(old=>old.map(r=>r.id===selectedRecord?{...r,opacity}:r));}}/>
          </label>
+         <label className="terrain-opacity-control">Map display
+           <select aria-label="Terrain raster resampling" value={selected?.resampling??'nearest'}
+             onChange={e=>setRecords(old=>old.map(r=>r.id===selectedRecord?
+               {...r,resampling:e.target.value as 'nearest'|'linear'}:r))}>
+             <option value="linear">Smoothed preview</option>
+             <option value="nearest">Exact class boundaries</option>
+           </select>
+         </label>
+         {selected?.resampling==='linear'&&<small className="compact-notice">
+           Visual interpolation only; original DEM grid, class counts and GeoTIFF resolution are unchanged.
+         </small>}
          <img src={result.raster.png} alt="Derived terrain raster" style={{width:'100%',maxHeight:180,objectFit:'contain'}}/>
          <MetricBars label="Terrain class distribution (cells)" values={result.raster.legend.map(b=>({name:b.label,value:b.cells,color:b.color}))}/>
          <button onClick={()=>{const a=document.createElement('a');const data=Uint8Array.from(atob(result.raster!.geotiff),c=>c.charCodeAt(0));const url=URL.createObjectURL(new Blob([data],{type:'image/tiff'}));a.href=url;a.download=result.operation+'.tif';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}}>GeoTIFF</button></div>}

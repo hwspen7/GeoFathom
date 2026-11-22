@@ -20,6 +20,9 @@ SURFACES = {"elevation", "slope_map", "aspect_map", "hillshade", "tri", "tpi",
 D8 = ((-1,0,64),(-1,1,128),(0,1,1),(1,1,2),(1,0,4),
       (1,-1,8),(0,-1,16),(-1,-1,32))
 COLORS = ("#263c84","#287fa5","#65b5a2","#d8cf76","#bc7b42","#873c34")
+# High-lightness slope palette on top of vector basemaps; scientific classes
+# and exact float32 GeoTIFF values are unchanged.
+SLOPE_COLORS = ("#dcebec","#96cbc8","#5eac9e","#ebc579","#d68e60","#a94946")
 DIRECTION_COLORS = ("#777777","#d94841","#d59635","#269d68","#285cb0",
                     "#853a9b","#999d39","#2caabb","#be709b")
 
@@ -152,7 +155,7 @@ def classification(values,operation):
         labels=[f"{a:.3g}–{b:.3g}" for a,b in zip(edges,edges[1:])]
     classes=np.full(values.shape,-1,dtype=np.int16)
     classes[finite]=np.digitize(values[finite],edges[1:-1])
-    return classes,labels,(("#222222","#555555","#888888","#aaaaaa","#dddddd","#ffffff") if operation=="hillshade" else COLORS)[:len(labels)]
+    return classes,labels,(("#222222","#555555","#888888","#aaaaaa","#dddddd","#ffffff") if operation=="hillshade" else SLOPE_COLORS if operation=="slope_map" else COLORS)[:len(labels)]
 
 def raster_product(values,operation,affine,crs,cancel=None):
     """Export exact source-grid GeoTIFF and a Web Mercator map preview with alpha nodata."""

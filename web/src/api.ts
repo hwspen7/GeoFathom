@@ -969,7 +969,7 @@ export async function downloadGISJob(projectId:string,id:string):Promise<void>{
 
 export type TerrainOperation='contours'|'volume'|'visibility'|'watershed'|'mesh'|'distribution'|'elevation'|'slope_map'|'aspect_map'|'hillshade'|'tri'|'tpi'|'curvature'|'flow_direction'|'flow_accumulation'|'streams'|'suitability'|'cutfill_map'|'least_cost'|'cross_sections';
 export interface TerrainRaster {png:string;geotiff:string;corners:[[number,number],[number,number],[number,number],[number,number]];legend:{label:string;color:string;cells:number}[];width:number;height:number;valid_cells:number}
-export interface TerrainRasterLayer {id:string;title:string;raster:TerrainRaster;opacity:number}
+export interface TerrainRasterLayer {id:string;title:string;raster:TerrainRaster;opacity:number;resampling:'nearest'|'linear'}
 export interface TerrainDistributionBin {lower_m:number;upper_m:number;cells:number;area_m2:number;cumulative_pct:number}
 export interface TerrainMesh {rows:number;cols:number;dx_m:number;dy_m:number;heights:Array<number|null>;origin_xy?:[number,number];source_crs?:string;texture?:{png:string;coverage_pct:number}}
 export interface AdvancedTerrainResult {

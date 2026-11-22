@@ -1018,14 +1018,17 @@ export default function MapCanvas({
     for(const item of terrainRasters??[]){
       if(derivedRasters.current.has(item.id)){
         const name='terrain-raster-'+item.id;
-        if(map.getLayer(name))map.setPaintProperty(name,'raster-opacity',Math.max(0,Math.min(1,item.opacity)));
+        if(map.getLayer(name)){
+          map.setPaintProperty(name,'raster-opacity',Math.max(0,Math.min(1,item.opacity)));
+          map.setPaintProperty(name,'raster-resampling',item.resampling);
+        }
         continue;
       }
       const name='terrain-raster-'+item.id;
       try{
         map.addSource(name,{type:'image',url:item.raster.png,coordinates:item.raster.corners});
         map.addLayer({id:name,source:name,type:'raster',
-          paint:{'raster-opacity':Math.max(0,Math.min(1,item.opacity)),'raster-fade-duration':0}},'terrain-result-lines');
+          paint:{'raster-opacity':Math.max(0,Math.min(1,item.opacity)),'raster-resampling':item.resampling,'raster-fade-duration':0}},'terrain-result-lines');
         derivedRasters.current.add(item.id);
       }catch(e){
         if(map.getLayer(name))map.removeLayer(name);
@@ -1035,6 +1038,7 @@ export default function MapCanvas({
     }
     container.current?.setAttribute('data-terrain-raster-count',String(derivedRasters.current.size));
     container.current?.setAttribute('data-terrain-raster-opacity',String((terrainRasters??[])[0]?.opacity??0));
+    container.current?.setAttribute('data-terrain-raster-resampling',(terrainRasters??[])[0]?.resampling??'none');
   },[terrainRasters,ready]);
   useEffect(()=>{
     const map=mapRef.current;
