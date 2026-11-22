@@ -90,6 +90,7 @@ class AdvancedTerrainInput(BaseModel):
     fill_sinks:bool=False
     consider_curvature:bool=False
     refraction_coeff:float=Field(default=0.13,ge=0,le=0.5)
+    comparison_image_id:str|None=None
 
 @router.post("/advanced")
 async def advanced(request:Request,body:AdvancedTerrainInput):
@@ -99,6 +100,7 @@ async def advanced(request:Request,body:AdvancedTerrainInput):
             body.operation,body.interval,body.reference,body.point,body.observer_height,body.target_height,
             body.end_point,body.max_slope,body.min_elevation,body.max_elevation,body.max_tri,body.stream_cells,body.azimuth,body.altitude,
             body.section_spacing,body.section_width,raster(body.texture_image_id) if body.texture_image_id and body.operation=='mesh' else None,
-            body.fill_sinks,body.consider_curvature,body.refraction_coeff)
+            body.fill_sinks,body.consider_curvature,body.refraction_coeff,
+            raster(body.comparison_image_id) if body.operation=="dem_difference" and body.comparison_image_id else None)
     except (GeometryError,RasterError,ValueError,OverflowError) as error:
         raise HTTPException(status_code=422,detail=str(error)) from error
