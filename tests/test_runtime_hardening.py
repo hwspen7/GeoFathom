@@ -10,11 +10,9 @@ from jobs import isolation
 
 @pytest.fixture
 def clean_native(monkeypatch):
-    topology._native.cache_clear()
+    # Test discovery without invalidating the singleton used by active native owners.
     monkeypatch.delenv("GEOFATHOM_NATIVE_LIBRARY", raising=False)
     monkeypatch.delenv("GEOFATHOM_REQUIRE_NATIVE", raising=False)
-    yield
-    topology._native.cache_clear()
 
 
 def test_missing_pinned_library_does_not_fallback(clean_native, monkeypatch, tmp_path):
@@ -22,7 +20,7 @@ def test_missing_pinned_library_does_not_fallback(clean_native, monkeypatch, tmp
     calls = []
     monkeypatch.setattr(topology.ctypes, "CDLL", lambda path: calls.append(path))
     with pytest.raises(RuntimeError, match="Required native library"):
-        topology._native()
+        topology._native.__wrapped__()
     assert calls == []
 
 
@@ -36,7 +34,7 @@ def test_broken_pinned_library_does_not_fallback(clean_native, monkeypatch, tmp_
         raise OSError("missing dependency")
     monkeypatch.setattr(topology.ctypes, "CDLL", load)
     with pytest.raises(RuntimeError, match="missing dependency"):
-        topology._native()
+        topology._native.__wrapped__()
     assert calls == [str(path.resolve())]
 
 
