@@ -326,7 +326,10 @@ export default function App() {
   }
 
   function revealPanel(id:string){
-    if(terrainLineDrawing){setTerrainLineDrawing(false);setDrawingMode(null);setVertices([]);}
+    if(drawingMode&&vertices.length&&id!==activeTool){
+      setError('Finish or cancel the current drawing before switching tools. Your selected area is retained.');
+      return;
+    }
     setShowTools(true);setActiveTool(id);if(id!=='tools-terrain'){setTerrainPicking(false);setTerrainHover(null);}
     requestAnimationFrame(()=>document.getElementById(id)?.scrollIntoView({block:'nearest'}));
   }
@@ -453,6 +456,7 @@ export default function App() {
 
   function startTerrainLine(){
     if(busy)return;
+    if(drawingMode&&vertices.length){setError('Finish or cancel the current sketch before starting a profile line.');return;}
     // Deliberately retain geometry, measurement, selectedPlace, search candidates,
     // scratch selection and all existing map layers.
     geometrySequence.current++;
@@ -468,6 +472,7 @@ export default function App() {
 
   function startDrawing(next: Exclude<ShapeMode, null>) {
     if(busy)return;
+    if(drawingMode&&vertices.length){setError('Finish or cancel the existing sketch before starting another.');return;}
     if(!['hole','split'].includes(next)&&scratch.length>=SCRATCH_LIMIT){setError('Local drawing limit reached. Save or export drawings and remove unused ones.');return;}
     if(next==='trace-along'&&!projectWorkspace?.features.some(f=>
       f.geometry.type==='LineString'||f.geometry.type==='MultiLineString')) {
@@ -853,7 +858,10 @@ export default function App() {
         <div className="gis-brand"><Globe2 size={19}/> <strong>GeoFathom</strong></div>
         <nav aria-label="Workspace tools" className="gis-menu">
           {([['Survey','tools-survey'],['GIS','tools-gis'],['Analysis','tools-spatial'],['Terrain','tools-terrain'],['Raster / AI','tools-raster'],['Cartography','tools-style'],['Data','tools-services'],['Assistant','tools-ai']] as const).map(([title,id])=>
-            <button key={id} aria-pressed={activeTool===id&&showTools} onClick={()=>{if(id==='tools-terrain'&&activeTool===id&&showTools){setShowTools(false);setTerrainPicking(false);setTerrainHover(null);}else revealPanel(id);}}>{title}</button>)}
+            <button key={id} aria-pressed={activeTool===id&&showTools} onClick={()=>{if(id==='tools-terrain'&&activeTool===id&&showTools){
+              if(drawingMode&&vertices.length){setError('Finish or cancel the current drawing before closing Terrain.');return;}
+              setShowTools(false);setTerrainPicking(false);setTerrainHover(null);
+            }else revealPanel(id);}}>{title}</button>)}
         </nav>
         <details className="gis-settings">
           <summary>Settings</summary>
