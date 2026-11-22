@@ -4,6 +4,7 @@ import maplibregl, { type GeoJSONSource, type MapMouseEvent, type StyleSpecifica
 import { rasterPreviewUrl, protectedRasterPreview, type RasterAsset } from './api';
 import { PixelSnapIndex } from './spatialIndex';
 import {BASEMAPS,type BasemapId} from './basemaps';
+import {OFFLINE_METHOD} from './scratch';
 import {drawingPreview,measurementAnchor,approximateMeasurement,geodesicDrag as edgeDistance} from './editing';
 import { featureLabel } from './labels';
 import type { ExternalTile } from './DataServicesPanel';
@@ -45,6 +46,7 @@ interface Props {
   selectedFeatureId:string|null;
   rasterOpacity:number;
   onMapClick: (position: Position) => void;
+  onFinishDrawing:()=>void;
   onViewportChange: (bbox: [number, number, number, number]) => void;
   discovered: GeoJSON.Geometry[];
   imageLayer: RasterAsset | null;
@@ -106,7 +108,7 @@ function featureCollection(
 ): GeoJSON.FeatureCollection {
   const features: GeoJSON.Feature[] = [];
   for (const saved of layerFeatures) {
-    if (!saved.visible || (selected&&editing&&saved.id===selectedFeatureId)) continue;
+    if (!saved.visible || (selected&&saved.id===selectedFeatureId&&saved.id.startsWith('scratch-')) || (selected&&editing&&saved.id===selectedFeatureId)) continue;
     features.push({
       type: 'Feature', geometry: selected&&saved.id===selectedFeatureId?selected:saved.geometry,
       properties: {
@@ -221,7 +223,7 @@ type Drag = {
 };
 
 export default function MapCanvas({
-  selected,drawingMode,vertices,focus,basemap,measurement,showMeasurements,selectedFeatureId,rasterOpacity,onMapClick,
+  selected,drawingMode,vertices,focus,basemap,measurement,showMeasurements,selectedFeatureId,rasterOpacity,onMapClick,onFinishDrawing,
   onViewportChange, discovered, imageLayer, traceMode, onTraceClick,
   editing, moving,edgeMoving, snapping, selectedLocked, layerFeatures,
   promptPositive,promptNegative,promptBox,annotationMode,onAnnotationClick,
@@ -237,7 +239,7 @@ export default function MapCanvas({
   const mapRef = useRef<maplibregl.Map | null>(null);
   const eventRef = useRef({
     selected,selectedFeatureId,drawingMode, traceMode, annotationMode,selectionBoxMode,labelMoveMode,editing, moving,edgeMoving, snapping, selectedLocked,
-    layerFeatures, onMapClick, onTraceClick,onAnnotationClick,onSelectionBox,onLabelMove,onViewportChange,
+    layerFeatures, onMapClick,onFinishDrawing, onTraceClick,onAnnotationClick,onSelectionBox,onLabelMove,onViewportChange,
     onGeometryPreview, onGeometryCommit, onSelectSavedFeature,
   });
   const renderRef = useRef({
@@ -257,7 +259,7 @@ export default function MapCanvas({
   const [ready, setReady] = useState(false);
   eventRef.current = {
     selected,selectedFeatureId,drawingMode, traceMode, annotationMode,selectionBoxMode,labelMoveMode,editing, moving,edgeMoving, snapping, selectedLocked,
-    layerFeatures, onMapClick, onTraceClick,onAnnotationClick,onSelectionBox,onLabelMove,onViewportChange,
+    layerFeatures, onMapClick,onFinishDrawing, onTraceClick,onAnnotationClick,onSelectionBox,onLabelMove,onViewportChange,
     onGeometryPreview, onGeometryCommit, onSelectSavedFeature,
   };
 
@@ -564,6 +566,7 @@ export default function MapCanvas({
     }
     function removeByRightClick(event: MapMouseEvent) {
       const state = eventRef.current;
+      if(state.drawingMode){event.preventDefault();state.onFinishDrawing();return;}
       if (!state.editing || state.edgeMoving || state.selectedLocked || !state.selected) return;
       const feature = hits(event).find(f => f.properties?.role === 'edit-vertex');
       if (!feature) return;
@@ -574,6 +577,7 @@ export default function MapCanvas({
     }
     function insertByDoubleClick(event: MapMouseEvent) {
       const state = eventRef.current;
+      if(state.drawingMode){event.preventDefault();state.onFinishDrawing();return;}
       if (!state.editing || state.edgeMoving || state.selectedLocked || !state.selected) return;
       const edges = verticesOf(state.selected).filter(p => p.midpoint);
       if (!edges.length) return;
@@ -633,6 +637,10 @@ export default function MapCanvas({
     }
     map.on('idle',inspectRenderedHandles);
     map.on('moveend', bounds);
+    const onEscape=(event:KeyboardEvent)=>{
+      if(event.key==='Escape'){drag.current=null;selectionDrag.current=null;labelDrag.current=null;map.dragPan.enable();}
+    };
+    window.addEventListener('keydown',onEscape);
     map.on('click', click);
     map.on('mousedown', beginDrag);
     map.on('mousemove', dragging);
@@ -761,6 +769,7 @@ export default function MapCanvas({
       map.off('mousemove',displayCoordinates);
       map.off('mouseup', finishDrag);
       window.removeEventListener('mouseup',finishDrag);
+      window.removeEventListener('keydown',onEscape);
       map.dragPan.enable();
       mapRef.current = null;
       map.remove();
@@ -895,7 +904,7 @@ export default function MapCanvas({
     const draft=drawingPreview(drawingMode,vertices,cursor);
     const g=draft??selected;
     if(!showMeasurements||!g)return;
-    const exact=!draft?measurement:null;
+    const exact=!draft&&measurement?.method!==OFFLINE_METHOD?measurement:null;
     const totals=exact??approximateMeasurement(g);
     const prefix=exact?'':'~ ';
     const format=(n:number)=>n.toLocaleString('en-US',{maximumFractionDigits:2});

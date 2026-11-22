@@ -89,7 +89,7 @@ export default function SurveyTools({
       <div className="survey-mode-grid">
         {buttonModes.map(item => (
           <button key={item.mode} className={mode === item.mode ? 'active' : ''}
-            title={'Draw ' + item.title.toLowerCase()} onClick={() => onStart(item.mode)}
+            title={'Draw '+item.title.toLowerCase()} aria-pressed={mode===item.mode} onClick={() => onStart(item.mode)}
             disabled={busy||(['hole','split'].includes(item.mode)&&(locked||(geometry?.type!=='Polygon'&&geometry?.type!=='MultiPolygon')))}>
             {item.mode === 'circle' ? <Circle size={15}/> :
              item.mode === 'line' ? <Ruler size={15}/> :
@@ -103,7 +103,7 @@ export default function SurveyTools({
         <div className="survey-action-bar">
           <span><MousePointer2 size={13}/> {points.length} pts</span>
           <button title="Remove last point" disabled={!points.length} onClick={onUndoPoint}><Undo2 size={14}/></button>
-          <button title="Cancel" onClick={onCancel}><RotateCcw size={14}/></button>
+          <button title="Cancel" aria-label="Cancel drawing" onClick={onCancel}><RotateCcw size={14}/></button>
           <button className="finish-button" disabled={busy||points.length<(mode==='point'?1:['polygon','hole'].includes(mode)?3:2)} onClick={onFinish}><Check size={14}/> Finish</button>
         </div>
       )}

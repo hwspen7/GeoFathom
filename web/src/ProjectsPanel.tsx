@@ -25,13 +25,14 @@ interface Props {
   onWorkspace: (workspace: GeoWorkspace | null, projectId: string | null) => void;
   onPlaceAnnotation: (projectId:string,layerId:string,text:string)=>void;
   onFeatureDeleted:()=>void;
+  onSavedDraft?:()=>void;
   extraFeatures:WorkspaceFeature[];
 }
 
 export default function ProjectsPanel({
   geometry, featureName, featureSource, featureProperties, selectedFeatureId,
   splitParts, refreshToken, onOpen, onWorkspace, onPlaceAnnotation, onFeatureDeleted,
-  extraFeatures,
+  extraFeatures,onSavedDraft,
 }: Props) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [listRetry,setListRetry]=useState(0);
@@ -186,7 +187,7 @@ export default function ProjectsPanel({
         );
         const latest = await getWorkspace(selected);
         const opened = latest.features.find(item => item.id === saved.id);
-        if (opened) onOpen(opened);
+        if(opened&&selection.current===selected){onSavedDraft?.();onOpen(opened);}
         setInfo('New geometry saved to the chosen layer.');
       }
     });

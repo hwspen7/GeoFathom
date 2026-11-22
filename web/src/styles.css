@@ -497,3 +497,11 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .gis-navigation-tools button{background:#fff;border:1px solid #cdd5dc;padding:6px;min-height:30px;color:#304656;font-size:11px}
 .gis-survey-commands{min-width:0;flex:1}
 .desktop-gis .panel-section[hidden]{display:none!important}
+
+.scratch-list{display:flex;flex-direction:column;gap:3px;max-height:200px;overflow:auto;margin:6px 0}
+.scratch-row{display:grid;grid-template-columns:20px minmax(0,1fr) 26px;gap:3px;align-items:center;padding:3px;border:1px solid #ccd6dc;background:#fff}
+.scratch-row.active{background:#d8eadf;border-color:#75a681}
+.scratch-row button{background:transparent;border:0;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#294b3c;font-size:12px;padding:4px}
+.scratch-layer>input{width:100%;margin:4px 0;padding:6px;border:1px solid #cbd5dd}
+.scratch-layer>button{border:1px solid #cbd5dd;background:white;color:#304656;padding:6px;font-size:11px;width:100%}
+.gis-toolbar .finish-button{color:#fff!important;background:#187e4a!important}

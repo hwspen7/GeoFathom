@@ -6,11 +6,12 @@ import {
 } from 'lucide-react';
 
 import {
-  getCapabilities,checkReady, interpret, measureGeometry, searchPlaces,
+  getCapabilities,checkReady,backendUnavailable, interpret, measureGeometry, searchPlaces,
   type Capabilities, type Measurement, type Place,
 } from './api';
 import MapCanvas, { type FocusPoint } from './MapCanvas';
 import {BASEMAPS,type BasemapId} from './basemaps';
+import {localMeasurement,localShape,readScratch,writeScratch,SCRATCH_LIMIT,OFFLINE_METHOD,type ScratchFeature} from './scratch';
 import SurveyTools from './SurveyTools';
 import ProfessionalPanel from './ProfessionalPanel';
 import TerrainWorkbench from './TerrainWorkbench';
@@ -46,6 +47,9 @@ export default function App() {
   const [candidates, setCandidates] = useState<Place[]>([]);
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
   const [geometry, setGeometry] = useState<GeoJSON.Geometry | null>(null);
+  const [scratch,setScratch]=useState<ScratchFeature[]>(readScratch);
+  const [scratchId,setScratchId]=useState<string|null>(null);
+  const [scratchStorageError,setScratchStorageError]=useState(false);
   const [measurement, setMeasurement] = useState<Measurement | null>(null);
   const [drawingMode, setDrawingMode] = useState<ShapeMode>(null);
   const [vertices, setVertices] = useState<Position[]>([]);
@@ -129,6 +133,29 @@ export default function App() {
   const selectedLocked = Boolean(selectedSaved &&
     projectWorkspace?.layers.find(layer => layer.id === selectedSaved.layer_id)?.locked);
 
+  useEffect(()=>{setScratchStorageError(!writeScratch(scratch));},[scratch]);
+
+  function storeScratch(next:GeoJSON.Geometry,measured:Measurement,id:string|null=scratchId){
+    const key=id??'scratch-'+crypto.randomUUID();
+    setScratchId(key);
+    setScratch(old=>{
+      const found=old.find(f=>f.id===key);
+      const item:ScratchFeature={id:key,name:found?.name??next.type+' '+(old.length+1),geometry:structuredClone(next),measurement:measured,visible:true};
+      return found?old.map(f=>f.id===key?item:f):[...old,item];
+    });
+  }
+  function selectScratch(item:ScratchFeature,zoom=true){
+    geometrySequence.current++;setBusy(false);setScratchId(item.id);setSelectedFeatureId(null);featureIdentity.current=null;
+    timeline.current=new GeometryTimeline();timeline.current.push(item.geometry);setHistoryPulse(v=>v+1);
+    lastValid.current=structuredClone(item.geometry);setGeometry(item.geometry);setMeasurement(item.measurement);
+    setGeometrySource('Local scratch');setFeatureProperties({source_type:'user_drawn',draft_name:item.name});
+    setPreview(null);setPendingShared(null);setLinked(false);setDrawingMode(null);setVertices([]);
+    setEditing(false);setEdgeMoving(false);setMoving(false);setTraceMode(false);setPromptMode(null);
+    setSelectionBoxMode(false);setLabelMoveMode(false);setPendingAnnotation(null);
+    setSelectedPlace(null);setSplitParts([]);setError('');setMessage('Selected '+item.name);
+    if(zoom){const [west,south,east,north]=item.measurement.bounds;setFocus({longitude:(west+east)/2,latitude:(south+north)/2,bbox:[west,south,east,north],key:Date.now()});}
+  }
+
   async function commitGeometry(next: GeoJSON.Geometry, details = 'Geometry updated and validated.', detached = false) {
     if (selectedLocked && !detached) {
       setError('Unlock the selected layer before editing geometry.');
@@ -152,6 +179,7 @@ export default function App() {
       }
       const checked = await measureGeometry(next);
       if (sequence !== geometrySequence.current) return;
+      if(detached||!selectedFeatureId)storeScratch(next,checked,detached?null:scratchId);
       setGeometry(next);
       setMeasurement(checked);
       setPreview(null);
@@ -162,7 +190,15 @@ export default function App() {
       setMessage(details);
     } catch (failure) {
       if (sequence !== geometrySequence.current) return;
-      setError(failure instanceof Error ? failure.message : 'Invalid geometry.');
+      if((detached||!selectedFeatureId)&&backendUnavailable(failure)){
+        try{
+          const local=localMeasurement(next);
+          storeScratch(next,local,detached?null:scratchId);setGeometry(next);setMeasurement(local);
+          lastValid.current=structuredClone(next);timeline.current.push(next);setHistoryPulse(v=>v+1);
+          setPreview(null);setError('');setMessage('Local edit completed · approximate measurement, backend offline.');
+          return;
+        }catch(localError){setError(String(localError));}
+      }else setError(failure instanceof Error ? failure.message : 'Invalid geometry.');
       setGeometry(lastValid.current);
       setPreview(null);
     }
@@ -176,10 +212,15 @@ export default function App() {
     setPreview(null);
     setHistoryPulse(value => value + 1);
     setMeasurement(null);
-    if (next) void measureGeometry(next).then(value => {
-      if (sequence === geometrySequence.current) setMeasurement(value);
-    }).catch(() => {
-      if (sequence === geometrySequence.current) setMeasurement(null);
+    if(!next&&scratchId)setScratch(old=>old.filter(item=>item.id!==scratchId));
+    if(next)void measureGeometry(next).then(value=>{
+      if(sequence===geometrySequence.current){setMeasurement(value);if(scratchId)storeScratch(next,value,scratchId);}
+    }).catch(failure=>{
+      if(sequence!==geometrySequence.current)return;
+      if(scratchId&&backendUnavailable(failure))try{
+        const value=localMeasurement(next);setMeasurement(value);storeScratch(next,value,scratchId);
+      }catch{setMeasurement(null);}
+      else setMeasurement(null);
     });
   }
 
@@ -192,7 +233,7 @@ export default function App() {
       setLinked(false);
     }
     featureIdentity.current = feature.id;
-    setPendingShared(null);
+    setScratchId(null);setPreview(null);setVertices([]);setPendingShared(null);
     setGeometry(feature.geometry);
     lastValid.current = structuredClone(feature.geometry);
     timeline.current.push(feature.geometry);
@@ -252,7 +293,7 @@ export default function App() {
 
   async function selectPlace(place: Place) {
     const sequence = ++geometrySequence.current;
-    setSelectedPlace(place);
+    setSelectedPlace(place);setScratchId(null);
     setSelectedFeatureId(null);
     setLinked(false);
     setEditing(false);setEdgeMoving(false);
@@ -354,6 +395,8 @@ export default function App() {
   }
 
   function startDrawing(next: Exclude<ShapeMode, null>) {
+    if(busy)return;
+    if(!['hole','split'].includes(next)&&scratch.length>=SCRATCH_LIMIT){setError('Local drawing limit reached. Save or export drawings and remove unused ones.');return;}
     if(next==='trace-along'&&!projectWorkspace?.features.some(f=>
       f.geometry.type==='LineString'||f.geometry.type==='MultiLineString')) {
       setError('Save at least one vector line feature in the active project to trace along.');
@@ -370,11 +413,9 @@ export default function App() {
     setTraceMode(false);
     setPromptMode(null);setPendingAnnotation(null);setSelectionBoxMode(false);setLabelMoveMode(false);
     if (!operation) {
-      if(featureIdentity.current){
-        timeline.current=new GeometryTimeline();
-        lastValid.current=null;
-        setHistoryPulse(value=>value+1);
-      }
+      setScratchId(null);
+      timeline.current=new GeometryTimeline();lastValid.current=null;
+      setHistoryPulse(value=>value+1);
       setLinked(false);
       setPendingShared(null);
       setGeometrySource('User drawn');
@@ -399,11 +440,11 @@ export default function App() {
       ['polygon','hole'].includes(next)?'Click corners, then Finish.':'Click start and end, then Finish.');
   }
 
-  async function finishDrawing() {
-    if (!drawingMode) return;
+  async function finishDrawing(points:Position[]=vertices) {
+    if (!drawingMode||busy) return;
     const mode = drawingMode;
     const required = mode==='point'?1:['polygon','hole'].includes(mode) ? 3 : 2;
-    if (vertices.length < required) {
+    if (points.length < required) {
       setError('Add more points before finishing.');
       return;
     }
@@ -413,13 +454,13 @@ export default function App() {
       let result: GeoJSON.Geometry;
       let measured: Measurement;
       if(mode==='point'){
-        result={type:'Point',coordinates:vertices[0]};
+        result={type:'Point',coordinates:points[0]};
         measured=await measureGeometry(result);
       }else if (mode === 'trace-along') {
         const paths=(projectWorkspace?.features ?? [])
           .filter(feature=>feature.geometry.type==='LineString'||feature.geometry.type==='MultiLineString')
           .flatMap(feature=>pathsOf(feature.geometry));
-        const traced=await traceExisting(vertices[0],vertices[1],paths);
+        const traced=await traceExisting(points[0],points[1],paths);
         if(sequence!==geometrySequence.current)return;
         result=traced.geometry;
         measured=traced.measurement;
@@ -429,22 +470,22 @@ export default function App() {
       } else if (mode === 'polygon' || mode === 'rectangle' || mode === 'circle') {
         let constructed;
         if (mode === 'circle') {
-          const path = { type: 'LineString', coordinates: vertices.slice(0,2) } as GeoJSON.LineString;
+          const path = { type: 'LineString', coordinates: points.slice(0,2) } as GeoJSON.LineString;
           const line = await measureGeometry(path);
           constructed = await constructGeometry({
-            mode, vertices: vertices.slice(0,1), radius_m: line.length_m ?? 0,
+            mode, vertices: points.slice(0,1), radius_m: line.length_m ?? 0,
           });
         } else {
           constructed = await constructGeometry({
-            mode, vertices: mode === 'rectangle' ? vertices.slice(0,2) : vertices,
+            mode, vertices: mode === 'rectangle' ? points.slice(0,2) : points,
           });
         }
         result = constructed.geometry; measured = constructed.measurement;
       } else if (mode === 'line' || mode === 'split') {
-        result = { type: 'LineString', coordinates: vertices };
+        result = { type: 'LineString', coordinates: points };
         measured = await measureGeometry(result);
       } else {
-        const constructed = await constructGeometry({ mode: 'polygon', vertices });
+        const constructed = await constructGeometry({ mode: 'polygon', vertices:points });
         result = constructed.geometry; measured = constructed.measurement;
       }
       if (mode === 'hole' && geometry) {
@@ -460,6 +501,7 @@ export default function App() {
         setSelectedFeatureId(null);
       }
       if(sequence!==geometrySequence.current)return;
+      if(!selectedFeatureId||!['hole','split'].includes(mode))storeScratch(result,measured,mode==='hole'?scratchId:null);
       setGeometry(result);
       lastValid.current = structuredClone(result);
       timeline.current.push(result);
@@ -470,8 +512,21 @@ export default function App() {
         ? 'Polygon divided. Save all pieces from Projects & saved geometry.'
         : 'Drawing completed and measured on the WGS84 ellipsoid.');
     } catch (failure) {
-      if(sequence===geometrySequence.current)
-        setError(failure instanceof Error ? failure.message : 'Drawing failed.');
+      if(sequence!==geometrySequence.current)return;
+      if(backendUnavailable(failure)){
+        try{
+          const local=localShape(mode,points);
+          if(local){
+            storeScratch(local.geometry,local.measurement,null);
+            setGeometry(local.geometry);setMeasurement(local.measurement);
+            lastValid.current=structuredClone(local.geometry);timeline.current.push(local.geometry);
+            setHistoryPulse(v=>v+1);setDrawingMode(null);setVertices([]);setPreview(null);
+            setError('');setMessage('Drawing completed locally · approximate measurement. Connect API for exact validation.');
+            return;
+          }
+        }catch(error){setError(error instanceof Error?error.message:String(error));return;}
+      }
+      setError(failure instanceof Error ? failure.message : 'Drawing failed.');
     } finally { setBusy(false); }
   }
 
@@ -515,7 +570,7 @@ export default function App() {
 
   function clearWorkspace() {
     geometrySequence.current++;
-    setGeometry(null);
+    setGeometry(null);setScratchId(null);setBusy(false);
     setPendingAnnotation(null);
     setSelectionBoxMode(false);setSelectionBox(null);
     setSpatialSelected([]);setQualityIssues([]);setProjectGrid(null);
@@ -554,7 +609,7 @@ export default function App() {
         source: selectedPlace?.source ?? 'User-drawn geometry',
         boundary_status: selectedPlace?.boundary_status ?? (featureProperties.source_type === 'image_derived' ? 'estimated_from_imagery' : 'user_drawn'),
         ...featureProperties,
-        measured_using: 'WGS84 ellipsoidal geodesic',
+        measured_using: measurement?.method??'Unverified geometry',
       },
     };
     const blob = new Blob([JSON.stringify(feature, null, 2)], { type: 'application/geo+json' });
@@ -573,7 +628,7 @@ export default function App() {
       if(event.target instanceof HTMLInputElement||event.target instanceof HTMLTextAreaElement||
         event.target instanceof HTMLSelectElement||event.ctrlKey||event.metaKey)return;
       if(event.key==='Escape'){
-        geometrySequence.current++;setDrawingMode(null);setVertices([]);
+        event.preventDefault();geometrySequence.current++;setBusy(false);setDrawingMode(null);setVertices([]);
         setEditing(false);setEdgeMoving(false);setMoving(false);setTraceMode(false);setPromptMode(null);
         setSelectionBoxMode(false);setLabelMoveMode(false);setPendingAnnotation(null);
         if(preview||pendingShared){setGeometry(lastValid.current);setPreview(null);setPendingShared(null);}
@@ -600,7 +655,7 @@ export default function App() {
       <div className="gis-toolbar" aria-label="Survey toolbar">
         <div className="gis-navigation-tools">
           <button aria-label="Pan and select" title="Pan and select · Esc" onClick={()=>{
-            geometrySequence.current++;setDrawingMode(null);setVertices([]);setEditing(false);setEdgeMoving(false);
+            geometrySequence.current++;setBusy(false);setDrawingMode(null);setVertices([]);setEditing(false);setEdgeMoving(false);
             setMoving(false);setTraceMode(false);setPromptMode(null);setSelectionBoxMode(false);setLabelMoveMode(false);
             setPendingAnnotation(null);if(preview||pendingShared){setGeometry(lastValid.current);setPreview(null);setPendingShared(null);}
           }}>Pan</button>
@@ -621,7 +676,7 @@ export default function App() {
             {!capabilities&&connectionError&&<div className="discovery-error" role="alert">{connectionError} <button onClick={()=>setConnectionRetry(v=>v+1)}>Reconnect</button></div>}
             <ProjectsPanel
               geometry={busy || preview || pendingShared || drawingMode ? null : geometry}
-              featureName={selectedPlace?.name || 'Custom boundary'}
+              featureName={scratch.find(f=>f.id===scratchId)?.name||selectedPlace?.name||'Custom boundary'}
               featureSource={geometrySource || selectedPlace?.source || 'User drawn'}
               featureProperties={featureProperties}
               selectedFeatureId={selectedFeatureId}
@@ -654,6 +709,7 @@ export default function App() {
                 setActiveProjectId(id);
               }}
               onOpen={openStoredFeature}
+              onSavedDraft={()=>{if(scratchId)setScratch(old=>old.filter(f=>f.id!==scratchId));setScratchId(null);}}
               onFeatureDeleted={clearWorkspace}
               onPlaceAnnotation={(projectId,layerId,text)=>{
                 setPendingAnnotation({projectId,layerId,text});
@@ -665,6 +721,30 @@ export default function App() {
           </section>
 
 
+            <section className="panel-section scratch-layer">
+              <div className="section-heading"><Layers3 size={15}/><span>Local drawings · {scratch.length}</span></div>
+              {scratchStorageError&&<p className="discovery-error">Browser storage unavailable. Export drawings before closing.</p>}
+              {!scratch.length&&<small>Draw a shape to create the first local feature.</small>}
+              <div className="scratch-list" aria-label="Local drawings">
+                {scratch.map(item=><div key={item.id} className={'scratch-row '+(scratchId===item.id?'active':'')}>
+                  <input type="checkbox" aria-label={'Show '+item.name} checked={item.visible} onChange={event=>{
+                    if(!event.target.checked&&scratchId===item.id)clearWorkspace();
+                    setScratch(old=>old.map(f=>f.id===item.id?{...f,visible:event.target.checked}:f));
+                  }}/>
+                  <button onClick={()=>{setScratch(old=>old.map(f=>f.id===item.id?{...f,visible:true}:f));selectScratch(item);}}>{item.name}</button>
+                  <button title={'Delete '+item.name} aria-label={'Delete '+item.name} onClick={()=>{
+                    if(scratchId===item.id)clearWorkspace();setScratch(old=>old.filter(f=>f.id!==item.id));
+                  }}>×</button>
+                </div>)}
+              </div>
+              {scratchId&&<input aria-label="Rename local drawing" value={scratch.find(f=>f.id===scratchId)?.name??''} maxLength={80}
+                onChange={e=>setScratch(old=>old.map(f=>f.id===scratchId?{...f,name:e.target.value}:f))}/>}
+              {scratch.length>0&&<button onClick={()=>{
+                const collection:GeoJSON.FeatureCollection={type:'FeatureCollection',features:scratch.map(f=>({type:'Feature',geometry:f.geometry,properties:{name:f.name,measurement:f.measurement}}))};
+                const url=URL.createObjectURL(new Blob([JSON.stringify(collection)],{type:'application/geo+json'}));
+                const link=document.createElement('a');link.href=url;link.download='geofathom-local-drawings.geojson';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+              }}>Export local drawings</button>}
+            </section>
             <section className="panel-section gis-basemaps">
               <div className="section-heading"><Globe2 size={15}/><span>Basemap</span></div>
               <select aria-label="Basemap" value={basemap} onChange={event=>setBasemap(event.target.value as BasemapId)}>
@@ -729,7 +809,9 @@ export default function App() {
             selected={geometry} drawingMode={drawingMode} vertices={vertices}
             editing={editing} moving={moving} edgeMoving={edgeMoving} snapping={snapping}
             selectedLocked={selectedLocked}
-            layerFeatures={[...(projectWorkspace?.features ?? []),
+            layerFeatures={[...scratch.map(item=>({id:item.id,layer_id:'scratch',geometry:item.geometry,name:item.name,source:'Local scratch',
+              properties:{},measurement:item.measurement,style:DEFAULT_LAYER_STYLE,color:'#168047',visible:item.visible,locked:false})),
+              ...[...(projectWorkspace?.features ?? []),
               ...pagedFeatures.filter(feature=>!(projectWorkspace?.features??[])
                 .some(row=>row.id===feature.id))].sort((a,b) => {
               const aIndex=projectWorkspace?.layers.find(layer=>layer.id===a.layer_id)?.z_index ?? 0;
@@ -745,7 +827,7 @@ export default function App() {
                   layer?.color??'#2563eb'),visible:Boolean(layer?.visible),
                 locked: Boolean(layer?.locked),
               };
-            })}
+            })]}
             onGeometryPreview={next => {
               if(!projectCurrent())return;
               geometrySequence.current++;
@@ -769,13 +851,16 @@ export default function App() {
                 });
             }}
             onSelectSavedFeature={id => {
+              const local=scratch.find(f=>f.id===id);
+              if(local){selectScratch(local,false);return;}
               const feature = projectWorkspace?.features.find(item => item.id === id) ??
                 pagedFeatures.find(item=>item.id===id);
               if (feature) openStoredFeature(feature);
             }}
             focus={focus} basemap={basemap}
             measurement={preview?null:measurement} showMeasurements={showMeasurements}
-            selectedFeatureId={selectedFeatureId}
+            selectedFeatureId={selectedFeatureId??scratchId}
+            onFinishDrawing={()=>{void finishDrawing();}}
             imageLayer={rasterVisible?imageLayer:null} rasterOpacity={rasterOpacity}
             traceMode={traceMode||promptMode!==null}
             promptPositive={positivePoints} promptNegative={negativePoints}
@@ -891,7 +976,9 @@ export default function App() {
             onMapClick={position => {
               if(busy)return;
               const max=drawingMode==='point'?1:['rectangle','circle','trace-along'].includes(drawingMode??'')?2:4000;
-              setVertices(value=>value.length>=max||(value.length>0&&value[value.length-1][0]===position[0]&&value[value.length-1][1]===position[1])?value:[...value,position]);
+              if(vertices.length>=max||(vertices.length&&vertices.at(-1)![0]===position[0]&&vertices.at(-1)![1]===position[1]))return;
+              const next=[...vertices,position];setVertices(next);
+              if(max<4000&&next.length===max)void finishDrawing(next);
             }}
           />
           <div className="map-legend">
@@ -942,6 +1029,7 @@ export default function App() {
                   {measurement.perimeter_m !== null && <div className="metric secondary"><span>Perimeter</span><strong>{number(measurement.perimeter_m / 1000, 3)} km</strong></div>}
                   {measurement.area_m2 !== null && <div className="metric secondary"><span>Square meters</span><strong>{number(measurement.area_m2)} m²</strong></div>}
                   <p className="analysis-footnote">{measurement.method}</p>
+                  {measurement.method===OFFLINE_METHOD&&<button onClick={()=>{if(geometry)void commitGeometry(geometry,'Exact measurement updated.');}}>Validate exact measurement</button>}
                 </>
               )}
               {(() => {
@@ -976,7 +1064,7 @@ export default function App() {
                   <summary>Edge lengths · {previewEdgeLengths(geometry).total} segments</summary>
                   <div>
                     {previewEdgeLengths(geometry).edges.map((edge, index) =>
-                      <div key={index}><span>{edge.label}</span><strong>{!preview&&measurement?.edge_lengths_m?.[index]!==undefined?'':'~ '}{number(!preview?(measurement?.edge_lengths_m?.[index]??edge.length_m):edge.length_m,2)} m</strong></div>)}
+                      <div key={index}><span>{edge.label}</span><strong>{!preview&&measurement?.method!==OFFLINE_METHOD&&measurement?.edge_lengths_m?.[index]!==undefined?'':'~ '}{number(!preview?(measurement?.edge_lengths_m?.[index]??edge.length_m):edge.length_m,2)} m</strong></div>)}
                   </div>
                   <p className="project-hint">Live spherical preview. Final area/perimeter is calculated on the WGS84 ellipsoid.</p>
                 </details>
@@ -1017,7 +1105,7 @@ export default function App() {
               saved={activeProjectId ? projectWorkspace?.features ?? [] : []}
               onStart={startDrawing}
               onFinish={() => { if(!busy)void finishDrawing(); }}
-              onCancel={() => { geometrySequence.current++; setDrawingMode(null); setVertices([]); }}
+              onCancel={() => { geometrySequence.current++;setBusy(false);setError('');setDrawingMode(null); setVertices([]);setMessage('Drawing cancelled.'); }}
               onUndoPoint={() => setVertices(value => value.slice(0,-1))}
               onUndo={() => applyHistory(timeline.current.undo())}
               onRedo={() => applyHistory(timeline.current.redo())}

@@ -6,7 +6,7 @@ export class ApiError extends Error {
   }
 }
 export function backendUnavailable(error:unknown):boolean{
-  return error instanceof ApiError&&(error.status===null||[502,503,504].includes(error.status));
+  return error instanceof ApiError&&(error.status===null||[500,502,503,504].includes(error.status));
 }
 
 export interface Place {
