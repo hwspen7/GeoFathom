@@ -66,3 +66,20 @@ def test_clip_wgs84_polygon_and_validates_requests(source_dems):
         dem_processing.prepare_dem([paths[0]],'mosaic',resolution_m=10)
     with pytest.raises(RasterError,match='resolution'):
         dem_processing.prepare_dem([paths[0]],'resample',resolution_m=0.5)
+
+
+
+def test_dem_mosaic_refuses_conflicting_datum_metadata(source_dems):
+    paths,_=source_dems
+    with rasterio.open(paths[0],'r+') as ds:ds.update_tags(VERTICAL_DATUM='NAVD88')
+    with rasterio.open(paths[1],'r+') as ds:ds.update_tags(VERTICAL_DATUM='EGM96')
+    with pytest.raises(RasterError,match='vertical datum mismatch'):
+        dem_processing.prepare_dem(paths,'mosaic',resolution_m=10)
+
+
+def test_dem_resample_reports_declared_datum_quality(source_dems):
+    paths,saved=source_dems
+    with rasterio.open(paths[0],'r+') as ds:ds.update_tags(VERTICAL_DATUM='NAVD88')
+    result=dem_processing.prepare_dem([paths[0]],'resample',resolution_m=10)
+    assert result['valid_cells']==24
+    assert 'labels match' in result['warning']

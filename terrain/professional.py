@@ -162,6 +162,29 @@ def classification(values,operation):
         return np.where(finite,values,-1).astype(np.int16),["Other","Selected"],("#a6adb4","#16856f")
     elif operation=="cutfill_map":
         return np.where(finite,np.where(values<0,0,np.where(values>0,2,1)),-1).astype(np.int16),["Fill","Balanced","Cut"],("#287fa5","#b8b8b8","#b95b37")
+    elif operation=="dem_difference":
+        # Diverging classes are always zero-centered, even for one-sided
+        # changes. Original GeoTIFF values and statistics are unaffected.
+        classes=np.full(values.shape,-1,dtype=np.int16)
+        max_abs=max(abs(lo),abs(hi))
+        if max_abs==0:
+            classes[finite]=3
+        else:
+            inner=max_abs/3
+            outer=2*max_abs/3
+            v=values[finite]
+            classes[finite]=np.select(
+                [v<=-outer,v<=-inner,v<0,v==0,v<inner,v<outer],
+                [0,1,2,3,4,5],default=6
+            ).astype(np.int16)
+        labels=(["Large decrease","Decrease","Small decrease","No change (0 m)",
+                 "Small increase","Increase","Large increase"] if max_abs==0 else
+                [f"≤ -{outer:.3g} m",f"-{outer:.3g} to -{inner:.3g} m",
+                 f"-{inner:.3g} to 0 m","No change (0 m)",
+                 f"0 to {inner:.3g} m",f"{inner:.3g} to {outer:.3g} m",
+                 f"≥ {outer:.3g} m"])
+        return classes,labels,("#225c8f","#6a98bf","#b7d0e1","#d8d8d8",
+                              "#e9c1ab","#c87953","#98432d")
     else:
         edges=np.linspace(lo,hi,7).tolist() if lo!=hi else [lo,hi]
         labels=[f"{a:.3g}–{b:.3g}" for a,b in zip(edges,edges[1:])]

@@ -286,8 +286,12 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
             result["warning"]+=" Vector edge budget exceeded; full drainage raster remains available."
     elif operation=="dem_difference":
         from .difference import compare_dem
-        result["raster"],result["metrics"]=compare_dem(z,valid,affine,crs,comparison_path,cancel)
-        result["warning"]="Primary minus comparison DEM on the primary grid. Reference data was bilinearly resampled. Verify matching vertical datums, source epochs, and native resolutions before interpreting changes."
+        result["raster"],result["metrics"]=compare_dem(z,valid,affine,crs,comparison_path,cancel,primary_path=path)
+        result["warning"]=("Primary minus comparison DEM, bilinearly aligned on the primary grid. "
+                           "Declared vertical datum labels agree but have not been independently verified. "
+                           if result["metrics"]["datum_labels_match"] else
+                           "Primary minus comparison DEM, bilinearly aligned on the primary grid. "
+                           "At least one vertical datum label is missing: change estimates are unverified. ")
     elif operation=="contours":
         result["features"]=_contours(z,valid,affine,crs,boundary,interval,cancel)
         result["metrics"]={"contour_lines":sum(f["properties"]["contour_path_count"] for f in result["features"]),

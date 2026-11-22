@@ -20,6 +20,7 @@ from imagery.raster import RasterError
 from imagery.store import imagery_dir, store_upload
 from terrain.engine import _check_dem
 from terrain.cancellation import checkpoint
+from terrain.vertical import vertical_datum, check_vertical_compatibility
 
 _PREPARE_SLOT=BoundedSemaphore(1)
 _MAX_PIXELS=8_000_000
@@ -55,6 +56,9 @@ def prepare_dem(paths, mode, geometry=None, resolution_m=None, sampling='bilinea
             sources=[stack.enter_context(rasterio.open(path)) for path in paths]
             for src in sources:
                 _check_dem(src)
+            datums=[vertical_datum(src) for src in sources]
+            datum=check_vertical_compatibility(datums)
+            all_datums_known=all(label is not None for label in datums)
             crs=sources[0].crs
             res=float(resolution_m if resolution_m is not None else min(abs(sources[0].transform.a),abs(sources[0].transform.e)))
             if not isfinite(res) or not 1 <= res <= 1000:
@@ -107,11 +111,19 @@ def prepare_dem(paths, mode, geometry=None, resolution_m=None, sampling='bilinea
                                dtype='float32',crs=crs,transform=affine,nodata=np.nan,
                                compress='deflate') as target:
                 target.write(merged,1)
-                target.update_tags(SOURCE=provenance,VERTICAL_UNIT='meter')
+                output_tags={'SOURCE':provenance,'VERTICAL_UNIT':'meter'}
+                # Do not label a mosaic with a datum if a contributor's
+                # reference is unknown, even when another input is labelled.
+                if datum is not None and all_datums_known:
+                    output_tags['VERTICAL_DATUM']=datum
+                target.update_tags(**output_tags)
             checkpoint(cancel)
             asset=store_upload(temporary,f'Terrain {mode} {res:g} m.tif',provenance)
+            quality=('Vertical datum labels match but are not independently verified. '
+                     if all_datums_known else
+                     'One or more source vertical datum labels are missing; vertical compatibility is unverified. ')
             return {'asset':asset,'operation':mode,'valid_cells':count,'total_cells':int(merged.size),
-                    'resolution_m':res,'warning':'Processing grid is not a certificate of source elevation or vertical-datum accuracy.'}
+                    'resolution_m':res,'warning':quality+'Processing grid is not proof of native elevation accuracy.'}
     except rasterio.errors.RasterioError as error:
         raise RasterError('DEM preparation failed to read or transform the input GeoTIFF.') from error
     finally:

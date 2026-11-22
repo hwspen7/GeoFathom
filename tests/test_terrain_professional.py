@@ -88,3 +88,15 @@ def test_directional_curvature_of_quadratic_surface():
     flat=derivatives(np.full((7,7),10.),valid,10,10)
     assert np.isnan(flat["plan_curvature"][3,3])
     assert np.isnan(flat["profile_curvature"][3,3])
+
+
+def test_dem_difference_uses_zero_centered_diverging_legend():
+    values=np.array([[-12.,-6.,-0.1,0.,0.1,6.,12.,np.nan]])
+    classes,labels,colors=classification(values,'dem_difference')
+    assert classes.tolist()==[[0,1,2,3,4,5,6,-1]]
+    assert len(colors)==7 and labels[3]=='No change (0 m)'
+    positive,_,_=classification(np.array([[2.,4.,8.]]),'dem_difference')
+    negative,_,_=classification(np.array([[-2.,-4.,-8.]]),'dem_difference')
+    assert np.all(positive>3) and np.all(negative<3)
+    zero,_,_=classification(np.array([[0.,0.,np.nan]]),'dem_difference')
+    assert zero.tolist()==[[3,3,-1]]

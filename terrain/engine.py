@@ -26,6 +26,10 @@ def _check_dem(src):
     if not src.crs or not src.crs.is_projected or src.crs.linear_units.lower() not in {"metre","meter","metres","meters"}:
         raise RasterError("DEM terrain analysis requires projected horizontal coordinates in meters.")
     if src.count!=1:raise RasterError("DEM needs exactly one elevation band.")
+    # Rasterio reads raw sample values, not scaled physical heights. Reject
+    # non-identity band transforms to avoid silent errors in slope and volume.
+    if not math.isclose(float(src.scales[0]),1.,rel_tol=0,abs_tol=1e-12) or not math.isclose(float(src.offsets[0]),0.,rel_tol=0,abs_tol=1e-12):
+        raise RasterError("Scaled DEM bands are unsupported: convert band scale/offset to physical meter elevations before analysis.")
     unit=(src.units[0] or src.tags().get("VERTICAL_UNIT","")).strip().lower()
     if unit and unit not in {"m","metre","meter","metres","meters"}:
         raise RasterError("DEM vertical units must be meters.")

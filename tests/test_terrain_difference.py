@@ -53,3 +53,34 @@ def test_dem_difference_needs_explicit_reference():
     with pytest.raises(RasterError,match="second DEM"):
         compare_dem(np.zeros((3,3)),np.ones((3,3),bool),
                     from_origin(0,30,10,10),"EPSG:32617",None)
+
+
+
+def test_dem_difference_refuses_conflicting_declared_vertical_datums(tmp_path):
+    affine=from_origin(500000,4500000,10,10)
+    primary=tmp_path/'primary.tif'
+    reference=tmp_path/'reference.tif'
+    make_dem(primary,np.full((5,5),102.),affine)
+    make_dem(reference,np.full((5,5),100.),affine)
+    with rasterio.open(primary,'r+') as ds:ds.update_tags(VERTICAL_DATUM='NAVD88')
+    with rasterio.open(reference,'r+') as ds:ds.update_tags(VERTICAL_DATUM='EGM96')
+    with pytest.raises(RasterError,match='vertical datum mismatch'):
+        compare_dem(np.full((5,5),102.),np.ones((5,5),bool),
+                    affine,'EPSG:32617',reference,primary_path=primary)
+
+
+def test_dem_difference_records_metadata_quality_and_signed_cells(tmp_path):
+    affine=from_origin(500000,4500000,10,10)
+    primary=tmp_path/'primary.tif'
+    reference=tmp_path/'reference.tif'
+    make_dem(primary,np.full((2,2),100.),affine)
+    make_dem(reference,np.full((2,2),100.),affine)
+    with rasterio.open(primary,'r+') as ds:ds.update_tags(VERTICAL_DATUM='NAVD88')
+    with rasterio.open(reference,'r+') as ds:ds.update_tags(VERTICAL_DATUM='NAVD 88')
+    values=np.array([[110.,90.],[100.,100.]])
+    _,metrics=compare_dem(values,np.ones((2,2),bool),affine,'EPSG:32617',reference,primary_path=primary)
+    assert metrics['datum_labels_match']==1
+    assert metrics['increased_cells']==1
+    assert metrics['decreased_cells']==1
+    assert metrics['unchanged_cells']==2
+    assert metrics['net_elevation_volume_m3']==pytest.approx(0)
