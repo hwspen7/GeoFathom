@@ -160,7 +160,12 @@ test('OSU disconnected mapped properties default to campus, with inspectable edi
  await expect(page.getByLabel('DEM download target')).toContainText('N 40.07640°');
  await page.getByLabel('Study area parcel').selectOption('0');
  await expect(page.getByLabel('DEM download target')).toContainText('N 40.01240°');
+ // Reproduce an ordinary user workflow with the floating legend open.
+ // Entering edit mode must make every actual geometry handle clickable.
+ await page.getByRole('button',{name:'Toggle map legend'}).click();
+ await expect(page.locator('.map-legend-items')).toBeVisible();
  await page.getByRole('button',{name:'Edit boundary nodes'}).click();
+ await expect(page.locator('.map-legend-items')).toHaveCount(0);
  await expect.poll(async()=>{
   const raw=await map.getAttribute('data-edit-handle-pixels');
   return raw?JSON.parse(raw).length:0;
