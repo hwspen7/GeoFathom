@@ -38,17 +38,41 @@ export function terrainContainsCenter(bounds:TerrainBBox,reference:TerrainBBox):
  // Allow a tiny numerical tolerance around projected raster footprints.
  return x>=bounds[0]-1e-5&&x<=bounds[2]+1e-5&&y>=bounds[1]-1e-5&&y<=bounds[3]+1e-5;
 }
+export const MAX_DEM_GRID_CELLS=8_000_000;
+export const MAX_DEM_GRID_SIDE=4096;
+export const DEM_RESOLUTIONS=[1,3,10,30,90] as const;
+export type DEMResolution=typeof DEM_RESOLUTIONS[number];
+/** The 1/3/10 m presets request USGS 3DEP; that service is not worldwide. */
+export function terrainSupportsUSGS(bounds:TerrainBBox|null):boolean{
+ if(!validBounds(bounds))return false;
+ const [w,s,e,n]=bounds;
+ return w>=-180&&e<=-60&&s>=17&&n<=72;
+}
+export function availableDEMResolutions(bounds:TerrainBBox|null):DEMResolution[]{
+ return terrainSupportsUSGS(bounds)?[1,3,10,30,90]:[30,90];
+}
 export interface FetchBudget {approximateCells:number;estimatedWidth:number;estimatedHeight:number;warning:string|null}
-/** Informative local estimate; the server validates exact UTM grid dimensions. */
+/** Approximate display estimate. Backend validates the exact UTM pixel grid. */
 export function terrainFetchBudget(bounds:TerrainBBox|null,resolution:number):FetchBudget|null{
- if(!validBounds(bounds)||!Number.isFinite(resolution)||resolution<=0)return null;
+ if(!validBounds(bounds)||!Number.isFinite(resolution)||!DEM_RESOLUTIONS.some(r=>r===resolution))return null;
  const [w,s,e,n]=bounds,mid=(s+n)*Math.PI/360;
- const width=Math.ceil(((e-w)*111320*Math.cos(mid))/resolution)+8;
- const height=Math.ceil(((n-s)*111320)/resolution)+8;
+ const width=Math.max(5,Math.ceil(((e-w)*111320*Math.cos(mid))/resolution)+8);
+ const height=Math.max(5,Math.ceil(((n-s)*111320)/resolution)+8);
  const cells=width*height;
- const warning=e-w>.25||n-s>.25?'Area exceeds 0.25° fetch limit. Zoom in or draw a smaller selection.':
-   width>1024||height>1024||cells>1000000?'Estimated grid exceeds the 1-million-cell budget. Choose a coarser resolution or smaller area.':null;
+ const warning=e-w>.25||n-s>.25?'Area exceeds the 0.25° single-fetch extent. Divide into smaller study areas.':
+   resolution<30&&!terrainSupportsUSGS(bounds)?'USGS 3DEP does not cover this location. Use Copernicus GLO-30/GLO-90 or import a local high-resolution DEM.':
+   width>MAX_DEM_GRID_SIDE||height>MAX_DEM_GRID_SIDE||cells>MAX_DEM_GRID_CELLS?
+   'Estimated grid exceeds the bounded 8-million-cell / 4096-pixel-side budget. Use Auto resolution, or divide the study area.':null;
  return {approximateCells:cells,estimatedWidth:width,estimatedHeight:height,warning};
+}
+/** Find the finest actually supported REQUEST grid fitting resource constraints.
+ * Output spacing never implies the upstream DEM has the same native accuracy. */
+export function recommendDEMResolution(bounds:TerrainBBox|null):DEMResolution|null{
+ if(!validBounds(bounds))return null;
+ for(const r of availableDEMResolutions(bounds)){
+  if(terrainFetchBudget(bounds,r)?.warning===null)return r;
+ }
+ return null;
 }
 export function terrainRasterMatchesTarget(asset:Pick<RasterAsset,'bbox'>,target:TerrainBBox){
  if(!validBounds(asset.bbox)||!validBounds(target))return false;
