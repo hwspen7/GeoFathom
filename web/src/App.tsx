@@ -1169,7 +1169,7 @@ export default function App() {
                 if(feature)openStoredFeature(feature);
               }}
             />
-            <TerrainWorkbench key={activeProjectId??'no-project'} projectId={activeProjectId} geometry={geometry}
+            <TerrainWorkbench key={'terrain-'+(activeProjectId??'no-project')} projectId={activeProjectId} geometry={geometry}
               raster={imageLayer} onPreview={value=>{if(projectCurrent())setTerrainFeatures(value);}}
               onSaved={()=>{if(projectCurrent())setRefreshToken(v=>v+1);}}/>
           </section>
