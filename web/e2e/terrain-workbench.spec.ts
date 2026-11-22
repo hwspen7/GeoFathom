@@ -35,6 +35,12 @@ with tempfile.TemporaryDirectory() as directory:
  await page.getByLabel('DEM elevation layer').selectOption(fixture.id);
  await page.getByLabel('Confirm DEM meter elevations').check();
  await page.getByRole('button',{name:/DEM study area/}).click();
+ await expect(page.getByLabel('DEM fetch area')).toHaveValue('viewport');
+ await expect(page.getByLabel('DEM download target')).toContainText('Current map');
+ await expect(page.getByLabel('Interactive geospatial map')).toHaveAttribute('data-dem-target-visible','true');
+ await page.getByLabel('DEM fetch area').selectOption('selection');
+ await expect(page.getByLabel('DEM download target')).toContainText('Selected geometry');
+ await page.getByLabel('DEM fetch area').selectOption('viewport');
  const terrainTab=page.getByRole('navigation',{name:'Workspace tools'}).getByRole('button',{name:'Terrain',exact:true});
  await expect(terrainTab).toHaveAttribute('aria-pressed','true');
  await terrainTab.click();
@@ -127,4 +133,7 @@ with tempfile.TemporaryDirectory() as directory:
  await page.getByLabel('Terrain tools').getByRole('button',{name:'Cross sections',exact:true}).click();
  await page.getByRole('button',{name:'Run terrain operation'}).click();
  await expect(page.getByRole('button',{name:'All sections CSV'})).toBeVisible();
+ await page.getByLabel('DEM elevation layer').selectOption('');
+ await expect(page.getByLabel('DEM elevation layer')).toHaveValue('');
+ await expect(page.getByRole('button',{name:'Run terrain operation'})).toBeDisabled();
 });

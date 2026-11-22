@@ -18,6 +18,12 @@ describe('intent-safe DEM requests',()=>{
  it('checks the returned DEM footprint rather than trusting the file name or source title',()=>{
   expect(terrainRasterMatchesTarget({bbox:[-82.6,39.4,-82.5,39.5]},cmh)).toBe(false);
   expect(terrainRasterMatchesTarget({bbox:[-83,39.9,-82.8,40.1]},cmh)).toBe(true);
+  expect(terrainRasterMatchesTarget({bbox:[-82.90,39.97,-82.87,40.02]},cmh)).toBe(false);
+ });
+ it('measures large polygon coordinates without overflowing the JavaScript argument limit',()=>{
+  const ring=Array.from({length:150000},(_,i)=>[-82.90+(i%2)*.03,39.99+(i%3)*.02]);
+  const bounds=terrainGeometryBounds({type:'Polygon',coordinates:[ring]});
+  expect(bounds![0]).toBeCloseTo(-82.9);expect(bounds![2]).toBeCloseTo(-82.87);expect(bounds![3]).toBeCloseTo(40.01);
  });
  it('reports high-resolution limits before sending requests and rejects bad geography',()=>{
   expect(terrainFetchBudget(cmh,1)!.warning).toMatch(/budget/);

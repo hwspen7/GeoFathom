@@ -15,9 +15,10 @@ export function terrainGeometryBounds(geometry:GeoJSON.Geometry|null):TerrainBBo
    geometry.type==='Polygon'?geometry.coordinates.flat():
    geometry.type==='MultiPolygon'?geometry.coordinates.flat(2):[];
  if(!positions.length||positions.some(p=>!Number.isFinite(p[0])||!Number.isFinite(p[1])))return null;
- const x=positions.map(p=>p[0]),y=positions.map(p=>p[1]);
- const bounds:TerrainBBox=[Math.min(...x),Math.min(...y),Math.max(...x),Math.max(...y)];
- // Line segments may be horizontal or vertical; preserve a valid fetch extent.
+ let w=Infinity,s=Infinity,e=-Infinity,n=-Infinity;
+ // Avoid spreading an unbounded number of GPS vertices onto the JS call stack.
+ for(const [lon,lat] of positions){w=Math.min(w,lon);s=Math.min(s,lat);e=Math.max(e,lon);n=Math.max(n,lat);}
+ const bounds:TerrainBBox=[w,s,e,n];
  return bounds.every(Number.isFinite)?bounds:null;
 }
 /** Fetching visible map data is the default; a selected feature is never implicit. */
@@ -50,7 +51,10 @@ export function terrainFetchBudget(bounds:TerrainBBox|null,resolution:number):Fe
  return {approximateCells:cells,estimatedWidth:width,estimatedHeight:height,warning};
 }
 export function terrainRasterMatchesTarget(asset:Pick<RasterAsset,'bbox'>,target:TerrainBBox){
- return validBounds(asset.bbox)&&terrainContainsCenter(asset.bbox,target);
+ if(!validBounds(asset.bbox)||!validBounds(target))return false;
+ // The entire request must lie inside the returned georeferenced footprint.
+ return target[0]>=asset.bbox[0]-1e-5&&target[1]>=asset.bbox[1]-1e-5 &&
+        target[2]<=asset.bbox[2]+1e-5&&target[3]<=asset.bbox[3]+1e-5;
 }
 export function describeTerrainBounds(bounds:TerrainBBox):string{
  const [w,s,e,n]=bounds;
