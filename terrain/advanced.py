@@ -254,16 +254,16 @@ def _mask_features(mask,affine,crs,name,cancel=None):
 def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,observer_height=1.7,target_height=0.,
                 end_point=None,max_slope=30.,min_elevation=-12000.,max_elevation=12000.,max_tri=100.,
                 stream_cells=100,azimuth=315.,altitude=45.,section_spacing=50.,section_width=20.,texture_path=None,
-                fill_sinks=False,consider_curvature=False,refraction_coeff=0.13,cancel=None):
+                fill_sinks=False,consider_curvature=False,refraction_coeff=0.13,comparison_path=None,cancel=None):
     checkpoint(cancel)
     if operation=="cross_sections":
         from .corridor import cross_sections
         return cross_sections(path,geometry,section_spacing,section_width,cancel)
-    if operation not in {"contours","volume","visibility","watershed","mesh","distribution"}|SURFACES:
+    if operation not in {"contours","volume","visibility","watershed","mesh","distribution","dem_difference"}|SURFACES:
         raise RasterError("Unknown terrain operation.")
     # Independent analysis budgets. Local surface derivatives can use large
     # grids; visibility ray tracing and catchment/path traversals remain bounded.
-    simple_large={"elevation","slope_map","aspect_map","hillshade","tri","tpi",
+    simple_large={"dem_difference","elevation","slope_map","aspect_map","hillshade","tri","tpi",
                   "curvature","cutfill_map","suitability","volume","distribution"}
     extended=operation in simple_large
     maximum=4096 if extended else 512 if operation=="visibility" else 1024
@@ -284,6 +284,10 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
         result["warning"]="Projected source-grid product; nodata and incomplete neighborhoods excluded. Unconditioned D8 terminates at sinks/flats; suitability and path costs are screening estimates, not engineering certification."
         if operation=="streams" and result["metrics"]["drainage_edges"]>result["metrics"]["vector_edges"]:
             result["warning"]+=" Vector edge budget exceeded; full drainage raster remains available."
+    elif operation=="dem_difference":
+        from .difference import compare_dem
+        result["raster"],result["metrics"]=compare_dem(z,valid,affine,crs,comparison_path,cancel)
+        result["warning"]="Primary minus comparison DEM on the primary grid. Reference data was bilinearly resampled. Verify matching vertical datums, source epochs, and native resolutions before interpreting changes."
     elif operation=="contours":
         result["features"]=_contours(z,valid,affine,crs,boundary,interval,cancel)
         result["metrics"]={"contour_lines":sum(f["properties"]["contour_path_count"] for f in result["features"]),
