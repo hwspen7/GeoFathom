@@ -7,6 +7,7 @@ import type {Position} from './editing';
 import {measurementAnchor} from './editing';
 import {terrainMetricDifferences,sameGeometryFootprint} from './terrainComparison';
 import {readTerrainRuns,writeTerrainRuns,insertTerrainRun,summarizeTerrainRun} from './terrainRunRegistry';
+import {loadTerrainResults,cacheTerrainResult,deleteTerrainResult,markTerrainResultSaved,type PersistedTerrainResult} from './terrainResultStore';
 import {terrainFetchBounds,terrainGeometryBounds,terrainFetchBudget,terrainBoundsOverlap,terrainRasterMatchesTarget,describeTerrainBounds,preferredTerrainFetchScope,terrainSupportsUSGS,recommendDEMResolution,availableDEMResolutions,type FetchScope,type TerrainBBox} from './terrainSource';
 
 function MeshView({mesh}:{mesh:TerrainMesh}){
@@ -59,13 +60,7 @@ function MeshView({mesh}:{mesh:TerrainMesh}){
 }
 
 type Operation=TerrainOperation|'slope'|'profile';
-type ProfileResult=Awaited<ReturnType<typeof terrainProfile>>;
-interface TerrainRecord {
- id:string;title:string;operation:Operation;source:RasterAsset;geometry:GeoJSON.Geometry;
- inputKey:string;visible:boolean;createdAt:number;saved?:boolean;opacity:number;
- resampling:'nearest'|'linear';referenceSource?:RasterAsset;
- advanced?:AdvancedTerrainResult;slope?:TerrainResult;profile?:ProfileResult;
-}
+type TerrainRecord=PersistedTerrainResult;
 const modes:Array<{id:Operation;title:string}>=[
  {id:'slope',title:'Slope / aspect'},{id:'profile',title:'Elevation profile'},{id:'contours',title:'Contours'},{id:'dem_difference',title:'DEM difference'},
  {id:'volume',title:'Cut / fill'},{id:'visibility',title:'Viewshed'},{id:'watershed',title:'Watershed (D8)'},{id:'mesh',title:'3D terrain'},
@@ -120,9 +115,26 @@ export default function TerrainWorkbench(p:Props){
  const [sectionSpacing,setSectionSpacing]=useState('50'),[sectionWidth,setSectionWidth]=useState('20'),[drape,setDrape]=useState(false),[expanded,setExpanded]=useState(false);
  const [pickEnd,setPickEnd]=useState(false);
  const [records,setRecords]=useState<TerrainRecord[]>([]);
+ const [resultCacheReady,setResultCacheReady]=useState(false);
+ const [resultCacheError,setResultCacheError]=useState('');
  const [runHistory,setRunHistory]=useState(()=>readTerrainRuns(p.projectId));
  const [historyStorageError,setHistoryStorageError]=useState(false);
  useEffect(()=>{setHistoryStorageError(!writeTerrainRuns(p.projectId,runHistory));},[runHistory,p.projectId]);
+ useEffect(()=>{
+   let current=true;
+   // App keys this component by project. Restore only its own outputs;
+   // no historical layer is drawn until the user explicitly shows it.
+   void loadTerrainResults(p.projectId).then(restored=>{
+     if(!current)return;
+     setRecords(old=>{
+       const ids=new Set(old.map(r=>r.id));
+       return [...restored.filter(r=>!ids.has(r.id)),...old].slice(-24);
+     });
+   }).catch(error=>{
+     if(current)setResultCacheError(error instanceof Error?error.message:'Unable to restore Terrain results.');
+   }).finally(()=>{if(current)setResultCacheReady(true);});
+   return()=>{current=false;};
+ },[p.projectId]);
  const [selectedRecord,setSelectedRecord]=useState<string|null>(null);
  const [compareRecordId,setCompareRecordId]=useState('');
  const selected=records.find(r=>r.id===selectedRecord);
@@ -138,7 +150,9 @@ export default function TerrainWorkbench(p:Props){
      return {length_m:r.profile.length_m,...(values.length?{mean_elevation_m:values.reduce((a,b)=>a+b,0)/values.length}:{})};}
    return {};
  }
- const comparisons=selected&&comparison?terrainMetricDifferences(physicalMetrics(selected),physicalMetrics(comparison)):[];
+ const matchingStudy=!!selected&&!!comparison&&sameGeometryFootprint(selected.geometry,comparison.geometry);
+ const comparisons=matchingStudy&&selected&&comparison?
+   terrainMetricDifferences(physicalMetrics(selected),physicalMetrics(comparison)):[];
  const analysisRequest=useRef<AbortController|null>(null);
  const alive=useRef(true);
  const sourceIntent=useRef(0);
@@ -195,7 +209,7 @@ export default function TerrainWorkbench(p:Props){
    (!needsPoint||validNumber(lon,-180,180)&&validNumber(lat,-90,90))&&
    (operation!=='visibility'||!considerCurvature||validNumber(refractionCoeff,0,.5))&&
    (operation!=='visibility'||validNumber(height,0,1000)&&validNumber(target,0,1000));
- const canRun=operation!==null&&p.connected&&verified&&!!correctShape&&!sourceMismatch&&!mapMismatch&&parametersValid;
+ const canRun=operation!==null&&p.connected&&resultCacheReady&&verified&&!!correctShape&&!sourceMismatch&&!mapMismatch&&parametersValid;
  useEffect(()=>{latest.current.onProfileSamples?.(activeProfileSamples??[]);},[activeProfileSamples]);
  const inputKey=JSON.stringify([dem?.id,analysisGeometry,operation,interval,reference,lon,lat,height,target,endLon,endLat,maxSlope,minElevation,maxElevation,maxTri,streamCells,azimuth,altitude,sectionSpacing,sectionWidth,fillSinks,considerCurvature,refractionCoeff,comparisonId,drape,drape?p.imageRaster?.id:null]);
  const inputsChanged=!!selected&&selected.inputKey!==inputKey;
@@ -258,6 +272,11 @@ export default function TerrainWorkbench(p:Props){
        physicalMetrics(record),record.referenceSource,
      )));
      setSelectedRecord(record.id);latest.current.onHover(null);
+     // Store the entire georeferenced raster/profile/mesh payload without
+     // truncation. A quota failure leaves the current result exportable.
+     void cacheTerrainResult(p.projectId,record).catch(error=>{
+       if(alive.current)setResultCacheError(error instanceof Error?error.message:'Terrain cache write failed.');
+     });
    }catch(e){if(ticket===sequence.current&&!controller.signal.aborted)setError(e instanceof Error?e.message:'Terrain analysis failed.');}
    finally{if(ticket===sequence.current){setBusy(false);analysisRequest.current=null;}}
  }
@@ -345,7 +364,14 @@ export default function TerrainWorkbench(p:Props){
        geometry:f.geometry,name:String(f.properties.name||result.operation)+' '+(i+1),
        source:'DEM '+source.name,properties:{...f.properties,source_image:source.id,operation:result.operation}
      })));
-     if(alive.current){setRecords(old=>old.map(r=>r.id===selected.id?{...r,saved:true}:r));latest.current.onSaved();if(ticket===sequence.current)setInfo('Saved '+saved.created+' terrain features.');}
+     if(alive.current){
+       setRecords(old=>old.map(r=>r.id===selected.id?{...r,saved:true}:r));
+       void markTerrainResultSaved(p.projectId,selected.id).catch(error=>{
+         if(alive.current)setResultCacheError(error instanceof Error?error.message:'Unable to mark saved result.');
+       });
+       latest.current.onSaved();
+       if(ticket===sequence.current)setInfo('Saved '+saved.created+' terrain features.');
+     }
    }catch(e){if(ticket===sequence.current)setError(e instanceof Error?e.message:'Save failed.');}
    finally{if(ticket===sequence.current)setBusy(false);}
  }
@@ -487,12 +513,19 @@ export default function TerrainWorkbench(p:Props){
        <input type="checkbox" aria-label={'Show '+record.title+' '+record.id} checked={record.visible} disabled={!record.advanced?.features.length&&!record.advanced?.raster}
          onChange={e=>setRecords(old=>old.map(r=>r.id===record.id?{...r,visible:e.target.checked}:r))}/>
        <button title={record.source.name} onClick={()=>{setSelectedRecord(record.id);setInfo('');latest.current.onHover(null);}}>{record.title} · {new Date(record.createdAt).toLocaleTimeString()}</button>
-       <button aria-label={'Remove result '+record.title} onClick={()=>{setRecords(old=>old.filter(r=>r.id!==record.id));if(selectedRecord===record.id)setSelectedRecord(null);}}>×</button>
+       <button aria-label={'Remove result '+record.title} onClick={()=>{
+          setRecords(old=>old.filter(r=>r.id!==record.id));
+          void deleteTerrainResult(p.projectId,record.id).catch(error=>{
+            if(alive.current)setResultCacheError(error instanceof Error?error.message:'Unable to delete cached result.');
+          });
+          if(selectedRecord===record.id)setSelectedRecord(null);
+        }}>×</button>
      </div>)}
    </section>}
    <details className="terrain-run-provenance" aria-label="Local terrain run history">
      <summary>Local run history · {runHistory.length} metadata versions</summary>
-     <small className="compact-notice">Project-scoped browser history only. Previous raster files and charts must be regenerated or exported separately. Clearing browser data removes these receipts.</small>
+     <small className="compact-notice">Project-scoped run receipts and cached scientific results. Results can be reopened in this browser after reload, but clearing browser data or switching devices removes the local cache. Export GeoTIFF and analysis data for durable archival.</small>
+     {resultCacheError&&<small role="alert" className="discovery-error">Result cache: {resultCacheError} Export active results before leaving this page.</small>}
      {historyStorageError&&<small className="discovery-error" role="alert">Browser storage unavailable; export run history now.</small>}
      <div className="survey-action-bar">
        <button disabled={!runHistory.length} onClick={()=>{
@@ -543,8 +576,8 @@ export default function TerrainWorkbench(p:Props){
          </select>
        </label>
        {comparison&&<>
-         {!sameGeometryFootprint(selected.geometry,comparison.geometry)&&
-           <small role="status">Different study geometry: numerical deltas are not directly comparable.</small>}
+         {!matchingStudy&&
+           <small role="status">Different study geometry: numerical deltas are disabled because the sampling regions do not match.</small>}
          {(selected.source.id!==comparison.source.id||selected.source.crs!==comparison.source.crs||
            selected.source.width!==comparison.source.width||selected.source.height!==comparison.source.height)&&
            <small role="status">Different DEM source/grid: compare regional statistics only, not individual pixels or native resolution.</small>}
