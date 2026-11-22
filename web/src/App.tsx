@@ -74,6 +74,8 @@ export default function App() {
   const [mapStatus,setMapStatus]=useState('Loading map');
   const [toolbarTarget,setToolbarTarget]=useState<HTMLDivElement|null>(null);
   const [showTools,setShowTools]=useState(true);
+  const [shortcutHelp,setShortcutHelp]=useState(false);
+  const [contextMenu,setContextMenu]=useState<{x:number;y:number}|null>(null);
   const [activeTool,setActiveTool]=useState('tools-survey');
   const [terrainFeatures,setTerrainFeatures]=useState<GeoJSON.Geometry[]>([]);
   const [terrainPicking,setTerrainPicking]=useState(false);
@@ -264,25 +266,6 @@ export default function App() {
     });
     setMessage('Loaded feature: ' + feature.name + ' · revision ' + feature.revision);
   }
-
-  useEffect(() => {
-    function keydown(event: KeyboardEvent) {
-      if (event.target instanceof HTMLInputElement ||
-          event.target instanceof HTMLTextAreaElement ||
-          event.target instanceof HTMLSelectElement) return;
-      if (!(event.ctrlKey || event.metaKey)) return;
-      if (event.key.toLowerCase() === 'z') {
-        event.preventDefault();
-        applyHistory(event.shiftKey ? timeline.current.redo() : timeline.current.undo());
-      } else if (event.key.toLowerCase() === 'y') {
-        event.preventDefault();
-        applyHistory(timeline.current.redo());
-      }
-    }
-    window.addEventListener('keydown', keydown);
-    return () => window.removeEventListener('keydown', keydown);
-  }, []);
-
 
   function revealPanel(id:string){
     setShowTools(true);setActiveTool(id);if(id!=='tools-terrain'){setTerrainPicking(false);setTerrainHover(null);}
@@ -631,23 +614,88 @@ export default function App() {
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
+  function stopInteraction(){
+    geometrySequence.current++;setBusy(false);setDrawingMode(null);setVertices([]);setTerrainPicking(false);
+    setEditing(false);setEdgeMoving(false);setMoving(false);setTraceMode(false);setPromptMode(null);
+    setSelectionBoxMode(false);setLabelMoveMode(false);setPendingAnnotation(null);setContextMenu(null);
+    if(preview||pendingShared){setGeometry(lastValid.current);setPreview(null);setPendingShared(null);}
+    setError('');setMessage('Select / pan');
+  }
+  function editMode(mode:'vertices'|'edge'|'move'){
+    if(!geometry||selectedLocked||busy||drawingMode)return;
+    if(preview||pendingShared){setGeometry(lastValid.current);setPreview(null);setPendingShared(null);}
+    geometrySequence.current++;
+    setEditing(true);setMoving(mode==='move');setEdgeMoving(mode==='edge');
+    if(mode!=='vertices')setLinked(false);
+    setTraceMode(false);setPromptMode(null);setTerrainPicking(false);setPendingAnnotation(null);
+    setSelectionBoxMode(false);setLabelMoveMode(false);setContextMenu(null);
+    setMessage(mode==='move'?'Drag feature':mode==='edge'?'Drag edge midpoint':'Drag vertices · right-click to delete');
+  }
+  function fitSelection(){
+    if(!measurement||preview)return;
+    const [west,south,east,north]=measurement.bounds;
+    setFocus({longitude:(west+east)/2,latitude:(south+north)/2,bbox:[west,south,east,north],key:Date.now()});
+  }
+  function removeLocal(){
+    if(!scratchId||busy||drawingMode)return;
+    setScratch(old=>old.filter(f=>f.id!==scratchId));clearWorkspace();setContextMenu(null);
+  }
+  function saveSelection(){
+    if(!geometry||busy||drawingMode||preview||pendingShared)return;
+    if(activeProjectId){
+      const button=document.querySelector<HTMLButtonElement>('[data-project-save]');
+      if(button&&!button.disabled){button.click();return;}
+    }
+    exportGeoJSON();
+  }
   useEffect(()=>{
     function commands(event:KeyboardEvent){
-      if(event.target instanceof HTMLInputElement||event.target instanceof HTMLTextAreaElement||
-        event.target instanceof HTMLSelectElement||event.ctrlKey||event.metaKey)return;
+      if(event.defaultPrevented||event.isComposing)return;
+      const target=event.target;
       if(event.key==='Escape'){
-        event.preventDefault();geometrySequence.current++;setBusy(false);setDrawingMode(null);setVertices([]);setTerrainPicking(false);
-        setEditing(false);setEdgeMoving(false);setMoving(false);setTraceMode(false);setPromptMode(null);
-        setSelectionBoxMode(false);setLabelMoveMode(false);setPendingAnnotation(null);
-        if(preview||pendingShared){setGeometry(lastValid.current);setPreview(null);setPendingShared(null);}
-      }else if(drawingMode&&!busy&&event.key==='Enter'){
-        event.preventDefault();void finishDrawing();
-      }else if(drawingMode&&!busy&&event.key==='Backspace'){
-        event.preventDefault();setVertices(value=>value.slice(0,-1));
+        event.preventDefault();if(shortcutHelp){setShortcutHelp(false);return;}stopInteraction();return;
       }
+      if(target instanceof HTMLElement&&(target.isContentEditable||target.closest('input,textarea,select,[contenteditable="true"]')))return;
+      if(event.ctrlKey||event.metaKey){
+        if(event.key.toLowerCase()==='s'){event.preventDefault();saveSelection();return;}
+        if(event.key.toLowerCase()==='z'){
+          event.preventDefault();
+          if(busy)return;
+          if(drawingMode){if(!event.shiftKey)setVertices(value=>value.slice(0,-1));return;}
+          applyHistory(event.shiftKey?timeline.current.redo():timeline.current.undo());
+        }else if(event.key.toLowerCase()==='y'){
+          event.preventDefault();if(!busy&&!drawingMode)applyHistory(timeline.current.redo());
+        }
+        return;
+      }
+      if(event.altKey||event.repeat)return;
+      if(drawingMode&&!busy&&event.key==='Enter'){
+        event.preventDefault();void finishDrawing();return;
+      }
+      if(drawingMode&&!busy&&event.key==='Backspace'){
+        event.preventDefault();setVertices(value=>value.slice(0,-1));return;
+      }
+      if(contextMenu&&event.key==='Tab'){setContextMenu(null);return;}
+      if(shortcutHelp||busy)return;
+      const key=event.key.toLowerCase();
+      const modes:Record<string,Exclude<ShapeMode,null>>={p:'point',g:'polygon',l:'line',r:'rectangle',c:'circle'};
+      if(modes[key]){event.preventDefault();setContextMenu(null);startDrawing(modes[key]);return;}
+      if(key==='v'){event.preventDefault();stopInteraction();}
+      else if(key==='e'){event.preventDefault();editMode('vertices');}
+      else if(key==='b'){event.preventDefault();if(geometry?.type!=='Point')editMode('edge');}
+      else if(key==='m'){event.preventDefault();editMode('move');}
+      else if(key==='f'){event.preventDefault();fitSelection();}
+      else if(key==='s'){event.preventDefault();setSnapping(v=>!v);}
+      else if(key==='t'){event.preventDefault();revealPanel('tools-terrain');}
+      else if(key==='delete'&&scratchId&&!drawingMode){event.preventDefault();removeLocal();}
+      else if(key==='?'){event.preventDefault();setShortcutHelp(true);}
+    }
+    function outside(event:MouseEvent){
+      if(event.target instanceof HTMLElement&&!event.target.closest('.gis-context-menu'))setContextMenu(null);
     }
     window.addEventListener('keydown',commands);
-    return ()=>window.removeEventListener('keydown',commands);
+    window.addEventListener('mousedown',outside);
+    return()=>{window.removeEventListener('keydown',commands);window.removeEventListener('mousedown',outside);};
   });
   return (
     <div className="workspace desktop-gis">
@@ -657,21 +705,14 @@ export default function App() {
           {([['Survey','tools-survey'],['GIS','tools-gis'],['Analysis','tools-spatial'],['Terrain','tools-terrain'],['Raster / AI','tools-raster'],['Cartography','tools-style'],['Data','tools-services'],['Assistant','tools-ai']] as const).map(([title,id])=>
             <button key={id} aria-pressed={activeTool===id&&showTools} onClick={()=>revealPanel(id)}>{title}</button>)}
         </nav>
+        <button className="gis-shortcut-help" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts" onClick={()=>setShortcutHelp(true)}>?</button>
         <button className="gis-inspector-toggle" aria-pressed={showTools} onClick={()=>setShowTools(v=>!v)}>Inspector</button>
         <button className="gis-connection" title={connectionError||'Check backend connection'} onClick={()=>setConnectionRetry(v=>v+1)}>{capabilities?<Wifi size={14}/>:<WifiOff size={14}/>} {capabilities?'Connected':'Reconnect API'}</button>
       </header>
       <div className="gis-toolbar" aria-label="Survey toolbar">
         <div className="gis-navigation-tools">
-          <button aria-label="Pan and select" title="Pan and select · Esc" onClick={()=>{
-            geometrySequence.current++;setBusy(false);setDrawingMode(null);setVertices([]);setEditing(false);setEdgeMoving(false);setTerrainPicking(false);
-            setMoving(false);setTraceMode(false);setPromptMode(null);setSelectionBoxMode(false);setLabelMoveMode(false);
-            setPendingAnnotation(null);if(preview||pendingShared){setGeometry(lastValid.current);setPreview(null);setPendingShared(null);}
-          }}>Pan</button>
-          <button disabled={!measurement||!!preview} title="Zoom to selected geometry" onClick={()=>{
-            if(!measurement)return;
-            const [west,south,east,north]=measurement.bounds;
-            setFocus({longitude:(west+east)/2,latitude:(south+north)/2,bbox:[west,south,east,north],key:Date.now()});
-          }}>Fit selection</button>
+          <button aria-label="Pan and select" title="Pan and select (V / Esc)" onClick={stopInteraction}>Pan</button>
+          <button disabled={!measurement||!!preview} title="Zoom to selected geometry (F)" onClick={fitSelection}>Fit selection</button>
         </div>
         <div className="gis-survey-commands" ref={setToolbarTarget}/>
         <div className="gis-quick-basemap" aria-label="Quick basemap tools">
@@ -838,6 +879,8 @@ export default function App() {
             selected={geometry} drawingMode={drawingMode} vertices={vertices}
             terrainPicking={terrainPicking} terrainMarker={terrainHover??terrainOrigin}
             onTerrainPick={position=>{setTerrainOrigin(position);setTerrainPicking(false);setMessage('Terrain point selected.');}}
+            onContextMenu={(x,y)=>setContextMenu({x,y})}
+            onEditingError={setError}
             editing={editing} moving={moving} edgeMoving={edgeMoving} snapping={snapping}
             selectedLocked={selectedLocked}
             layerFeatures={[...scratch.map(item=>({id:item.id,layer_id:'scratch',geometry:item.geometry,name:item.name,source:'Local scratch',
@@ -1429,6 +1472,29 @@ export default function App() {
           </div>
         </aside>
       </div>
+      {contextMenu&&<div className="gis-context-menu" role="menu" aria-label="Map commands"
+        style={{left:Math.max(4,Math.min(contextMenu.x,window.innerWidth-210)),top:Math.max(4,Math.min(contextMenu.y,window.innerHeight-260))}}>
+        <button role="menuitem" onClick={()=>{stopInteraction();}}>Select / pan <kbd>V</kbd></button>
+        <button role="menuitem" disabled={!geometry||selectedLocked||busy} onClick={()=>editMode('vertices')}>Edit vertices <kbd>E</kbd></button>
+        <button role="menuitem" disabled={!geometry||geometry.type==='Point'||selectedLocked||busy} onClick={()=>editMode('edge')}>Move edge <kbd>B</kbd></button>
+        <button role="menuitem" disabled={!geometry||selectedLocked||busy} onClick={()=>editMode('move')}>Move feature <kbd>M</kbd></button>
+        <button role="menuitem" disabled={!measurement} onClick={()=>{fitSelection();setContextMenu(null);}}>Fit selection <kbd>F</kbd></button>
+        <button role="menuitem" disabled={!geometry||busy||!!preview} onClick={()=>{setContextMenu(null);saveSelection();}}>Save / export <kbd>Ctrl S</kbd></button>
+        <button role="menuitem" disabled={!scratchId||busy} onClick={removeLocal}>Delete local drawing <kbd>Del</kbd></button>
+        <button role="menuitem" onClick={()=>{setContextMenu(null);revealPanel('tools-terrain');}}>Terrain <kbd>T</kbd></button>
+      </div>}
+      {shortcutHelp&&<div className="gis-dialog-shade" onClick={()=>setShortcutHelp(false)}>
+        <div role="dialog" aria-modal="true" aria-label="Keyboard shortcuts" className="gis-shortcuts" onClick={e=>e.stopPropagation()}>
+          <header><strong>Keyboard / mouse</strong><button aria-label="Close shortcuts" onClick={()=>setShortcutHelp(false)}>×</button></header>
+          <div className="shortcut-table">{[
+            ['Select / pan','V / Esc'],['Point / line','P / L'],['Polygon / rectangle / circle','G / R / C'],
+            ['Edit vertices / edge / move','E / B / M'],['Finish drawing','Enter / double-click / right-click'],
+            ['Remove last vertex','Backspace / Ctrl Z'],['Undo / redo','Ctrl Z / Ctrl Y'],['Delete edit vertex','Right-click vertex'],
+            ['Insert vertex','Double-click edge'],['Context menu','Right-click map'],['Fit selection','F'],['Toggle snapping','S'],
+            ['Save or export','Ctrl S'],['Delete local drawing','Delete'],['Terrain tools','T'],['Help','?'],
+          ].map(([action,key])=><div key={action}><span>{action}</span><kbd>{key}</kbd></div>)}</div>
+        </div>
+      </div>}
       <footer className="gis-status" role="status">
         <span>{error?<span className="error">{error}</span>:busy?'Processing…':message}</span>
         <span>{drawingMode?'Draw · '+drawingMode:editing?(moving?'Move feature':edgeMoving?'Move edge':'Edit vertices'):'Select / pan'} · WGS84</span>

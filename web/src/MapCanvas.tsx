@@ -52,6 +52,8 @@ interface Props {
   terrainPicking:boolean;
   terrainMarker:Position|null;
   onTerrainPick:(point:Position)=>void;
+  onContextMenu:(x:number,y:number)=>void;
+  onEditingError:(message:string)=>void;
   onViewportChange: (bbox: [number, number, number, number]) => void;
   discovered: GeoJSON.Geometry[];
   imageLayer: RasterAsset | null;
@@ -229,7 +231,7 @@ type Drag = {
 
 export default function MapCanvas({
   selected,drawingMode,vertices,focus,basemap,customBasemap,onBasemapStatus,measurement,showMeasurements,selectedFeatureId,rasterOpacity,onMapClick,onFinishDrawing,
-  terrainPicking,terrainMarker,onTerrainPick,
+  terrainPicking,terrainMarker,onTerrainPick,onContextMenu,onEditingError,
   onViewportChange, discovered, imageLayer, traceMode, onTraceClick,
   editing, moving,edgeMoving, snapping, selectedLocked, layerFeatures,
   promptPositive,promptNegative,promptBox,annotationMode,onAnnotationClick,
@@ -245,7 +247,7 @@ export default function MapCanvas({
   const mapRef = useRef<maplibregl.Map | null>(null);
   const eventRef = useRef({
     selected,selectedFeatureId,drawingMode, traceMode, annotationMode,selectionBoxMode,labelMoveMode,editing, moving,edgeMoving, snapping, selectedLocked,
-    layerFeatures, onMapClick,onFinishDrawing,terrainPicking,onTerrainPick, onTraceClick,onAnnotationClick,onSelectionBox,onLabelMove,onViewportChange,
+    layerFeatures, onMapClick,onFinishDrawing,terrainPicking,onTerrainPick,onContextMenu,onEditingError, onTraceClick,onAnnotationClick,onSelectionBox,onLabelMove,onViewportChange,
     onGeometryPreview, onGeometryCommit, onSelectSavedFeature,
   });
   const renderRef = useRef({
@@ -265,7 +267,7 @@ export default function MapCanvas({
   const [ready, setReady] = useState(false);
   eventRef.current = {
     selected,selectedFeatureId,drawingMode, traceMode, annotationMode,selectionBoxMode,labelMoveMode,editing, moving,edgeMoving, snapping, selectedLocked,
-    layerFeatures, onMapClick,onFinishDrawing,terrainPicking,onTerrainPick, onTraceClick,onAnnotationClick,onSelectionBox,onLabelMove,onViewportChange,
+    layerFeatures, onMapClick,onFinishDrawing,terrainPicking,onTerrainPick,onContextMenu,onEditingError, onTraceClick,onAnnotationClick,onSelectionBox,onLabelMove,onViewportChange,
     onGeometryPreview, onGeometryCommit, onSelectSavedFeature,
   };
 
@@ -330,7 +332,7 @@ export default function MapCanvas({
     }
     function beginDrag(event: MapMouseEvent) {
       spatialSnap.current=null;
-      if(eventRef.current.terrainPicking)return;
+      if(eventRef.current.terrainPicking||event.originalEvent.button!==0)return;
       if(eventRef.current.labelMoveMode){
         const state=eventRef.current;
         const found=hits(event).find(item=>
@@ -403,7 +405,9 @@ export default function MapCanvas({
       let first = state.selected;
       let path: GeometryPath | null = null;
       let kind: Drag['kind'] | null = null;
-      if (handle || fallback) {
+      if(state.moving&&(handle||fallback||features.some(f=>f.properties?.role==='selected'))){
+        kind='feature';
+      }else if (handle || fallback) {
         path = handle ? nodePath(handle.properties) : fallback!.path;
         const midpoint=handle?.properties?.role==='edit-midpoint'||fallback?.midpoint;
         if(state.edgeMoving){
@@ -573,15 +577,35 @@ export default function MapCanvas({
       }
     }
     function removeByRightClick(event: MapMouseEvent) {
-      const state = eventRef.current;
-      if(state.drawingMode){event.preventDefault();state.onFinishDrawing();return;}
-      if (!state.editing || state.edgeMoving || state.selectedLocked || !state.selected) return;
-      const feature = hits(event).find(f => f.properties?.role === 'edit-vertex');
-      if (!feature) return;
-      event.preventDefault();
-      try {
-        state.onGeometryCommit(removeVertex(state.selected, nodePath(feature.properties)));
-      } catch { /* The minimum ring size is enforced by the edit toolbar. */ }
+      const state=eventRef.current;
+      event.preventDefault();event.originalEvent.preventDefault();
+      if(state.drawingMode){state.onFinishDrawing();return;}
+      if(state.editing&&!state.edgeMoving&&!state.moving&&!state.selectedLocked&&state.selected){
+        const feature=hits(event).find(f=>f.properties?.role==='edit-vertex');
+        let path=feature?nodePath(feature.properties):null;
+        if(!path){
+          let distance=9;
+          for(const v of verticesOf(state.selected)){
+            if(v.midpoint)continue;
+            const xy=map.project(v.point as maplibregl.LngLatLike);
+            const d=Math.hypot(xy.x-event.point.x,xy.y-event.point.y);
+            if(d<distance){distance=d;path=v.path;}
+          }
+        }
+        if(path){
+          try{
+            const next=removeVertex(state.selected,path);
+            if(JSON.stringify(next)===JSON.stringify(state.selected))state.onEditingError('Minimum vertex count reached.');
+            else state.onGeometryCommit(next);
+          }catch(error){state.onEditingError(error instanceof Error?error.message:'Cannot delete vertex.');}
+          return;
+        }
+      }
+      if(!state.editing){
+        const feature=hits(event).find(f=>f.properties?.role==='saved');
+        if(feature?.properties?.id)state.onSelectSavedFeature(String(feature.properties.id));
+      }
+      state.onContextMenu(event.originalEvent.clientX,event.originalEvent.clientY);
     }
     function insertByDoubleClick(event: MapMouseEvent) {
       const state = eventRef.current;
@@ -923,7 +947,7 @@ export default function MapCanvas({
     const map = mapRef.current;
     if (!map) return;
     map.doubleClickZoom[editing||drawingMode ? 'disable' : 'enable']();
-    map.getCanvas().style.cursor = drawingMode || traceMode || editing || annotationMode || selectionBoxMode || labelMoveMode ? 'crosshair' : '';
+    map.getCanvas().style.cursor = drawingMode || traceMode || editing || annotationMode || selectionBoxMode || labelMoveMode || terrainPicking ? 'crosshair' : '';
   }, [editing, drawingMode, traceMode, annotationMode, selectionBoxMode,labelMoveMode,ready]);
 
   useEffect(()=>{
@@ -932,7 +956,7 @@ export default function MapCanvas({
     const marker=new maplibregl.Marker({element:node}).setLngLat(terrainMarker).addTo(map);
     return()=>{marker.remove();};
   },[terrainMarker,ready]);
-  useEffect(()=>{const map=mapRef.current;if(ready&&map&&terrainPicking)map.getCanvas().style.cursor='crosshair';},[terrainPicking,ready]);
+
 
   // HTML dimension labels do not depend on a remote glyph server.
   // Reproject on every map movement; never intercept editing gestures.

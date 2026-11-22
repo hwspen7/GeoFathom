@@ -554,3 +554,15 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .terrain-bar-track span{display:block;height:100%}
 .terrain-map-marker{width:13px;height:13px;border:2px solid white;border-radius:50%;background:#e69226;box-shadow:0 0 0 1px #a76110;pointer-events:none}
 .visually-hidden{position:absolute;width:1px;height:1px;clip-path:inset(50%);overflow:hidden;white-space:nowrap}
+
+.gis-shortcut-help{border:1px solid #cbd2d8;background:#fff;color:#314b5f;width:24px;height:24px;font-size:12px}
+.gis-context-menu{position:fixed;z-index:40;width:200px;background:#fff;border:1px solid #9eafb9;box-shadow:2px 4px 12px #0003;padding:3px}
+.gis-context-menu button{width:100%;border:0;background:#fff;display:flex;justify-content:space-between;gap:6px;text-align:left;padding:6px;font-size:11px;color:#263340}
+.gis-context-menu button:hover:not(:disabled){background:#dbe9f2}
+.gis-context-menu button:disabled{opacity:.45}
+.desktop-gis kbd{font:10px 'Segoe UI',system-ui,sans-serif;color:#637583;white-space:nowrap}
+.gis-dialog-shade{position:fixed;inset:0;background:#0004;display:grid;place-items:center;z-index:50}
+.gis-shortcuts{background:#f8fafb;width:min(470px,92vw);max-height:90vh;overflow:auto;padding:12px;border:1px solid #94a6b2;box-shadow:0 8px 25px #0004}
+.gis-shortcuts header{display:flex;justify-content:space-between;align-items:center;padding-bottom:8px;border-bottom:1px solid #cbd5dc}
+.gis-shortcuts header button{background:white;border:1px solid #c9d3da;padding:3px 8px}
+.shortcut-table>div{display:flex;justify-content:space-between;gap:8px;padding:6px 3px;border-bottom:1px solid #e1e6ea;font-size:12px}

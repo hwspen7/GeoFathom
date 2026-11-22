@@ -89,7 +89,7 @@ export default function SurveyTools({
       <div className="survey-mode-grid">
         {buttonModes.map(item => (
           <button key={item.mode} className={mode === item.mode ? 'active' : ''}
-            title={'Draw '+item.title.toLowerCase()} aria-pressed={mode===item.mode} onClick={() => onStart(item.mode)}
+            title={'Draw '+item.title.toLowerCase()+(({point:' (P)',polygon:' (G)',line:' (L)',rectangle:' (R)',circle:' (C)'} as Partial<Record<Exclude<ShapeMode,null>,string>>)[item.mode]??'')} aria-pressed={mode===item.mode} onClick={() => onStart(item.mode)}
             disabled={busy||(['hole','split'].includes(item.mode)&&(locked||(geometry?.type!=='Polygon'&&geometry?.type!=='MultiPolygon')))}>
             {item.mode === 'circle' ? <Circle size={15}/> :
              item.mode === 'line' ? <Ruler size={15}/> :
@@ -108,11 +108,11 @@ export default function SurveyTools({
         </div>
       )}
       <div className="survey-action-bar">
-        <button title="Edit vertices" disabled={!geometry||locked||busy} className={editing && !moving && !edgeMoving ? 'active' : ''}
+        <button title="Edit vertices (E)" disabled={!geometry||locked||busy} className={editing && !moving && !edgeMoving ? 'active' : ''}
           onClick={() => onEdit(!editing || moving || edgeMoving, false)}><Pencil size={14}/> Vertices</button>
-        <button title="Move whole shape" disabled={!geometry||locked||busy} className={moving ? 'active' : ''}
+        <button title="Move whole shape (M)" disabled={!geometry||locked||busy} className={moving ? 'active' : ''}
           onClick={() => onEdit(!moving, !moving)}><MousePointer2 size={14}/> Move</button>
-        {onEdgeMove&&<button title="Drag a segment midpoint to move both endpoints" disabled={!geometry||locked||busy||geometry.type==='Point'} className={edgeMoving?'active':''}
+        {onEdgeMove&&<button title="Drag a segment midpoint to move both endpoints (B)" disabled={!geometry||locked||busy||geometry.type==='Point'} className={edgeMoving?'active':''}
           onClick={()=>onEdgeMove(!edgeMoving)}><Ruler size={14}/> Edge</button>}
         <button title="Snap to nearby vertices" className={snapping ? 'active' : ''}
           onClick={() => onSnapping(!snapping)}>Snap {snapping ? 'ON' : 'OFF'}</button>

@@ -533,7 +533,7 @@ export default function ProjectsPanel({
             <button type="submit" disabled={busy || !workspace || !layerName.trim()}><Plus size={14}/></button>
           </form>
           <div className="project-actions">
-            <button onClick={() => void save()} disabled={busy || !workspace || !geometry || locked || Boolean(!current && activeLayer?.locked)}>
+            <button data-project-save onClick={() => void save()} disabled={busy || !workspace || !geometry || locked || Boolean(!current && activeLayer?.locked)}>
               <Save size={14}/> {current ? 'Update feature' : 'Save selected'}
             </button>
             <button onClick={() => void exportJson()} disabled={busy}>
