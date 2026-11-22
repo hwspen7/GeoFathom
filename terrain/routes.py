@@ -87,6 +87,9 @@ class AdvancedTerrainInput(BaseModel):
     section_spacing:float=Field(default=50,ge=1,le=10000)
     section_width:float=Field(default=20,ge=1,le=2000)
     texture_image_id:str|None=None
+    fill_sinks:bool=False
+    consider_curvature:bool=False
+    refraction_coeff:float=Field(default=0.13,ge=0,le=0.5)
 
 @router.post("/advanced")
 async def advanced(request:Request,body:AdvancedTerrainInput):
@@ -95,6 +98,7 @@ async def advanced(request:Request,body:AdvancedTerrainInput):
         return await run_cancelable(request,run_terrain,raster(body.image_id),body.geometry,
             body.operation,body.interval,body.reference,body.point,body.observer_height,body.target_height,
             body.end_point,body.max_slope,body.min_elevation,body.max_elevation,body.max_tri,body.stream_cells,body.azimuth,body.altitude,
-            body.section_spacing,body.section_width,raster(body.texture_image_id) if body.texture_image_id and body.operation=='mesh' else None)
+            body.section_spacing,body.section_width,raster(body.texture_image_id) if body.texture_image_id and body.operation=='mesh' else None,
+            body.fill_sinks,body.consider_curvature,body.refraction_coeff)
     except (GeometryError,RasterError,ValueError,OverflowError) as error:
         raise HTTPException(status_code=422,detail=str(error)) from error
