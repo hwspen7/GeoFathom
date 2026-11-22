@@ -23,7 +23,9 @@ export default defineConfig({
   webServer:[
     {
       command:'python -m uvicorn core.main:app --host 127.0.0.1 --port 8000',
-      cwd:'..',url:'http://127.0.0.1:8000/health',
+      // Liveness alone can expose a fresh, uninitialized SQLite database.
+      // Readiness initializes and verifies storage before browsers start.
+      cwd:'..',url:'http://127.0.0.1:8000/health/ready',
       timeout:90_000,reuseExistingServer:!freshServer,
       stderr:'pipe',
       env:{...process.env,
