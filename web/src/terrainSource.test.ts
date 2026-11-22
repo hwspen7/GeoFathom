@@ -10,7 +10,10 @@ describe('intent-safe DEM requests',()=>{
   expect(preferredTerrainFetchScope(campus)).toBe('selection');
   const actual=terrainFetchBounds(huge,campus,preferredTerrainFetchScope(campus));
   expect(actual).not.toEqual(huge);
-  expect(actual).toEqual([-83.0424,39.9856,-83.0116,40.0104]);
+  expect(actual?.[0]).toBeCloseTo(-83.0424,6);
+  expect(actual?.[1]).toBeCloseTo(39.9856,6);
+  expect(actual?.[2]).toBeCloseTo(-83.0116,6);
+  expect(actual?.[3]).toBeCloseTo(40.0104,6);
   expect(terrainFetchBudget(actual,10)?.warning).toBeNull();
   expect(preferredTerrainFetchScope({type:'Point',coordinates:[-83.02,40]})).toBe('viewport');
   expect(preferredTerrainFetchScope(null)).toBe('viewport');

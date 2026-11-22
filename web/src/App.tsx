@@ -14,7 +14,7 @@ import {loadDisplay,saveDisplay,areaText,distanceText,type AreaUnit} from './dis
 import {BASEMAPS,customBasemap,defaultCustom,preferredSatellite,mapTilerImagery,type BasemapId,type CustomBasemap} from './basemaps';
 import {ScratchHistory} from './scratchHistory';
 import {addRaster,changeRaster,selectDEM,hideDEMs,type RasterLayerView} from './rasterLayers';
-import {terrainContainsCenter,terrainGeometryBounds} from './terrainSource';
+import {terrainContainsCenter,terrainGeometryBounds,terrainRasterMatchesTarget} from './terrainSource';
 import {PIN_LIMIT,readPinnedPlaces,writePinnedPlaces,pinPlace,unpinPlace,visibleGeometry} from './pinnedPlaces';
 import {localMeasurement,localShape,readScratch,writeScratch,SCRATCH_LIMIT,OFFLINE_METHOD,type ScratchFeature} from './scratch';
 import SurveyTools from './SurveyTools';
@@ -352,8 +352,13 @@ export default function App() {
     retainPlace(place);
     setSelectedPlace(place);setScratchId(null);setPreview(null);setPendingShared(null);
     // A new place outside the old DEM must not silently inherit an unrelated source.
-    if(demLayer&&!terrainContainsCenter(demLayer.bbox,[place.longitude,place.latitude,place.longitude,place.latitude])){
+    // The source must cover the *entire* chosen campus, not merely its center.
+    const requestedBounds=place.geometry?terrainGeometryBounds(place.geometry):null;
+    const matchesDEM=demLayer&&(requestedBounds?terrainRasterMatchesTarget(demLayer,requestedBounds):
+      terrainContainsCenter(demLayer.bbox,[place.longitude,place.latitude,place.longitude,place.latitude]));
+    if(demLayer&&!matchesDEM){
       setDemLayer(null);setRasterLayers(old=>hideDEMs(old));setExtentMode(false);setExtentGeometry(null);
+      setTerrainRasters([]);setTerrainFeatures([]);
     }
     timeline.current=new GeometryTimeline();lastValid.current=null;setHistoryPulse(v=>v+1);
     setTerrainPicking(false);setPromptMode(null);setPendingAnnotation(null);setSelectionBoxMode(false);setLabelMoveMode(false);

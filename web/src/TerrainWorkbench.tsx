@@ -136,7 +136,7 @@ export default function TerrainWorkbench(p:Props){
  const correctShape=lineOperation?analysisGeometry?.type==='LineString':area;
  const dem=p.raster?.bands===1?p.raster:null;
  const analysisBounds=useMemo(()=>terrainGeometryBounds(analysisGeometry??null),[analysisGeometry]);
- const sourceMismatch=!!dem&&!!analysisBounds&&!terrainBoundsOverlap(dem.bbox,analysisBounds);
+ const sourceMismatch=!!dem&&!!analysisBounds&&!terrainRasterMatchesTarget(dem,analysisBounds);
  const mapMismatch=!!dem&&!!p.viewport&&!terrainBoundsOverlap(dem.bbox,p.viewport);
  const verified=!!dem&&(/Copernicus DEM GLO-|USGS 3DEP Bare Earth DEM/.test(dem.provenance)||verticalConfirmed);
  const validNumber=(value:string,min:number,max:number)=>value.trim()!==''&&Number.isFinite(Number(value))&&Number(value)>=min&&Number(value)<=max;
@@ -319,7 +319,7 @@ export default function TerrainWorkbench(p:Props){
      {sourceInfo&&<small className="compact-notice" title="Copernicus is DSM; 3DEP is bare-earth DEM. Requested grid size is not native resolution.">{sourceInfo}</small>}
      {dem&&<small className="compact-notice" title={dem.provenance}>{dem.width} × {dem.height} · {dem.crs} · elevation m · {describeTerrainBounds(dem.bbox)}</small>}
      {mapMismatch&&<small className="discovery-error" role="status">Selected DEM is outside the current map. Choose a local source or use Fit explicitly.</small>}
-     {sourceMismatch&&<small className="discovery-error" role="status">Selected analysis shape is outside this DEM. Select matching data.</small>}
+     {sourceMismatch&&<small className="discovery-error" role="status">Selected analysis shape is not completely covered by this DEM. Select a matching source.</small>}
      {dem&&!/Copernicus DEM GLO-|USGS 3DEP Bare Earth DEM/.test(dem.provenance)&&<label className="gis-check"><input aria-label="Confirm DEM meter elevations" type="checkbox" checked={verticalConfirmed} onChange={e=>setVerticalConfirmed(e.target.checked)}/> Confirm single-band meter elevations</label>}
    </div>
    <label className="terrain-category">Tool group <select aria-label="Terrain tool group" value={category} onChange={e=>{setCategory(e.target.value);setOperation(null);setLive(false);setPickEnd(false);}}>{Object.keys(categories).map(name=><option key={name}>{name}</option>)}</select></label>
@@ -361,7 +361,7 @@ export default function TerrainWorkbench(p:Props){
        <label><input aria-label="Live terrain updates" type="checkbox" checked={live} onChange={e=>setLive(e.target.checked)}/> Live</label></div>
      {!p.connected&&<small className="compact-notice">API offline</small>}
      {!dem&&<small className="compact-notice">DEM required</small>}
-     {sourceMismatch&&<small className="discovery-error">Analysis area does not intersect selected DEM</small>}
+     {sourceMismatch&&<small className="discovery-error">Selected analysis area is not fully covered by the DEM</small>}
      {mapMismatch&&<small className="discovery-error">Run blocked: the selected DEM is outside the visible map. Use the raster Fit control or fetch new data.</small>}
      {dem&&!verified&&<small className="compact-notice">Confirm elevation units before analysis</small>}
      {!parametersValid&&<small className="discovery-error">Check numeric parameters</small>}
