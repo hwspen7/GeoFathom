@@ -10,12 +10,14 @@ import {
   type Capabilities, type Measurement, type Place,
 } from './api';
 import MapCanvas, { type FocusPoint } from './MapCanvas';
+import BoundaryEditor from './BoundaryEditor';
 import {loadDisplay,saveDisplay,areaText,distanceText,type AreaUnit} from './displaySettings';
 import {BASEMAPS,customBasemap,defaultCustom,preferredSatellite,mapTilerImagery,type BasemapId,type CustomBasemap} from './basemaps';
 import {ScratchHistory} from './scratchHistory';
 import {addRaster,changeRaster,selectDEM,hideDEMs,type RasterLayerView} from './rasterLayers';
 import {terrainContainsCenter,terrainGeometryBounds,terrainRasterMatchesTarget} from './terrainSource';
 import {PIN_LIMIT,readPinnedPlaces,writePinnedPlaces,pinPlace,unpinPlace,visibleGeometry} from './pinnedPlaces';
+import {studyParcels,suggestedParcel,parcelAt} from './studyArea';
 import {localMeasurement,localShape,readScratch,writeScratch,SCRATCH_LIMIT,OFFLINE_METHOD,type ScratchFeature} from './scratch';
 import SurveyTools from './SurveyTools';
 import ProfessionalPanel from './ProfessionalPanel';
@@ -28,7 +30,7 @@ import { featureColor, legendEntries, DEFAULT_LAYER_STYLE } from './labels';
 import ImageCorrectionPanel, { type PromptMode } from './ImageCorrectionPanel';
 import {
   GeometryTimeline, approximateMeasurement, previewEdgeLengths, pathsOf, drawingPreview,
-  singleMovedVertex, type Position, type ShapeMode,
+  singleMovedVertex,verticesOf,moveVertex,removeVertex,type GeometryPath, type Position, type ShapeMode,
 } from './editing';
 import DiscoveryPanel from './DiscoveryPanel';
 import type { DiscoveryResponse, GeoWorkspace, WorkspaceFeature, QualityIssue } from './api';
@@ -53,6 +55,8 @@ export default function App() {
   const [candidates, setCandidates] = useState<Place[]>([]);
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
   const [geometry, setGeometry] = useState<GeoJSON.Geometry | null>(null);
+  const [selectedParcel,setSelectedParcel]=useState<number|'all'>('all');
+  const [selectedBoundaryNode,setSelectedBoundaryNode]=useState<GeometryPath|null>(null);
   const scratchScope=useRef<string|null>(null);
   const [pins,setPins]=useState(()=>({scope:null as string|null,places:readPinnedPlaces(null)}));
   const [pinStorageError,setPinStorageError]=useState(false);
@@ -68,6 +72,7 @@ export default function App() {
       // profile line or any other local/saved project feature.
       geometrySequence.current++;
       setSelectedPlace(null);setGeometry(null);setMeasurement(null);
+      setSelectedBoundaryNode(null);setSelectedParcel('all');
       lastValid.current=null;timeline.current=new GeometryTimeline();
       setHistoryPulse(v=>v+1);
       setError('');setMessage('Retained location removed. Other drawings are unchanged.');
@@ -209,7 +214,7 @@ export default function App() {
     });
   }
   function selectScratch(item:ScratchFeature,zoom=true){
-    setExtentMode(false);
+    setExtentMode(false);setSelectedBoundaryNode(null);setSelectedParcel('all');
     geometrySequence.current++;setBusy(false);setScratchId(item.id);setSelectedFeatureId(null);featureIdentity.current=null;
     timeline.current=new GeometryTimeline();timeline.current.push(item.geometry);setHistoryPulse(v=>v+1);
     lastValid.current=structuredClone(item.geometry);setGeometry(item.geometry);setMeasurement(item.measurement);
@@ -302,7 +307,7 @@ export default function App() {
     }
     featureIdentity.current = feature.id;
     setScratchId(null);setPreview(null);setVertices([]);setPendingShared(null);
-    setGeometry(feature.geometry);
+    setGeometry(feature.geometry);setSelectedBoundaryNode(null);setSelectedParcel('all');
     lastValid.current = structuredClone(feature.geometry);
     timeline.current.push(feature.geometry);
     setHistoryPulse(value => value + 1);
@@ -350,10 +355,19 @@ export default function App() {
     }
     const sequence = ++geometrySequence.current;
     retainPlace(place);
+    const mapped=place.geometry&&['Polygon','MultiPolygon','LineString','MultiLineString'].includes(place.geometry.type);
+    const parcels=studyParcels(place.geometry??null);
+    // A geocoder can return a disconnected university MultiPolygon including
+    // remote airport/farm sites. Default to its component nearest the place
+    // reference, but keep the entire original geometry pinned and selectable.
+    const suggested=parcels.length>1?suggestedParcel(place.geometry!,[place.longitude,place.latitude]):null;
+    const selectedIndex=suggested??'all';
+    const target:GeoJSON.Geometry=(mapped&&(suggested!==null?parcelAt(place.geometry!,suggested):place.geometry))||
+      {type:'Point',coordinates:[place.longitude,place.latitude]};
+    setSelectedParcel(selectedIndex);setSelectedBoundaryNode(null);
     setSelectedPlace(place);setScratchId(null);setPreview(null);setPendingShared(null);
-    // A new place outside the old DEM must not silently inherit an unrelated source.
-    // The source must cover the *entire* chosen campus, not merely its center.
-    const requestedBounds=place.geometry?terrainGeometryBounds(place.geometry):null;
+    // Validate the selected campus parcel, not unrelated properties elsewhere.
+    const requestedBounds=terrainGeometryBounds(target);
     const matchesDEM=demLayer&&(requestedBounds?terrainRasterMatchesTarget(demLayer,requestedBounds):
       terrainContainsCenter(demLayer.bbox,[place.longitude,place.latitude,place.longitude,place.latitude]));
     if(demLayer&&!matchesDEM){
@@ -372,8 +386,6 @@ export default function App() {
     setVertices([]);
     // Geocoders may return a point, even for an airport. Never treat a point
     // marker or its search bounding box as a surveyed analysis polygon.
-    const mapped=place.geometry&&['Polygon','MultiPolygon','LineString','MultiLineString'].includes(place.geometry.type);
-    const target:GeoJSON.Geometry=mapped?place.geometry!:{type:'Point',coordinates:[place.longitude,place.latitude]};
     setGeometry(target);
     setMeasurement(null);
     lastValid.current=structuredClone(target);
@@ -397,7 +409,10 @@ export default function App() {
         const result = await measureGeometry(target);
         if (sequence !== geometrySequence.current) return;
         setMeasurement(result);
-        setMessage('Mapped boundary loaded. Check that it represents your intended area.');
+        setMessage(parcels.length>1?
+          'Selected nearby mapped parcel '+(Number(selectedIndex)+1)+'/'+parcels.length+
+          '. Other disconnected sites remain in retained search results.':
+          'Mapped boundary loaded. Check that it represents your intended area.');
       } catch (problem) {
         if (sequence !== geometrySequence.current) return;
         setError(problem instanceof Error ? problem.message : 'Could not measure boundary.');
@@ -462,6 +477,32 @@ export default function App() {
     } finally {
       if(sequence===geometrySequence.current)setBusy(false);
     }
+  }
+
+  async function chooseSelectedParcel(value:number|'all'){
+    if(!selectedPlace?.geometry||busy)return;
+    const next=parcelAt(selectedPlace.geometry,value);
+    if(!next)return;
+    const ticket=++geometrySequence.current;
+    setSelectedParcel(value);setSelectedBoundaryNode(null);
+    setEditing(false);setMoving(false);setEdgeMoving(false);setExtentMode(false);
+    setGeometry(next);setMeasurement(null);setPreview(null);setError('');
+    lastValid.current=structuredClone(next);
+    timeline.current=new GeometryTimeline();timeline.current.push(next);setHistoryPulse(v=>v+1);
+    // Previously acquired multi-site DEM remains in the library but must not
+    // obscure a newly chosen connected campus analysis parcel.
+    setDemLayer(null);setRasterLayers(old=>hideDEMs(old));
+    setTerrainRasters([]);setTerrainFeatures([]);
+    const bounds=terrainGeometryBounds(next);
+    if(bounds){const [w,s,e,n]=bounds;
+      setFocus({longitude:(w+e)/2,latitude:(s+n)/2,bbox:bounds,key:Date.now()});}
+    try{
+      const checked=await measureGeometry(next);
+      if(ticket!==geometrySequence.current)return;
+      setMeasurement(checked);
+      setMessage(value==='all'?'Full mapped place selected (including detached sites).':
+        'Connected campus parcel selected. DEM target now follows this parcel.');
+    }catch(err){if(ticket===geometrySequence.current)setError(err instanceof Error?err.message:String(err));}
   }
 
   function startTerrainLine(){
@@ -769,6 +810,7 @@ export default function App() {
   }
   function deselect(){
     geometrySequence.current++;setBusy(false);setGeometry(null);setMeasurement(null);
+    setSelectedBoundaryNode(null);setSelectedParcel('all');
     // Deselect does not delete the independent profile line or retained map references.
     setTerrainLineDrawing(false);
     setScratchId(null);setSelectedFeatureId(null);featureIdentity.current=null;setSelectedPlace(null);
@@ -1123,6 +1165,7 @@ export default function App() {
             terrainFetchTarget={showTools&&activeTool==='tools-terrain'?terrainFetchTarget:null}
             onTerrainPick={position=>{setTerrainOrigin(position);setTerrainPicking(false);setMessage('Terrain point selected.');}}
             onContextMenu={(x,y)=>setContextMenu({x,y})} onDeselect={deselect}
+            selectedBoundaryNode={selectedBoundaryNode} onSelectBoundaryNode={setSelectedBoundaryNode}
             onEditingError={setError}
             editing={editing} moving={moving} edgeMoving={edgeMoving} snapping={snapping}
             selectedLocked={selectedLocked}
@@ -1392,6 +1435,21 @@ export default function App() {
                 </details>
               )}
               {selectedPlace && <p className="data-source">Data: {selectedPlace.source} · {geometry&&['Polygon','MultiPolygon','LineString','MultiLineString'].includes(geometry.type) ? 'Mapped outline':'Coordinates only · use DEM extent or draw a study area'}</p>}
+              <BoundaryEditor geometry={geometry} sourcePlace={selectedPlace} selectedParcel={selectedParcel}
+                onChooseParcel={value=>void chooseSelectedParcel(value)}
+                editing={editing&&!moving&&!edgeMoving} busy={busy} selectedNode={selectedBoundaryNode}
+                onSelectNode={setSelectedBoundaryNode}
+                onToggleEditing={()=>{if(editing){setEditing(false);setMoving(false);setEdgeMoving(false);}
+                  else editMode('vertices');}}
+                onMoveNode={(path,coordinate)=>{
+                  if(!geometry||selectedLocked)return;
+                  void commitGeometry(moveVertex(geometry,path,coordinate),'Boundary node coordinates validated.');
+                }}
+                onRemoveNode={path=>{
+                  if(!geometry||selectedLocked)return;
+                  try{void commitGeometry(removeVertex(geometry,path),'Boundary node removed and validated.');}
+                  catch(e){setError(e instanceof Error?e.message:String(e));}
+                }}/>
               <div className="analysis-actions">
                 <button onClick={exportGeoJSON} disabled={!geometry}><Download size={15} /> Export GeoJSON</button>
                 <button onClick={deselect}><RotateCcw size={15} /> Deselect</button>
