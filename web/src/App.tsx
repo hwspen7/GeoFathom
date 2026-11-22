@@ -165,12 +165,14 @@ export default function App() {
 
   useEffect(()=>{setScratchStorageError(!writeScratch(scratch));},[scratch]);
 
-  function storeScratch(next:GeoJSON.Geometry,measured:Measurement,id:string|null=scratchId){
+  function storeScratch(next:GeoJSON.Geometry,measured:Measurement,id:string|null=scratchId,metadata?:{source:string;properties:Record<string,unknown>;name?:string}){
     const key=id??'scratch-'+crypto.randomUUID();
+    if(!scratchHistory.current!.current.some(f=>f.id===key)&&scratchHistory.current!.current.length>=SCRATCH_LIMIT)throw Error('Local feature limit reached. Save or export your drawings first.');
     setScratchId(key);
     setScratch(old=>{
       const found=old.find(f=>f.id===key);
-      const item:ScratchFeature={id:key,name:found?.name??next.type+' '+(old.length+1),geometry:structuredClone(next),measurement:measured,visible:true};
+      const item:ScratchFeature={id:key,name:metadata?.name??found?.name??next.type+' '+(old.length+1),geometry:structuredClone(next),measurement:measured,visible:true,
+        source:metadata?.source??found?.source??geometrySource,properties:metadata?.properties??found?.properties??featureProperties};
       return found?old.map(f=>f.id===key?item:f):[...old,item];
     });
   }
@@ -179,7 +181,7 @@ export default function App() {
     geometrySequence.current++;setBusy(false);setScratchId(item.id);setSelectedFeatureId(null);featureIdentity.current=null;
     timeline.current=new GeometryTimeline();timeline.current.push(item.geometry);setHistoryPulse(v=>v+1);
     lastValid.current=structuredClone(item.geometry);setGeometry(item.geometry);setMeasurement(item.measurement);
-    setGeometrySource('Local scratch');setFeatureProperties({source_type:'user_drawn',draft_name:item.name});
+    setGeometrySource(item.source||'Local scratch');setFeatureProperties(item.properties??{source_type:'user_drawn',draft_name:item.name});
     setPreview(null);setPendingShared(null);setLinked(false);setDrawingMode(null);setVertices([]);setTerrainPicking(false);
     setEditing(false);setEdgeMoving(false);setMoving(false);setTraceMode(false);setPromptMode(null);
     setSelectionBoxMode(false);setLabelMoveMode(false);setPendingAnnotation(null);
@@ -211,6 +213,7 @@ export default function App() {
       const checked = await measureGeometry(next);
       if (sequence !== geometrySequence.current) return;
       if(detached||!selectedFeatureId)storeScratch(next,checked,detached?null:scratchId);
+      if(detached){setSelectedFeatureId(null);featureIdentity.current=null;setSelectedPlace(null);setPendingShared(null);setLinked(false);}
       setGeometry(next);
       setMeasurement(checked);
       setPreview(null);
@@ -350,8 +353,11 @@ export default function App() {
         setMessage('Place found, but the mapped geometry could not be measured.');
       }
     } else {
+      lastValid.current={type:'Point',coordinates:[place.longitude,place.latitude]};
+      timeline.current.push(lastValid.current);
       setMessage('Location found without a mapped boundary. Draw a polygon to measure it.');
     }
+    if(sequence===geometrySequence.current)setBusy(false);
   }
 
   async function runSearch(event: FormEvent<HTMLFormElement>) {
@@ -372,9 +378,9 @@ export default function App() {
         setMessage('No place found. Try a different spelling or draw directly on the map.');
       }
     } catch (problem) {
-      setError(problem instanceof Error ? problem.message : 'Search failed.');
+      if(sequence===geometrySequence.current)setError(problem instanceof Error ? problem.message : 'Search failed.');
     } finally {
-      setBusy(false);
+      if(sequence===geometrySequence.current)setBusy(false);
     }
   }
 
@@ -394,19 +400,16 @@ export default function App() {
       setCandidates(answer.results);
       setMessage(answer.message);
       if (answer.intent.action === 'discover') {
-        setDiscovered(answer.results);
-        setSelectedPlace(null);
-        setGeometry(null);
-        setMeasurement(null);
+        deselect();setDiscovered(answer.results);
       } else {
         setDiscovered([]);
         if (answer.results.length) await selectPlace(answer.results[0]);
         if (answer.results.length > 1) setMessage(answer.message + ' Select the correct candidate.');
       }
     } catch (problem) {
-      setError(problem instanceof Error ? problem.message : 'Assistant request failed.');
+      if(sequence===geometrySequence.current)setError(problem instanceof Error ? problem.message : 'Assistant request failed.');
     } finally {
-      setBusy(false);
+      if(sequence===geometrySequence.current)setBusy(false);
     }
   }
 
@@ -510,14 +513,23 @@ export default function App() {
       } else if (mode === 'split' && geometry) {
         const divided = await editPair('split',geometry,result);
         if(sequence!==geometrySequence.current)return;
-        setSplitParts(divided.features.map(item => item.geometry));
-        setDiscovered([]);
-        result = divided.features[0].geometry;
-        measured = divided.features[0].measurement;
-        setSelectedFeatureId(null);
+        if(!divided.features.length)throw Error('The split did not produce a polygon.');
+        const pieces:ScratchFeature[]=divided.features.map((item,index)=>({
+          id:'scratch-'+crypto.randomUUID(),name:'Split part '+(index+1),geometry:item.geometry,
+          measurement:item.measurement,visible:true,source:geometrySource||'User drawn',
+          properties:{...featureProperties,operation:'split'}
+        }));
+        // Local source replacement is atomic and undoable. A saved source
+        // stays intact: the pieces are independent drafts until explicitly saved.
+        const prior=scratchHistory.current!.current.filter(f=>f.id!==scratchId);
+        if(prior.length+pieces.length>SCRATCH_LIMIT)throw Error('Split exceeds the local feature limit.');
+        setScratch(()=>[...prior,...pieces]);setScratchId(pieces[0].id);
+        setSplitParts([]);setDiscovered([]);
+        result=pieces[0].geometry;measured=pieces[0].measurement;
+        setSelectedFeatureId(null);featureIdentity.current=null;
       }
       if(sequence!==geometrySequence.current)return;
-      if(!selectedFeatureId||!['hole','split'].includes(mode))storeScratch(result,measured,mode==='hole'?scratchId:null);
+      if(mode!=='split'&&(!selectedFeatureId||mode!=='hole'))storeScratch(result,measured,mode==='hole'?scratchId:null);
       setGeometry(result);
       lastValid.current = structuredClone(result);
       timeline.current.push(result);
@@ -525,7 +537,7 @@ export default function App() {
       setMeasurement(measured);
       setDrawingMode(null); setVertices([]); setPreview(null);
       setMessage(mode === 'split'
-        ? 'Polygon divided. Save all pieces from Projects & saved geometry.'
+        ? 'Polygon divided into independent local features. Original saved features are unchanged.'
         : 'Drawing completed and measured on the WGS84 ellipsoid.');
     } catch (failure) {
       if(sequence!==geometrySequence.current)return;
@@ -559,10 +571,10 @@ export default function App() {
       setSelectedFeatureId(null);
       setGeometrySource('Numeric geodesic construction');
       setFeatureProperties({ source_type:'numeric', mode });
-      await commitGeometry(created.geometry,'Precise construction created with PyProj.',true);
+      setBusy(false);await commitGeometry(created.geometry,'Precise construction created with PyProj.',true);
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : 'Numeric construction failed.');
-    } finally { setBusy(false); }
+      if(sequence===geometrySequence.current)setError(failure instanceof Error ? failure.message : 'Numeric construction failed.');
+    } finally { if(sequence===geometrySequence.current)setBusy(false); }
   }
 
   async function combineWith(mode: 'union' | 'difference' | 'intersection', featureId: string) {
@@ -577,10 +589,10 @@ export default function App() {
       setSelectedFeatureId(null);
       setGeometrySource('Spatial overlay · ' + mode);
       setFeatureProperties({ source_type:'spatial_operation', operation:mode });
-      await commitGeometry(result.geometry, 'Spatial ' + mode + ' completed.',true);
+      setBusy(false);await commitGeometry(result.geometry, 'Spatial ' + mode + ' completed.',true);
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : 'Spatial overlay failed.');
-    } finally { setBusy(false); }
+      if(sequence===geometrySequence.current)setError(failure instanceof Error ? failure.message : 'Spatial overlay failed.');
+    } finally { if(sequence===geometrySequence.current)setBusy(false); }
   }
 
 
@@ -1081,6 +1093,8 @@ export default function App() {
                   ...traceSettings,
                 });
                 if(sequence!==geometrySequence.current)return;
+                storeScratch(result.geometry,result.measurement,null,{source:imageLayer.provenance+' · '+result.engine,
+                  properties:{source_type:'image_derived',image_id:imageLayer.id,method:result.provider,quality:'requires_user_review'}});
                 setGeometry(result.geometry);
                 lastValid.current = structuredClone(result.geometry);
                 timeline.current.push(result.geometry);
@@ -1110,9 +1124,9 @@ export default function App() {
                 setTraceMode(false);
                 setMessage(result.warning + ' (' + result.pixel_count + ' source pixels selected)');
               } catch (failure) {
-                setError(failure instanceof Error ? failure.message : 'Automatic outline failed.');
+                if(sequence===geometrySequence.current)setError(failure instanceof Error ? failure.message : 'Automatic outline failed.');
               } finally {
-                setBusy(false);
+                if(sequence===geometrySequence.current)setBusy(false);
               }
             }}
             discovered={[...discovered.map(place => place.geometry).filter((item): item is GeoJSON.Geometry => item !== null),
@@ -1389,6 +1403,8 @@ export default function App() {
                     window_size:traceSettings.window_size,
                   });
                   if(sequence!==geometrySequence.current)return;
+                  storeScratch(refined.geometry,refined.measurement,null,{source:'SAM 2 · '+imageLayer.name,
+                    properties:{source_type:'image_derived',image_id:imageLayer.id,model_id:refined.model_id,quality:'requires_user_review'}});
                   setGeometry(refined.geometry);
                   lastValid.current=structuredClone(refined.geometry);
                   timeline.current.push(refined.geometry);
@@ -1407,8 +1423,8 @@ export default function App() {
                   setPromptMode(null);
                   setMessage(refined.warning);
                 }catch(failure){
-                  setError(failure instanceof Error?failure.message:'SAM 2 refinement unavailable.');
-                }finally{setBusy(false);}
+                  if(sequence===geometrySequence.current)setError(failure instanceof Error?failure.message:'SAM 2 refinement unavailable.');
+                }finally{if(sequence===geometrySequence.current)setBusy(false);}
               }}
             />
          </section>

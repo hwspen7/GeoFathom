@@ -676,7 +676,13 @@ export default function MapCanvas({
     map.on('idle',inspectRenderedHandles);
     map.on('moveend', bounds);
     const onEscape=(event:KeyboardEvent)=>{
-      if(event.key==='Escape'){drag.current=null;selectionDrag.current=null;labelDrag.current=null;map.dragPan.enable();}
+      if(event.key==='Escape'){
+        drag.current=null;selectionDrag.current=null;labelDrag.current=null;labelPointer.current=null;spatialSnap.current=null;
+        for(const name of ['selection-preview','label-drag-preview']){
+          (map.getSource(name) as GeoJSONSource|undefined)?.setData({type:'FeatureCollection',features:[]});
+        }
+        map.dragPan.enable();
+      }
     };
     window.addEventListener('keydown',onEscape);
     map.on('click', click);
@@ -992,6 +998,14 @@ export default function MapCanvas({
     map.setPaintProperty('terrain-result-labels','text-halo-color',palette.halo);
   },[ready,basemap,display]);
   useEffect(()=>{setCursor(null);},[drawingMode]);
+  useEffect(()=>{
+    const map=mapRef.current;
+    drag.current=null;selectionDrag.current=null;labelDrag.current=null;labelPointer.current=null;
+    spatialSnap.current=null;map?.dragPan.enable();
+    for(const name of ['selection-preview','label-drag-preview']){
+      (map?.getSource(name) as GeoJSONSource|undefined)?.setData({type:'FeatureCollection',features:[]});
+    }
+  },[selectedFeatureId,editing,moving,edgeMoving,drawingMode,terrainPicking,selectionBoxMode,labelMoveMode]);
 
   useEffect(() => {
     const map = mapRef.current;

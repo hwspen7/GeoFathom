@@ -1,6 +1,6 @@
 import {approximateMeasurement,pathsOf,geodesicDrag,drawingPreview,type Position,type ShapeMode} from './editing';
 import type {Measurement} from './api';
-export interface ScratchFeature {id:string;name:string;geometry:GeoJSON.Geometry;measurement:Measurement;visible:boolean}
+export interface ScratchFeature {id:string;name:string;geometry:GeoJSON.Geometry;measurement:Measurement;visible:boolean;source?:string;properties?:Record<string,unknown>}
 const KEY='geofathom-scratch-v1';
 export const SCRATCH_LIMIT=200;
 export const OFFLINE_METHOD='Local spherical estimate (not ellipsoidal validation)';
