@@ -942,3 +942,16 @@ export async function downloadGISJob(projectId:string,id:string):Promise<void>{
     document.body.appendChild(element);element.click();element.remove();
   }finally{window.setTimeout(()=>URL.revokeObjectURL(url),1000);}
 }
+
+
+export type TerrainOperation='contours'|'volume'|'visibility'|'watershed'|'mesh';
+export interface TerrainMesh {rows:number;cols:number;dx_m:number;dy_m:number;heights:Array<number|null>}
+export interface AdvancedTerrainResult {
+  operation:TerrainOperation;source_crs:string;valid_cells:number;missing_cells:number;
+  cell_area_m2:number;metrics:Record<string,number>;warning:string;
+  features:Array<GeoJSON.Feature<GeoJSON.Geometry,Record<string,unknown>>>;mesh?:TerrainMesh;
+}
+export function advancedTerrain(body:{image_id:string;geometry:GeoJSON.Geometry;operation:TerrainOperation;
+  interval:number;reference:number;point:[number,number]|null;observer_height:number;target_height:number}):Promise<AdvancedTerrainResult>{
+  return request('/terrain/advanced',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+}

@@ -13,6 +13,7 @@ import MapCanvas, { type FocusPoint } from './MapCanvas';
 import {BASEMAPS,type BasemapId} from './basemaps';
 import SurveyTools from './SurveyTools';
 import ProfessionalPanel from './ProfessionalPanel';
+import TerrainWorkbench from './TerrainWorkbench';
 import SpatialToolsPanel from './SpatialToolsPanel';
 import CartographyProPanel from './CartographyProPanel';
 import DataServicesPanel, {type ExternalTile} from './DataServicesPanel';
@@ -1152,6 +1153,9 @@ export default function App() {
                 if(feature)openStoredFeature(feature);
               }}
             />
+            <TerrainWorkbench key={activeProjectId??'no-project'} projectId={activeProjectId} geometry={geometry}
+              raster={imageLayer} onPreview={value=>{if(projectCurrent())setExternalFeatures(value);}}
+              onSaved={()=>{if(projectCurrent())setRefreshToken(v=>v+1);}}/>
           </section>
 
           <section id="tools-spatial" className="panel-section">

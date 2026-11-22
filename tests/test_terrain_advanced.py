@@ -1,0 +1,50 @@
+"""Numerical DEM fixtures for the new interactive terrain operations."""
+import numpy as np
+import rasterio
+from rasterio.transform import from_origin
+from pyproj import Transformer
+import pytest
+from terrain.advanced import run_terrain,_watershed,_visibility
+from imagery.raster import RasterError
+
+@pytest.fixture
+def dem(tmp_path):
+    path=tmp_path/"plane.tif"
+    affine=from_origin(500000,4500000,10,10)
+    z=np.tile(np.arange(20,dtype=np.float32)+100,(20,1))
+    with rasterio.open(path,"w",driver="GTiff",width=20,height=20,count=1,
+        dtype="float32",crs="EPSG:32617",transform=affine,nodata=-9999) as ds:ds.write(z,1)
+    t=Transformer.from_crs("EPSG:32617","EPSG:4326",always_xy=True)
+    ring=[t.transform(x,y) for x,y in [(500020,4499980),(500180,4499980),(500180,4499820),(500020,4499820),(500020,4499980)]]
+    return path,{"type":"Polygon","coordinates":[ring]}
+
+def test_cut_fill_known_projected_cells(dem):
+    path,polygon=dem
+    result=run_terrain(path,polygon,"volume",reference=110)
+    assert result["valid_cells"]==256
+    assert result["metrics"]["cut_m3"]==pytest.approx(sum(range(1,8))*16*100)
+    assert result["metrics"]["fill_m3"]==pytest.approx(sum(range(1,9))*16*100)
+
+def test_contours_and_mesh_are_real_dem_outputs(dem):
+    path,polygon=dem
+    result=run_terrain(path,polygon,"contours",interval=5)
+    assert {f["properties"]["elevation_m"] for f in result["features"]}=={105,110,115}
+    assert all(f["geometry"]["type"]=="LineString" for f in result["features"])
+    mesh=run_terrain(path,polygon,"mesh")["mesh"]
+    assert len(mesh["heights"])==mesh["rows"]*mesh["cols"]
+    assert min(v for v in mesh["heights"] if v is not None)==102
+
+def test_d8_plane_flows_only_to_same_row_outlet():
+    z=np.tile(np.arange(5,dtype=float),(5,1))
+    mask=_watershed(z,np.ones_like(z,bool),(2,0),from_origin(0,50,10,10))
+    assert mask.sum()==5 and mask[2].all()
+
+def test_visibility_ridge_blocks_cells_beyond_it():
+    z=np.zeros((5,5),float);z[:,2]=30
+    visible,known=_visibility(z,np.ones_like(z,bool),(2,0),from_origin(0,50,10,10),1.7,0)
+    assert known.all() and visible[2,1] and not visible[2,4]
+
+def test_visibility_and_watershed_require_valid_origin(dem):
+    path,polygon=dem
+    with pytest.raises(RasterError,match="Observer/outlet"):
+        run_terrain(path,polygon,"visibility",point=[0,0])

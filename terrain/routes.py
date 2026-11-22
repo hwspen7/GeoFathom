@@ -41,3 +41,23 @@ async def profile(body:TerrainInput)->dict:
                                        body.geometry,body.samples)
     except (GeometryError,RasterError,ValueError) as error:
         raise HTTPException(status_code=422,detail=str(error)) from error
+
+
+class AdvancedTerrainInput(BaseModel):
+    image_id:str
+    geometry:dict
+    operation:str
+    interval:float=Field(default=10,gt=0)
+    reference:float=0
+    point:tuple[float,float]|None=None
+    observer_height:float=Field(default=1.7,ge=0,le=1000)
+    target_height:float=Field(default=0,ge=0,le=1000)
+
+@router.post("/advanced")
+async def advanced(body:AdvancedTerrainInput):
+    from .advanced import run_terrain
+    try:
+        return await run_in_threadpool(run_terrain,raster(body.image_id),body.geometry,
+            body.operation,body.interval,body.reference,body.point,body.observer_height,body.target_height)
+    except (GeometryError,RasterError,ValueError,OverflowError) as error:
+        raise HTTPException(status_code=422,detail=str(error)) from error

@@ -485,3 +485,8 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .desktop-gis .map-legend{top:9px;right:9px}
 @media(max-width:850px){.desktop-gis .gis-layers{width:210px;min-width:165px}.gis-inspector{width:235px;min-width:200px}.gis-menu button{padding:4px}.gis-connection{display:none}}
 @media(max-width:620px){.desktop-gis .gis-body{position:relative}.desktop-gis .gis-layers{width:160px;min-width:140px}.gis-inspector{position:absolute;right:0;top:0;bottom:0;z-index:6;width:240px;max-width:80vw;box-shadow:-2px 0 8px #0002}.gis-header{gap:4px}.gis-brand{font-size:12px}}
+
+.dem-mesh canvas{width:100%;height:auto;display:block;touch-action:none;cursor:grab;border:1px solid #aebdc8}
+.dem-mesh canvas:active{cursor:grabbing}
+.dem-mesh label{display:flex;align-items:center;gap:5px;font-size:11px}
+.terrain-workbench>summary{display:flex;align-items:center;gap:6px;padding:8px;cursor:pointer;border:1px solid #d2dbe1;background:#fff}
