@@ -719,14 +719,25 @@ export default function MapCanvas({
       }
     }
 
-    // Browser acceptance tests must wait for the asynchronous GeoJSON worker
-    // to render vertex handles, not merely for React to schedule setData.
+    // Projected vertex pixels are only meaningful for the *current* camera
+    // and the currently loaded GeoJSON source. Exposing them mid-fitBounds
+    // makes clicks target a past frame even though the vertex is visible.
+    function clearHandleDiagnostics(){
+      if(!import.meta.env.DEV||!container.current)return;
+      container.current.setAttribute('data-edit-handle-pixels','[]');
+      container.current.setAttribute('data-rendered-handle-pixels','[]');
+      container.current.setAttribute('data-map-camera-stable','false');
+    }
     function inspectRenderedHandles() {
-      if(!import.meta.env.DEV || !map.getLayer('workspace-points') || !container.current)return;
+      if(!import.meta.env.DEV||!container.current)return;
+      if(!map.getLayer('workspace-points')||map.isMoving()||
+         !map.isSourceLoaded('workspace')){
+        clearHandleDiagnostics();
+        return;
+      }
       const view=renderRef.current;
       if(!view.editing||!view.selected){
-        container.current.setAttribute('data-rendered-handle-pixels','[]');
-        container.current.setAttribute('data-edit-handle-pixels','[]');
+        clearHandleDiagnostics();
         return;
       }
       const pixels:Position[]=[];
@@ -739,12 +750,11 @@ export default function MapCanvas({
         }).some(item=>item.properties?.role==='edit-vertex');
         if(matched)pixels.push([point.x,point.y]);
       }
-      // Refresh test/diagnostic handle locations after the camera finishes
-      // animating. The React geometry effect alone can expose stale pixels
-      // when a searched place triggers fitBounds concurrently.
       container.current.setAttribute('data-edit-handle-pixels',JSON.stringify(all));
       container.current.setAttribute('data-rendered-handle-pixels',JSON.stringify(pixels));
+      container.current.setAttribute('data-map-camera-stable','true');
     }
+    map.on('movestart',clearHandleDiagnostics);
     map.on('idle',inspectRenderedHandles);
     // GeoJSON source updates finish on a worker after React calls setData.
     // An idle callback alone can miss a newly-loaded geometry if an unrelated
@@ -963,6 +973,7 @@ export default function MapCanvas({
       resize.disconnect();
       map.getContainer().removeEventListener('pointerdown',inspectVertexPointer,true);
       map.off('zoomend',refreshZoomLabels);
+      map.off('movestart',clearHandleDiagnostics);
       map.off('idle',inspectRenderedHandles);
       map.off('sourcedata',inspectWorkspaceSource);
       map.off('mousemove', dragging);
@@ -988,16 +999,16 @@ export default function MapCanvas({
         const shifted=map.unproject([p.x+dx,p.y+dy]);
         return [shifted.lng,shifted.lat];
       },cursor,selectedFeatureId,pinnedPlaces,selectedBoundaryNode);
-    (map.getSource('workspace') as GeoJSONSource).setData(collection);
-    if(container.current && import.meta.env.DEV){
+    // New geometry is not yet on screen. Invalidate the projection receipts
+    // before sending setData to MapLibre's asynchronous GeoJSON worker.
+    if(container.current&&import.meta.env.DEV){
+      container.current.setAttribute('data-edit-handle-pixels','[]');
+      container.current.setAttribute('data-rendered-handle-pixels','[]');
+      container.current.setAttribute('data-map-camera-stable','false');
       container.current.setAttribute('data-label-feature-count',
         String(collection.features.filter(item=>Boolean(item.properties?.label)).length));
-      const handles=editing&&selected?verticesOf(selected).filter(item=>!item.midpoint).map(item=>{
-        const p=map.project(item.point as maplibregl.LngLatLike);
-        return [p.x,p.y];
-      }):[];
-      container.current.setAttribute('data-edit-handle-pixels',JSON.stringify(handles));
     }
+    (map.getSource('workspace') as GeoJSONSource).setData(collection);
     if(container.current&&import.meta.env.DEV){
       container.current.setAttribute('data-boundary-node-count',String(collection.features.filter(f=>f.properties?.role==='boundary-node'||f.properties?.role==='boundary-node-selected').length));
     }
