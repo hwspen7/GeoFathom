@@ -4,7 +4,6 @@ import os
 from pathlib import Path
 import re
 import shutil
-from contextlib import closing
 import httpx
 
 def _sha(path):
@@ -41,7 +40,10 @@ def download_asset(href,root,client=None,allowed_hosts=None):
     os.close(fd)
     try:
         if final.is_file() and tag.is_file():
-            expected=tag.read_text(encoding="ascii").strip()
+            try:
+                expected=tag.read_text(encoding="ascii").strip()
+            except UnicodeError:
+                expected=""
             if final.stat().st_size==length and _sha(final)==expected:
                 return final
             final.unlink(missing_ok=True);tag.unlink(missing_ok=True)
@@ -51,7 +53,8 @@ def download_asset(href,root,client=None,allowed_hosts=None):
         if shutil.disk_usage(root).free<length-start+16*1024*1024:
             raise RuntimeError("Insufficient disk capacity for remote asset.")
         if start<length:
-            requested={**headers}
+            # Require the same strong entity tag even on a full download.
+            requested={**headers,"If-Match":etag}
             if start:
                 requested.update({"Range":f"bytes={start}-","If-Range":etag})
             with client.stream("GET",href,headers=requested,follow_redirects=False) as response:
@@ -74,6 +77,9 @@ def download_asset(href,root,client=None,allowed_hosts=None):
                     for chunk in response.iter_bytes(1024*1024):
                         total+=len(chunk)
                         if total>length:
+                            # Do not preserve a complete-looking prefix from
+                            # an invalid oversized transfer for later reuse.
+                            output.truncate(0)
                             raise RuntimeError("Remote COG exceeded its advertised size.")
                         output.write(chunk)
         if partial.stat().st_size!=length:

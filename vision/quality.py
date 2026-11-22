@@ -44,9 +44,14 @@ def confusion_matrix(reference,predicted,num_classes,valid=None):
 
 
 def metrics_from_matrix(matrix,classes):
-    values=np.asarray(matrix,dtype=np.int64)
-    if (values.shape!=(len(classes),len(classes))
-            or not np.all(values>=0)):
+    raw=np.asarray(matrix)
+    if (raw.shape!=(len(classes),len(classes))
+            or not np.issubdtype(raw.dtype,np.integer)
+            or np.any(raw<0)
+            or sum(map(int,raw.flat))>np.iinfo(np.int64).max):
+        raise ValueError("Invalid confusion matrix.")
+    values=raw.astype(np.int64,copy=False)
+    if not np.all(values>=0):
         raise ValueError("Invalid confusion matrix.")
     tp=np.diag(values)
     truth=values.sum(axis=1)

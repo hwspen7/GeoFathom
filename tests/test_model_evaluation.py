@@ -110,3 +110,33 @@ def test_context_halo_evaluation_scores_every_eligible_pixel_once(prepared,monke
     assert result["context_halo"]==16
     assert result["valid_pixels"]==128*128
     assert result["confusion_matrix"]==[[128*128-3600,0],[3600,0]]
+
+
+@pytest.mark.parametrize("values",[
+    [[1.5,0],[0,2]],[[1,-1],[0,2]],[[1,2,3]],
+    [[2**62,2**62],[1,0]],[[float("nan"),0],[0,1]],
+])
+def test_confusion_metrics_reject_invalid_or_overflowing_counts(values):
+    with pytest.raises(ValueError,match="Invalid confusion matrix"):
+        metrics_from_matrix(values,["a","b"])
+
+
+def test_empty_confusion_matrix_has_no_claimed_accuracy():
+    result=metrics_from_matrix([[0,0],[0,0]],["a","b"])
+    assert result["valid_pixels"]==0
+    assert result["overall_accuracy"] is None
+    assert result["mean_iou_present_classes"] is None
+    assert result["classes"][0]["iou"]==0
+
+
+@pytest.mark.parametrize("reference,predicted,classes,mask",[
+    ([[0]],[[0,1]],2,None),([0],[0],2,None),
+    ([[0]],[[0]],1,None),([[0]],[[0]],65,None),
+    ([[0]],[[0]],2,[[True,False]]),
+    ([[0.0]],[[0]],2,None),([[0]],[[0.0]],2,None),
+    ([[-1]],[[0]],2,None),([[0]],[[-1]],2,None),
+    ([[0]],[[2]],2,None),
+])
+def test_confusion_counts_invalid_grid_and_labels(reference,predicted,classes,mask):
+    with pytest.raises(ValueError):
+        confusion_matrix(reference,predicted,classes,mask)
