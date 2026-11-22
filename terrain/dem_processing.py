@@ -133,7 +133,7 @@ def prepare_dem(paths, mode, geometry=None, resolution_m=None, sampling='bilinea
                      if all_datums_known else
                      'One or more source vertical datum labels are missing; vertical compatibility is unverified. ')
             return {'asset':asset,'operation':mode,'valid_cells':count,'total_cells':int(merged.size),
-                    'resolution_m':res,'warning':quality+'Processing grid is not proof of native elevation accuracy.'}
+                    'resolution_m':res,'warning':quality+'Output grid resolution is not a certificate of native source elevation accuracy or vertical-datum correctness.'}
     except rasterio.errors.RasterioError as error:
         raise RasterError('DEM preparation failed to read or transform the input GeoTIFF.') from error
     finally:
