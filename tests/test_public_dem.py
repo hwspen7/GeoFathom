@@ -118,3 +118,70 @@ def test_pre_cancelled_dem_never_reaches_provider(tmp_path,monkeypatch):
     monkeypatch.setattr(public_dem,"_read_usgs",lambda *args,**kwargs:pytest.fail("Provider must not run"))
     with pytest.raises(TerrainCancelled):
         fetch_dem_subset((-83.001,39.999,-83.,40.),3,cancel=cancel)
+
+def test_larger_single_fetch_is_bounded_and_more_than_one_million_cells():
+    from imagery.public_dem import MAX_DEM_CELLS,MAX_DEM_SIDE
+    bbox=(-83.050,39.98,-82.984,40.036)
+    _,_,width,height=_grid(bbox,3)
+    assert width*height>1_000_000
+    assert width*height<=MAX_DEM_CELLS and max(width,height)<=MAX_DEM_SIDE
+    with pytest.raises(RasterError,match="8-million-cell"):
+        _grid(bbox,1)
+
+
+def test_usgs_large_grid_streams_true_georeferenced_chunks_without_gaps(monkeypatch):
+    from contextlib import contextmanager
+    import httpx
+    from rasterio.io import MemoryFile
+    from rasterio.transform import from_bounds
+    from imagery import public_dem
+    bbox=(-83.003,39.998,-82.980,40.001)
+    crs,affine,width,height=_grid(bbox,1)
+    assert width>public_dem.MAX_USGS_TILE_SIDE and height<public_dem.MAX_USGS_TILE_SIDE
+    calls=[]
+    @contextmanager
+    def stream(method,url,**kwargs):
+        assert method=="GET" and url==public_dem.USGS_EXPORT
+        size=kwargs["params"]["size"]
+        w,h=map(int,size.split(","))
+        west,south,east,north=map(float,kwargs["params"]["bbox"].split(","))
+        assert w<=public_dem.MAX_USGS_TILE_SIDE and h<=public_dem.MAX_USGS_TILE_SIDE
+        # Record the first x coordinate to confirm that remote subrequests
+        # have unique exact bounds and no overlap/gap in the output lattice.
+        calls.append((west,east,w))
+        stamp=from_bounds(west,south,east,north,w,h)
+        with MemoryFile() as memory:
+            with memory.open(driver="GTiff",width=w,height=h,count=1,dtype="float32",
+                             crs=crs,transform=stamp,nodata=-9999) as ds:
+                ds.write(np.full((h,w),100+len(calls),dtype=np.float32),1)
+            response=httpx.Response(200,content=memory.read(),request=httpx.Request("GET",url))
+            yield response
+    monkeypatch.setattr(public_dem.httpx,"stream",stream)
+    arr,actual_crs,actual_transform,count,missing=public_dem._read_usgs(bbox,1)
+    assert actual_crs==crs and actual_transform==affine
+    assert count==width*height and not missing
+    assert arr.shape==(height,width)
+    assert len(calls)>=2
+    assert np.allclose(arr[:,:1024],101)
+    assert np.allclose(arr[:,1024:],102)
+    assert abs(calls[0][1]-calls[1][0])<1e-5
+
+
+def test_usgs_georeference_mismatch_is_rejected(monkeypatch):
+    from contextlib import contextmanager
+    import httpx
+    from rasterio.io import MemoryFile
+    from imagery import public_dem
+    bbox=(-83.001,39.999,-83.,40.)
+    crs,affine,width,height=_grid(bbox,3)
+    @contextmanager
+    def wrong_bounds(method,url,**kwargs):
+        with MemoryFile() as memory:
+            with memory.open(driver="GTiff",width=width,height=height,count=1,
+                             dtype="float32",crs=crs,transform=from_origin(
+                                 affine.c+1000,affine.f,3,3),nodata=-9999) as ds:
+                ds.write(np.full((height,width),220,np.float32),1)
+            yield httpx.Response(200,content=memory.read(),request=httpx.Request("GET",url))
+    monkeypatch.setattr(public_dem.httpx,"stream",wrong_bounds)
+    with pytest.raises(RasterError,match="not aligned"):
+        public_dem._read_usgs(bbox,3)

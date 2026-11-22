@@ -1,9 +1,34 @@
 import {describe,it,expect} from 'vitest';
-import {terrainFetchBounds,terrainRasterMatchesTarget,terrainGeometryBounds,terrainBoundsOverlap,terrainFetchBudget,preferredTerrainFetchScope,terrainRasterFitsStudyArea} from './terrainSource';
+import {terrainFetchBounds,terrainRasterMatchesTarget,terrainGeometryBounds,terrainBoundsOverlap,terrainFetchBudget,preferredTerrainFetchScope,terrainRasterFitsStudyArea,recommendDEMResolution,availableDEMResolutions,terrainSupportsUSGS,MAX_DEM_GRID_CELLS} from './terrainSource';
 
 const cmh:[number,number,number,number]=[-82.93,39.96,-82.85,40.03];
 const old={type:'Polygon' as const,coordinates:[[[-82.59,39.41],[-82.50,39.41],[-82.50,39.46],[-82.59,39.46],[-82.59,39.41]]]};
 describe('intent-safe DEM requests',()=>{
+ it('supports multi-million-cell US study areas and recommends a finer fitting grid',()=>{
+  const area:[number,number,number,number]=[-83.050,39.98,-82.984,40.036];
+  const one=terrainFetchBudget(area,1)!;
+  expect(terrainSupportsUSGS(area)).toBe(true);
+  expect(one.warning).toMatch(/8-million/);
+  expect(terrainFetchBudget(area,3)!.warning).toBeNull();
+  expect(terrainFetchBudget(area,3)!.approximateCells).toBeGreaterThan(1_000_000);
+  expect(recommendDEMResolution(area)).toBe(3);
+  expect(MAX_DEM_GRID_CELLS).toBe(8_000_000);
+ });
+ it('does not offer US-only grids for Hong Kong airport even if pixels would fit',()=>{
+  const hkg:[number,number,number,number]=[113.89,22.28,113.98,22.345];
+  expect(terrainSupportsUSGS(hkg)).toBe(false);
+  expect(availableDEMResolutions(hkg)).toEqual([30,90]);
+  expect(terrainFetchBudget(hkg,1)!.warning).toMatch(/USGS 3DEP/);
+  expect(terrainFetchBudget(hkg,30)!.warning).toBeNull();
+  expect(recommendDEMResolution(hkg)).toBe(30);
+ });
+ it('maintains a bounded limit rather than allowing unbounded terrain allocations',()=>{
+  const huge:[number,number,number,number]=[-83.15,39.95,-82.93,40.15];
+  expect(terrainFetchBudget(huge,3)!.warning).toMatch(/8-million/);
+  expect(recommendDEMResolution(huge)).toBe(10);
+  const tooWide:[number,number,number,number]=[-83.3,39.9,-82.99,40.1];
+  expect(recommendDEMResolution(tooWide)).toBeNull();
+ });
  it('hides previously downloaded far-north DEM while retaining a tight campus DEM',()=>{
   const main:[number,number,number,number]=[-83.045,39.990,-83.010,40.012];
   expect(terrainRasterFitsStudyArea({bbox:[-83.084,39.988,-83.003,40.077]},main)).toBe(false);
