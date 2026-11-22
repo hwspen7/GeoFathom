@@ -58,7 +58,7 @@ type Operation=TerrainOperation|'slope'|'profile';
 type ProfileResult=Awaited<ReturnType<typeof terrainProfile>>;
 interface TerrainRecord {
  id:string;title:string;operation:Operation;source:RasterAsset;geometry:GeoJSON.Geometry;
- inputKey:string;visible:boolean;createdAt:number;
+ inputKey:string;visible:boolean;createdAt:number;saved?:boolean;
  advanced?:AdvancedTerrainResult;slope?:TerrainResult;profile?:ProfileResult;
 }
 const modes:Array<{id:Operation;title:string}>=[
@@ -124,7 +124,10 @@ export default function TerrainWorkbench(p:Props){
    sequence.current++;analysisRequest.current?.abort();analysisRequest.current=null;setBusy(false);
  }
  async function run(){
-   if(!canRun||!dem||!p.geometry)return;
+   if(!canRun||!dem||!p.geometry||busy)return;
+   if(records.length>=24&&!records.some(r=>r.inputKey===inputKey&&!r.saved)){
+     setLive(false);setError('Result limit reached (24). Export or remove a result before another calculation.');return;
+   }
    // A live run replaces only the previous run with identical input, never
    // hidden or historical results from different source geometry.
    analysisRequest.current?.abort();
@@ -140,7 +143,7 @@ export default function TerrainWorkbench(p:Props){
        observer_height:Number(height),target_height:Number(target)},controller.signal);
      if(ticket!==sequence.current||controller.signal.aborted)return;
      setRecords(old=>{
-       const kept=old.filter(r=>r.inputKey!==inputKey);
+       const kept=old.filter(r=>r.inputKey!==inputKey||r.saved);
        return [...kept,record];
      });
      setSelectedRecord(record.id);latest.current.onHover(null);
@@ -196,7 +199,7 @@ export default function TerrainWorkbench(p:Props){
    finally{if(alive.current)setFetching(false);}
  }
  async function save(){
-   if(!p.projectId||!selected||!result||result.features.length>512)return;
+   if(!p.projectId||!selected||selected.saved||busy||!result||result.features.length>512)return;
    const ticket=sequence.current;setBusy(true);setError('');
    const source=selected.source;
    try{
@@ -204,7 +207,7 @@ export default function TerrainWorkbench(p:Props){
        geometry:f.geometry,name:String(f.properties.name||result.operation)+' '+(i+1),
        source:'DEM '+source.name,properties:{...f.properties,source_image:source.id,operation:result.operation}
      })));
-     if(alive.current){latest.current.onSaved();if(ticket===sequence.current)setInfo('Saved '+saved.created+' terrain features.');}
+     if(alive.current){setRecords(old=>old.map(r=>r.id===selected.id?{...r,saved:true}:r));latest.current.onSaved();if(ticket===sequence.current)setInfo('Saved '+saved.created+' terrain features.');}
    }catch(e){if(ticket===sequence.current)setError(e instanceof Error?e.message:'Save failed.');}
    finally{if(ticket===sequence.current)setBusy(false);}
  }
@@ -292,7 +295,7 @@ export default function TerrainWorkbench(p:Props){
        {result.operation==='watershed'&&<MetricBars label="Catchment (cells)" values={[{name:'Upstream',value:result.metrics.upstream_cells,color:'#3687b9'},{name:'Other',value:Math.max(0,result.valid_cells-result.metrics.upstream_cells),color:'#9ba7ad'}]}/>}
        {result.mesh&&<MeshView mesh={result.mesh}/>}
        <small className="compact-notice" title={result.warning}>{result.valid_cells} valid · {result.missing_cells} missing · Method ⓘ</small>
-       {result.features.length>0&&<div className="survey-action-bar"><button disabled={!p.projectId||busy||result.features.length>512} title={result.features.length>512?'Export GeoJSON for results exceeding the atomic project batch limit.':'Save to project'} onClick={()=>void save()}>Save terrain features</button>
+       {result.features.length>0&&<div className="survey-action-bar"><button disabled={!p.projectId||busy||selected?.saved||result.features.length>512} title={result.features.length>512?'Export GeoJSON for results exceeding the atomic project batch limit.':'Save to project'} onClick={()=>void save()}>{selected?.saved?'Saved to project':'Save terrain features'}</button>
          <button onClick={()=>setRecords(old=>old.map(r=>r.id===selectedRecord?{...r,visible:true}:r))}>Show on map</button><button onClick={()=>setRecords(old=>old.map(r=>r.id===selectedRecord?{...r,visible:false}:r))}>Hide</button></div>}
      </>}
    </section>}

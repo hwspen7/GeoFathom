@@ -56,6 +56,7 @@ export default function ProjectsPanel({
   notify.current = onWorkspace;
   const notifySwitch=useRef(onProjectSwitch);notifySwitch.current=onProjectSwitch;
   const selection = useRef('');
+  const initializedSelection=useRef(false);
   const requestSequence = useRef(0);
   const styleWriting=useRef(false);
   const historySequence = useRef(0);
@@ -63,7 +64,8 @@ export default function ProjectsPanel({
   featureIdentity.current = selectedFeatureId;
 
   const chooseProject = useCallback((id: string,created=false) => {
-    if (selection.current === id) return;
+    if (initializedSelection.current && selection.current === id) return;
+    initializedSelection.current=true;
     // Invalidate outstanding reads synchronously, before React commits the switch.
     selection.current = id;
     notifySwitch.current?.(id||null,created);
@@ -83,7 +85,7 @@ export default function ProjectsPanel({
     getProjects().then(list => {
       if (cancelled) return;
       setProjects(list);setError('');
-      if(selection.current)return;
+      if(initializedSelection.current)return;
       const id = restoreProject(list, storedProject());
       rememberProject(id);
       chooseProject(id);
@@ -359,6 +361,7 @@ export default function ProjectsPanel({
         <>
           <select aria-label="Active project" value={selected} disabled={busy}
             onChange={event => chooseProject(event.target.value)}>
+            <option value="">Local workspace</option>
             {projects.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}
           </select>
 

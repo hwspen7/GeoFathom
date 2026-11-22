@@ -21,7 +21,7 @@ describe('tab-scoped project identity',()=>{
     rememberProject('project-a');
     expect(storedProject()).toBe('project-a');
     rememberProject('');
-    expect(storedProject()).toBe('');
+    expect(restoreProject([{id:'project-a'}],storedProject())).toBe('');
   });
   it('works when storage access is blocked',()=>{
     vi.stubGlobal('window',{get sessionStorage(){throw new Error('blocked');}});
