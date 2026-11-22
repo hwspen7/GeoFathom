@@ -982,6 +982,20 @@ export function advancedTerrain(body:{image_id:string;geometry:GeoJSON.Geometry;
   return request('/terrain/advanced',{signal,method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
 }
 
+export type DEMProcessMode='clip'|'mosaic'|'resample';
+export async function prepareDEM(body:{
+  image_ids:string[];mode:DEMProcessMode;resolution_m:number;
+  sampling:'nearest'|'bilinear';geometry?:GeoJSON.Geometry|null
+},token:string,signal?:AbortSignal):Promise<{
+  asset:RasterAsset;operation:DEMProcessMode;valid_cells:number;total_cells:number;
+  resolution_m:number;warning:string
+}>{
+  const headers:Record<string,string>={'Content-Type':'application/json'};
+  if(token)headers['X-GeoFathom-Admin-Token']=token;
+  else headers['X-GeoFathom-Local-Import']='1';
+  return request('/terrain/dem/prepare',{method:'POST',headers,signal,body:JSON.stringify(body)});
+}
+
 export function bufferGeometry(geometry:GeoJSON.Geometry,distance_m:number):Promise<EditResponse&{warning:string}>{
   return request('/analysis/buffer',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({geometry,distance_m,resolution:16})});
