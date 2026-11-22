@@ -142,6 +142,19 @@ with tempfile.TemporaryDirectory() as directory:
  const chart=page.getByRole('img',{name:'Interactive elevation profile'});
  await expect(chart).toBeVisible();await chart.hover();
  await expect(page.getByLabel('Terrain sample location')).toHaveCount(1);
+ await expect(page.getByLabel('Terrain run provenance')).toBeVisible();
+ // Reverse interaction: actual map-projected profile point → chart cursor.
+ await chart.locator('..').hover({position:{x:1,y:1}});
+ const pixels=JSON.parse((await map.getAttribute('data-profile-station-pixels'))||'[]') as number[][];
+ expect(pixels.length).toBeGreaterThan(10);
+ const mapBox=(await map.boundingBox())!;
+ const candidate=pixels.find(p=>p[0]>20&&p[0]<mapBox.width-20&&p[1]>20&&p[1]<mapBox.height-20);
+ expect(candidate).toBeTruthy();
+ await page.mouse.move(mapBox.x+candidate![0],mapBox.y+candidate![1]);
+ await expect.poll(async()=>{
+   const idx=await page.locator('.terrain-profile-chart[data-profile-selected-index]').getAttribute('data-profile-selected-index');
+   return idx!==null&&idx!=='none';
+ },{timeout:15000}).toBe(true);
  await expect(page.getByLabel('Profile sample position')).toBeVisible();
  await page.getByLabel('Terrain tool group').selectOption('Engineering');
  await page.getByLabel('Terrain tools').getByRole('button',{name:'Cross sections',exact:true}).click();

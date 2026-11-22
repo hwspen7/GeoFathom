@@ -1164,8 +1164,19 @@ export default function MapCanvas({
   }, [editing, drawingMode, traceMode, annotationMode, selectionBoxMode,labelMoveMode,terrainPicking,ready]);
 
   useEffect(()=>{
+    const map=mapRef.current;if(!ready||!map||!import.meta.env.DEV||!container.current)return;
+    // Browser regression locates a real projected profile sample, never a
+    // guessed place on the SVG/map.
+    container.current.setAttribute('data-profile-station-pixels',JSON.stringify(
+      profileSamples.filter(s=>!!s.coordinate).map(s=>{
+        const p=map.project(s.coordinate as maplibregl.LngLatLike);
+        return [p.x,p.y,s.distance_m];
+      })));
+  },[profileSamples,ready]);
+  useEffect(()=>{
     const map=mapRef.current;if(!ready||!map||!terrainMarker)return;
     const node=document.createElement('div');node.className='terrain-map-marker';node.setAttribute('aria-label','Terrain sample location');
+    node.style.pointerEvents='none';
     const marker=new maplibregl.Marker({element:node}).setLngLat(terrainMarker).addTo(map);
     return()=>{marker.remove();};
   },[terrainMarker,ready]);

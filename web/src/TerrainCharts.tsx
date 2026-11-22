@@ -31,7 +31,7 @@ export function ProfilePlot({samples,length,onHover,mapIndex=null}:{samples:Prof
    const csv='distance_m,elevation_m,longitude,latitude\n'+samples.map(p=>[p.distance_m,p.elevation_m??'',p.coordinate?.[0]??'',p.coordinate?.[1]??''].join(',')).join('\n');
    const a=document.createElement('a'),url=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.href=url;a.download='elevation-profile.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
  }
- return <div className="terrain-profile-chart">
+ return <div className="terrain-profile-chart" data-profile-selected-index={activeIndex??'none'}>
    <svg viewBox="0 0 345 153" role="img" aria-label="Interactive elevation profile"
      onPointerMove={e=>{const b=e.currentTarget.getBoundingClientRect();choose(Math.max(0,Math.min(1,((e.clientX-b.left)/b.width*345-42)/286))*length);}}
      onPointerLeave={()=>{setIndex(null);onHover(null);}}>
