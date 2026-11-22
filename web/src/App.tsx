@@ -30,7 +30,7 @@ import { featureColor, legendEntries, DEFAULT_LAYER_STYLE } from './labels';
 import ImageCorrectionPanel, { type PromptMode } from './ImageCorrectionPanel';
 import {
   GeometryTimeline, approximateMeasurement, previewEdgeLengths, pathsOf, drawingPreview,
-  singleMovedVertex,verticesOf,moveVertex,removeVertex,type GeometryPath, type Position, type ShapeMode,
+  singleMovedVertex,moveVertex,removeVertex,type GeometryPath, type Position, type ShapeMode,
 } from './editing';
 import DiscoveryPanel from './DiscoveryPanel';
 import type { DiscoveryResponse, GeoWorkspace, WorkspaceFeature, QualityIssue } from './api';
@@ -249,7 +249,19 @@ export default function App() {
       }
       const checked = await measureGeometry(next);
       if (sequence !== geometrySequence.current) return;
-      if(detached||!selectedFeatureId)storeScratch(next,checked,detached?null:scratchId);
+      if(detached||!selectedFeatureId)storeScratch(next,checked,detached?null:scratchId,
+        selectedPlace&&!detached?{
+          source:'Edited mapped boundary (local copy)',
+          name:selectedPlace.name+' · edited study area',
+          properties:{source_type:'user_edited_osm_copy',original_place_id:selectedPlace.id},
+        }:undefined);
+      if(selectedPlace&&!detached&&!selectedFeatureId){
+        // Source OSM reference remains pinned unchanged. All vertex edits are
+        // committed into an independent local feature and can be reversed.
+        setSelectedPlace(null);setSelectedParcel('all');
+        setGeometrySource('Edited mapped boundary (local copy)');
+        setFeatureProperties({source_type:'user_edited_osm_copy',original_place_id:selectedPlace.id});
+      }
       if(detached){setSelectedFeatureId(null);featureIdentity.current=null;setSelectedPlace(null);setPendingShared(null);setLinked(false);}
       setGeometry(next);
       setMeasurement(checked);
@@ -264,7 +276,13 @@ export default function App() {
       if((detached||!selectedFeatureId)&&backendUnavailable(failure)){
         try{
           const local=localMeasurement(next);
-          storeScratch(next,local,detached?null:scratchId);setGeometry(next);setMeasurement(local);
+          storeScratch(next,local,detached?null:scratchId,selectedPlace&&!detached?{
+            source:'Edited mapped boundary (local copy)',
+            name:selectedPlace.name+' · edited study area',
+            properties:{source_type:'user_edited_osm_copy',original_place_id:selectedPlace.id},
+          }:undefined);
+          if(selectedPlace&&!detached){setSelectedPlace(null);setSelectedParcel('all');}
+          setGeometry(next);setMeasurement(local);
           lastValid.current=structuredClone(next);timeline.current.push(next);setHistoryPulse(v=>v+1);
           setPreview(null);setError('');setMessage('Local edit completed · approximate measurement, backend offline.');
           return;

@@ -21,8 +21,8 @@ function area(polygon:GeoJSON.Position[][]):number{
 }
 /** Separate components without altering source geometry or fabricating a campus outline. */
 export function studyParcels(geometry:GeoJSON.Geometry|null):StudyParcel[]{
- if(!geometry||!['Polygon','MultiPolygon'].includes(geometry.type))return [];
- const polygons=geometry.type==='Polygon'?[geometry.coordinates]:geometry.coordinates;
+ if(!geometry||(geometry.type!=='Polygon'&&geometry.type!=='MultiPolygon'))return [];
+ const polygons:GeoJSON.Position[][][]=geometry.type==='Polygon'?[geometry.coordinates]:geometry.coordinates;
  return polygons.flatMap((rings,index)=>{
   const polygon:GeoJSON.Polygon={type:'Polygon',coordinates:structuredClone(rings)};
   const bounds=terrainGeometryBounds(polygon);
