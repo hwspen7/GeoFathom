@@ -333,29 +333,26 @@ export default function App() {
     setDrawingMode(null);
     setTraceMode(false);
     setVertices([]);
-    setGeometry(
-      place.geometry || {
-        type: 'Point',
-        coordinates: [place.longitude, place.latitude],
-      },
-    );
+    // Geocoders may return a point, even for an airport. Never treat a point
+    // marker or its search bounding box as a surveyed analysis polygon.
+    const mapped=place.geometry&&['Polygon','MultiPolygon','LineString','MultiLineString'].includes(place.geometry.type);
+    const target:GeoJSON.Geometry=mapped?place.geometry!:{type:'Point',coordinates:[place.longitude,place.latitude]};
+    setGeometry(target);
     setMeasurement(null);
-    if (place.geometry) {
-      lastValid.current = structuredClone(place.geometry);
-      timeline.current.push(place.geometry);
-      setHistoryPulse(value => value + 1);
-    }
+    lastValid.current=structuredClone(target);
+    timeline.current.push(target);
+    setHistoryPulse(value => value + 1);
     setGeometrySource(place.source);
-    setFeatureProperties({ source_type: 'mapped_openstreetmap', osm_id: place.osm_id, osm_type: place.osm_type });
+    setFeatureProperties({ source_type:mapped?'mapped_openstreetmap':'geocoded_location', osm_id: place.osm_id, osm_type: place.osm_type });
     setFocus({
       latitude: place.latitude,
       longitude: place.longitude,
       bbox: place.bbox,
       key: Date.now(),
     });
-    if (place.geometry) {
+    if (mapped) {
       try {
-        const result = await measureGeometry(place.geometry);
+        const result = await measureGeometry(target);
         if (sequence !== geometrySequence.current) return;
         setMeasurement(result);
         setMessage('Mapped boundary loaded. Check that it represents your intended area.');
@@ -365,9 +362,7 @@ export default function App() {
         setMessage('Place found, but the mapped geometry could not be measured.');
       }
     } else {
-      lastValid.current={type:'Point',coordinates:[place.longitude,place.latitude]};
-      timeline.current.push(lastValid.current);
-      setMessage('Location found without a mapped boundary. Draw a polygon to measure it.');
+      setMessage('Location selected (point only). Terrain can fetch the current map view; draw an area or use DEM extent for area analysis.');
     }
     if(sequence===geometrySequence.current)setBusy(false);
   }
@@ -1016,6 +1011,7 @@ export default function App() {
           <MapCanvas
             selected={geometry} drawingMode={drawingMode} vertices={vertices}
             terrainPicking={terrainPicking} terrainMarker={showTools&&activeTool==='tools-terrain'?(terrainHover??terrainOrigin):null}
+            preservePlaceSelection={!!selectedPlace}
             terrainResults={terrainVisible?terrainFeatures:[]} terrainRasters={terrainVisible?terrainRasters:[]}
             terrainFetchTarget={showTools&&activeTool==='tools-terrain'?terrainFetchTarget:null}
             onTerrainPick={position=>{setTerrainOrigin(position);setTerrainPicking(false);setMessage('Terrain point selected.');}}
@@ -1288,7 +1284,7 @@ export default function App() {
                   <small className="compact-notice" title="Live spherical preview. Final area and perimeter use the WGS84 ellipsoid.">~ estimated · WGS84 after validation</small>
                 </details>
               )}
-              {selectedPlace && <p className="data-source">Data: {selectedPlace.source} · {selectedPlace.boundary_status === 'mapped' ? 'Mapped outline' : 'Coordinates only'}</p>}
+              {selectedPlace && <p className="data-source">Data: {selectedPlace.source} · {geometry&&['Polygon','MultiPolygon','LineString','MultiLineString'].includes(geometry.type) ? 'Mapped outline':'Coordinates only · use DEM extent or draw a study area'}</p>}
               <div className="analysis-actions">
                 <button onClick={exportGeoJSON} disabled={!geometry}><Download size={15} /> Export GeoJSON</button>
                 <button onClick={deselect}><RotateCcw size={15} /> Deselect</button>

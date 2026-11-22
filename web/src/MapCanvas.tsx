@@ -90,6 +90,7 @@ interface Props {
   }) => void;
   onSelectSavedFeature: (id: string) => void;
   onDeselect:()=>void;
+  preservePlaceSelection?:boolean;
 }
 
 function mapStyle():StyleSpecification{
@@ -244,7 +245,7 @@ export default function MapCanvas({
   promptPositive,promptNegative,promptBox,annotationMode,onAnnotationClick,
   selectionBoxMode,onSelectionBox,selectedIds,qualityIssues,projectGrid,externalTiles,
   labelMoveMode,onLabelMove,
-  onGeometryPreview, onGeometryCommit, onSelectSavedFeature,onDeselect,
+  onGeometryPreview, onGeometryCommit, onSelectSavedFeature,onDeselect,preservePlaceSelection=false,
 }: Props) {
   const container = useRef<HTMLDivElement>(null);
   const coordinateRef = useRef<HTMLDivElement>(null);
@@ -255,7 +256,7 @@ export default function MapCanvas({
   const eventRef = useRef({
     selected,selectedFeatureId,drawingMode, traceMode, annotationMode,selectionBoxMode,labelMoveMode,editing, moving,edgeMoving, snapping, selectedLocked,
     layerFeatures, onMapClick,onFinishDrawing,terrainPicking,onTerrainPick,onContextMenu,onEditingError, onTraceClick,onAnnotationClick,onSelectionBox,onLabelMove,onViewportChange,
-    onGeometryPreview, onGeometryCommit, onSelectSavedFeature,onDeselect,
+    onGeometryPreview, onGeometryCommit, onSelectSavedFeature,onDeselect,preservePlaceSelection,
   });
   const renderRef = useRef({
     selected,vertices,drawingMode,discovered,layerFeatures,editing,
@@ -275,7 +276,7 @@ export default function MapCanvas({
   eventRef.current = {
     selected,selectedFeatureId,drawingMode, traceMode, annotationMode,selectionBoxMode,labelMoveMode,editing, moving,edgeMoving, snapping, selectedLocked,
     layerFeatures, onMapClick,onFinishDrawing,terrainPicking,onTerrainPick,onContextMenu,onEditingError, onTraceClick,onAnnotationClick,onSelectionBox,onLabelMove,onViewportChange,
-    onGeometryPreview, onGeometryCommit, onSelectSavedFeature,onDeselect,
+    onGeometryPreview, onGeometryCommit, onSelectSavedFeature,onDeselect,preservePlaceSelection,
   };
 
   useEffect(() => {
@@ -581,7 +582,11 @@ export default function MapCanvas({
       else if (!state.editing) {
         const feature = hits(event).find(f => f.properties?.role === 'saved');
         if (feature?.properties?.id) state.onSelectSavedFeature(String(feature.properties.id));
-        else if(!hits(event).some(f=>f.properties?.role==='selected'))state.onDeselect();
+        // A search result is a chosen location, not a transient hover. Plain
+        // map clicks must not discard it before Terrain can use the location.
+        // Saved-feature clicks still switch the active selection, and the
+        // explicit Deselect button remains available.
+        else if(!state.preservePlaceSelection&&!hits(event).some(f=>f.properties?.role==='selected'))state.onDeselect();
       }
     }
     function removeByRightClick(event: MapMouseEvent) {
