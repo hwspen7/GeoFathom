@@ -31,7 +31,7 @@ with tempfile.TemporaryDirectory() as directory:
  await page.getByLabel('Active project').selectOption(id);
  await page.getByRole('navigation',{name:'Workspace tools'}).getByRole('button',{name:'Raster / AI',exact:true}).click();
  await page.getByLabel('Select georeferenced imagery').selectOption(fixture.id);
- await page.getByRole('button',{name:'DEM study area',exact:true}).click();
+ await page.getByRole('button',{name:/DEM study area/}).click();
  await page.getByRole('navigation',{name:'Workspace tools'}).getByRole('button',{name:'GIS',exact:true}).click();
  await page.getByText('Advanced DEM tools',{exact:true}).click();
  const mode=page.getByLabel('Advanced terrain operation');

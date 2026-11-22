@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 
 import {
-  getCapabilities, interpret, measureGeometry, searchPlaces,
+  getCapabilities,checkReady, interpret, measureGeometry, searchPlaces,
   type Capabilities, type Measurement, type Place,
 } from './api';
 import MapCanvas, { type FocusPoint } from './MapCanvas';
@@ -56,6 +56,8 @@ export default function App() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [capabilities, setCapabilities] = useState<Capabilities | null>(null);
+  const [connectionError,setConnectionError]=useState('');
+  const [connectionRetry,setConnectionRetry]=useState(0);
   const [assistantQuery, setAssistantQuery] = useState('');
   const [modelId, setModelId] = useState('local-saluki');
   const [modelUsed, setModelUsed] = useState<boolean | null>(null);
@@ -238,9 +240,15 @@ export default function App() {
     requestAnimationFrame(()=>document.getElementById(id)?.scrollIntoView({block:'nearest'}));
   }
 
-  useEffect(() => {
-    getCapabilities().then(setCapabilities).catch(() => setCapabilities(null));
-  }, []);
+  useEffect(()=>{
+    let cancelled=false;
+    void Promise.all([checkReady(),getCapabilities()]).then(([,value])=>{
+      if(!cancelled){setCapabilities(value);setConnectionError('');setRefreshToken(v=>v+1);}
+    }).catch(error=>{
+      if(!cancelled){setCapabilities(null);setConnectionError(error instanceof Error?error.message:String(error));}
+    });
+    return()=>{cancelled=true;};
+  },[connectionRetry]);
 
   async function selectPlace(place: Place) {
     const sequence = ++geometrySequence.current;
@@ -587,7 +595,7 @@ export default function App() {
             <button key={id} aria-pressed={activeTool===id&&showTools} onClick={()=>revealPanel(id)}>{title}</button>)}
         </nav>
         <button className="gis-inspector-toggle" aria-pressed={showTools} onClick={()=>setShowTools(v=>!v)}>Inspector</button>
-        <span className="gis-connection">{capabilities?<Wifi size={14}/>:<WifiOff size={14}/>} {capabilities?'Connected':'Offline'}</span>
+        <button className="gis-connection" title={connectionError||'Check backend connection'} onClick={()=>setConnectionRetry(v=>v+1)}>{capabilities?<Wifi size={14}/>:<WifiOff size={14}/>} {capabilities?'Connected':'Reconnect API'}</button>
       </header>
       <div className="gis-toolbar" aria-label="Survey toolbar">
         <div className="gis-navigation-tools">
@@ -610,6 +618,7 @@ export default function App() {
           <div className="sidebar-scroll">
           <section className="panel-section">
             <div className="section-heading"><Layers3 size={16} /><span>Projects & saved geometry</span></div>
+            {!capabilities&&connectionError&&<div className="discovery-error" role="alert">{connectionError} <button onClick={()=>setConnectionRetry(v=>v+1)}>Reconnect</button></div>}
             <ProjectsPanel
               geometry={busy || preview || pendingShared || drawingMode ? null : geometry}
               featureName={selectedPlace?.name || 'Custom boundary'}

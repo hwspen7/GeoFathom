@@ -1,4 +1,13 @@
-const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/$/, '');
+// A same-origin local proxy avoids localhost/IPv4 and CORS mismatches.
+const API_URL = (import.meta.env.VITE_API_URL || '/api').replace(/\/$/, '');
+export class ApiError extends Error {
+  constructor(message:string,public readonly status:number|null){
+    super(message);this.name='ApiError';
+  }
+}
+export function backendUnavailable(error:unknown):boolean{
+  return error instanceof ApiError&&(error.status===null||[502,503,504].includes(error.status));
+}
 
 export interface Place {
   id: string;
@@ -68,7 +77,15 @@ function sessionHeaders(initial?: HeadersInit): Headers {
   return headers;
 }
 async function rawRequest(path: string, init?: RequestInit): Promise<Response> {
-  return fetch(API_URL + path, {...init, headers: sessionHeaders(init?.headers)});
+  // Local geometry and project requests must not strand the editor indefinitely.
+  const fast=/^\/(measure|edit\/|health|capabilities|projects(?:\/|$))/.test(path);
+  try{
+    return await fetch(API_URL+path,{...init,headers:sessionHeaders(init?.headers),
+      signal:init?.signal??AbortSignal.timeout(fast?12000:120000)});
+  }catch(error){
+    const detail=error instanceof Error?error.message:String(error);
+    throw new ApiError('API connection failed. Start GeoFathom backend and reconnect. ('+detail+')',null);
+  }
 }
 async function responseError(response: Response, fallback = 'Request failed'): Promise<Error> {
   let detail = fallback;
@@ -78,7 +95,7 @@ async function responseError(response: Response, fallback = 'Request failed'): P
   } catch {
     detail = response.statusText || detail;
   }
-  return new Error(detail);
+  return new ApiError(detail||fallback,response.status);
 }
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await rawRequest(path, init);
@@ -105,6 +122,10 @@ export function measureGeometry(geometry: GeoJSON.Geometry): Promise<Measurement
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ geometry }),
   });
+}
+
+export function checkReady():Promise<{status:string;checks:Record<string,boolean>}>{
+  return request('/health/ready');
 }
 
 export function getCapabilities(): Promise<Capabilities> {

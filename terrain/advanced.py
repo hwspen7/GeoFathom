@@ -99,7 +99,12 @@ def _origin(point,crs,affine,valid):
         raise RasterError("Provide observer or outlet longitude and latitude.")
     if not all(isinstance(v,(int,float)) and not isinstance(v,bool) and math.isfinite(v) for v in point) or not(-180<=point[0]<=180 and -90<=point[1]<=90):
         raise RasterError("Invalid WGS84 observer or outlet.")
-    xx,yy=transform("EPSG:4326",crs,[point[0]],[point[1]])
+    try:
+        xx,yy=transform("EPSG:4326",crs,[point[0]],[point[1]])
+        if not (math.isfinite(xx[0]) and math.isfinite(yy[0])):
+            raise ValueError("Non-finite projected coordinate")
+    except (rasterio.errors.RasterioError, ValueError, RuntimeError) as error:
+        raise RasterError("Observer/outlet must fall in a valid selected DEM cell.") from error
     c,r=(~affine)*(xx[0],yy[0])
     r,c=math.floor(r),math.floor(c)
     if not(0<=r<valid.shape[0] and 0<=c<valid.shape[1] and valid[r,c]):

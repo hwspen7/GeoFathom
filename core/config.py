@@ -16,7 +16,7 @@ class Settings:
     contact_email: str = ""
     nominatim_url: str = "https://nominatim.openstreetmap.org"
     overpass_url: str = "https://overpass-api.de/api/interpreter"
-    cors_origins: tuple[str, ...] = ("http://localhost:5173",)
+    cors_origins: tuple[str, ...] = ("http://localhost:5173", "http://127.0.0.1:5173")
     llm_provider: str = "groq"
     llm_model: str = "openai/gpt-oss-120b"
     ollama_url: str = "http://localhost:11434"
@@ -31,7 +31,7 @@ class Settings:
 
 
 def get_settings() -> Settings:
-    origins = os.getenv("GEOFATHOM_CORS_ORIGINS", "http://localhost:5173")
+    origins = os.getenv("GEOFATHOM_CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")
     return Settings(
         contact_email=os.getenv("GEOFATHOM_CONTACT_EMAIL", ""),
         nominatim_url=os.getenv(

@@ -34,6 +34,7 @@ export default function ProjectsPanel({
   extraFeatures,
 }: Props) {
   const [projects, setProjects] = useState<Project[]>([]);
+  const [listRetry,setListRetry]=useState(0);
   const [selected, setSelected] = useState('');
   const [workspace, setWorkspace] = useState<GeoWorkspace | null>(null);
   const [layerId, setLayerId] = useState('');
@@ -71,16 +72,17 @@ export default function ProjectsPanel({
   useEffect(() => {
     let cancelled = false;
     getProjects().then(list => {
-      if (cancelled || selection.current) return;
-      setProjects(list);
+      if (cancelled) return;
+      setProjects(list);setError('');
+      if(selection.current)return;
       const id = restoreProject(list, storedProject());
       rememberProject(id);
       chooseProject(id);
-    }).catch(() => {
-      if (!cancelled && !selection.current) setError('Cannot load saved projects.');
+    }).catch(cause => {
+      if (!cancelled && !selection.current) setError('Cannot load saved projects. '+(cause instanceof Error?cause.message:String(cause)));
     });
     return () => { cancelled = true; };
-  }, [chooseProject]);
+  }, [chooseProject,listRetry]);
 
   const reload = useCallback(async (projectId: string): Promise<GeoWorkspace> => {
     // Old mutation callbacks may still request a refresh; never publish them.
@@ -636,7 +638,7 @@ export default function ProjectsPanel({
       )}
       {!projects.length && <p className="project-hint">Create a project to keep geometry and layer history.</p>}
       {info && <p className="project-info">{info}</p>}
-      {error && <p className="discovery-error">{error}</p>}
+      {error && <><p className="discovery-error">{error}</p><button onClick={()=>{setError('');setListRetry(v=>v+1);if(selected)void reload(selected).catch(cause=>setError(String(cause)));}}>Retry projects</button></>}
     </div>
   );
 }
