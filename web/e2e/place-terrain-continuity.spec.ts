@@ -139,3 +139,39 @@ test('frontend exposes actual build revision in Settings for stale-process diagn
  await page.locator('.gis-settings summary').click();
  await expect(page.getByLabel('Build revision')).toContainText(/Frontend revision [0-9a-f]{7,}/);
 });
+
+test('OSU disconnected mapped properties default to campus, with inspectable editable nodes',async({page})=>{
+ await page.goto('/');
+ const map=page.getByLabel('Interactive geospatial map');
+ await expect(map).toHaveAttribute('data-label-layer-ready','true',{timeout:25000});
+ const osu={...cmh,id:'osu-campus-test',name:'The Ohio State University',
+  longitude:-83.023,latitude:40.001,bbox:[-83.09,39.985,-83.002,40.078],
+  geometry:{type:'MultiPolygon',coordinates:[
+    [[[-83.045,39.990],[-83.010,39.990],[-83.010,40.012],[-83.045,40.012],[-83.045,39.990]]],
+    [[[-83.080,40.070],[-83.060,40.070],[-83.060,40.076],[-83.080,40.076],[-83.080,40.070]]],
+  ]]} as unknown as typeof cmh;
+ await search(page,osu);
+ await expect(page.getByLabel('Study area parcel')).toHaveValue('0');
+ await expect(page.getByLabel('Pinned places').getByRole('button',{name:'Select pinned The Ohio State University'})).toBeVisible();
+ await page.getByRole('navigation',{name:'Workspace tools'}).getByRole('button',{name:'Terrain',exact:true}).click();
+ await expect(page.getByLabel('DEM fetch area')).toHaveValue('selection');
+ await expect(page.getByLabel('DEM download target')).toContainText('N 40.01240°');
+ await page.getByLabel('Study area parcel').selectOption('all');
+ await expect(page.getByLabel('DEM download target')).toContainText('N 40.07640°');
+ await page.getByLabel('Study area parcel').selectOption('0');
+ await expect(page.getByLabel('DEM download target')).toContainText('N 40.01240°');
+ await page.getByRole('button',{name:'Edit boundary nodes'}).click();
+ await expect.poll(async()=>{
+  const raw=await map.getAttribute('data-edit-handle-pixels');
+  return raw?JSON.parse(raw).length:0;
+ },{timeout:18000}).toBeGreaterThan(3);
+ await expect(page.getByLabel('Boundary longitude')).toHaveValue('-83.0450000');
+ await page.getByLabel('Boundary node').selectOption('1');
+ await expect(page.getByLabel('Boundary longitude')).toHaveValue('-83.0100000');
+ await page.getByLabel('Boundary longitude').fill('-83.0105');
+ await page.getByRole('button',{name:'Apply coordinates'}).click();
+ await expect.poll(async()=>await page.getByLabel('Boundary longitude').inputValue(),
+  {timeout:18000}).toBe('-83.0105000');
+ await expect(page.getByLabel('Pinned places').getByRole('button',{name:'Select pinned The Ohio State University'})).toBeVisible();
+ await expect(page.getByLabel('DEM download target')).toContainText('N 40.01240°');
+});

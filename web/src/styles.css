@@ -610,3 +610,12 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .terrain-chart{display:block;width:100%;height:auto}
 .terrain-map-legend{margin:2px 0;font-size:10px;padding-left:4px}
 .terrain-map-legend summary{cursor:pointer}
+
+/* Compact georeferenced editing; node labels stay in Inspector, never over the map. */
+.desktop-gis .boundary-inspector{padding:7px 0;margin:7px 0;border-top:1px solid #dce3e8;border-bottom:1px solid #dce3e8;display:grid;gap:6px}
+.desktop-gis .boundary-inspector label{display:grid;gap:3px;font-size:11px;color:#4f6270}
+.desktop-gis .boundary-inspector select,.desktop-gis .boundary-inspector input{min-width:0;max-width:100%;font-size:11px;padding:5px;border:1px solid #c5d0d9;border-radius:3px;background:#fff;color:#263340}
+.desktop-gis .boundary-node-detail{padding:4px 0}
+.desktop-gis .boundary-node-detail summary{font-size:11px;cursor:pointer;color:#344b62}
+.desktop-gis .boundary-node-detail[open]{display:grid;gap:7px}
+.desktop-gis .boundary-inspector .area-fields{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}

@@ -54,7 +54,7 @@ export default function BoundaryEditor(p:Props){
    </div>
    <small className="compact-notice">Select a boundary dot to inspect its WGS84 coordinates.
      {p.editing?' Drag white nodes; drag blue midpoints to insert.':''}</small>
-   <details className="boundary-node-detail" open={p.editing}>
+   <details className="boundary-node-detail" open={p.editing||p.selectedNode!==null}>
      <summary>Node coordinates</summary>
      {active&&<>
        <label>Node

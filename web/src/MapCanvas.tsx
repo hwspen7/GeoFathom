@@ -131,7 +131,7 @@ function featureCollection(
   // Retained reference locations cannot be implicitly removed by tool switches.
   for(const place of pinnedPlaces){
     features.push({type:'Feature',geometry:place.geometry,
-      properties:{role:'pinned-place',id:place.id,color:'#168c85',fillOpacity:.07,lineWidth:2,strokeColor:'#168c85',pointRadius:6}});
+      properties:{role:'pinned-place',id:place.id,color:'#849c9c',fillOpacity:.025,lineWidth:1.2,strokeColor:'#849c9c',pointRadius:6}});
   }
   for (const saved of layerFeatures) {
     if (!saved.visible || (selected&&saved.id===selectedFeatureId&&saved.id.startsWith('scratch-')) || (selected&&editing&&saved.id===selectedFeatureId)) continue;
@@ -827,12 +827,12 @@ export default function MapCanvas({
           'circle-radius': [
             'case',
             ['==',['get','role'],'edit-midpoint'],4,
-            ['==',['get','role'],'boundary-node'],3,
+            ['==',['get','role'],'boundary-node'],2.5,
             ['==',['get','role'],'boundary-node-selected'],6,
             ['coalesce',['get','pointRadius'],6],
           ],
           'circle-stroke-color': ['coalesce',['get','strokeColor'],'#2563eb'],
-          'circle-stroke-width': 2,
+          'circle-stroke-width': ['case',['==',['get','role'],'boundary-node'],.8,2],
         },
       });
       map.addLayer({
