@@ -89,6 +89,16 @@ with tempfile.TemporaryDirectory() as directory:
  await expect(map).toHaveAttribute('data-terrain-raster-opacity','0.25');
  const download=page.waitForEvent('download');await page.getByRole('button',{name:'GeoTIFF',exact:true}).click();
  expect((await download).suggestedFilename()).toBe('slope_map.tif');
+ // Two related raster analyses remain independently addressable.
+ await tools.getByRole('button',{name:'Hillshade',exact:true}).click();
+ await page.getByRole('button',{name:'Run terrain operation'}).click();
+ await expect(map).toHaveAttribute('data-terrain-raster-count','1');
+ await expect(page.getByLabel('Terrain raster resampling')).toHaveValue('linear');
+ const previousSlope=page.getByRole('checkbox',{name:/Show Slope map /}).first();
+ await previousSlope.check();
+ await expect(map).toHaveAttribute('data-terrain-raster-count','2');
+ await previousSlope.uncheck();
+ await expect(map).toHaveAttribute('data-terrain-raster-count','1');
  await page.getByLabel('Terrain tool group').selectOption('Quick');
  await tools.getByRole('button',{name:'Contours',exact:true}).click();
  await page.getByLabel('Contour interval').fill('5');
