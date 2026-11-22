@@ -54,3 +54,36 @@ export function MetricBars({label,values,max}:{label:string;values:Array<{name:s
    <small>{label}</small>{values.map(v=><div key={v.name}><span>{v.name}</span><div className="terrain-bar-track"><span style={{width:Math.max(0,Math.min(100,v.value/scale*100))+'%',background:v.color}}/></div><strong>{fmt(v.value)}</strong></div>)}
  </div>;
 }
+
+/** Full-resolution cell histogram and cumulative valid-area curve. */
+export function ElevationDistribution({bins}:{bins:import('./api').TerrainDistributionBin[]}){
+ const [active,setActive]=useState<number|null>(null);
+ if(!bins.length)return null;
+ const maximum=Math.max(1,...bins.map(b=>b.cells));
+ const selected=active===null?null:bins[active];
+ const dx=276/bins.length;
+ const curve=['42,120',...bins.map((b,i)=>(42+(i+1)*dx)+','+(120-b.cumulative_pct))].join(' ');
+ function download(){
+   const text='lower_m,upper_m,cells,area_m2,cumulative_pct\n'+bins.map(b=>[b.lower_m,b.upper_m,b.cells,b.area_m2,b.cumulative_pct].join(',')).join('\n');
+   const a=document.createElement('a'),url=URL.createObjectURL(new Blob([text],{type:'text/csv'}));a.href=url;a.download='elevation-distribution.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+ }
+ return <div className="terrain-profile-chart">
+   <svg viewBox="0 0 360 155" role="img" aria-label="Elevation distribution and cumulative area"
+       onPointerMove={e=>{const b=e.currentTarget.getBoundingClientRect();const x=(e.clientX-b.left)/b.width*360;setActive(Math.max(0,Math.min(bins.length-1,Math.floor((x-42)/dx))));}}
+       onPointerLeave={()=>setActive(null)}>
+     <rect x="42" y="20" width="276" height="100" fill="#f4f7f9"/>
+     {[0,.5,1].map(t=><g key={t}><line x1="42" x2="318" y1={120-t*100} y2={120-t*100} stroke="#d6dee4"/>
+       <text x="38" y={123-t*100} textAnchor="end" fontSize="9" fill="#526270">{fmt(t*maximum)}</text>
+       <text x="322" y={123-t*100} fontSize="9" fill="#526270">{t*100}%</text></g>)}
+     {bins.map((b,i)=><rect key={i} x={42+i*dx+.5} y={120-100*b.cells/maximum} width={Math.max(0,dx-1)} height={100*b.cells/maximum} fill={active===i?'#c18732':'#3977aa'}/>)}
+     <polyline points={curve} fill="none" stroke="#ad6026" strokeWidth="2"/>
+     <text x="42" y="11" fontSize="9" fill="#526270">Cells</text><text x="318" y="11" textAnchor="end" fontSize="9" fill="#ad6026">Cumulative area</text>
+     <text x="42" y="133" fontSize="9" fill="#526270">{fmt(bins[0].lower_m)}</text>
+     <text x="318" y="133" textAnchor="end" fontSize="9" fill="#526270">{fmt(bins[bins.length-1].upper_m)}</text>
+     <text x="180" y="148" textAnchor="middle" fontSize="9" fill="#526270">Elevation (m)</text>
+   </svg>
+   <div className="profile-readout">{selected?fmt(selected.lower_m)+'–'+fmt(selected.upper_m)+' m · '+selected.cells.toLocaleString()+' cells · '+fmt(selected.cumulative_pct)+'% cumulative':'Blue: cell frequency · Brown: cumulative area'}</div>
+   <input aria-label="Elevation distribution bin" type="range" min="0" max={Math.max(0,bins.length-1)} value={active??0} onChange={e=>setActive(Number(e.target.value))}/>
+   <div className="survey-action-bar"><span>{bins.length} elevation bins</span><button onClick={download}>CSV</button></div>
+ </div>;
+}

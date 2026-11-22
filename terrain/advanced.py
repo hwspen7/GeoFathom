@@ -253,7 +253,7 @@ def _mask_features(mask,affine,crs,name,cancel=None):
 
 def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,observer_height=1.7,target_height=0.,cancel=None):
     checkpoint(cancel)
-    if operation not in {"contours","volume","visibility","watershed","mesh"}:
+    if operation not in {"contours","volume","visibility","watershed","mesh","distribution"}:
         raise RasterError("Unknown terrain operation.")
     z,valid,covered,affine,crs,boundary,coverage=_window(path,geometry,512 if operation=="visibility" else 1024)
     checkpoint(cancel)
@@ -266,6 +266,30 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
             "contour_levels":len({f["properties"]["elevation_m"] for f in result["features"]}),
             "interval_m":interval,"minimum_m":float(z[valid].min()),"maximum_m":float(z[valid].max())}
         result["warning"]="Interpolated contours on the source DEM grid; no extrapolation across nodata."
+    elif operation=="distribution":
+        # Use every valid source cell rather than the subsampled display mesh.
+        elevations=z[valid]
+        lo,hi=float(elevations.min()),float(elevations.max())
+        p10,median,p90=(float(v) for v in np.percentile(elevations,[10,50,90]))
+        if lo==hi:
+            counts=np.array([elevations.size])
+            edges=np.array([lo,hi])
+        else:
+            counts,edges=np.histogram(elevations,bins=20,range=(lo,hi))
+        cumulative=np.cumsum(counts)
+        result["distribution"]=[
+            {"lower_m":float(edges[i]),"upper_m":float(edges[i+1]),
+             "cells":int(count),"area_m2":int(count)*cell,
+             "cumulative_pct":100*int(cumulative[i])/elevations.size}
+            for i,count in enumerate(counts)]
+        mean=float(elevations.mean())
+        result["metrics"]={"minimum_m":lo,"maximum_m":hi,"mean_m":mean,
+            "median_m":median,"stddev_m":float(elevations.std()),
+            "p10_m":p10,"p90_m":p90,"relief_m":hi-lo,
+            "covered_grid_area_m2":int(valid.sum())*cell}
+        if hi>lo:
+            result["metrics"]["hypsometric_integral"]=(mean-lo)/(hi-lo)
+        result["warning"]="Cell-center elevation distribution on the valid projected DEM grid; nodata excluded. Cumulative area includes elevations through each bin."
     elif operation=="volume":
         if not math.isfinite(reference):raise RasterError("Reference elevation must be finite.")
         delta=z[valid]-reference

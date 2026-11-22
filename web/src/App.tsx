@@ -777,7 +777,7 @@ export default function App() {
         <div className="gis-brand"><Globe2 size={19}/> <strong>GeoFathom</strong></div>
         <nav aria-label="Workspace tools" className="gis-menu">
           {([['Survey','tools-survey'],['GIS','tools-gis'],['Analysis','tools-spatial'],['Terrain','tools-terrain'],['Raster / AI','tools-raster'],['Cartography','tools-style'],['Data','tools-services'],['Assistant','tools-ai']] as const).map(([title,id])=>
-            <button key={id} aria-pressed={activeTool===id&&showTools} onClick={()=>revealPanel(id)}>{title}</button>)}
+            <button key={id} aria-pressed={activeTool===id&&showTools} onClick={()=>{if(id==='tools-terrain'&&activeTool===id&&showTools){setShowTools(false);setTerrainPicking(false);setTerrainHover(null);}else revealPanel(id);}}>{title}</button>)}
         </nav>
         <details className="gis-settings">
           <summary>Settings</summary>
@@ -1008,7 +1008,7 @@ export default function App() {
         <div className="map-wrap">
           <MapCanvas
             selected={geometry} drawingMode={drawingMode} vertices={vertices}
-            terrainPicking={terrainPicking} terrainMarker={activeTool==='tools-terrain'?(terrainHover??terrainOrigin):null}
+            terrainPicking={terrainPicking} terrainMarker={showTools&&activeTool==='tools-terrain'?(terrainHover??terrainOrigin):null}
             terrainResults={terrainVisible?terrainFeatures:[]}
             onTerrainPick={position=>{setTerrainOrigin(position);setTerrainPicking(false);setMessage('Terrain point selected.');}}
             onContextMenu={(x,y)=>setContextMenu({x,y})} onDeselect={deselect}

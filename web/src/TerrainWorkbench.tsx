@@ -1,7 +1,7 @@
 import {useEffect,useRef,useState,type ChangeEvent} from 'react';
 import {Mountain} from 'lucide-react';
 import {advancedTerrain,saveFeatureBatch,analyzeTerrain,terrainProfile,listImagery,uploadImagery,fetchPublicDEM,type TerrainResult,type TerrainMesh,type TerrainOperation,type AdvancedTerrainResult,type RasterAsset} from './api';
-import {ProfilePlot,MetricBars} from './TerrainCharts';
+import {ProfilePlot,MetricBars,ElevationDistribution} from './TerrainCharts';
 import type {Position} from './editing';
 import {measurementAnchor} from './editing';
 
@@ -50,7 +50,7 @@ function MeshView({mesh}:{mesh:TerrainMesh}){
       onPointerUp={()=>{drag.current=null;}} onPointerCancel={()=>{drag.current=null;}}/>
     <label>Vertical exaggeration <input aria-label="Terrain vertical exaggeration" type="range" min="1" max="5" step=".5"
       value={exaggeration} onChange={e=>setExaggeration(Number(e.target.value))}/></label>
-    <small>Drag to rotate · elevations in meters</small>
+    <div className="survey-action-bar"><small>Drag to rotate · elevations in meters</small><button onClick={()=>{setAngle(-.6);setTilt(.9);setExaggeration(1);}}>Reset view</button></div>
   </div>;
 }
 
@@ -63,13 +63,14 @@ interface TerrainRecord {
 }
 const modes:Array<{id:Operation;title:string}>=[
  {id:'slope',title:'Slope / aspect'},{id:'profile',title:'Elevation profile'},{id:'contours',title:'Contours'},
- {id:'volume',title:'Cut / fill'},{id:'visibility',title:'Viewshed'},{id:'watershed',title:'Watershed (D8)'},{id:'mesh',title:'3D terrain'}
+ {id:'volume',title:'Cut / fill'},{id:'visibility',title:'Viewshed'},{id:'watershed',title:'Watershed (D8)'},{id:'mesh',title:'3D terrain'},
+ {id:'distribution',title:'Elevation distribution'}
 ];
 const units:Record<string,string>={cut_m3:'m³',fill_m3:'m³',net_cut_m3:'m³',covered_grid_area_m2:'m²',reference_elevation_m:'m',
- contour_lines:'',contour_levels:'',dataset_overlap_pct:'%',valid_grid_pct:'%',interval_m:'m',visible_cells:'',visible_grid_area_m2:'m²',unknown_cells:'',upstream_cells:'',upstream_grid_area_m2:'m²',minimum_m:'m',maximum_m:'m'};
+ contour_lines:'',contour_levels:'',dataset_overlap_pct:'%',valid_grid_pct:'%',interval_m:'m',visible_cells:'',visible_grid_area_m2:'m²',unknown_cells:'',upstream_cells:'',upstream_grid_area_m2:'m²',minimum_m:'m',maximum_m:'m',mean_m:'m',median_m:'m',stddev_m:'m',p10_m:'m',p90_m:'m',relief_m:'m'};
 const names:Record<string,string>={cut_m3:'Cut',fill_m3:'Fill',net_cut_m3:'Net cut',covered_grid_area_m2:'Grid area',reference_elevation_m:'Reference',
  contour_lines:'Contour paths',contour_levels:'Elevation levels',dataset_overlap_pct:'DEM footprint coverage',valid_grid_pct:'Valid grid coverage',interval_m:'Interval',visible_cells:'Visible cells',visible_grid_area_m2:'Visible area',unknown_cells:'Unknown cells',
- upstream_cells:'Upstream cells',upstream_grid_area_m2:'Catchment area',minimum_m:'Lowest elevation',maximum_m:'Highest elevation'};
+ upstream_cells:'Upstream cells',upstream_grid_area_m2:'Catchment area',minimum_m:'Lowest elevation',maximum_m:'Highest elevation',mean_m:'Mean elevation',median_m:'Median elevation',stddev_m:'Standard deviation',p10_m:'10th percentile',p90_m:'90th percentile',relief_m:'Relief',hypsometric_integral:'Hypsometric integral'};
 const fmt=(n:number)=>n.toLocaleString('en-US',{maximumFractionDigits:2});
 interface Props{
  projectId:string|null;geometry:GeoJSON.Geometry|null;raster:RasterAsset|null;active:boolean;connected:boolean;
@@ -80,7 +81,8 @@ interface Props{
  onHover:(point:Position|null)=>void;onPreview:(g:GeoJSON.Feature[])=>void;onSaved:()=>void;
 }
 export default function TerrainWorkbench(p:Props){
- const [operation,setOperation]=useState<Operation>('slope');
+ // Opening Terrain never preselects a calculation.
+ const [operation,setOperation]=useState<Operation|null>(null);
  const [assets,setAssets]=useState<RasterAsset[]>([]),[token,setToken]=useState('');
  const [resolution,setResolution]=useState<30|90>(30),[fetching,setFetching]=useState(false),[sourceInfo,setSourceInfo]=useState('');
  const [interval,setInterval]=useState('10'),[reference,setReference]=useState('0');
@@ -106,7 +108,7 @@ export default function TerrainWorkbench(p:Props){
    (operation!=='volume'||validNumber(reference,-12000,12000))&&
    (!needsPoint||validNumber(lon,-180,180)&&validNumber(lat,-90,90))&&
    (operation!=='visibility'||validNumber(height,0,1000)&&validNumber(target,0,1000));
- const canRun=p.connected&&verified&&!!correctShape&&parametersValid;
+ const canRun=operation!==null&&p.connected&&verified&&!!correctShape&&parametersValid;
  const inputKey=JSON.stringify([dem?.id,p.geometry,operation,interval,reference,lon,lat,height,target]);
  const inputsChanged=!!selected&&selected.inputKey!==inputKey;
  useEffect(()=>{setVerticalConfirmed(false);sourceIntent.current++;},[dem?.id]);
@@ -124,7 +126,7 @@ export default function TerrainWorkbench(p:Props){
    sequence.current++;analysisRequest.current?.abort();analysisRequest.current=null;setBusy(false);
  }
  async function run(){
-   if(!canRun||!dem||!p.geometry||busy)return;
+   if(!operation||!canRun||!dem||!p.geometry||busy)return;
    if(records.length>=24&&!records.some(r=>r.inputKey===inputKey&&!r.saved)){
      setLive(false);setError('Result limit reached (24). Export or remove a result before another calculation.');return;
    }
@@ -237,12 +239,13 @@ export default function TerrainWorkbench(p:Props){
      {dem&&!/Copernicus DEM GLO-/.test(dem.provenance)&&<label className="gis-check"><input aria-label="Confirm DEM meter elevations" type="checkbox" checked={verticalConfirmed} onChange={e=>setVerticalConfirmed(e.target.checked)}/> Confirm single-band meter elevations</label>}
    </div>
    <div className="terrain-command-grid" aria-label="Terrain tools">
-     {modes.map(mode=><button key={mode.id} type="button" aria-pressed={operation===mode.id} onClick={()=>setOperation(mode.id)}>{mode.title}</button>)}
+     {modes.map(mode=><button key={mode.id} type="button" aria-pressed={operation===mode.id} onClick={()=>{setOperation(old=>old===mode.id?null:mode.id);if(operation===mode.id)setLive(false);}}>{mode.title}</button>)}
    </div>
-   <select aria-label="Advanced terrain operation" className="visually-hidden" tabIndex={-1} value={operation} onChange={e=>setOperation(e.target.value as Operation)}>
+   <select aria-label="Advanced terrain operation" className="visually-hidden" tabIndex={-1} value={operation??''} onChange={e=>setOperation(e.target.value?e.target.value as Operation:null)}>
+     <option value="">Select operation</option>
      {modes.map(mode=><option key={mode.id} value={mode.id}>{mode.title}</option>)}
    </select>
-   <div className="professional-form">
+   {operation&&<div className="professional-form">
      <div className="survey-action-bar">
        <button onClick={()=>p.onDraw(operation==='profile')}>{operation==='profile'?'Draw profile line':'Draw study area'}</button>
        {operation!=='profile'&&<button disabled={!dem} aria-pressed={p.extentMode} onClick={p.onUseExtent}>DEM extent</button>}
@@ -266,7 +269,7 @@ export default function TerrainWorkbench(p:Props){
      {!dem&&<small className="compact-notice">DEM required</small>}
      {dem&&!verified&&<small className="compact-notice">Confirm elevation units before analysis</small>}
      {!parametersValid&&<small className="discovery-error">Check numeric parameters</small>}
-   </div>
+   </div>}
    {!!records.length&&<section className="terrain-run-list" aria-label="Analysis result layers">
      <div className="section-heading">Analysis results · {records.length}</div>
      {records.map(record=><div key={record.id} className={'scratch-row '+(selectedRecord===record.id?'active':'')}>
@@ -293,6 +296,7 @@ export default function TerrainWorkbench(p:Props){
        {result.operation==='volume'&&<MetricBars label="Earthwork volume (m³)" values={[{name:'Cut',value:result.metrics.cut_m3,color:'#b87848'},{name:'Fill',value:result.metrics.fill_m3,color:'#3b82ab'}]}/>}
        {result.operation==='visibility'&&<MetricBars label="Visibility (cells)" values={[{name:'Visible',value:result.metrics.visible_cells,color:'#34885c'},{name:'Unknown',value:result.metrics.unknown_cells,color:'#9099a2'},{name:'Hidden',value:Math.max(0,result.valid_cells-result.metrics.visible_cells-result.metrics.unknown_cells),color:'#c17d55'}]}/>}
        {result.operation==='watershed'&&<MetricBars label="Catchment (cells)" values={[{name:'Upstream',value:result.metrics.upstream_cells,color:'#3687b9'},{name:'Other',value:Math.max(0,result.valid_cells-result.metrics.upstream_cells),color:'#9ba7ad'}]}/>}
+       {result.distribution&&<ElevationDistribution bins={result.distribution}/>}
        {result.mesh&&<MeshView mesh={result.mesh}/>}
        <small className="compact-notice" title={result.warning}>{result.valid_cells} valid · {result.missing_cells} missing · Method ⓘ</small>
        {result.features.length>0&&<div className="survey-action-bar"><button disabled={!p.projectId||busy||selected?.saved||result.features.length>512} title={result.features.length>512?'Export GeoJSON for results exceeding the atomic project batch limit.':'Save to project'} onClick={()=>void save()}>{selected?.saved?'Saved to project':'Save terrain features'}</button>

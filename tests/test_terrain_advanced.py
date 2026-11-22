@@ -101,3 +101,28 @@ def test_coverage_reports_partial_footprint(dem):
     assert result["metrics"]["dataset_overlap_pct"]==pytest.approx(50,abs=.01)
     assert result["metrics"]["valid_grid_pct"]==100
     assert "intersection only" in result["warning"]
+
+def test_elevation_distribution_preserves_full_grid_and_area(dem):
+    path,polygon=dem
+    result=run_terrain(path,polygon,"distribution")
+    bins=result["distribution"]
+    assert sum(b["cells"] for b in bins)==result["valid_cells"]==256
+    assert sum(b["area_m2"] for b in bins)==pytest.approx(25600)
+    assert bins[-1]["cumulative_pct"]==100
+    assert all(a["cumulative_pct"]<=b["cumulative_pct"] for a,b in zip(bins,bins[1:]))
+    assert result["metrics"]["minimum_m"]==102
+    assert result["metrics"]["maximum_m"]==117
+    assert result["metrics"]["median_m"]==109.5
+    assert result["metrics"]["hypsometric_integral"]==pytest.approx(.5)
+
+def test_flat_distribution_excludes_nodata_and_avoids_division_by_zero(dem):
+    path,polygon=dem
+    with rasterio.open(path,"r+") as ds:
+        z=np.full((20,20),42,dtype=np.float32)
+        z[4,4]=-9999
+        ds.write(z,1)
+    result=run_terrain(path,polygon,"distribution")
+    assert result["valid_cells"]==255 and result["missing_cells"]==1
+    assert result["distribution"]==[{"lower_m":42.,"upper_m":42.,"cells":255,"area_m2":25500.,"cumulative_pct":100.}]
+    assert result["metrics"]["stddev_m"]==0
+    assert "hypsometric_integral" not in result["metrics"]
