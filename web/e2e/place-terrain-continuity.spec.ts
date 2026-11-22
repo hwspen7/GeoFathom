@@ -191,6 +191,9 @@ test('OSU disconnected mapped properties default to campus, with inspectable edi
  },{x,y});
  expect(pointerTarget.inMap,JSON.stringify({x,y,pointerTarget})).toBe(true);
  await page.mouse.click(x,y);
+ // The geometry inspector must receive the *real* native pointer event.
+ // This distinguishes a covered node from React selection propagation.
+ await expect(map).toHaveAttribute('data-edit-native-hit',JSON.stringify({polygon:0,ring:0,vertex:2}));
  await expect(page.getByLabel('Boundary node',{exact:true})).toHaveValue('2');
  await expect(page.getByLabel('Pinned places').getByRole('button',{name:'Select pinned The Ohio State University'})).toBeVisible();
  await page.getByLabel('Boundary node',{exact:true}).selectOption('1');
