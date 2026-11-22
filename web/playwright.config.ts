@@ -1,5 +1,7 @@
 import { defineConfig,devices } from '@playwright/test';
 
+const freshServer = !!process.env.CI || process.env.GEOFATHOM_E2E_FRESH === '1';
+
 export default defineConfig({
   testDir:'./e2e',
   timeout:45_000,
@@ -21,7 +23,7 @@ export default defineConfig({
     {
       command:'python -m uvicorn core.main:app --host 127.0.0.1 --port 8000',
       cwd:'..',url:'http://127.0.0.1:8000/health',
-      timeout:90_000,reuseExistingServer:!process.env.CI,
+      timeout:90_000,reuseExistingServer:!freshServer,
       env:{...process.env,
         GEOFATHOM_DATABASE_PATH:process.env.GEOFATHOM_E2E_DATABASE_PATH || 'data/e2e-geofathom.sqlite',
         GEOFATHOM_CORS_ORIGINS:'http://localhost:5173',
@@ -30,7 +32,7 @@ export default defineConfig({
     {
       command:'npm run dev -- --host 127.0.0.1',
       cwd:'.',url:'http://localhost:5173',
-      timeout:90_000,reuseExistingServer:!process.env.CI,
+      timeout:90_000,reuseExistingServer:!freshServer,
     },
   ],
 });

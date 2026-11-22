@@ -20,8 +20,16 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def run(args, env, cwd=ROOT, capture=False):
     print(">", " ".join(map(str, args)), flush=True)
-    return subprocess.run([str(a) for a in args], cwd=cwd, env=env, check=True,
-                          text=True, capture_output=capture)
+    try:
+        return subprocess.run([str(a) for a in args], cwd=cwd, env=env, check=True,
+                              text=True, capture_output=capture)
+    except subprocess.CalledProcessError as error:
+        # Preserve diagnostics from captured subprocesses before propagating failure.
+        if error.stdout:
+            print(error.stdout, flush=True)
+        if error.stderr:
+            print(error.stderr, file=sys.stderr, flush=True)
+        raise
 
 
 def require(name, override=None):
@@ -118,7 +126,8 @@ def main():
                GEOFATHOM_IMAGERY_DIR=str(out / "imagery"),
                GEOFATHOM_VERSION_DIR=str(out / "versions"),
                GEOFATHOM_VISION_MODELS_DIR=str(out / "models"))
-    report = {"passed": False, "soak_seconds_per_device": args.soak_seconds, "stages": []}
+    report = {"passed": False, "soak_seconds_per_device": args.soak_seconds,
+              "web_requested": not args.skip_web, "stages": []}
     name = "geofathom-acceptance-" + stamp.lower()
     state = {"container_started": False}
     python = sys.executable
@@ -164,7 +173,9 @@ def main():
         report["pytest"] = check_junit(junit)
         report["stages"].append("All Python tests with live PostGIS")
         if not args.skip_web:
-            web_env = {**env, "CI": "1", "GEOFATHOM_E2E_DATABASE_PATH": str(out / "e2e.sqlite")}
+            # Do not reuse a running application or enable CI retries on the host.
+            web_env = {**env, "GEOFATHOM_E2E_FRESH": "1", "GEOFATHOM_E2E_DATABASE_PATH": str(out / "e2e.sqlite")}
+            web_env.pop("CI", None)
             for key in ("GEOFATHOM_TEST_POSTGIS_DSN", "GEOFATHOM_GPU_ACCEPTANCE_MODEL"):
                 web_env.pop(key, None)
             for command in (["npm.cmd", "ci", "--no-audit", "--no-fund"],
@@ -174,6 +185,10 @@ def main():
                 run(command, web_env, ROOT / "web")
             report["stages"].append("Web build, unit and browser E2E")
         report["passed"] = True
+    except Exception as error:
+        # Keep a durable report on failure without exposing database credentials.
+        report["failure_type"] = type(error).__name__
+        raise
     finally:
         if state["container_started"]:
             try:
