@@ -598,3 +598,9 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 
 .terrain-run-list{max-height:220px;overflow:auto;margin-top:8px;border-top:1px solid #c8d2da;padding-top:6px}
 .terrain-run-list button{font-size:11px}.terrain-run-list .scratch-row button{max-width:100%}
+
+.terrain-result-dialog{width:min(1000px,92vw);max-height:90vh;overflow:auto;border:1px solid #9baab5;background:#f9fafb;padding:16px;color:#263340}
+.terrain-result-dialog::backdrop{background:#11202c55}
+.terrain-result-dialog .terrain-profile-chart svg,.terrain-result-dialog .dem-mesh canvas{max-height:60vh;object-fit:contain}
+.terrain-aspect-rose{display:block;width:100%;max-height:330px}
+.terrain-result-dialog .terrain-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}

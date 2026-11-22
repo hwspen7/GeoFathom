@@ -127,7 +127,7 @@ def classification(values,operation):
         classes=np.full(values.shape,-1,dtype=np.int16)
         for i,code in enumerate(codes):classes[finite&(values==code)]=i
         return classes,["Sink/flat","N","NE","E","SE","S","SW","W","NW"],DIRECTION_COLORS
-    elif operation in {"streams","suitability"}:
+    elif operation in {"streams","suitability","least_cost"}:
         return np.where(finite,values,-1).astype(np.int16),["Other","Selected"],("#a6adb4","#16856f")
     elif operation=="cutfill_map":
         return np.where(finite,np.where(values<0,0,np.where(values>0,2,1)),-1).astype(np.int16),["Fill","Balanced","Cut"],("#287fa5","#b8b8b8","#b95b37")
@@ -136,7 +136,7 @@ def classification(values,operation):
         labels=[f"{a:.3g}–{b:.3g}" for a,b in zip(edges,edges[1:])]
     classes=np.full(values.shape,-1,dtype=np.int16)
     classes[finite]=np.digitize(values[finite],edges[1:-1])
-    return classes,labels,COLORS[:len(labels)]
+    return classes,labels,(("#222222","#555555","#888888","#aaaaaa","#dddddd","#ffffff") if operation=="hillshade" else COLORS)[:len(labels)]
 
 def raster_product(values,operation,affine,crs,cancel=None):
     """Export exact source-grid GeoTIFF and a Web Mercator map preview with alpha nodata."""
@@ -228,7 +228,7 @@ def surface(z,valid,affine,crs,operation,reference,point,end_point,max_slope,
                      "suitable_pct":float(100*(values==1).sum()/good.sum())}
         else:values=d[operation]
     if not np.isfinite(values).any():raise RasterError("No valid cells for this terrain product.")
-    product=raster_product(values,"suitability" if operation=="least_cost" else operation,affine,crs,cancel)
+    product=raster_product(values,operation,affine,crs,cancel)
     metrics.update({"product_valid_cells":product["valid_cells"],
                     "product_min":float(np.nanmin(values)),"product_max":float(np.nanmax(values)),
                     "product_mean":float(np.nanmean(values))})

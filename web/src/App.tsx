@@ -1487,7 +1487,7 @@ export default function App() {
             <div className="section-heading"><Layers3 size={16}/><span>Terrain analysis</span></div>
             <TerrainWorkbench key={'terrain-'+(activeProjectId??'no-project')} projectId={activeProjectId}
               active={activeTool==='tools-terrain'&&showTools}
-              geometry={preview||drawingMode?null:extentMode?extentGeometry:geometry} raster={demLayer} viewport={viewport}
+              geometry={preview||drawingMode?null:extentMode?extentGeometry:geometry} raster={demLayer} imageRaster={imageLayer} viewport={viewport}
               connected={Boolean(capabilities)} localImport={capabilities?.local_raster_import===true}
               refreshToken={refreshToken+connectionRetry} origin={terrainOrigin} picking={terrainPicking}
               onSelectRaster={asset=>{

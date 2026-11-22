@@ -41,3 +41,19 @@ def test_unavailable_remote_data_does_not_create_elevation(tmp_path,monkeypatch)
     monkeypatch.setenv("GEOFATHOM_IMAGERY_DIR",str(tmp_path/"library"))
     with pytest.raises(RasterError,match="No public DEM data"):fetch_dem_subset((121.49,31.2,121.51,31.22),30)
     assert not list((tmp_path/"library").glob("*.tif"))
+
+def test_usgs_grid_and_provenance(tmp_path,monkeypatch):
+    from imagery import public_dem
+    from imagery.store import image_file
+    bbox=(-83.001,39.999,-83.,40.)
+    crs,affine,w,h=_grid(bbox,1)
+    assert affine.a==1 and w<1024 and h<1024
+    def fake(bounds,resolution):
+        return np.full((h,w),220,np.float32),crs,affine,w*h,[]
+    monkeypatch.setattr(public_dem,"_read_usgs",fake)
+    monkeypatch.setenv("GEOFATHOM_IMAGERY_DIR",str(tmp_path/"library"))
+    result=fetch_dem_subset(bbox,1)
+    assert "USGS 3DEP Bare Earth DEM" in result["asset"]["provenance"]
+    assert "native source resolution varies" in result["asset"]["provenance"]
+    with rasterio.open(image_file(result["asset"]["id"])) as ds:
+        assert ds.transform.a==1 and np.allclose(ds.read(1),220)

@@ -254,8 +254,11 @@ def _mask_features(mask,affine,crs,name,cancel=None):
 
 def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,observer_height=1.7,target_height=0.,
                 end_point=None,max_slope=30.,min_elevation=-12000.,max_elevation=12000.,max_tri=100.,
-                stream_cells=100,azimuth=315.,altitude=45.,cancel=None):
+                stream_cells=100,azimuth=315.,altitude=45.,section_spacing=50.,section_width=20.,texture_path=None,cancel=None):
     checkpoint(cancel)
+    if operation=="cross_sections":
+        from .corridor import cross_sections
+        return cross_sections(path,geometry,section_spacing,section_width,cancel)
     if operation not in {"contours","volume","visibility","watershed","mesh","distribution"}|SURFACES:
         raise RasterError("Unknown terrain operation.")
     z,valid,covered,affine,crs,boundary,coverage=_window(path,geometry,512 if operation=="visibility" else 1024)
@@ -318,11 +321,14 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
         result["metrics"]={"upstream_cells":int(mask.sum()),"upstream_grid_area_m2":int(mask.sum())*cell}
         result["warning"]="D8 contributing area within the selected grid; sinks/flats terminate and external upstream areas are not included."
     else:
-        step=max(1,math.ceil(max(z.shape)/64))
+        step=max(1,math.ceil(max(z.shape)/128))
         heights=z[::step,::step];mask=valid[::step,::step]
         result["mesh"]={"rows":heights.shape[0],"cols":heights.shape[1],
             "dx_m":abs(affine.a)*step,"dy_m":abs(affine.e)*step,
             "heights":[float(v) if ok else None for v,ok in zip(heights.flat,mask.flat)]}
+        if texture_path is not None:
+            from .texture import mesh_texture
+            result["mesh"]["texture"]=mesh_texture(texture_path,affine,crs,heights.shape[0],heights.shape[1],step,cancel)
         result["metrics"]={"minimum_m":float(z[valid].min()),"maximum_m":float(z[valid].max())}
         result["warning"]="Interactive 3D elevation preview sampled from the DEM; gaps represent nodata."
     result["metrics"].update({"dataset_overlap_pct":coverage,

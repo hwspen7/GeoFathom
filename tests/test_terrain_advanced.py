@@ -146,3 +146,18 @@ def test_least_cost_projected_route(dem):
                        end_point=t.transform(500145,4499855),max_slope=45)
     assert result["metrics"]["route_length_m"]>0
     assert result["features"][0]["geometry"]["type"]=="LineString"
+
+def test_cross_sections_and_rgb_texture(dem,tmp_path):
+    path,polygon=dem
+    t=Transformer.from_crs("EPSG:32617","EPSG:4326",always_xy=True)
+    line={"type":"LineString","coordinates":[t.transform(500050,4499950),t.transform(500150,4499850)]}
+    result=run_terrain(path,line,"cross_sections",section_spacing=50,section_width=10)
+    assert len(result["sections"])==4 and result["valid_cells"]>0
+    assert result["sections"][0]["samples"][20]["offset_m"]==0
+    rgb=tmp_path/"rgb.tif"
+    with rasterio.open(rgb,"w",driver="GTiff",width=20,height=20,count=3,dtype="uint8",
+                       crs="EPSG:32617",transform=from_origin(500000,4500000,10,10)) as ds:
+        ds.write(np.full((3,20,20),128,dtype=np.uint8))
+    mesh=run_terrain(path,polygon,"mesh",texture_path=rgb)["mesh"]
+    assert mesh["texture"]["coverage_pct"]==pytest.approx(100)
+    assert mesh["texture"]["png"].startswith("data:image/png;base64,")

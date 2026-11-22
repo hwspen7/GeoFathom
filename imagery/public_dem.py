@@ -12,6 +12,9 @@ from threading import BoundedSemaphore
 
 import numpy as np
 import rasterio
+import httpx
+from rasterio.io import MemoryFile
+from rasterio.transform import array_bounds
 from rasterio.transform import from_origin
 from rasterio.warp import transform_bounds, reproject, Resampling
 from .raster import RasterError
@@ -28,7 +31,7 @@ def tile_url(lat,lon,resolution):
     return f"https://copernicus-dem-{resolution}m.s3.amazonaws.com/{name}/{name}.tif"
 
 def _grid(bbox,resolution):
-    if resolution not in (30,90) or len(bbox)!=4 or not all(math.isfinite(v) for v in bbox):
+    if resolution not in (1,3,10,30,90) or len(bbox)!=4 or not all(math.isfinite(v) for v in bbox):
         raise RasterError("Invalid DEM area or resolution.")
     w,s,e,n=bbox
     if not (-180<=w<e<=180 and -79<=s<n<=83):
@@ -83,13 +86,46 @@ def _read_tiles(bbox,resolution):
         raise RasterError("No public DEM data returned. Check network/coverage or try GLO-90. No elevations were fabricated.")
     return destination,crs,affine,int(valid.sum()),unavailable
 
+USGS_EXPORT="https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer/exportImage"
+
+def _read_usgs(bbox,resolution):
+    w,s,e,n=bbox
+    if not (-180<=w<e<=-60 and 17<=s<n<=72):
+        raise RasterError("USGS 3DEP request is outside the supported US service area.")
+    crs,affine,width,height=_grid(bbox,resolution)
+    bounds=array_bounds(height,width,affine)
+    epsg=crs.split(":")[1]
+    params={"bbox":",".join(map(str,bounds)),"bboxSR":epsg,"imageSR":epsg,
+            "size":f"{width},{height}","format":"tiff","pixelType":"F32","noData":"-9999",
+            "interpolation":"RSP_BilinearInterpolation","renderingRule":'{"rasterFunction":"None"}',"f":"image"}
+    content=bytearray()
+    try:
+        with httpx.stream("GET",USGS_EXPORT,params=params,timeout=httpx.Timeout(30.,connect=8.),follow_redirects=False) as response:
+            response.raise_for_status()
+            for chunk in response.iter_bytes():
+                content.extend(chunk)
+                if len(content)>32*1024*1024:raise RasterError("USGS DEM response exceeded 32 MiB.")
+        with MemoryFile(bytes(content)) as memory:
+            with memory.open() as source:
+                if source.count!=1 or not source.crs or source.width>2048 or source.height>2048:
+                    raise RasterError("Unexpected USGS elevation raster.")
+                destination=np.full((height,width),_NODATA,dtype=np.float32)
+                reproject(rasterio.band(source,1),destination,dst_transform=affine,dst_crs=crs,
+                          dst_nodata=_NODATA,resampling=Resampling.bilinear,num_threads=1,warp_mem_limit=32)
+    except (httpx.HTTPError,rasterio.errors.RasterioError) as error:
+        raise RasterError("USGS 3DEP elevation unavailable; no elevations were fabricated.") from error
+    valid=np.isfinite(destination)&(destination!=_NODATA)
+    if not valid.any():raise RasterError("No valid USGS 3DEP elevations returned.")
+    return destination,crs,affine,int(valid.sum()),[]
+
 def fetch_dem_subset(bbox,resolution):
     _grid(bbox,resolution)
     if not _FETCH_SLOT.acquire(blocking=False):
         raise RasterError("Another elevation download is active.")
     temporary=None
     try:
-        array,crs,affine,count,missing=_read_tiles(bbox,resolution)
+        usgs=resolution in (1,3,10)
+        array,crs,affine,count,missing=(_read_usgs if usgs else _read_tiles)(bbox,resolution)
         root=imagery_dir();root.mkdir(parents=True,exist_ok=True)
         with tempfile.NamedTemporaryFile(prefix=".dem-",suffix=".tif",dir=root,delete=False) as f:
             temporary=Path(f.name)
@@ -97,13 +133,16 @@ def fetch_dem_subset(bbox,resolution):
         provenance=(f"Copernicus DEM GLO-{resolution} Public 2021 DSM, accessed {date.today().isoformat()} "
                     f"from registry.opendata.aws/copernicus-dem; local UTM {resolution} m bilinear resampling. "
                     "Contains modified Copernicus DEM data; buildings and vegetation are included.")
+        if usgs:
+            provenance=f"USGS 3DEP Bare Earth DEM, accessed {date.today().isoformat()}; requested local UTM grid {resolution} m; native source resolution varies and is not verified by exportImage."
         with rasterio.open(temporary,"w",driver="GTiff",height=array.shape[0],width=array.shape[1],
             count=1,dtype="float32",crs=crs,transform=affine,nodata=_NODATA,compress="deflate") as output:
             output.write(array,1)
             output.update_tags(SOURCE=provenance,VERTICAL_UNIT="meter")
-        asset=store_upload(temporary,f"Copernicus GLO-{resolution} {bbox[0]:.4f},{bbox[1]:.4f}.tif",provenance)
+        label=f"USGS 3DEP {resolution} m grid" if usgs else f"Copernicus GLO-{resolution}"
+        asset=store_upload(temporary,f"{label} {bbox[0]:.4f},{bbox[1]:.4f}.tif",provenance)
         return {"asset":asset,"resolution_m":resolution,"valid_cells":count,"total_cells":int(array.size),
-                "missing_tiles":missing,"warning":"DSM, not bare-earth DTM. Source coverage and elevation accuracy vary; not survey-grade."}
+                "missing_tiles":missing,"warning":("3DEP bare-earth DEM; requested grid spacing is not proof of native resolution or survey-grade accuracy." if usgs else "DSM, not bare-earth DTM. Source coverage and elevation accuracy vary; not survey-grade.")}
     finally:
         if temporary is not None:temporary.unlink(missing_ok=True)
         _FETCH_SLOT.release()

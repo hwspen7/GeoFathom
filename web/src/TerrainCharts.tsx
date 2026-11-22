@@ -1,4 +1,4 @@
-import {useState} from 'react';
+import {useEffect,useRef,useState,type ReactNode} from 'react';
 import type {Position} from './editing';
 
 export interface ProfileSample{distance_m:number;elevation_m:number|null;coordinate?:Position}
@@ -86,4 +86,71 @@ export function ElevationDistribution({bins}:{bins:import('./api').TerrainDistri
    <input aria-label="Elevation distribution bin" type="range" min="0" max={Math.max(0,bins.length-1)} value={active??0} onChange={e=>setActive(Number(e.target.value))}/>
    <div className="survey-action-bar"><span>{bins.length} elevation bins</span><button onClick={download}>CSV</button></div>
  </div>;
+}
+
+/** A single result pane switches between inspector and modal, avoiding duplicate plots. */
+function saveBlob(blob:Blob,name:string){const a=document.createElement('a'),url=URL.createObjectURL(blob);a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
+function chartCanvas(node:Element):Promise<HTMLCanvasElement>{
+ if(node instanceof HTMLCanvasElement)return Promise.resolve(node);
+ return new Promise((resolve,reject)=>{
+   const img=new Image(),svg=node instanceof SVGElement;
+   const data=svg?new Blob([new XMLSerializer().serializeToString(node)],{type:'image/svg+xml;charset=utf-8'}):null;
+   const url=data?URL.createObjectURL(data):(node as HTMLImageElement).src;
+   img.onload=()=>{const c=document.createElement('canvas');c.width=svg?1200:img.naturalWidth;c.height=svg?Math.max(1,Math.round(1200*img.naturalHeight/img.naturalWidth)):img.naturalHeight;const ctx=c.getContext('2d');if(!ctx){if(data)URL.revokeObjectURL(url);reject(Error('Canvas unavailable'));return;}ctx.fillStyle='white';ctx.fillRect(0,0,c.width,c.height);ctx.drawImage(img,0,0,c.width,c.height);if(data)URL.revokeObjectURL(url);resolve(c);};
+   img.onerror=()=>{if(data)URL.revokeObjectURL(url);reject(Error('Unable to render plot'));};img.src=url;
+ });
+}
+/** Minimal standards-compliant single-page PDF embedding a chart JPEG. */
+export function chartPDF(jpeg:Uint8Array,width:number,height:number){
+ const encode=(s:string)=>new TextEncoder().encode(s);
+ const chunks:BlobPart[]=[],offsets:number[]=[0];let position=0;
+ function put(v:string|Uint8Array){const b=typeof v==='string'?encode(v):v;chunks.push(new Uint8Array(b));position+=b.byteLength;}
+ function obj(n:number,body:string){offsets[n]=position;put(n+' 0 obj\n'+body+'\nendobj\n');}
+ put('%PDF-1.4\n');
+ const pageW=612,pageH=792,w=Math.min(540,700*width/height),h=w*height/width;
+ obj(1,'<< /Type /Catalog /Pages 2 0 R >>');obj(2,'<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
+ obj(3,'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 '+pageW+' '+pageH+'] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>');
+ offsets[4]=position;put('4 0 obj\n<< /Type /XObject /Subtype /Image /Width '+width+' /Height '+height+' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length '+jpeg.length+' >>\nstream\n');put(jpeg);put('\nendstream\nendobj\n');
+ const command='q '+w+' 0 0 '+h+' '+((pageW-w)/2)+' '+((pageH-h)/2)+' cm /Im0 Do Q\n';
+ obj(5,'<< /Length '+encode(command).length+' >>\nstream\n'+command+'endstream');
+ const xref=position;put('xref\n0 6\n0000000000 65535 f \n'+offsets.slice(1).map(n=>String(n).padStart(10,'0')+' 00000 n \n').join('')+'trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n'+xref+'\n%%EOF\n');
+ return new Blob(chunks,{type:'application/pdf'});
+}
+export function ResultPane({expanded,onClose,children}:{expanded:boolean;onClose:()=>void;children:ReactNode}){
+ const ref=useRef<HTMLDialogElement>(null),content=useRef<HTMLElement>(null),[error,setError]=useState('');
+ useEffect(()=>{if(expanded&&ref.current&&!ref.current.open)ref.current.showModal();},[expanded]);
+ async function exportPlot(format:string){
+   const node=content.current?.querySelector('svg.terrain-chart, .terrain-profile-chart svg, .dem-mesh canvas, .terrain-profile-chart img, .terrain-aspect-rose');
+   if(!node){setError('No graphical plot in this result. Use data export.');return;}
+   try{
+     setError('');
+     if(format==='SVG'){
+       if(!(node instanceof SVGElement))throw Error('SVG is only available for vector charts.');
+       const n=node.cloneNode(true) as SVGElement;n.setAttribute('xmlns','http://www.w3.org/2000/svg');saveBlob(new Blob([new XMLSerializer().serializeToString(n)],{type:'image/svg+xml'}),'terrain-chart.svg');return;
+     }
+     const canvas=await chartCanvas(node);
+     if(format==='PNG'){const blob=await new Promise<Blob|null>(r=>canvas.toBlob(r,'image/png'));if(!blob)throw Error('PNG encoding failed');saveBlob(blob,'terrain-chart.png');}
+     else{const jpeg=Uint8Array.from(atob(canvas.toDataURL('image/jpeg',.92).split(',')[1]),c=>c.charCodeAt(0));saveBlob(chartPDF(jpeg,canvas.width,canvas.height),'terrain-chart.pdf');}
+   }catch(e){setError(e instanceof Error?e.message:String(e));}
+ }
+ const panel=<section ref={content} className="terrain-output" aria-label="Terrain results">{children}
+   {expanded&&<div className="survey-action-bar">{['SVG','PNG','PDF'].map(format=><button key={format} onClick={()=>void exportPlot(format)}>{format}</button>)}</div>}
+   {error&&<small role="alert">{error}</small>}</section>;
+ return expanded?<dialog ref={ref} className="terrain-result-dialog" aria-label="Expanded terrain result" onCancel={e=>{e.preventDefault();onClose();}}>{panel}</dialog>:panel;
+}
+export function AspectRose({bins}:{bins:{label:string;color:string;cells:number}[]}){
+ const max=Math.max(1,...bins.map(x=>x.cells));
+ return <svg className="terrain-aspect-rose terrain-chart" viewBox="0 0 240 240" role="img" aria-label="Slope aspect rose">
+   {[25,50,75,90].map(r=><circle key={r} cx="120" cy="120" r={r} fill="none" stroke="#c7d2da"/>)}
+   {bins.map((b,i)=>{const t=i*Math.PI/4,r=90*b.cells/max,a=t-.32,z=t+.32;
+    return <g key={b.label}><path d={'M120 120 L'+(120+r*Math.sin(a))+' '+(120-r*Math.cos(a))+' A'+r+' '+r+' 0 0 1 '+(120+r*Math.sin(z))+' '+(120-r*Math.cos(z))+' Z'} fill={b.color}><title>{b.label}: {b.cells} cells</title></path>
+    <text x={120+103*Math.sin(t)} y={124-103*Math.cos(t)} textAnchor="middle" fontSize="11">{b.label}</text></g>;})}
+ </svg>;
+}
+export function SectionPlot({sections,onHover}:{sections:NonNullable<import('./api').AdvancedTerrainResult['sections']>;onHover:(p:Position|null)=>void}){
+ const [index,setIndex]=useState(0);const section=sections[Math.min(index,sections.length-1)];
+ if(!section)return null;
+ function csv(){saveBlob(new Blob(['station_m,offset_m,elevation_m,longitude,latitude\n'+sections.flatMap(s=>s.samples.map(p=>[s.station_m,p.offset_m,p.elevation_m??'',...p.coordinate].join(','))).join('\n')],{type:'text/csv'}),'cross-sections.csv');}
+ return <div><label>Station <select value={index} onChange={e=>{onHover(null);setIndex(Number(e.target.value));}}>{sections.map((s,i)=><option key={i} value={i}>{fmt(s.station_m)} m</option>)}</select></label>
+ <ProfilePlot key={index} samples={section.samples} length={section.length_m} onHover={onHover}/><small>Distance is measured from right edge; centerline at {fmt(section.length_m/2)} m.</small><button onClick={csv}>All sections CSV</button></div>;
 }
