@@ -619,3 +619,6 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .desktop-gis .boundary-node-detail summary{font-size:11px;cursor:pointer;color:#344b62}
 .desktop-gis .boundary-node-detail[open]{display:grid;gap:7px}
 .desktop-gis .boundary-inspector .area-fields{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+
+.desktop-gis .terrain-opacity-control{display:flex;align-items:center;gap:8px;font-size:11px;color:#526270;padding:4px 0}
+.desktop-gis .terrain-opacity-control input{min-width:70px;flex:1}

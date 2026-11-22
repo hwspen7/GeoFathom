@@ -60,7 +60,7 @@ type Operation=TerrainOperation|'slope'|'profile';
 type ProfileResult=Awaited<ReturnType<typeof terrainProfile>>;
 interface TerrainRecord {
  id:string;title:string;operation:Operation;source:RasterAsset;geometry:GeoJSON.Geometry;
- inputKey:string;visible:boolean;createdAt:number;saved?:boolean;
+ inputKey:string;visible:boolean;createdAt:number;saved?:boolean;opacity:number;
  advanced?:AdvancedTerrainResult;slope?:TerrainResult;profile?:ProfileResult;
 }
 const modes:Array<{id:Operation;title:string}>=[
@@ -79,10 +79,10 @@ const categories:Record<string,Operation[]>={
  Engineering:['profile','cross_sections','volume','cutfill_map','suitability','least_cost'],
 };
 const units:Record<string,string>={cut_m3:'m³',fill_m3:'m³',net_cut_m3:'m³',covered_grid_area_m2:'m²',reference_elevation_m:'m',
- contour_lines:'',contour_levels:'',dataset_overlap_pct:'%',valid_grid_pct:'%',interval_m:'m',visible_cells:'',visible_grid_area_m2:'m²',unknown_cells:'',upstream_cells:'',upstream_grid_area_m2:'m²',minimum_m:'m',maximum_m:'m',mean_m:'m',median_m:'m',stddev_m:'m',p10_m:'m',p90_m:'m',relief_m:'m',circular_mean_aspect_deg:'°'};
+ contour_lines:'',contour_levels:'',product_valid_cells:'',flat_cells:'',directional_cells:'',route_cells:'',dataset_overlap_pct:'%',valid_grid_pct:'%',interval_m:'m',visible_cells:'',visible_grid_area_m2:'m²',unknown_cells:'',upstream_cells:'',upstream_grid_area_m2:'m²',minimum_m:'m',maximum_m:'m',mean_m:'m',median_m:'m',stddev_m:'m',p10_m:'m',p90_m:'m',relief_m:'m',circular_mean_aspect_deg:'°'};
 const names:Record<string,string>={cut_m3:'Cut',fill_m3:'Fill',net_cut_m3:'Net cut',covered_grid_area_m2:'Grid area',reference_elevation_m:'Reference',
  contour_lines:'Contour paths',contour_levels:'Elevation levels',dataset_overlap_pct:'DEM footprint coverage',valid_grid_pct:'Valid grid coverage',interval_m:'Interval',visible_cells:'Visible cells',visible_grid_area_m2:'Visible area',unknown_cells:'Unknown cells',
- upstream_cells:'Upstream cells',upstream_grid_area_m2:'Catchment area',minimum_m:'Lowest elevation',maximum_m:'Highest elevation',mean_m:'Mean elevation',median_m:'Median elevation',stddev_m:'Standard deviation',p10_m:'10th percentile',p90_m:'90th percentile',relief_m:'Relief',hypsometric_integral:'Hypsometric integral',circular_mean_aspect_deg:'Mean downslope bearing',product_min:'Minimum',product_max:'Maximum',product_mean:'Mean'};
+ upstream_cells:'Upstream cells',upstream_grid_area_m2:'Catchment area',minimum_m:'Lowest elevation',maximum_m:'Highest elevation',mean_m:'Mean elevation',median_m:'Median elevation',stddev_m:'Standard deviation',p10_m:'10th percentile',p90_m:'90th percentile',relief_m:'Relief',hypsometric_integral:'Hypsometric integral',circular_mean_aspect_deg:'Mean downslope bearing',product_min:'Minimum',product_max:'Maximum',product_mean:'Mean',product_valid_cells:'Calculated raster cells'};
 const fmt=(n:number)=>n.toLocaleString('en-US',{maximumFractionDigits:2});
 interface Props{
  projectId:string|null;geometry:GeoJSON.Geometry|null;profileGeometry?:GeoJSON.LineString|null;raster:RasterAsset|null;imageRaster?:RasterAsset|null;active:boolean;connected:boolean;
@@ -176,7 +176,7 @@ export default function TerrainWorkbench(p:Props){
  useEffect(()=>()=>{fetchAbort.current?.abort();},[fetchKey]);
  useEffect(()=>()=>{latest.current.onFetchTarget?.(null);},[]);
  // Published result layers are independent from the currently selected input.
- useEffect(()=>{latest.current.onPreview(records.filter(r=>r.visible).flatMap(r=>r.advanced?.features??[]));latest.current.onRasterPreview?.(records.flatMap(r=>r.visible&&r.advanced?.raster?[{id:r.id,title:r.title,raster:r.advanced.raster}]:[]));},[records]);
+ useEffect(()=>{latest.current.onPreview(records.filter(r=>r.visible).flatMap(r=>r.advanced?.features??[]));latest.current.onRasterPreview?.(records.flatMap(r=>r.visible&&r.advanced?.raster?[{id:r.id,title:r.title,raster:r.advanced.raster,opacity:r.opacity}]:[]));},[records]);
  useEffect(()=>{
    if(!p.active||!p.connected)return;
    let current=true;
@@ -199,7 +199,7 @@ export default function TerrainWorkbench(p:Props){
    const controller=new AbortController();analysisRequest.current=controller;
    const ticket=++sequence.current;setBusy(true);setError('');setInfo('');
    const record:TerrainRecord={id:crypto.randomUUID(),title:modes.find(m=>m.id===operation)!.title,
-     operation,source:dem,geometry:structuredClone(analysisGeometry),inputKey,visible:true,createdAt:Date.now()};
+     operation,source:dem,geometry:structuredClone(analysisGeometry),inputKey,visible:true,opacity:.48,createdAt:Date.now()};
    try{
      if(operation==='profile')record.profile=await terrainProfile(dem.id,analysisGeometry,controller.signal);
      else if(operation==='slope')record.slope=await analyzeTerrain(dem.id,analysisGeometry,controller.signal);
@@ -398,7 +398,7 @@ export default function TerrainWorkbench(p:Props){
      <small className="compact-notice" title={slope.warning}>{slope.valid_pixels} valid cells · {slope.engine}</small></>}
      {profile&&<ProfilePlot samples={profile.samples} length={profile.length_m} onHover={p.onHover}/>}
      {result&&<>
-       <div className="terrain-metrics">{Object.entries(result.metrics).map(([k,v])=><div key={k}><span>{names[k]??k.replaceAll('_',' ')}</span><strong>{fmt(v)} {units[k]??(k.startsWith('product_')?(
+       <div className="terrain-metrics">{Object.entries(result.metrics).map(([k,v])=><div key={k}><span>{names[k]??k.replaceAll('_',' ')}</span><strong>{fmt(v)} {units[k]??(['product_min','product_max','product_mean'].includes(k)?(
           ['elevation','tpi','tri','cutfill_map'].includes(result.operation)?'m':
           ['slope_map','aspect_map'].includes(result.operation)?'°':
           result.operation==='flow_accumulation'?'cells':''):'')}</strong></div>)}</div>
@@ -406,11 +406,24 @@ export default function TerrainWorkbench(p:Props){
        {result.operation==='visibility'&&<MetricBars label="Visibility (cells)" values={[{name:'Visible',value:result.metrics.visible_cells,color:'#34885c'},{name:'Unknown',value:result.metrics.unknown_cells,color:'#9099a2'},{name:'Hidden',value:Math.max(0,result.valid_cells-result.metrics.visible_cells-result.metrics.unknown_cells),color:'#c17d55'}]}/>}
        {result.operation==='watershed'&&<MetricBars label="Catchment (cells)" values={[{name:'Upstream',value:result.metrics.upstream_cells,color:'#3687b9'},{name:'Other',value:Math.max(0,result.valid_cells-result.metrics.upstream_cells),color:'#9ba7ad'}]}/>}
        {result.distribution&&<ElevationDistribution bins={result.distribution}/>}
-       {result.raster&&<div className="terrain-profile-chart"><img src={result.raster.png} alt="Derived terrain raster" style={{width:'100%',maxHeight:180,objectFit:'contain'}}/><MetricBars label="Terrain class distribution (cells)" values={result.raster.legend.map(b=>({name:b.label,value:b.cells,color:b.color}))}/><button onClick={()=>{const a=document.createElement('a');const data=Uint8Array.from(atob(result.raster!.geotiff),c=>c.charCodeAt(0));const url=URL.createObjectURL(new Blob([data],{type:'image/tiff'}));a.href=url;a.download=result.operation+'.tif';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}}>GeoTIFF</button></div>}
+       {result.raster&&<div className="terrain-profile-chart">
+         <label className="terrain-opacity-control">Result opacity · {Math.round((selected?.opacity??.48)*100)}%
+           <input aria-label="Terrain raster opacity" type="range" min="0" max="100" step="5"
+             value={Math.round((selected?.opacity??.48)*100)}
+             onChange={e=>{const opacity=Number(e.target.value)/100;setRecords(old=>old.map(r=>r.id===selectedRecord?{...r,opacity}:r));}}/>
+         </label>
+         <img src={result.raster.png} alt="Derived terrain raster" style={{width:'100%',maxHeight:180,objectFit:'contain'}}/>
+         <MetricBars label="Terrain class distribution (cells)" values={result.raster.legend.map(b=>({name:b.label,value:b.cells,color:b.color}))}/>
+         <button onClick={()=>{const a=document.createElement('a');const data=Uint8Array.from(atob(result.raster!.geotiff),c=>c.charCodeAt(0));const url=URL.createObjectURL(new Blob([data],{type:'image/tiff'}));a.href=url;a.download=result.operation+'.tif';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}}>GeoTIFF</button></div>}
        {result.operation==='aspect_map'&&result.raster&&<AspectRose bins={result.raster.legend}/>}
        {result.sections&&<SectionPlot sections={result.sections} onHover={p.onHover}/>}
        {result.mesh&&<GPUView mesh={result.mesh} fallback={<MeshView mesh={result.mesh}/>}/>}
-       <small className="compact-notice" title={result.warning}>{result.valid_cells} valid · {result.missing_cells} missing · Method ⓘ</small>
+       {result.operation==='slope_map'&&result.raster&&result.valid_cells>result.raster.valid_cells&&
+         <small className="compact-notice" aria-label="Slope edge cells explanation">
+           {fmt(result.valid_cells-result.raster.valid_cells)} boundary cells excluded by the 3 × 3 slope calculation.
+           Source DEM coverage and calculated-slope coverage are different measures.
+         </small>}
+       <small className="compact-notice" title={result.warning}>{result.valid_cells} DEM source cells valid · {result.missing_cells} source cells missing · Method ⓘ</small>
        {result.features.length>0&&<div className="survey-action-bar"><button disabled={!p.projectId||busy||selected?.saved||result.features.length>512} title={result.features.length>512?'Export GeoJSON for results exceeding the atomic project batch limit.':'Save to project'} onClick={()=>void save()}>{selected?.saved?'Saved to project':'Save terrain features'}</button>
          <button onClick={()=>setRecords(old=>old.map(r=>r.id===selectedRecord?{...r,visible:true}:r))}>Show on map</button><button onClick={()=>setRecords(old=>old.map(r=>r.id===selectedRecord?{...r,visible:false}:r))}>Hide</button></div>}
      </>}
