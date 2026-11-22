@@ -57,6 +57,7 @@ interface Props {
   terrainMarker:Position|null;
   terrainResults:GeoJSON.Feature[];
   terrainRasters?:TerrainRasterLayer[];
+  terrainFetchTarget?:[number,number,number,number]|null;
   onTerrainPick:(point:Position)=>void;
   onContextMenu:(x:number,y:number)=>void;
   onEditingError:(message:string)=>void;
@@ -237,7 +238,7 @@ type Drag = {
 
 export default function MapCanvas({
   selected,drawingMode,vertices,focus,basemap,customBasemap,onBasemapStatus,measurement,showMeasurements,display,selectedFeatureId,rasterLayers,onRasterError,onMapClick,onFinishDrawing,
-  terrainPicking,terrainMarker,terrainResults,terrainRasters,onTerrainPick,onContextMenu,onEditingError,
+  terrainPicking,terrainMarker,terrainResults,terrainRasters,terrainFetchTarget,onTerrainPick,onContextMenu,onEditingError,
   onViewportChange, discovered, traceMode, onTraceClick,
   editing, moving,edgeMoving, snapping, selectedLocked, layerFeatures,
   promptPositive,promptNegative,promptBox,annotationMode,onAnnotationClick,
@@ -729,6 +730,9 @@ export default function MapCanvas({
         paint:{'fill-color':'#20a9cf','fill-opacity':.15}});
       map.addLayer({id:'selection-preview-line',source:'selection-preview',type:'line',
         paint:{'line-color':'#20a9cf','line-width':2,'line-dasharray':[2,2]}});
+      map.addSource('terrain-fetch-target',{type:'geojson',data:{type:'FeatureCollection',features:[]}});
+      map.addLayer({id:'terrain-fetch-target-fill',source:'terrain-fetch-target',type:'fill',paint:{'fill-color':'#d47b19','fill-opacity':.055}});
+      map.addLayer({id:'terrain-fetch-target-outline',source:'terrain-fetch-target',type:'line',paint:{'line-color':'#d47b19','line-width':2,'line-dasharray':[3,2]}});
       map.addSource('terrain-result',{type:'geojson',data:{type:'FeatureCollection',features:[]}});
       map.addLayer({id:'terrain-result-fill',source:'terrain-result',type:'fill',
         filter:['==',['geometry-type'],'Polygon'],
@@ -892,6 +896,17 @@ export default function MapCanvas({
     source?.setData({type:'FeatureCollection',features:terrainResults});
     container.current?.setAttribute('data-terrain-feature-count',String(terrainResults.length));
   },[terrainResults,ready]);
+  useEffect(()=>{
+    const map=mapRef.current;if(!ready||!map)return;
+    const source=map.getSource('terrain-fetch-target') as GeoJSONSource|undefined;
+    const box=terrainFetchTarget;
+    source?.setData({type:'FeatureCollection',features:box?[{
+      type:'Feature',properties:{name:'DEM download target'},
+      geometry:{type:'Polygon',coordinates:[[[box[0],box[1]],[box[2],box[1]],
+        [box[2],box[3]],[box[0],box[3]],[box[0],box[1]]]]}
+    }]:[]});
+    container.current?.setAttribute('data-dem-target-visible',box?'true':'false');
+  },[terrainFetchTarget,ready]);
   useEffect(()=>{
     const map=mapRef.current;if(!ready||!map)return;
     const ids:string[]=[];

@@ -93,6 +93,7 @@ export default function App() {
   const [activeTool,setActiveTool]=useState('tools-survey');
   const [terrainFeatures,setTerrainFeatures]=useState<GeoJSON.Feature[]>([]);
   const [terrainRasters,setTerrainRasters]=useState<TerrainRasterLayer[]>([]);
+  const [terrainFetchTarget,setTerrainFetchTarget]=useState<[number,number,number,number]|null>(null);
   const [terrainVisible,setTerrainVisible]=useState(true);
   const [showLayers,setShowLayers]=useState(true);
   const [terrainPicking,setTerrainPicking]=useState(false);
@@ -614,7 +615,7 @@ export default function App() {
     setSelectionBoxMode(false);setSelectionBox(null);
     setSpatialSelected([]);setQualityIssues([]);setProjectGrid(null);
     setLabelMoveMode(false);
-    setExternalFeatures([]);setTerrainFeatures([]);setTerrainRasters([]);setPagedFeatures([]);
+    setExternalFeatures([]);setTerrainFeatures([]);setTerrainRasters([]);setTerrainFetchTarget(null);setPagedFeatures([]);
     setPromptMode(null);setPositivePoints([]);setNegativePoints([]);setBoxPoints([]);
     setPendingShared(null);
     lastValid.current = null;
@@ -897,7 +898,7 @@ export default function App() {
                     setHistoryPulse(value=>value+1);
                   }
                   setPendingAnnotation(null);setPendingShared(null);setLinked(false);
-                  setPagedFeatures([]);setExternalFeatures([]);setTerrainFeatures([]);setTerrainRasters([]);setExternalTiles([]);
+                  setPagedFeatures([]);setExternalFeatures([]);setTerrainFeatures([]);setTerrainRasters([]);setTerrainFetchTarget(null);setExternalTiles([]);
                   setSpatialSelected([]);setQualityIssues([]);setProjectGrid(null);
                   setSelectionBox(null);setSelectionBoxMode(false);setLabelMoveMode(false);
                 }
@@ -1016,6 +1017,7 @@ export default function App() {
             selected={geometry} drawingMode={drawingMode} vertices={vertices}
             terrainPicking={terrainPicking} terrainMarker={showTools&&activeTool==='tools-terrain'?(terrainHover??terrainOrigin):null}
             terrainResults={terrainVisible?terrainFeatures:[]} terrainRasters={terrainVisible?terrainRasters:[]}
+            terrainFetchTarget={showTools&&activeTool==='tools-terrain'?terrainFetchTarget:null}
             onTerrainPick={position=>{setTerrainOrigin(position);setTerrainPicking(false);setMessage('Terrain point selected.');}}
             onContextMenu={(x,y)=>setContextMenu({x,y})} onDeselect={deselect}
             onEditingError={setError}
@@ -1517,6 +1519,7 @@ export default function App() {
                 setEditing(false);setEdgeMoving(false);setMoving(false);setTraceMode(false);setPromptMode(null);
                 setSelectionBoxMode(false);setLabelMoveMode(false);setPendingAnnotation(null);
               }}
+              onFetchTarget={setTerrainFetchTarget}
               onHover={setTerrainHover}
               onPreview={value=>{if(projectCurrent())setTerrainFeatures(value);}}
               onRasterPreview={value=>{if(projectCurrent())setTerrainRasters(value);}}
