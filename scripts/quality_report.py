@@ -36,6 +36,38 @@ def frontend_coverage(path):
             for name in ("statements", "branches", "functions", "lines")}
 
 
+# Targets are explicit, independent numerators/denominators, without rounding.
+COVERAGE_TARGETS = {
+    "python.statements":95.0, "python.branches":90.0,
+    "native_cpu.lines":95.0, "native_cpu.branches":85.0,
+    "web.statements":90.0, "web.branches":85.0,
+}
+
+
+def coverage_gates(metrics,baseline=None,required=None):
+    """Qualify every required metric and reject invalid or missing values."""
+    chosen=COVERAGE_TARGETS if required is None else required
+    checks={}
+    measurements={}
+    for key in chosen:
+        group,field=key.split(".")
+        value=metrics[group][field]
+        if (type(value) not in (int,float) or not math.isfinite(value)
+                or not 0<=value<=100):
+            raise ValueError(f"Invalid coverage metric: {key}")
+        minimum=COVERAGE_TARGETS[key]
+        measurements[key]={"actual":value,"minimum":minimum}
+        checks[key]=value>=minimum
+        if baseline and key in baseline:
+            floor=baseline[key]
+            if type(floor) not in (int,float) or not math.isfinite(floor) or not 0<=floor<=100:
+                raise ValueError(f"Invalid regression baseline: {key}")
+            checks[key+".no_regression"]=value>=floor
+            measurements[key]["baseline"]=floor
+    return {"passed":bool(checks) and all(checks.values()),"gates":checks,
+            "measurements":measurements}
+
+
 def compare_performance(baseline, current, metadata, tolerance):
     baseline, current = Path(baseline), Path(current)
     prior = read_json(baseline / "acceptance.json")
@@ -64,17 +96,14 @@ def main():
     parser.add_argument("--native", type=Path, required=True)
     parser.add_argument("--web", type=Path, required=True)
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--baseline",type=Path,help="Measured like-for-like coverage floors (metric to percent)")
     parser.add_argument("--report-only", action="store_true",
                         help="Collect CI measurements without asserting release qualification")
     args = parser.parse_args()
     py, native, web = python_coverage(args.python), native_coverage(args.native), frontend_coverage(args.web)
-    checks = {"python_statements_95": py["statements"] >= 95,
-              "python_branches_90": py["branches"] >= 90,
-              "native_lines_95": native["lines"] >= 95,
-              "native_branches_85": native["branches"] >= 85,
-              "web_statements_90": web["statements"] >= 90,
-              "web_branches_85": web["branches"] >= 85}
-    result = {"passed": all(checks.values()), "python": py, "native_cpu": native, "web": web, "gates": checks}
+    metrics={"python":py,"native_cpu":native,"web":web}
+    baseline=read_json(args.baseline)["floors"] if args.baseline else None
+    result={**metrics,**coverage_gates(metrics,baseline)}
     data = json.dumps(result, indent=2)
     if args.output:
         args.output.write_text(data, encoding="utf-8")

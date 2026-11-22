@@ -261,7 +261,7 @@ jobs:
           npm run coverage:merge
       - name: Record quality targets without falsely qualifying the release
         run: |
-          python scripts/quality_report.py --python combined-coverage.json --native reports/geofathom-native-coverage/native-coverage.xml --web web/coverage/coverage-summary.json --output quality.json --report-only
+          python scripts/quality_report.py --python combined-coverage.json --native reports/geofathom-native-coverage/native-coverage.xml --web web/coverage/coverage-summary.json --output quality.json --baseline docs/quality-baseline.json --report-only
           cat quality.json >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         with:
@@ -272,3 +272,37 @@ jobs:
             quality.json
             web/coverage/coverage-summary.json
             web/coverage/coverage-final.json
+
+
+  quality-targets:
+    needs: [quality-measurement]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: geofathom-*-coverage
+          path: reports
+      - uses: actions/download-artifact@v4
+        with:
+          name: geofathom-combined-quality
+          path: combined
+      - name: Enforce all measured coverage thresholds and regression floors
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from scripts.quality_report import coverage_gates
+          paths=list(Path("combined").rglob("quality.json"))
+          if len(paths)!=1:
+              raise RuntimeError("Expected exactly one combined coverage report")
+          report=json.loads(paths[0].read_text(encoding="utf-8"))
+          baseline=json.loads(Path("docs/quality-baseline.json").read_text(encoding="utf-8"))["floors"]
+          result=coverage_gates(report,baseline)
+          print(json.dumps(result,indent=2))
+          if not result["passed"]:
+              raise SystemExit("Coverage targets or regression floors are unmet.")
+          PY

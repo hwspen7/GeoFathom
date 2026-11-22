@@ -277,3 +277,13 @@ are emitted separately and the combined report is calculated from counters,
 not from adding percentages. Native CPU line and branch goals are 95% and
 85%; Python targets remain 95% statements and 90% branches, frontend targets
 90% statements and 85% branches.
+
+
+CI has two distinct jobs: quality-measurement publishes the actual combined
+measurements even if targets are unmet; quality-targets fails on each unmet
+threshold or comparable metric regression floor. The earlier unit-only
+frontend metric is deliberately not used as a baseline for the new
+instrumentation. A successful Windows short run is functional/hardware
+evidence; `--require-coverage-targets` additionally enforces its local
+Python and combined web coverage. The independent GCC CI job provides native
+line/branch evidence.

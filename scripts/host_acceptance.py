@@ -174,6 +174,8 @@ def main():
     parser.add_argument("--reuse-test-postgis", action="store_true",
                         help="Use the explicitly configured disposable GEOFATHOM_TEST_POSTGIS_DSN")
     parser.add_argument("--skip-web", action="store_true")
+    parser.add_argument("--require-coverage-targets", action="store_true",
+                        help="Fail unless measured local Python and full web metrics reach the target")
     parser.add_argument("--baseline", type=Path, help="Previous host acceptance report directory")
     parser.add_argument("--resume", type=Path,
                         help="Reuse hash-verified native checkpoints from a compatible run")
@@ -307,6 +309,16 @@ def main():
             shutil.copytree(ROOT / "web" / "coverage", out / "web-coverage")
             report["web_coverage"] = frontend_coverage(out / "web-coverage" / "coverage-summary.json")
             report["stages"].append("Web build, unit and browser E2E")
+        from quality_report import coverage_gates
+        local_metrics={"python":report["python_coverage"]}
+        local_required=["python.statements","python.branches"]
+        if not args.skip_web:
+            local_metrics["web"]=report["web_coverage"]
+            local_required.extend(["web.statements","web.branches"])
+        report["local_coverage_gates"]=coverage_gates(local_metrics,required=local_required)
+        report["native_coverage_scope"]="Separate GCC CI report; Windows hardware CTest is not a line/branch measurement."
+        if args.require_coverage_targets and not report["local_coverage_gates"]["passed"]:
+            raise RuntimeError("Local coverage targets are not met.")
         report["passed"] = True
         report["scope"] = "backend-and-hardware" if args.skip_web else "backend-hardware-and-web"
         # Synthetic model and single-host tests are not full production qualification.

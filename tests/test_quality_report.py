@@ -46,3 +46,25 @@ def test_performance_gate_detects_both_latency_and_throughput_regression(tmp_pat
     assert not result["measurements"]["gpu-inference.json"]["passed"]
     with pytest.raises(ValueError,match="Incomparable"):
         quality.compare_performance(baseline,current,{**meta,"cpu":"different"},15)
+
+
+def test_coverage_gate_distinguishes_six_independent_metrics():
+    report={"python":{"statements":95,"branches":90},
+            "native_cpu":{"lines":96,"branches":85},
+            "web":{"statements":90,"branches":85}}
+    assert quality.coverage_gates(report)["passed"]
+    for key in quality.COVERAGE_TARGETS:
+        group,metric=key.split(".")
+        original=report[group][metric]
+        report[group][metric]=quality.COVERAGE_TARGETS[key]-.001
+        verdict=quality.coverage_gates(report)
+        assert not verdict["passed"] and not verdict["gates"][key]
+        report[group][metric]=original
+    assert not quality.coverage_gates(report,{"native_cpu.lines":97})["passed"]
+
+
+@pytest.mark.parametrize("value",[float("nan"),float("inf"),-1,101,True,"99"])
+def test_coverage_gate_rejects_invalid_measurements(value):
+    with pytest.raises(ValueError,match="Invalid coverage"):
+        quality.coverage_gates({"python":{"statements":value}},
+                               required=["python.statements"])

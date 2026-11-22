@@ -1,0 +1,10 @@
+{
+  "source_commit": "c80bb58a1e0b20985aa076ddd6ba07351ff7fa62",
+  "measurement": "Combined Linux/Windows/PostGIS Python and GCC native CPU; frontend baseline must use shared source instrumentation, not the prior V8 unit-only report.",
+  "floors": {
+    "python.statements": 83.95665389189904,
+    "python.branches": 68.30282861896839,
+    "native_cpu.lines": 96.18320610687023,
+    "native_cpu.branches": 64.85753052917232
+  }
+}
