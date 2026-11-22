@@ -134,3 +134,21 @@ archive on pull requests without publishing a tag. CUDA compilation, ARM64
 parity and real Linux cgroup enforcement have separate CI jobs. Actual
 CUDA, 24-hour soak and multi-host hardware acceptance remain mandatory
 for production hardware qualification.
+
+
+## Repeatable Windows acceptance
+
+Run the file-backed entry point instead of piping Python into stdin:
+`python scripts/run_acceptance.py -v -rs --tb=short`.
+Windows multiprocessing spawn must be able to reload the parent entry file.
+The launcher is CPU-only compatible; enable the existing hardware test flags
+and configure a disposable PostGIS DSN explicitly for full qualification.
+
+The active CUDA toolkit is discovered through CUDA_PATH (bin/x64 or bin).
+An operator may set GEOFATHOM_CUDA_BIN to an existing absolute directory
+containing the matching CUDA runtime DLL. The native loader retains the
+Windows DLL search handle; ONNX CUDA session initialization preloads CUDA
+and cuDNN when the installed ONNX Runtime provides the preload API.
+The runtime rejects whole-provider CUDA-to-CPU fallback. Ordinary ONNX
+per-node CPU placement is still possible for unsupported operators; strict
+hardware qualification requires a profiling-based CUDA operator audit.

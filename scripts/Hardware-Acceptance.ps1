@@ -16,8 +16,8 @@ if ($gpu -notmatch "4070 Ti SUPER") { throw "Expected RTX 4070 Ti SUPER was not 
 Invoke-Checked { cmake -S . -B build/native-cuda -DGEOFATHOM_NATIVE_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES=89 }
 Invoke-Checked { cmake --build build/native-cuda --config Release --parallel }
 Invoke-Checked { ctest --test-dir build/native-cuda --build-config Release --output-on-failure }
-$dll = Get-ChildItem build/native-cuda -Filter geofathom_native.dll -Recurse | Select-Object -First 1
-if (-not $dll) { throw "CUDA native DLL missing." }
+$dll = Get-Item build/native-cuda/Release/geofathom_native.dll -ErrorAction SilentlyContinue
+if (-not $dll) { throw "CUDA Release native DLL missing." }
 $env:GEOFATHOM_NATIVE_LIBRARY = $dll.FullName
 $env:GEOFATHOM_REQUIRE_NATIVE = "1"
 $env:GEOFATHOM_SPECTRAL_DEVICE = "cuda"

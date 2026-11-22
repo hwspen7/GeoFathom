@@ -37,7 +37,10 @@ def _native() -> ctypes.CDLL | None:
         if candidate is None or not candidate.is_file():
             continue
         try:
-            library = ctypes.CDLL(str(candidate))
+            # Register the active Windows toolkit before loading native dependencies.
+            from core.cuda_environment import prepare_native_cuda
+            prepare_native_cuda()
+            library = ctypes.CDLL(str(candidate.resolve()))
             library.gf_contains_ring.argtypes = [
                 ctypes.POINTER(ctypes.c_double),
                 ctypes.c_size_t,

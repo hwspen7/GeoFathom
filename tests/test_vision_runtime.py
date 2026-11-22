@@ -139,6 +139,9 @@ def test_cuda_io_binding_dispatch_with_mocked_onnx_session(monkeypatch,tmp_path)
     model=tmp_path/"io.onnx"
     model.write_bytes(b"only a mocked provider, no model weights")
     monkeypatch.setenv("GEOFATHOM_VISION_IO_BINDING","1")
+    # Exercise CPU-copy binding regardless of the operator CUDA environment.
+    monkeypatch.setenv("GEOFATHOM_VISION_DEVICE_POSTPROCESS","0")
+    monkeypatch.setenv("GEOFATHOM_CUDA_DEVICE_ID","0")
     steps=[]
     output=np.zeros((1,2,128,128),dtype=np.float32)
     output[:,1]=3
@@ -185,7 +188,8 @@ def test_real_gpu_acceptance_requires_operator_installed_model(monkeypatch):
     monkeypatch.setenv("GEOFATHOM_VISION_IO_BINDING","1")
     config=semantic._manifest(identifier)
     size=config["tile_size"]
-    tensor=np.zeros((1,3,size,size),dtype=np.float32)
+    # The installed model may use multispectral rather than RGB input.
+    tensor=np.zeros((1,len(config["bands"]),size,size),dtype=np.float32)
     start=time.perf_counter()
     for _ in range(10):
         labels,confidence=semantic._predict_tile(tensor,config,"cuda")

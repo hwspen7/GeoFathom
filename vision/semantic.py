@@ -113,6 +113,8 @@ def _session(path, modified_ns, device):
     options.inter_op_num_threads = 1
     providers = ["CPUExecutionProvider"]
     if device == "cuda":
+        from core.cuda_environment import prepare_onnx_cuda
+        prepare_onnx_cuda(ort)
         if "CUDAExecutionProvider" not in ort.get_available_providers():
             raise RuntimeError("ONNX CUDA provider is unavailable.")
         # An arena limit is advisory: weights, kernels and external drivers
@@ -123,8 +125,12 @@ def _session(path, modified_ns, device):
         }), "CPUExecutionProvider"]
     session = ort.InferenceSession(path, sess_options=options,
                                    providers=providers)
-    if device == "cuda" and session.get_providers()[0] != "CUDAExecutionProvider":
-        raise RuntimeError("ONNX CUDA session fell back to CPU unexpectedly.")
+    if device == "cuda":
+        if session.get_providers()[0] != "CUDAExecutionProvider":
+            raise RuntimeError("ONNX CUDA session fell back to CPU unexpectedly.")
+        # Disable provider-wide retry on CPU; normal ORT per-node placement is
+        # unchanged for models containing CPU-only shape/control operations.
+        session.disable_fallback()
     return session
 
 
