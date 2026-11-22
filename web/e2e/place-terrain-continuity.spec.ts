@@ -136,7 +136,7 @@ test('search centers on true selected campus outline, not unrelated broad search
 
 test('frontend exposes actual build revision in Settings for stale-process diagnosis',async({page})=>{
  await page.goto('/');
- await page.locator('.gis-settings summary').click();
+ await page.locator('.gis-settings > summary').click();
  await expect(page.getByLabel('Build revision')).toContainText(/Frontend revision [0-9a-f]{7,}/);
 });
 
@@ -170,9 +170,9 @@ test('OSU disconnected mapped properties default to campus, with inspectable edi
  const pixels=JSON.parse((await map.getAttribute('data-edit-handle-pixels'))||'[]') as number[][];
  const rect=(await map.boundingBox())!;
  await page.mouse.click(rect.x+pixels[2][0],rect.y+pixels[2][1]);
- await expect(page.getByLabel('Boundary node')).toHaveValue('2');
+ await expect(page.getByLabel('Boundary node',{exact:true})).toHaveValue('2');
  await expect(page.getByLabel('Pinned places').getByRole('button',{name:'Select pinned The Ohio State University'})).toBeVisible();
- await page.getByLabel('Boundary node').selectOption('1');
+ await page.getByLabel('Boundary node',{exact:true}).selectOption('1');
  await expect(page.getByLabel('Boundary longitude')).toHaveValue('-83.0100000');
  await page.getByLabel('Boundary longitude').fill('-83.0105');
  await page.getByRole('button',{name:'Apply coordinates'}).click();
