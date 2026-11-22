@@ -1,6 +1,8 @@
 """DEM area statistics and elevation cross sections."""
 
-from fastapi import APIRouter,HTTPException
+import asyncio
+from threading import Event
+from fastapi import APIRouter,HTTPException,Request
 from pydantic import BaseModel,Field
 from starlette.concurrency import run_in_threadpool
 
@@ -8,6 +10,28 @@ from imagery.raster import RasterError
 from imagery.store import image_file
 from geometry.measure import GeometryError
 from .engine import analyze_area,elevation_profile
+from .cancellation import TerrainCancelled
+
+
+async def run_cancelable(request, fn, *args):
+    # Do not abandon a worker on browser disconnect: request cancellation
+    # is observed at the algorithm checkpoints, and the worker is drained.
+    cancel=Event()
+    task=asyncio.create_task(run_in_threadpool(fn,*args,cancel=cancel))
+    try:
+        while not task.done():
+            await asyncio.wait({task},timeout=.1)
+            if not task.done() and await request.is_disconnected():
+                cancel.set()
+        return await task
+    except TerrainCancelled as error:
+        raise HTTPException(status_code=499,detail=str(error)) from error
+    finally:
+        cancel.set()
+        if not task.done():
+            try:await asyncio.shield(task)
+            except (TerrainCancelled,asyncio.CancelledError):pass
+
 
 router=APIRouter(prefix="/terrain",tags=["terrain"])
 
@@ -26,18 +50,18 @@ def raster(identifier):
 
 
 @router.post("/analyze")
-async def area(body:TerrainInput)->dict:
+async def area(request:Request,body:TerrainInput)->dict:
     try:
-        return await run_in_threadpool(analyze_area,raster(body.image_id),
+        return await run_cancelable(request,analyze_area,raster(body.image_id),
                                        body.geometry,body.vertical_unit)
     except (GeometryError,RasterError,ValueError) as error:
         raise HTTPException(status_code=422,detail=str(error)) from error
 
 
 @router.post("/profile")
-async def profile(body:TerrainInput)->dict:
+async def profile(request:Request,body:TerrainInput)->dict:
     try:
-        return await run_in_threadpool(elevation_profile,raster(body.image_id),
+        return await run_cancelable(request,elevation_profile,raster(body.image_id),
                                        body.geometry,body.samples)
     except (GeometryError,RasterError,ValueError) as error:
         raise HTTPException(status_code=422,detail=str(error)) from error
@@ -54,10 +78,10 @@ class AdvancedTerrainInput(BaseModel):
     target_height:float=Field(default=0,ge=0,le=1000)
 
 @router.post("/advanced")
-async def advanced(body:AdvancedTerrainInput):
+async def advanced(request:Request,body:AdvancedTerrainInput):
     from .advanced import run_terrain
     try:
-        return await run_in_threadpool(run_terrain,raster(body.image_id),body.geometry,
+        return await run_cancelable(request,run_terrain,raster(body.image_id),body.geometry,
             body.operation,body.interval,body.reference,body.point,body.observer_height,body.target_height)
     except (GeometryError,RasterError,ValueError,OverflowError) as error:
         raise HTTPException(status_code=422,detail=str(error)) from error

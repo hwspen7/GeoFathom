@@ -11,6 +11,7 @@ from shapely import make_valid
 from geometry.measure import measure_geometry
 from imagery.raster import RasterError
 from .engine import _check_dem
+from .cancellation import checkpoint
 
 def _window(path, geometry, maximum):
     measure_geometry(geometry)
@@ -85,7 +86,7 @@ def _contour_groups(lines):
     if group:
         yield group[0] if len(group)==1 else MultiLineString(group)
 
-def _contours(z,valid,affine,crs,boundary,interval):
+def _contours(z,valid,affine,crs,boundary,interval,cancel=None):
     if not math.isfinite(interval) or interval<=0:
         raise RasterError("Contour interval must be a positive finite number.")
     lo,hi=float(z[valid].min()),float(z[valid].max())
@@ -100,6 +101,7 @@ def _contours(z,valid,affine,crs,boundary,interval):
     features=[]
     vertex_count=0
     for n in range(start,end+1):
+        checkpoint(cancel)
         level=n*interval
         above=[v>=level for v in corners]
         flags=above[0].astype(np.uint8)+2*above[1]+4*above[2]+8*above[3]
@@ -107,7 +109,8 @@ def _contours(z,valid,affine,crs,boundary,interval):
         if len(rows)>_CONTOUR_VERTEX_BUDGET:
             raise RasterError("Contour complexity exceeds the geometry budget.")
         segments=[]
-        for r,c in zip(rows,cols):
+        for index,(r,c) in enumerate(zip(rows,cols)):
+            if index%1024==0:checkpoint(cancel)
             vals=[v[r,c] for v in corners]
             crossings=[]
             for i in range(4):
@@ -152,7 +155,7 @@ def _origin(point,crs,affine,valid):
         raise RasterError("Observer/outlet must fall in a valid selected DEM cell.")
     return r,c
 
-def _visibility(z,valid,origin,affine,observer_height,target_height):
+def _visibility(z,valid,origin,affine,observer_height,target_height,cancel=None):
     if any(not math.isfinite(v) or not 0<=v<=1000 for v in (observer_height,target_height)):
         raise RasterError("Observer and target heights must be 0–1000 meters.")
     if max(z.shape[0]*abs(affine.e),z.shape[1]*abs(affine.a))>10000:
@@ -176,6 +179,7 @@ def _visibility(z,valid,origin,affine,observer_height,target_height):
         fractions=np.arange(1,steps,dtype=np.float64)/steps
         chunk=max(1,min(1024,262144//max(1,steps-1)))
         for start in range(first,last,chunk):
+            checkpoint(cancel)
             rr_end=rows[start:min(last,start+chunk)]
             cc_end=cols[start:min(last,start+chunk)]
             rr=np.rint(r0+(rr_end[:,None]-r0)*fractions).astype(np.intp)
@@ -186,7 +190,7 @@ def _visibility(z,valid,origin,affine,observer_height,target_height):
             seen[rr_end,cc_end]=complete&np.all(z[rr,cc]<=line+1e-8,axis=1)
     return seen,known
 
-def _watershed(z,valid,origin,affine):
+def _watershed(z,valid,origin,affine,cancel=None):
     """D8 steepest descent, no depression filling; flat/sink cells terminate."""
     height,width=z.shape
     downhill=np.full(z.shape,-1,dtype=np.int64)
@@ -202,11 +206,13 @@ def _watershed(z,valid,origin,affine):
         downhill[rs,cs][good]=dest[good]
     upstream=[[] for _ in range(z.size)]
     for index,dest in enumerate(downhill.flat):
+        if index%1024==0:checkpoint(cancel)
         if dest>=0:upstream[int(dest)].append(index)
     basin=np.zeros(z.size,bool)
     queue=[origin[0]*width+origin[1]]
     basin[queue[0]]=True
     while queue:
+        checkpoint(cancel)
         for index in upstream[queue.pop()]:
             if not basin[index]:
                 basin[index]=True;queue.append(index)
@@ -218,12 +224,13 @@ def _polygon_parts(geometry):
     elif geometry.geom_type in {"MultiPolygon","GeometryCollection"}:
         for part in geometry.geoms:yield from _polygon_parts(part)
 
-def _mask_features(mask,affine,crs,name):
+def _mask_features(mask,affine,crs,name,cancel=None):
     # Tiled vectorization bounds individual geometry complexity without
     # discarding any true cells. Adjacent chunks share boundaries only.
     output=[];total=0
     for row in range(0,mask.shape[0],64):
         for col in range(0,mask.shape[1],64):
+            checkpoint(cancel)
             tile=mask[row:row+64,col:col+64]
             if not tile.any():continue
             local=affine*rasterio.Affine.translation(col,row)
@@ -244,15 +251,17 @@ def _mask_features(mask,affine,crs,name):
             emit()
     return output
 
-def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,observer_height=1.7,target_height=0.):
+def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,observer_height=1.7,target_height=0.,cancel=None):
+    checkpoint(cancel)
     if operation not in {"contours","volume","visibility","watershed","mesh"}:
         raise RasterError("Unknown terrain operation.")
     z,valid,covered,affine,crs,boundary,coverage=_window(path,geometry,512 if operation=="visibility" else 1024)
+    checkpoint(cancel)
     cell=abs(affine.a*affine.e)
     result={"operation":operation,"source_crs":str(crs),"valid_cells":int(valid.sum()),
         "missing_cells":int((covered&~valid).sum()),"cell_area_m2":cell,"metrics":{},"features":[]}
     if operation=="contours":
-        result["features"]=_contours(z,valid,affine,crs,boundary,interval)
+        result["features"]=_contours(z,valid,affine,crs,boundary,interval,cancel)
         result["metrics"]={"contour_lines":sum(f["properties"]["contour_path_count"] for f in result["features"]),
             "contour_levels":len({f["properties"]["elevation_m"] for f in result["features"]}),
             "interval_m":interval,"minimum_m":float(z[valid].min()),"maximum_m":float(z[valid].max())}
@@ -267,14 +276,14 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
         result["warning"]="Projected cell-center cut/fill estimate versus a horizontal reference plane; nodata excluded, not a certified earthworks survey."
     elif operation=="visibility":
         origin=_origin(point,crs,affine,valid)
-        seen,known=_visibility(z,valid,origin,affine,observer_height,target_height)
-        result["features"]=_mask_features(seen,affine,crs,"Visible terrain")
+        seen,known=_visibility(z,valid,origin,affine,observer_height,target_height,cancel)
+        result["features"]=_mask_features(seen,affine,crs,"Visible terrain",cancel)
         result["metrics"]={"visible_cells":int(seen.sum()),"visible_grid_area_m2":int(seen.sum())*cell,"unknown_cells":int((valid&~known).sum())}
         result["warning"]="Local cell-center terrain visibility; no curvature, refraction, buildings or vegetation. Nodata along rays is unknown."
     elif operation=="watershed":
         origin=_origin(point,crs,affine,valid)
-        mask=_watershed(z,valid,origin,affine)
-        result["features"]=_mask_features(mask,affine,crs,"D8 contributing area")
+        mask=_watershed(z,valid,origin,affine,cancel)
+        result["features"]=_mask_features(mask,affine,crs,"D8 contributing area",cancel)
         result["metrics"]={"upstream_cells":int(mask.sum()),"upstream_grid_area_m2":int(mask.sum())*cell}
         result["warning"]="D8 contributing area within the selected grid; sinks/flats terminate and external upstream areas are not included."
     else:
@@ -291,4 +300,5 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
         result["warning"]+=" Study area extends beyond the DEM footprint; results cover the intersection only."
     if int((covered&~valid).sum()):
         result["warning"]+=" Some covered cells are nodata."
+    checkpoint(cancel)
     return result

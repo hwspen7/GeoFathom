@@ -17,6 +17,7 @@ from shapely.geometry import shape
 from geometry.measure import GeometryError,measure_geometry
 from geometry.topology import _native
 from imagery.raster import RasterError
+from .cancellation import checkpoint
 
 _GEOD=Geod(ellps="WGS84")
 
@@ -74,7 +75,8 @@ def _native_slope(array,valid,dx,dy):
             "engine":"numpy-horn"}
 
 
-def analyze_area(path,geometry,vertical_unit="meter"):
+def analyze_area(path,geometry,vertical_unit="meter",cancel=None):
+    checkpoint(cancel)
     if vertical_unit!="meter":
         raise RasterError("Terrain model currently supports vertical elevations in meters only.")
     measure_geometry(geometry)
@@ -101,7 +103,9 @@ def analyze_area(path,geometry,vertical_unit="meter"):
         heights=np.asarray(values.filled(np.nan),dtype=np.float32)
         valid_values=heights[usable]
         if len(valid_values)<9:raise RasterError("Not enough valid DEM elevation cells.")
+        checkpoint(cancel)
         slope=_native_slope(heights,usable,abs(src.transform.a),abs(src.transform.e))
+        checkpoint(cancel)
         return {
             "source":"User-provided projected GeoTIFF DEM",
             "source_crs":str(src.crs),"vertical_unit":"meter",
@@ -117,7 +121,8 @@ def analyze_area(path,geometry,vertical_unit="meter"):
         }
 
 
-def elevation_profile(path,geometry,samples=80):
+def elevation_profile(path,geometry,samples=80,cancel=None):
+    checkpoint(cancel)
     if not 4<=samples<=250:
         raise RasterError("Profile samples must be 4–250.")
     measure_geometry(geometry)
@@ -136,6 +141,7 @@ def elevation_profile(path,geometry,samples=80):
         distances=np.linspace(0,distance[-1],samples)
         interpolated=[]
         for d in distances:
+            checkpoint(cancel)
             i=int(np.searchsorted(distance,d,side="right")-1)
             i=min(i,len(coords)-2)
             t=(d-distance[i])/(distance[i+1]-distance[i]) if distance[i+1]>distance[i] else 0
@@ -146,6 +152,7 @@ def elevation_profile(path,geometry,samples=80):
                         [p[0] for p in interpolated],[p[1] for p in interpolated])
         heights=[]
         for sample in src.sample(zip(xs,ys),indexes=1,masked=True):
+            checkpoint(cancel)
             value=sample[0]
             heights.append(None if np.ma.is_masked(value) or not np.isfinite(value)
                            else float(value))
