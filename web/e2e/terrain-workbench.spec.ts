@@ -197,6 +197,13 @@ with tempfile.TemporaryDirectory() as directory:
  // Results from one project must never be visible in a different project.
  const another=await page.request.post(API+'/projects',{data:{name:'Independent terrain project '+Date.now()}});
  expect(another.status()).toBe(201);
- await page.getByLabel('Active project').selectOption((await another.json()).id);
+ const anotherId=(await another.json()).id;
+ // An external client created this project after initial startup. Focusing
+ // the selector must discover it without reloading the current workspace.
+ const selector=page.getByLabel('Active project');
+ await selector.focus();
+ await expect(selector.locator('option').filter({hasText:'Independent terrain project'})).toHaveCount(1);
+ await selector.selectOption(anotherId);
+ await expect(selector).toHaveValue(anotherId);
  await expect(page.getByLabel('Analysis result layers')).toHaveCount(0);
 });
