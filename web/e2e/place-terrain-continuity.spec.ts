@@ -149,7 +149,7 @@ test('OSU disconnected mapped properties default to campus, with inspectable edi
   geometry:{type:'MultiPolygon',coordinates:[
     [[[-83.045,39.990],[-83.010,39.990],[-83.010,40.012],[-83.045,40.012],[-83.045,39.990]]],
     [[[-83.080,40.070],[-83.060,40.070],[-83.060,40.076],[-83.080,40.076],[-83.080,40.070]]],
-  ]]} as unknown as typeof cmh;
+  ]}} as unknown as typeof cmh;
  await search(page,osu);
  await expect(page.getByLabel('Study area parcel')).toHaveValue('0');
  await expect(page.getByLabel('Pinned places').getByRole('button',{name:'Select pinned The Ohio State University'})).toBeVisible();
