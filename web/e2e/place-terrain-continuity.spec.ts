@@ -177,8 +177,11 @@ test('OSU disconnected mapped properties default to campus, with inspectable edi
   const raw=await map.getAttribute('data-rendered-handle-pixels');
   return raw?JSON.parse(raw).length:0;
  },{timeout:18000}).toBeGreaterThan(3);
- // Click a real rendered map vertex. Selecting it must not mutate the shape.
+ // Projected handle locations become actionable only when fitBounds has
+ // fully stopped and the latest workspace GeoJSON frame has rendered.
+ await expect(map).toHaveAttribute('data-map-camera-stable','true',{timeout:18000});
  const pixels=JSON.parse((await map.getAttribute('data-edit-handle-pixels'))||'[]') as number[][];
+ expect(pixels.length).toBeGreaterThan(3);
  const rect=(await map.boundingBox())!;
  // All geometry edit handles must remain directly accessible. A floating
  // map overlay must not intercept pointer events intended for a vertex.
