@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import {
   GeometryTimeline, addVertex, approximateMeasurement, moveVertex,
   removeVertex, shiftGeometry, snapPixels, snapToPaths, verticesOf, previewEdgeLengths,
-  geodesicDrag, translateSpherical,
+  geodesicDrag, translateSpherical, pathsOf, singleMovedVertex,
 } from './editing';
 
 import type { Position } from './editing';
@@ -116,4 +116,43 @@ test('metric drag uses a geodesic displacement instead of a raw degree offset',(
   const before=approximateMeasurement(box).area_m2!;
   const after=approximateMeasurement(shifted).area_m2!;
   expect(Math.abs(after-before)/before).toBeLessThan(.001);
+});
+
+
+test('invalid vertex paths cannot edit a closing coordinate or delete another vertex',()=>{
+  for(const path of [{polygon:0,ring:0,vertex:-1},{polygon:0,ring:0,vertex:4},
+    {polygon:0,ring:0,vertex:1.5},{polygon:5,ring:0,vertex:0}]){
+    expect(moveVertex(box,path,[4,5])).toEqual(box);
+    expect(addVertex(box,path,[4,5])).toEqual(box);
+    expect(removeVertex(box,path)).toEqual(box);
+  }
+});
+test('bounded history retains exactly 100 states and returns detached snapshots',()=>{
+  const timeline=new GeometryTimeline();
+  expect(timeline.undo()).toBeNull();expect(timeline.redo()).toBeNull();
+  for(let i=0;i<120;i++)timeline.push({type:'Point',coordinates:[i/10,0]});
+  let n=0;while(timeline.canUndo){timeline.undo();n++;}
+  expect(n).toBe(99);
+  const current=timeline.current as GeoJSON.Point;current.coordinates[0]=999;
+  expect((timeline.current as GeoJSON.Point).coordinates[0]).not.toBe(999);
+});
+test('shared topology detects one logical closing vertex and rejects multiple edits',()=>{
+  const moved=moveVertex(box,{polygon:0,ring:0,vertex:0},[.002,.003]);
+  expect(singleMovedVertex(box,moved)).toEqual({old:[0,0],next:[.002,.003]});
+  expect(singleMovedVertex(box,box)).toBeNull();
+  expect(singleMovedVertex(box,addVertex(box,{polygon:0,ring:0,vertex:1},[.01,.005]))).toBeNull();
+  expect(singleMovedVertex(box,shiftGeometry(box,.01,.01))).toBeNull();
+  expect(singleMovedVertex(box,{type:'Point',coordinates:[0,0]})).toBeNull();
+});
+test('line measurements, terminal vertices, empty paths and repeated edges',()=>{
+  const line:GeoJSON.LineString={type:'LineString',coordinates:[[0,0],[.01,0]]};
+  const point:GeoJSON.Point={type:'Point',coordinates:[0,0]};
+  expect(verticesOf(line)).toHaveLength(3);
+  expect(approximateMeasurement(line).length_m).toBeCloseTo(1111.95,1);
+  expect(approximateMeasurement(point)).toEqual({area_m2:null,perimeter_m:null,length_m:null});
+  expect(pathsOf(point)).toEqual([]);
+  expect(pathsOf({type:'MultiLineString',coordinates:[line.coordinates,line.coordinates]})).toHaveLength(2);
+  expect(snapToPaths([50,20],[[[0,0],[0,0]]],p=>p,10)).toEqual({position:[50,20],kind:'none'});
+  expect(snapToPaths([1,0],[[[0,0],[100,0]]],p=>p,10)).toEqual({position:[0,0],kind:'vertex'});
+  expect(()=>removeVertex(line,{polygon:0,ring:0,vertex:1})).toThrow('Cannot delete');
 });

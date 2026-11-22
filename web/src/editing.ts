@@ -20,6 +20,11 @@ function ringAt(geometry: GeoJSON.Geometry, path: GeometryPath): Position[] | nu
   return rings(geometry)[path.polygon]?.[path.ring] ?? null;
 }
 
+/** Closing polygon coordinate is a duplicate, never an independent vertex. */
+function editableIndex(geometry: GeoJSON.Geometry, ring: Position[], index: number): boolean {
+  return Number.isInteger(index) && index >= 0 &&
+    index < ring.length - (geometry.type === 'LineString' ? 0 : 1);
+}
 function closeRing(vertices: Position[]): void {
   if (vertices.length && (vertices[0][0] !== vertices[vertices.length - 1][0] ||
                           vertices[0][1] !== vertices[vertices.length - 1][1])) {
@@ -53,7 +58,7 @@ export function moveVertex(
 ): GeoJSON.Geometry {
   const result = copyGeometry(geometry);
   const ring = ringAt(result, path);
-  if (!ring || path.vertex < 0 || path.vertex >= ring.length) return result;
+  if (!ring || !editableIndex(result,ring,path.vertex)) return result;
   ring[path.vertex] = [...coordinate];
   if (result.type !== 'LineString' && path.vertex === 0) closeRing(ring);
   return result;
@@ -64,7 +69,7 @@ export function addVertex(
 ): GeoJSON.Geometry {
   const result = copyGeometry(geometry);
   const ring = ringAt(result, path);
-  if (!ring) return result;
+  if (!ring || !editableIndex(result,ring,path.vertex)) return result;
   ring.splice(path.vertex + 1, 0, [...coordinate]);
   return result;
 }
@@ -72,7 +77,7 @@ export function addVertex(
 export function removeVertex(geometry: GeoJSON.Geometry, path: GeometryPath): GeoJSON.Geometry {
   const result = copyGeometry(geometry);
   const ring = ringAt(result, path);
-  if (!ring) return result;
+  if (!ring || !editableIndex(result,ring,path.vertex)) return result;
   const min = result.type === 'LineString' ? 2 : 4;
   if (ring.length <= min) throw new Error('Cannot delete another vertex from this shape.');
   ring.splice(path.vertex, 1);
