@@ -123,6 +123,16 @@ export default function TerrainWorkbench(p:Props){
  const [live,setLive]=useState(false),[busy,setBusy]=useState(false),[importing,setImporting]=useState(false);
  const [error,setError]=useState(''),[info,setInfo]=useState('');
  const selectedGeometry=useMemo(()=>terrainGeometryBounds(p.geometry),[p.geometry]);
+ const selectedAreaKey=JSON.stringify([p.geometry?.type,selectedGeometry]);
+ const previousAreaKey=useRef(selectedAreaKey);
+ // A new polygon is a new download intent. Do not retain an explicit
+ // 'viewport' override from an earlier unrelated place or workflow.
+ useEffect(()=>{
+   if(previousAreaKey.current!==selectedAreaKey){
+     previousAreaKey.current=selectedAreaKey;
+     setFetchChoice('auto');
+   }
+ },[selectedAreaKey]);
  const fetchArea=useMemo(()=>terrainFetchBounds(p.viewport,p.geometry,fetchScope),[p.viewport,p.geometry,fetchScope]);
  const budget=terrainFetchBudget(fetchArea,resolution);
  const fetchKey=JSON.stringify([fetchScope,fetchArea,resolution]);
@@ -304,7 +314,7 @@ export default function TerrainWorkbench(p:Props){
      </select></label>
      {selectedGeometry&&<div className="survey-action-bar">
        <button onClick={()=>{setFetchChoice('selection');setInfo('DEM will use the selected geometry bounds, not the previous map view.');}}>Use selected area</button>
-       {p.onFitSelectedArea&&<button onClick={p.onFitSelectedArea}>Fit selected area</button>}
+       {p.onFitSelectedArea&&<button onClick={()=>{setFetchChoice('selection');p.onFitSelectedArea?.();}}>Fit selected area</button>}
      </div>}
      <small className="compact-notice" aria-label="DEM download target">
        {fetchArea?(fetchScope==='viewport'?'Current map · ':'Selected geometry · ')+describeTerrainBounds(fetchArea):'No valid download area'}

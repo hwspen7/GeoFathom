@@ -907,6 +907,8 @@ export default function App() {
                 </form>
               </details>
 
+            <div className="section-heading">Diagnostics</div>
+            <small aria-label="Build revision" className="compact-notice">Frontend revision {import.meta.env.VITE_GEOFATHOM_REVISION}</small>
           </div>
         </details>
         <button className="gis-shortcut-help" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts" onClick={()=>setShortcutHelp(true)}>?</button>

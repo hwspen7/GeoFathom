@@ -133,3 +133,9 @@ test('search centers on true selected campus outline, not unrelated broad search
  await expect(page.getByLabel('DEM fetch area')).toHaveValue('selection');
  await expect(page.getByLabel('DEM download target')).toContainText('W -82.91540°');
 });
+
+test('frontend exposes actual build revision in Settings for stale-process diagnosis',async({page})=>{
+ await page.goto('/');
+ await page.locator('.gis-settings summary').click();
+ await expect(page.getByLabel('Build revision')).toContainText(/Frontend revision [0-9a-f]{7,}/);
+});
