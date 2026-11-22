@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import maplibregl, { type GeoJSONSource, type MapMouseEvent, type StyleSpecification } from 'maplibre-gl';
 import {nearestProfileSample} from './profileLink';
+import {nearestEditableHandle} from './vertexHit';
 import {boundaryNodeVisible} from './boundaryDensity';
 import type {ProfileSample} from './TerrainCharts';
 
@@ -426,28 +427,16 @@ export default function MapCanvas({
       }
       const state = eventRef.current;
       if (!state.editing || state.selectedLocked || !state.selected) return;
-      const features = hits(event);
-      const handle = features.find(f => f.properties?.role === 'edit-vertex'
-                                   || f.properties?.role === 'edit-midpoint');
-      // MapLibre's asynchronous GeoJSON hit test can briefly miss a visible
-      // handle. Prefer the rendered feature, but fall back to a small
-      // screen-pixel radius around the actual projected geometric vertex.
-      let fallback:ReturnType<typeof verticesOf>[number]|null=null;
-      if(!handle){
-        let best=9;
-        for(const node of verticesOf(state.selected)){
-          const p=map.project(node.point as maplibregl.LngLatLike);
-          const distance=Math.hypot(event.point.x-p.x,event.point.y-p.y);
-          if(distance<best){
-            best=distance;fallback=node;
-          }
-        }
-      }
+      const features=hits(event);
+      // The GeoJSON worker may lag behind geometry updates and render two
+      // different feature roles at the same vertex. Resolve the current
+      // authoritative geometry in screen coordinates instead.
+      const handle=nearestEditableHandle(state.selected,event.point,
+        coordinate=>map.project(coordinate as maplibregl.LngLatLike),
+        state.edgeMoving?'midpoint':'both');
       if(import.meta.env.DEV&&container.current){
         container.current.setAttribute('data-dev-hit-role',
-          String(handle?.properties?.role??(fallback?'fallback-'+
-            (fallback.midpoint?'edit-midpoint':'edit-vertex'):
-            features.map(f=>f.properties?.role).join(','))));
+          handle?(handle.midpoint?'edit-midpoint':'edit-vertex'):'none');
         container.current.setAttribute('data-dev-pointer-pixel',
           JSON.stringify([event.point.x,event.point.y]));
       }
@@ -455,11 +444,11 @@ export default function MapCanvas({
       let inserted=false;
       let path: GeometryPath | null = null;
       let kind: Drag['kind'] | null = null;
-      if(state.moving&&(handle||fallback||features.some(f=>f.properties?.role==='selected'))){
+      if(state.moving&&(handle||features.some(f=>f.properties?.role==='selected'))){
         kind='feature';
-      }else if (handle || fallback) {
-        path = handle ? nodePath(handle.properties) : fallback!.path;
-        const midpoint=handle?.properties?.role==='edit-midpoint'||fallback?.midpoint;
+      }else if (handle) {
+        path=handle.path;
+        const midpoint=handle.midpoint;
         if(state.edgeMoving){
           if(!midpoint)return;
           kind='edge';
@@ -626,22 +615,21 @@ export default function MapCanvas({
       if (state.annotationMode) state.onAnnotationClick(coordinates(event));
       else if (state.traceMode) state.onTraceClick(coordinates(event));
       else if (state.drawingMode) state.onMapClick(snapAt(coordinates(event), null));
-      else if (!state.editing) {
+      else if (state.editing&&!state.moving&&!state.edgeMoving&&!state.selectedLocked&&state.selected){
+        // A click inspects a node regardless of whether the MapLibre worker
+        // supplied the expected point feature on the preceding mousedown.
+        const node=nearestEditableHandle(state.selected,event.point,
+          coordinate=>map.project(coordinate as maplibregl.LngLatLike),'vertex');
+        if(node){state.onSelectBoundaryNode?.(node.path);return;}
+      }else if (!state.editing) {
         const features=hits(event);
+        if(state.selected){
+          const node=nearestEditableHandle(state.selected,event.point,
+            coordinate=>map.project(coordinate as maplibregl.LngLatLike),'vertex');
+          if(node){state.onSelectBoundaryNode?.(node.path);return;}
+        }
         const boundary=features.find(f=>f.properties?.role==='boundary-node'||f.properties?.role==='boundary-node-selected');
         if(boundary){state.onSelectBoundaryNode?.(nodePath(boundary.properties));return;}
-        // Some MapLibre GeoJSON worker frames have not yet indexed new handles.
-        if(state.selected){
-          let nearest=7;
-          let found:GeometryPath|null=null;
-          for(const node of verticesOf(state.selected)){
-            if(node.midpoint)continue;
-            const xy=map.project(node.point as maplibregl.LngLatLike);
-            const distance=Math.hypot(event.point.x-xy.x,event.point.y-xy.y);
-            if(distance<nearest){nearest=distance;found=node.path;}
-          }
-          if(found){state.onSelectBoundaryNode?.(found);return;}
-        }
         const saved=features.find(f=>f.properties?.role==='saved');
         const retained=features.find(f=>f.properties?.role==='pinned-place');
         if(saved?.properties?.id)state.onSelectSavedFeature(String(saved.properties.id));
@@ -655,17 +643,11 @@ export default function MapCanvas({
       event.preventDefault();event.originalEvent.preventDefault();
       if(state.drawingMode){state.onFinishDrawing();return;}
       if(state.editing&&!state.edgeMoving&&!state.moving&&!state.selectedLocked&&state.selected){
-        const feature=hits(event).find(f=>f.properties?.role==='edit-vertex');
-        let path=feature?nodePath(feature.properties):null;
-        if(!path){
-          let distance=9;
-          for(const v of verticesOf(state.selected)){
-            if(v.midpoint)continue;
-            const xy=map.project(v.point as maplibregl.LngLatLike);
-            const d=Math.hypot(xy.x-event.point.x,xy.y-event.point.y);
-            if(d<distance){distance=d;path=v.path;}
-          }
-        }
+        // Deletion uses the same projected geometry resolution as selection,
+        // never a potentially stale rendered-feature hit.
+        const node=nearestEditableHandle(state.selected,event.point,
+          coordinate=>map.project(coordinate as maplibregl.LngLatLike),'vertex');
+        const path=node?.path??null;
         if(path){
           try{
             const next=removeVertex(state.selected,path);
