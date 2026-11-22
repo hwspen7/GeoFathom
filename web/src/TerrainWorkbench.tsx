@@ -1,4 +1,4 @@
-import {useEffect,useRef,useState,type ChangeEvent} from 'react';
+import {useEffect,useMemo,useRef,useState,type ChangeEvent} from 'react';
 import {Mountain} from 'lucide-react';
 import {advancedTerrain,saveFeatureBatch,analyzeTerrain,terrainProfile,listImagery,uploadImagery,fetchPublicDEM,type TerrainResult,type TerrainMesh,type TerrainOperation,type AdvancedTerrainResult,type RasterAsset,type TerrainRasterLayer} from './api';
 import {ProfilePlot,MetricBars,ElevationDistribution,AspectRose,SectionPlot,ResultPane} from './TerrainCharts';
@@ -118,8 +118,8 @@ export default function TerrainWorkbench(p:Props){
  const [verticalConfirmed,setVerticalConfirmed]=useState(false);
  const [live,setLive]=useState(false),[busy,setBusy]=useState(false),[importing,setImporting]=useState(false);
  const [error,setError]=useState(''),[info,setInfo]=useState('');
- const selectedGeometry=terrainGeometryBounds(p.geometry);
- const fetchArea=terrainFetchBounds(p.viewport,p.geometry,fetchScope);
+ const selectedGeometry=useMemo(()=>terrainGeometryBounds(p.geometry),[p.geometry]);
+ const fetchArea=useMemo(()=>terrainFetchBounds(p.viewport,p.geometry,fetchScope),[p.viewport,p.geometry,fetchScope]);
  const budget=terrainFetchBudget(fetchArea,resolution);
  const fetchKey=JSON.stringify([fetchScope,fetchArea,resolution]);
  const currentFetchKey=useRef(fetchKey);currentFetchKey.current=fetchKey;
@@ -145,7 +145,12 @@ export default function TerrainWorkbench(p:Props){
  const canRun=operation!==null&&p.connected&&verified&&!!correctShape&&!sourceMismatch&&!mapMismatch&&parametersValid;
  const inputKey=JSON.stringify([dem?.id,p.geometry,operation,interval,reference,lon,lat,height,target,endLon,endLat,maxSlope,minElevation,maxElevation,maxTri,streamCells,azimuth,altitude,sectionSpacing,sectionWidth,drape,drape?p.imageRaster?.id:null]);
  const inputsChanged=!!selected&&selected.inputKey!==inputKey;
- useEffect(()=>{setVerticalConfirmed(false);sourceIntent.current++;},[dem?.id]);
+ useEffect(()=>{
+   setVerticalConfirmed(false);sourceIntent.current++;
+   // Historical calculations remain available, but never overlay a newly selected source.
+   setRecords(old=>old.some(r=>r.visible&&r.source.id!==dem?.id)?old.map(r=>r.source.id!==dem?.id?{...r,visible:false}:r):old);
+   setSelectedRecord(null);setExpanded(false);
+ },[dem?.id]);
  // A map move to an unrelated location must not publish a stale analysis result.
  useEffect(()=>{if(mapMismatch&&analysisRequest.current)cancelAnalysis();},[mapMismatch]);
  // Map extent outline and request coordinates always derive from the same explicit target.
