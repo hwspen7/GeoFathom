@@ -202,7 +202,7 @@ with tempfile.TemporaryDirectory() as directory:
  // the selector must discover it without reloading the current workspace.
  const selector=page.getByLabel('Active project');
  await selector.focus();
- await expect(selector.locator('option').filter({hasText:'Independent terrain project'})).toHaveCount(1);
+ await expect(selector.locator('option[value="'+anotherId+'"]')).toHaveCount(1);
  await selector.selectOption(anotherId);
  await expect(selector).toHaveValue(anotherId);
  await expect(page.getByLabel('Analysis result layers')).toHaveCount(0);
