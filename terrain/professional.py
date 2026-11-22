@@ -120,7 +120,8 @@ def circular_mean_degrees(angles):
     radians=np.deg2rad(angles)
     east=float(np.sin(radians).mean());north=float(np.cos(radians).mean())
     if math.hypot(east,north)<1e-8:return None
-    return float(np.rad2deg(np.arctan2(east,north))%360)
+    direction=float(np.rad2deg(np.arctan2(east,north))%360)
+    return 0.0 if 360-direction<1e-10 else direction
 
 def _hex(value):
     return tuple(int(value[i:i+2],16) for i in (1,3,5))
