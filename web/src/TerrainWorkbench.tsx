@@ -67,7 +67,7 @@ interface TerrainRecord {
  advanced?:AdvancedTerrainResult;slope?:TerrainResult;profile?:ProfileResult;
 }
 const modes:Array<{id:Operation;title:string}>=[
- {id:'slope',title:'Slope / aspect'},{id:'profile',title:'Elevation profile'},{id:'contours',title:'Contours'},
+ {id:'slope',title:'Slope / aspect'},{id:'profile',title:'Elevation profile'},{id:'contours',title:'Contours'},{id:'dem_difference',title:'DEM difference'},
  {id:'volume',title:'Cut / fill'},{id:'visibility',title:'Viewshed'},{id:'watershed',title:'Watershed (D8)'},{id:'mesh',title:'3D terrain'},
  {id:'distribution',title:'Elevation distribution'},
  {id:'elevation',title:'Elevation map'},{id:'slope_map',title:'Slope map'},{id:'aspect_map',title:'Aspect map'},{id:'hillshade',title:'Hillshade'},
@@ -77,15 +77,15 @@ const modes:Array<{id:Operation;title:string}>=[
 ];
 const categories:Record<string,Operation[]>={
  Quick:['slope','profile','contours','volume','visibility','watershed','mesh','distribution'],
- Surface:['elevation','slope_map','aspect_map','hillshade','tri','tpi','curvature','distribution','contours'],
+ Surface:['elevation','slope_map','aspect_map','hillshade','tri','tpi','curvature','distribution','contours','dem_difference'],
  Hydrology:['flow_direction','flow_accumulation','streams','watershed'],
  Engineering:['profile','cross_sections','volume','cutfill_map','suitability','least_cost'],
 };
 const units:Record<string,string>={cut_m3:'m³',fill_m3:'m³',net_cut_m3:'m³',covered_grid_area_m2:'m²',reference_elevation_m:'m',
- contour_lines:'',contour_levels:'',product_valid_cells:'',flat_cells:'',directional_cells:'',route_cells:'',dataset_overlap_pct:'%',valid_grid_pct:'%',interval_m:'m',visible_cells:'',visible_grid_area_m2:'m²',unknown_cells:'',upstream_cells:'',upstream_grid_area_m2:'m²',maximum_fill_depth_m:'m',total_fill_depth_m:'m',conditioning_fill_volume_m3:'m³',minimum_m:'m',maximum_m:'m',mean_m:'m',median_m:'m',stddev_m:'m',p10_m:'m',p90_m:'m',relief_m:'m',circular_mean_aspect_deg:'°'};
+ contour_lines:'',contour_levels:'',product_valid_cells:'',flat_cells:'',directional_cells:'',route_cells:'',dataset_overlap_pct:'%',valid_grid_pct:'%',comparison_coverage_pct:'%',interval_m:'m',visible_cells:'',visible_grid_area_m2:'m²',unknown_cells:'',upstream_cells:'',upstream_grid_area_m2:'m²',elevation_change_mean_m:'m',elevation_change_min_m:'m',elevation_change_max_m:'m',elevation_change_rmse_m:'m',elevation_change_mae_m:'m',raised_volume_m3:'m³',lowered_volume_m3:'m³',net_elevation_volume_m3:'m³',maximum_fill_depth_m:'m',total_fill_depth_m:'m',conditioning_fill_volume_m3:'m³',minimum_m:'m',maximum_m:'m',mean_m:'m',median_m:'m',stddev_m:'m',p10_m:'m',p90_m:'m',relief_m:'m',circular_mean_aspect_deg:'°'};
 const names:Record<string,string>={cut_m3:'Cut',fill_m3:'Fill',net_cut_m3:'Net cut',covered_grid_area_m2:'Grid area',reference_elevation_m:'Reference',
  contour_lines:'Contour paths',contour_levels:'Elevation levels',dataset_overlap_pct:'DEM footprint coverage',valid_grid_pct:'Valid grid coverage',interval_m:'Interval',visible_cells:'Visible cells',visible_grid_area_m2:'Visible area',unknown_cells:'Unknown cells',
- upstream_cells:'Upstream cells',upstream_grid_area_m2:'Catchment area',conditioned_cells:'Conditioned cells',outlet_cells:'Outlets',maximum_fill_depth_m:'Max fill depth',conditioning_fill_volume_m3:'Conditioning volume',total_fill_depth_m:'Sum of fill depths',minimum_m:'Lowest elevation',maximum_m:'Highest elevation',mean_m:'Mean elevation',median_m:'Median elevation',stddev_m:'Standard deviation',p10_m:'10th percentile',p90_m:'90th percentile',relief_m:'Relief',hypsometric_integral:'Hypsometric integral',circular_mean_aspect_deg:'Mean downslope bearing',product_min:'Minimum',product_max:'Maximum',product_mean:'Mean',product_valid_cells:'Calculated raster cells'};
+ upstream_cells:'Upstream cells',upstream_grid_area_m2:'Catchment area',comparison_cells:'Matched cells',comparison_coverage_pct:'Coverage (%)',elevation_change_mean_m:'Mean elevation change',elevation_change_min_m:'Minimum change',elevation_change_max_m:'Maximum change',elevation_change_rmse_m:'RMSE',elevation_change_mae_m:'MAE',raised_volume_m3:'Raised volume',lowered_volume_m3:'Lowered volume',net_elevation_volume_m3:'Net volume',conditioned_cells:'Conditioned cells',outlet_cells:'Outlets',maximum_fill_depth_m:'Max fill depth',conditioning_fill_volume_m3:'Conditioning volume',total_fill_depth_m:'Sum of fill depths',minimum_m:'Lowest elevation',maximum_m:'Highest elevation',mean_m:'Mean elevation',median_m:'Median elevation',stddev_m:'Standard deviation',p10_m:'10th percentile',p90_m:'90th percentile',relief_m:'Relief',hypsometric_integral:'Hypsometric integral',circular_mean_aspect_deg:'Mean downslope bearing',product_min:'Minimum',product_max:'Maximum',product_mean:'Mean',product_valid_cells:'Calculated raster cells'};
 const fmt=(n:number)=>n.toLocaleString('en-US',{maximumFractionDigits:2});
 interface Props{
  projectId:string|null;geometry:GeoJSON.Geometry|null;profileGeometry?:GeoJSON.LineString|null;raster:RasterAsset|null;imageRaster?:RasterAsset|null;active:boolean;connected:boolean;
@@ -111,6 +111,7 @@ export default function TerrainWorkbench(p:Props){
  const [interval,setInterval]=useState('10'),[reference,setReference]=useState('0');
  const [lon,setLon]=useState(''),[lat,setLat]=useState(''),[height,setHeight]=useState('1.7'),[target,setTarget]=useState('0');
  const [endLon,setEndLon]=useState(''),[endLat,setEndLat]=useState('');
+ const [comparisonId,setComparisonId]=useState('');
  const [maxSlope,setMaxSlope]=useState('30'),[minElevation,setMinElevation]=useState('-12000'),[maxElevation,setMaxElevation]=useState('12000'),[maxTri,setMaxTri]=useState('100');
  const [streamCells,setStreamCells]=useState('100'),[azimuth,setAzimuth]=useState('315'),[altitude,setAltitude]=useState('45');
  const [fillSinks,setFillSinks]=useState(true),[considerCurvature,setConsiderCurvature]=useState(true),[refractionCoeff,setRefractionCoeff]=useState('0.13');
@@ -183,6 +184,7 @@ export default function TerrainWorkbench(p:Props){
  const validNumber=(value:string,min:number,max:number)=>value.trim()!==''&&Number.isFinite(Number(value))&&Number(value)>=min&&Number(value)<=max;
  const parametersValid=(operation!=='cross_sections'||validNumber(sectionSpacing,1,10000)&&validNumber(sectionWidth,1,2000))&&
    (operation!=='contours'||validNumber(interval,.01,1e6))&&
+   (operation!=='dem_difference'||!!comparisonId&&comparisonId!==dem?.id&&assets.some(a=>a.id===comparisonId&&a.bands===1))&&
    ((operation!=='volume'&&operation!=='cutfill_map')||validNumber(reference,-12000,12000))&&
    (operation!=='least_cost'||validNumber(endLon,-180,180)&&validNumber(endLat,-90,90)&&validNumber(maxSlope,.01,90))&&
    (operation!=='suitability'||validNumber(maxSlope,0,90)&&validNumber(minElevation,-12000,12000)&&validNumber(maxElevation,-12000,12000)&&Number(minElevation)<=Number(maxElevation)&&validNumber(maxTri,0,100000))&&
@@ -193,7 +195,7 @@ export default function TerrainWorkbench(p:Props){
    (operation!=='visibility'||validNumber(height,0,1000)&&validNumber(target,0,1000));
  const canRun=operation!==null&&p.connected&&verified&&!!correctShape&&!sourceMismatch&&!mapMismatch&&parametersValid;
  useEffect(()=>{latest.current.onProfileSamples?.(activeProfileSamples??[]);},[activeProfileSamples]);
- const inputKey=JSON.stringify([dem?.id,analysisGeometry,operation,interval,reference,lon,lat,height,target,endLon,endLat,maxSlope,minElevation,maxElevation,maxTri,streamCells,azimuth,altitude,sectionSpacing,sectionWidth,fillSinks,considerCurvature,refractionCoeff,drape,drape?p.imageRaster?.id:null]);
+ const inputKey=JSON.stringify([dem?.id,analysisGeometry,operation,interval,reference,lon,lat,height,target,endLon,endLat,maxSlope,minElevation,maxElevation,maxTri,streamCells,azimuth,altitude,sectionSpacing,sectionWidth,fillSinks,considerCurvature,refractionCoeff,comparisonId,drape,drape?p.imageRaster?.id:null]);
  const inputsChanged=!!selected&&selected.inputKey!==inputKey;
  useEffect(()=>{
    setVerticalConfirmed(false);sourceIntent.current++;
@@ -239,7 +241,7 @@ export default function TerrainWorkbench(p:Props){
      else record.advanced=await advancedTerrain({image_id:dem.id,geometry:analysisGeometry,operation,
        interval:Number(interval),reference:Number(reference),point:needsPoint?[Number(lon),Number(lat)]:null,
        observer_height:Number(height),target_height:Number(target),end_point:operation==='least_cost'?[Number(endLon),Number(endLat)]:null,
-       max_slope:Number(maxSlope),min_elevation:Number(minElevation),max_elevation:Number(maxElevation),max_tri:Number(maxTri),stream_cells:Number(streamCells),azimuth:Number(azimuth),altitude:Number(altitude),section_spacing:Number(sectionSpacing),section_width:Number(sectionWidth),fill_sinks:fillSinks,consider_curvature:considerCurvature,refraction_coeff:Number(refractionCoeff),texture_image_id:operation==='mesh'&&drape&&p.imageRaster&&p.imageRaster.bands>=3?p.imageRaster.id:null},controller.signal);
+       max_slope:Number(maxSlope),min_elevation:Number(minElevation),max_elevation:Number(maxElevation),max_tri:Number(maxTri),stream_cells:Number(streamCells),azimuth:Number(azimuth),altitude:Number(altitude),section_spacing:Number(sectionSpacing),section_width:Number(sectionWidth),fill_sinks:fillSinks,consider_curvature:considerCurvature,refraction_coeff:Number(refractionCoeff),comparison_image_id:operation==='dem_difference'?comparisonId:null,texture_image_id:operation==='mesh'&&drape&&p.imageRaster&&p.imageRaster.bands>=3?p.imageRaster.id:null},controller.signal);
      if(ticket!==sequence.current||controller.signal.aborted)return;
      setRecords(old=>{
        const kept=old.filter(r=>r.inputKey!==inputKey||r.saved);
@@ -405,6 +407,7 @@ export default function TerrainWorkbench(p:Props){
      </div>
      <small className="compact-notice">{correctShape?(lineOperation?'✓ Independent profile line':p.extentMode?'✓ DEM footprint':'✓ Geometry selected'):lineOperation?'Draw a profile line; the selected area stays on the map':'Select or draw a polygon'}</small>
      {operation==='contours'&&<label>Interval (m)<input aria-label="Contour interval" type="number" min=".01" step="any" value={interval} onChange={e=>setInterval(e.target.value)}/></label>}
+     {operation==='dem_difference'&&<label>Reference DEM<select aria-label="Reference comparison DEM" value={comparisonId} onChange={e=>setComparisonId(e.target.value)}><option value="">Select second DEM</option>{assets.filter(a=>a.bands===1&&a.id!==dem?.id).map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>}
      {(operation==='volume'||operation==='cutfill_map')&&<label>Reference elevation (m)<input aria-label="Reference elevation" type="number" step="any" value={reference} onChange={e=>setReference(e.target.value)}/></label>}
      {operation==='cross_sections'&&<div className="area-fields"><label>Station spacing (m)<input type="number" value={sectionSpacing} onChange={e=>setSectionSpacing(e.target.value)}/></label><label>Half-width (m)<input type="number" value={sectionWidth} onChange={e=>setSectionWidth(e.target.value)}/></label></div>}
      {operation==='mesh'&&p.imageRaster&&p.imageRaster.bands>=3&&<label className="gis-check"><input type="checkbox" checked={drape} onChange={e=>setDrape(e.target.checked)}/> Drape selected RGB imagery</label>}
@@ -512,7 +515,7 @@ export default function TerrainWorkbench(p:Props){
      {profile&&<ProfilePlot samples={profile.samples} length={profile.length_m} onHover={p.onHover} mapIndex={p.profileMapIndex??null}/>}
      {result&&<>
        <div className="terrain-metrics">{Object.entries(result.metrics).map(([k,v])=><div key={k}><span>{names[k]??k.replaceAll('_',' ')}</span><strong>{fmt(v)} {units[k]??(['product_min','product_max','product_mean'].includes(k)?(
-          ['elevation','tpi','tri','cutfill_map'].includes(result.operation)?'m':
+          ['elevation','tpi','tri','cutfill_map','dem_difference'].includes(result.operation)?'m':
           ['slope_map','aspect_map'].includes(result.operation)?'°':
           result.operation==='flow_accumulation'?'cells':''):'')}</strong></div>)}</div>
        {result.operation==='volume'&&<MetricBars label="Earthwork volume (m³)" values={[{name:'Cut',value:result.metrics.cut_m3,color:'#b87848'},{name:'Fill',value:result.metrics.fill_m3,color:'#3b82ab'}]}/>}
