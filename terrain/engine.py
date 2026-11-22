@@ -94,8 +94,8 @@ def analyze_area(path,geometry,vertical_unit="meter",cancel=None):
             w=w.intersection(Window(0,0,src.width,src.height))
         except Exception as error:
             raise RasterError("Selected region is outside DEM raster.") from error
-        if w.width<3 or w.height<3 or w.width>1024 or w.height>1024:
-            raise RasterError("Select a DEM area between 3×3 and 1024×1024 source pixels.")
+        if w.width<3 or w.height<3 or w.width>4096 or w.height>4096 or w.width*w.height>8_000_000:
+            raise RasterError("Slope analysis supports up to 8 million pixels and 4096 pixels per side. Select a coarser DEM or smaller region.")
         values=src.read(1,window=w,masked=True).astype(np.float32)
         cover=geometry_mask([polygon],out_shape=values.shape,
                             transform=src.window_transform(w),invert=True)

@@ -14,7 +14,7 @@ from .engine import _check_dem
 from .cancellation import checkpoint
 from .professional import SURFACES, surface, d8_directions, D8
 
-def _window(path, geometry, maximum):
+def _window(path, geometry, maximum, max_cells=1_000_000):
     measure_geometry(geometry)
     if geometry["type"] not in {"Polygon","MultiPolygon"}:
         raise RasterError("Draw or select a polygon study area.")
@@ -30,8 +30,8 @@ def _window(path, geometry, maximum):
                 Window(0,0,source.width,source.height))
         except Exception as error:
             raise RasterError("Study area does not overlap the DEM.") from error
-        if not(2<=w.width<=maximum and 2<=w.height<=maximum):
-            raise RasterError(f"Select a study area of 2–{maximum} pixels on each side.")
+        if not(2<=w.width<=maximum and 2<=w.height<=maximum and w.width*w.height<=max_cells):
+            raise RasterError(f"This terrain operation supports up to {max_cells:,} pixels and {maximum} pixels on each side. Choose a coarser DEM or a smaller study area.")
         affine=source.window_transform(w)
         z=source.read(1,window=w,masked=True).astype(np.float64)
         covered=geometry_mask([projected],out_shape=z.shape,transform=affine,invert=True)
@@ -249,7 +249,14 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
         return cross_sections(path,geometry,section_spacing,section_width,cancel)
     if operation not in {"contours","volume","visibility","watershed","mesh","distribution"}|SURFACES:
         raise RasterError("Unknown terrain operation.")
-    z,valid,covered,affine,crs,boundary,coverage=_window(path,geometry,512 if operation=="visibility" else 1024)
+    # Independent analysis budgets. Local surface derivatives can use large
+    # grids; visibility ray tracing and catchment/path traversals remain bounded.
+    simple_large={"elevation","slope_map","aspect_map","hillshade","tri","tpi",
+                  "curvature","cutfill_map","suitability","volume","distribution"}
+    extended=operation in simple_large
+    maximum=4096 if extended else 512 if operation=="visibility" else 1024
+    max_cells=8_000_000 if extended else 262_144 if operation=="visibility" else 1_000_000
+    z,valid,covered,affine,crs,boundary,coverage=_window(path,geometry,maximum,max_cells)
     checkpoint(cancel)
     cell=abs(affine.a*affine.e)
     result={"operation":operation,"source_crs":str(crs),"valid_cells":int(valid.sum()),
