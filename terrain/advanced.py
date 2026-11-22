@@ -13,6 +13,7 @@ from imagery.raster import RasterError
 from .engine import _check_dem
 from .cancellation import checkpoint
 from .professional import SURFACES, surface, d8_directions, D8
+from .hydrology import condition_dem
 
 def _window(path, geometry, maximum, max_cells=1_000_000):
     measure_geometry(geometry)
@@ -156,11 +157,18 @@ def _origin(point,crs,affine,valid):
         raise RasterError("Observer/outlet must fall in a valid selected DEM cell.")
     return r,c
 
-def _visibility(z,valid,origin,affine,observer_height,target_height,cancel=None):
+def _visibility(z,valid,origin,affine,observer_height,target_height,cancel=None,
+                consider_curvature=False,refraction_coeff=0.13):
     if any(not math.isfinite(v) or not 0<=v<=1000 for v in (observer_height,target_height)):
         raise RasterError("Observer and target heights must be 0–1000 meters.")
+    if consider_curvature and not (math.isfinite(refraction_coeff) and 0 <= refraction_coeff <= .5):
+        raise RasterError("Atmospheric refraction coefficient must be between 0 and 0.5.")
     if max(z.shape[0]*abs(affine.e),z.shape[1]*abs(affine.a))>10000:
-        raise RasterError("Visibility uses a local planar model limited to 10 km.")
+        raise RasterError("Visibility analysis is limited to a 10 km local extent.")
+    # Effective-Earth-radius correction lowers ray samples relative to the
+    # observer tangent; no correction is written to the source DEM.
+    curvature=(1-refraction_coeff)/(2*6371008.8) if consider_curvature else 0.0
+    dx_m,dy_m=abs(affine.a),abs(affine.e)
     r0,c0=origin
     seen=np.zeros(z.shape,bool);known=np.zeros(z.shape,bool)
     seen[r0,c0]=known[r0,c0]=True
@@ -186,9 +194,12 @@ def _visibility(z,valid,origin,affine,observer_height,target_height,cancel=None)
             rr=np.rint(r0+(rr_end[:,None]-r0)*fractions).astype(np.intp)
             cc=np.rint(c0+(cc_end[:,None]-c0)*fractions).astype(np.intp)
             complete=valid[rr,cc].all(axis=1)
-            line=eye+(z[rr_end,cc_end,None]+target_height-eye)*fractions
+            distance_sq=((rr_end-r0)*dy_m)**2+((cc_end-c0)*dx_m)**2
+            target_z=z[rr_end,cc_end]-curvature*distance_sq+target_height
+            line=eye+(target_z[:,None]-eye)*fractions
+            blockers=z[rr,cc]-curvature*distance_sq[:,None]*fractions[None,:]**2
             known[rr_end,cc_end]=complete
-            seen[rr_end,cc_end]=complete&np.all(z[rr,cc]<=line+1e-8,axis=1)
+            seen[rr_end,cc_end]=complete&np.all(blockers<=line+1e-8,axis=1)
     return seen,known
 
 def _watershed(z,valid,origin,affine,cancel=None):
@@ -242,7 +253,8 @@ def _mask_features(mask,affine,crs,name,cancel=None):
 
 def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,observer_height=1.7,target_height=0.,
                 end_point=None,max_slope=30.,min_elevation=-12000.,max_elevation=12000.,max_tri=100.,
-                stream_cells=100,azimuth=315.,altitude=45.,section_spacing=50.,section_width=20.,texture_path=None,cancel=None):
+                stream_cells=100,azimuth=315.,altitude=45.,section_spacing=50.,section_width=20.,texture_path=None,
+                fill_sinks=False,consider_curvature=False,refraction_coeff=0.13,cancel=None):
     checkpoint(cancel)
     if operation=="cross_sections":
         from .corridor import cross_sections
@@ -258,13 +270,18 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
     max_cells=8_000_000 if extended else 262_144 if operation=="visibility" else 1_000_000
     z,valid,covered,affine,crs,boundary,coverage=_window(path,geometry,maximum,max_cells)
     checkpoint(cancel)
+    hydro_ops={"flow_direction","flow_accumulation","streams","watershed"}
+    # Drainage may use a conditioned working grid; other surface products
+    # always operate on the original elevations.
+    flow_z,conditioned=(condition_dem(z,valid,cancel) if fill_sinks and operation in hydro_ops
+                        else (z,None))
     cell=abs(affine.a*affine.e)
     result={"operation":operation,"source_crs":str(crs),"valid_cells":int(valid.sum()),
         "missing_cells":int((covered&~valid).sum()),"cell_area_m2":cell,"metrics":{},"features":[]}
     if operation in SURFACES:
-        result["raster"],result["metrics"],result["features"]=surface(z,valid,affine,crs,operation,reference,point,end_point,
+        result["raster"],result["metrics"],result["features"]=surface(flow_z,valid,affine,crs,operation,reference,point,end_point,
             max_slope,min_elevation,max_elevation,max_tri,stream_cells,azimuth,altitude,_feature,_origin,cancel)
-        result["warning"]="Projected source-grid product; nodata and incomplete neighborhoods excluded. D8 terminates at sinks/flats; suitability and path costs are screening estimates, not engineering certification."
+        result["warning"]="Projected source-grid product; nodata and incomplete neighborhoods excluded. Unconditioned D8 terminates at sinks/flats; suitability and path costs are screening estimates, not engineering certification."
         if operation=="streams" and result["metrics"]["drainage_edges"]>result["metrics"]["vector_edges"]:
             result["warning"]+=" Vector edge budget exceeded; full drainage raster remains available."
     elif operation=="contours":
@@ -307,13 +324,15 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
         result["warning"]="Projected cell-center cut/fill estimate versus a horizontal reference plane; nodata excluded, not a certified earthworks survey."
     elif operation=="visibility":
         origin=_origin(point,crs,affine,valid)
-        seen,known=_visibility(z,valid,origin,affine,observer_height,target_height,cancel)
+        seen,known=_visibility(z,valid,origin,affine,observer_height,target_height,cancel,
+                               consider_curvature,refraction_coeff)
         result["features"]=_mask_features(seen,affine,crs,"Visible terrain",cancel)
         result["metrics"]={"visible_cells":int(seen.sum()),"visible_grid_area_m2":int(seen.sum())*cell,"unknown_cells":int((valid&~known).sum())}
-        result["warning"]="Local cell-center terrain visibility; no curvature, refraction, buildings or vegetation. Nodata along rays is unknown."
+        result["warning"]=("Local cell-center visibility with Earth curvature and configurable atmospheric refraction. "
+                           if consider_curvature else "Local planar cell-center visibility; curvature and refraction disabled. ")+"Buildings/vegetation depend on the input DEM/DSM; NoData along rays is unknown."
     elif operation=="watershed":
         origin=_origin(point,crs,affine,valid)
-        mask=_watershed(z,valid,origin,affine,cancel)
+        mask=_watershed(flow_z,valid,origin,affine,cancel)
         result["features"]=_mask_features(mask,affine,crs,"D8 contributing area",cancel)
         result["metrics"]={"upstream_cells":int(mask.sum()),"upstream_grid_area_m2":int(mask.sum())*cell}
         result["warning"]="D8 contributing area within the selected grid; sinks/flats terminate and external upstream areas are not included."
@@ -332,6 +351,10 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
             result["mesh"]["texture"]=mesh_texture(texture_path,affine,crs,heights.shape[0],heights.shape[1],step,cancel)
         result["metrics"]={"minimum_m":float(z[valid].min()),"maximum_m":float(z[valid].max())}
         result["warning"]="Interactive 3D elevation preview sampled from the DEM; gaps represent nodata."
+    if conditioned is not None:
+        result["metrics"].update(conditioned)
+        result["metrics"]["conditioning_fill_volume_m3"]=conditioned["total_fill_depth_m"]*cell
+        result["warning"]+=" Priority-flood depression filling and flat routing applied to a working surface; NoData boundaries are outlets."
     result["metrics"].update({"dataset_overlap_pct":coverage,
         "valid_grid_pct":100*int(valid.sum())/int(covered.sum())})
     if coverage<99.99:
