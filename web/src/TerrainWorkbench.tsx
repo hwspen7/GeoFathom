@@ -1,6 +1,6 @@
 import {useEffect,useMemo,useRef,useState,type ChangeEvent} from 'react';
 import {Mountain} from 'lucide-react';
-import {advancedTerrain,saveFeatureBatch,analyzeTerrain,terrainProfile,listImagery,uploadImagery,fetchPublicDEM,prepareDEM,type DEMProcessMode,type TerrainResult,type TerrainMesh,type TerrainOperation,type AdvancedTerrainResult,type RasterAsset,type TerrainRasterLayer} from './api';
+import {advancedTerrain,saveFeatureBatch,analyzeTerrain,terrainProfile,listImagery,uploadImagery,fetchPublicDEM,prepareDEM,type DEMProcessMode,type TerrainMesh,type TerrainOperation,type RasterAsset,type TerrainRasterLayer} from './api';
 import {ProfilePlot,MetricBars,ElevationDistribution,AspectRose,SectionPlot,ResultPane} from './TerrainCharts';
 import {GPUView} from './TerrainMeshView';
 import type {Position} from './editing';
