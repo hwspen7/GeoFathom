@@ -370,7 +370,9 @@ export default function MapCanvas({
     function hits(event: MapMouseEvent) {
       if (!map.getLayer('workspace-points')) return [];
       return map.queryRenderedFeatures(event.point, {
-        layers: ['workspace-labels','workspace-points','workspace-lines','workspace-fill'],
+        layers: ['workspace-labels-overlap','workspace-labels',
+            'workspace-line-labels-overlap','workspace-line-labels',
+            'workspace-points','workspace-lines','workspace-fill'],
       });
     }
     function nodePath(props: GeoJSON.GeoJsonProperties): GeometryPath {
@@ -890,45 +892,55 @@ export default function MapCanvas({
           'circle-stroke-width': ['case',['==',['get','role'],'boundary-node'],.8,2],
         },
       });
-      map.addLayer({
-        id:'workspace-labels',type:'symbol',source:'workspace',
-        filter:['all',['==',['get','role'],'saved'],
-          ['any',['!=',['geometry-type'],'LineString'],
-                 ['!=',['get','labelPlacement'],'line']],
-          ['!=',['get','label'],'']],
-        layout:{
-          'text-field':['get','label'],
-          'text-font':['Open Sans Regular'],
-          'symbol-sort-key':['get','labelSortKey'],
-          'text-offset':['get','labelOffset'],
-          'text-size':['coalesce',['get','labelSize'],12],
-          'text-max-width':15,
-          'text-allow-overlap':['coalesce',['get','labelOverlap'],false],
-          'text-padding':4,
-          'text-optional':true,
-        },
-        paint:{
-          'text-color':['coalesce',['get','labelColor'],'#183954'],
-          'text-halo-color':['coalesce',['get','labelHaloColor'],'#ffffff'],
-          'text-halo-width':['coalesce',['get','labelHaloWidth'],1.5],
-        },
-      });
-      map.addLayer({
-        id:'workspace-line-labels',type:'symbol',source:'workspace',
-        filter:['all',['==',['get','role'],'saved'],
-          ['==',['geometry-type'],'LineString'],
-          ['==',['get','labelPlacement'],'line'],
-          ['!=',['get','label'],'']],
-        layout:{'symbol-placement':'line','text-field':['get','label'],
-          'text-font':['Open Sans Regular'],'text-size':['get','labelSize'],
-          'text-allow-overlap':['get','labelOverlap'],
-          'symbol-sort-key':['get','labelSortKey'],
-          'text-max-angle':30,
-        },
-        paint:{'text-color':['get','labelColor'],
-          'text-halo-color':['get','labelHaloColor'],
-          'text-halo-width':['get','labelHaloWidth']},
-      });
+      // The MapLibre style specification does not permit data expressions
+      // for text-allow-overlap. Split the same source into two symbol layers
+      // so per-feature overlap preferences remain effective rather than
+      // producing a silent style-validation error.
+      for(const allowOverlap of [false,true]){
+        map.addLayer({
+          id:allowOverlap?'workspace-labels-overlap':'workspace-labels',
+          type:'symbol',source:'workspace',
+          filter:['all',['==',['get','role'],'saved'],
+            ['any',['!=',['geometry-type'],'LineString'],
+                   ['!=',['get','labelPlacement'],'line']],
+            ['!=',['get','label'],''],
+            ['==',['coalesce',['get','labelOverlap'],false],allowOverlap]],
+          layout:{
+            'text-field':['get','label'],
+            'text-font':['Open Sans Regular'],
+            'symbol-sort-key':['get','labelSortKey'],
+            'text-offset':['get','labelOffset'],
+            'text-size':['coalesce',['get','labelSize'],12],
+            'text-max-width':15,
+            'text-allow-overlap':allowOverlap,
+            'text-padding':4,
+            'text-optional':true,
+          },
+          paint:{
+            'text-color':['coalesce',['get','labelColor'],'#183954'],
+            'text-halo-color':['coalesce',['get','labelHaloColor'],'#ffffff'],
+            'text-halo-width':['coalesce',['get','labelHaloWidth'],1.5],
+          },
+        });
+        map.addLayer({
+          id:allowOverlap?'workspace-line-labels-overlap':'workspace-line-labels',
+          type:'symbol',source:'workspace',
+          filter:['all',['==',['get','role'],'saved'],
+            ['==',['geometry-type'],'LineString'],
+            ['==',['get','labelPlacement'],'line'],
+            ['!=',['get','label'],''],
+            ['==',['coalesce',['get','labelOverlap'],false],allowOverlap]],
+          layout:{'symbol-placement':'line','text-field':['get','label'],
+            'text-font':['Open Sans Regular'],'text-size':['get','labelSize'],
+            'text-allow-overlap':allowOverlap,
+            'symbol-sort-key':['get','labelSortKey'],
+            'text-max-angle':30,
+          },
+          paint:{'text-color':['get','labelColor'],
+            'text-halo-color':['get','labelHaloColor'],
+            'text-halo-width':['get','labelHaloWidth']},
+        });
+      }
       setReady(true);
       bounds();
     });
