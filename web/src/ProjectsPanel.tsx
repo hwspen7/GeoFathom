@@ -97,6 +97,19 @@ export default function ProjectsPanel({
     return () => { cancelled = true; };
   }, [chooseProject,listRetry]);
 
+  // Projects may also be created by scripts or other connected clients.
+  // Refresh on selector focus without replacing the current selection,
+  // its workspace, or a newer mutation response.
+  const refreshProjectList = useCallback(async () => {
+    try {
+      const list=await getProjects();
+      setProjects(list);
+      setError('');
+    } catch (cause) {
+      setError('Cannot refresh project list. '+(cause instanceof Error?cause.message:String(cause)));
+    }
+  }, []);
+
   const reload = useCallback(async (projectId: string): Promise<GeoWorkspace> => {
     // Old mutation callbacks may still request a refresh; never publish them.
     const current = selection.current === projectId;
@@ -384,6 +397,7 @@ export default function ProjectsPanel({
       {projects.length > 0 && (
         <>
           <select aria-label="Active project" value={selected} disabled={busy}
+            onFocus={()=>{void refreshProjectList();}}
             onChange={event => chooseProject(event.target.value)}>
             <option value="">Local workspace</option>
             {projects.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}
