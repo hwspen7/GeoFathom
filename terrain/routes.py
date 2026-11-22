@@ -2,7 +2,7 @@
 
 import asyncio
 from threading import Event
-from fastapi import APIRouter,HTTPException,Request
+from fastapi import APIRouter,HTTPException,Request,Header
 from pydantic import BaseModel,Field
 from starlette.concurrency import run_in_threadpool
 
@@ -63,6 +63,29 @@ async def profile(request:Request,body:TerrainInput)->dict:
     try:
         return await run_cancelable(request,elevation_profile,raster(body.image_id),
                                        body.geometry,body.samples)
+    except (GeometryError,RasterError,ValueError) as error:
+        raise HTTPException(status_code=422,detail=str(error)) from error
+
+
+class DEMPrepareInput(BaseModel):
+    image_ids:list[str]=Field(min_length=1,max_length=4)
+    mode:str
+    geometry:dict|None=None
+    resolution_m:float|None=Field(default=None,ge=1,le=1000)
+    sampling:str="bilinear"
+
+
+@router.post("/dem/prepare",status_code=201)
+async def prepare_dem_asset(request:Request,body:DEMPrepareInput,
+                            token:str|None=Header(default=None,alias="X-GeoFathom-Admin-Token")):
+    """Prepare a locally stored elevation product with the import permission."""
+    from imagery.routes import require_raster_import
+    from .dem_processing import prepare_dem
+    require_raster_import(request,token)
+    try:
+        paths=[raster(identifier) for identifier in body.image_ids]
+        return await run_cancelable(request,prepare_dem,paths,body.mode,
+                                    body.geometry,body.resolution_m,body.sampling)
     except (GeometryError,RasterError,ValueError) as error:
         raise HTTPException(status_code=422,detail=str(error)) from error
 
