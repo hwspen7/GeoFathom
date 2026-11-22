@@ -14,7 +14,7 @@ import {loadDisplay,saveDisplay,areaText,distanceText,type AreaUnit} from './dis
 import {BASEMAPS,customBasemap,defaultCustom,preferredSatellite,mapTilerImagery,type BasemapId,type CustomBasemap} from './basemaps';
 import {ScratchHistory} from './scratchHistory';
 import {addRaster,changeRaster,selectDEM,hideDEMs,type RasterLayerView} from './rasterLayers';
-import {terrainContainsCenter} from './terrainSource';
+import {terrainContainsCenter,terrainGeometryBounds} from './terrainSource';
 import {PIN_LIMIT,readPinnedPlaces,writePinnedPlaces,pinPlace,unpinPlace,visibleGeometry} from './pinnedPlaces';
 import {localMeasurement,localShape,readScratch,writeScratch,SCRATCH_LIMIT,OFFLINE_METHOD,type ScratchFeature} from './scratch';
 import SurveyTools from './SurveyTools';
@@ -1613,6 +1613,14 @@ export default function App() {
                 setSelectionBoxMode(false);setLabelMoveMode(false);setPendingAnnotation(null);
               }}
               onFetchTarget={setTerrainFetchTarget}
+              onFitSelectedArea={()=>{
+                const g=geometry;
+                if(!g)return;
+                const bounds=terrainGeometryBounds(g);
+                if(bounds){const [w,s,e,n]=bounds;
+                  setFocus({longitude:(w+e)/2,latitude:(s+n)/2,bbox:bounds,key:Date.now()});
+                }
+              }}
               onHover={setTerrainHover}
               onPreview={value=>{if(projectCurrent())setTerrainFeatures(value);}}
               onRasterPreview={value=>{if(projectCurrent())setTerrainRasters(value);}}

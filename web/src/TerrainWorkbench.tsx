@@ -5,7 +5,7 @@ import {ProfilePlot,MetricBars,ElevationDistribution,AspectRose,SectionPlot,Resu
 import {GPUView} from './TerrainMeshView';
 import type {Position} from './editing';
 import {measurementAnchor} from './editing';
-import {terrainFetchBounds,terrainGeometryBounds,terrainFetchBudget,terrainBoundsOverlap,terrainRasterMatchesTarget,describeTerrainBounds,type FetchScope,type TerrainBBox} from './terrainSource';
+import {terrainFetchBounds,terrainGeometryBounds,terrainFetchBudget,terrainBoundsOverlap,terrainRasterMatchesTarget,describeTerrainBounds,preferredTerrainFetchScope,type FetchScope,type TerrainBBox} from './terrainSource';
 
 function MeshView({mesh}:{mesh:TerrainMesh}){
   const canvas=useRef<HTMLCanvasElement>(null);
@@ -90,6 +90,7 @@ interface Props{
  localImport:boolean;refreshToken:number;origin:Position|null;picking:boolean;
  onSelectRaster:(r:RasterAsset|null)=>void;onDraw:(line:boolean)=>void;onClearProfile?:()=>void;onUseExtent:()=>void;onPick:()=>void;
  onFetchTarget?:(bbox:TerrainBBox|null)=>void;
+ onFitSelectedArea?:()=>void;
  extentMode:boolean;onUseSelection:()=>void;
  onHover:(point:Position|null)=>void;onPreview:(g:GeoJSON.Feature[])=>void;onRasterPreview?:(layers:TerrainRasterLayer[])=>void;onSaved:()=>void;
 }
@@ -99,7 +100,10 @@ export default function TerrainWorkbench(p:Props){
  const [category,setCategory]=useState('Quick');
  const [assets,setAssets]=useState<RasterAsset[]>([]),[token,setToken]=useState('');
  const [resolution,setResolution]=useState<1|3|10|30|90>(30),[fetching,setFetching]=useState(false),[sourceInfo,setSourceInfo]=useState('');
- const [fetchScope,setFetchScope]=useState<FetchScope>('viewport');
+ // The displayed fetch choice tracks a genuine selected area automatically.
+ // An explicit dropdown choice takes precedence until the user changes it again.
+ const [fetchChoice,setFetchChoice]=useState<'auto'|FetchScope>('auto');
+ const fetchScope=fetchChoice==='auto'?preferredTerrainFetchScope(p.geometry):fetchChoice;
  const [interval,setInterval]=useState('10'),[reference,setReference]=useState('0');
  const [lon,setLon]=useState(''),[lat,setLat]=useState(''),[height,setHeight]=useState('1.7'),[target,setTarget]=useState('0');
  const [endLon,setEndLon]=useState(''),[endLat,setEndLat]=useState('');
@@ -295,9 +299,13 @@ export default function TerrainWorkbench(p:Props){
      {!p.localImport&&<details className="access-settings"><summary>Import access</summary><input type="password" aria-label="DEM import token" value={token} onChange={e=>setToken(e.target.value)}/></details>}
      <label className="raster-upload" title="Single-band DEM GeoTIFF, projected in meters, with meter elevations"><Mountain size={14}/> {importing?'Importing…':'Import DEM'}
        <input type="file" aria-label="Import DEM" accept=".tif,.tiff" disabled={importing||fetching||!p.connected} onChange={e=>void importDEM(e)}/></label>
-     <label>Download area <select aria-label="DEM fetch area" value={fetchScope} onChange={e=>{setFetchScope(e.target.value as FetchScope);setInfo('');}}>
+     <label>Download area <select aria-label="DEM fetch area" value={fetchScope} onChange={e=>{setFetchChoice(e.target.value as FetchScope);setInfo('');}}>
        <option value="viewport">Current map view</option><option value="selection" disabled={!selectedGeometry}>Selected geometry</option>
      </select></label>
+     {selectedGeometry&&<div className="survey-action-bar">
+       <button onClick={()=>{setFetchChoice('selection');setInfo('DEM will use the selected geometry bounds, not the previous map view.');}}>Use selected area</button>
+       {p.onFitSelectedArea&&<button onClick={p.onFitSelectedArea}>Fit selected area</button>}
+     </div>}
      <small className="compact-notice" aria-label="DEM download target">
        {fetchArea?(fetchScope==='viewport'?'Current map · ':'Selected geometry · ')+describeTerrainBounds(fetchArea):'No valid download area'}
        {budget?' · ~'+budget.approximateCells.toLocaleString()+' grid cells':''}
