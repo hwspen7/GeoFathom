@@ -268,6 +268,9 @@ type Drag = {
   path: GeometryPath | null;
   kind: 'vertex' | 'feature' | 'edge';
   inserted?:boolean;
+  /** Map gestures are edits only after meaningful pointer travel. */
+  startPixel: Position;
+  moved: boolean;
 };
 
 export default function MapCanvas({
@@ -473,6 +476,7 @@ export default function MapCanvas({
       if(import.meta.env.DEV&&container.current)
         container.current.setAttribute('data-dev-drag-began',kind);
       drag.current = { original: first, last: first, path, kind,inserted,
+        startPixel:[event.point.x,event.point.y],moved:false,
         start: coordinates(event),end:coordinates(event) };
       map.dragPan.disable();
       map.getCanvas().style.cursor = 'grabbing';
@@ -540,6 +544,15 @@ export default function MapCanvas({
         if(eventRef.current.drawingMode&&Date.now()-cursorTick.current>=33){cursorTick.current=Date.now();setCursor(snapAt(coordinates(event),null));}
         return;
       }
+      // Selecting a vertex is not a geometry edit. Ignore sub-4px pointer
+      // jitter and rounding from project/unproject until drag is intentional.
+      // A requested midpoint insertion remains an edit without movement.
+      if(!current.moved&&!current.inserted){
+        const dx=event.point.x-current.startPixel[0];
+        const dy=event.point.y-current.startPixel[1];
+        if(Math.hypot(dx,dy)<4)return;
+      }
+      current.moved=true;
       const coordinate = coordinates(event);
       current.end=coordinate;
       let changed: GeoJSON.Geometry;
@@ -603,9 +616,9 @@ export default function MapCanvas({
           });
         }
       }else{
-        // Inspecting an existing vertex must never create a new local feature.
-        // An explicitly inserted midpoint is a real edit even without drag.
-        if(current.inserted||JSON.stringify(current.last)!==JSON.stringify(current.original))
+        // An existing vertex clicked without a deliberate drag is inspection;
+        // only a moved node or explicit midpoint insertion mutates geometry.
+        if(current.inserted||current.moved)
           eventRef.current.onGeometryCommit(current.last);
       }
     }
