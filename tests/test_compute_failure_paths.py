@@ -177,3 +177,16 @@ def test_trace_validation_and_sam_geometry(monkeypatch,tmp_path):
         trace.trace_raster(tmp_path/"scene.tif","id",10,20,"sam2")
     with pytest.raises(raster.RasterError,match="four"):
         trace._vectorize(np.eye(2,dtype=np.uint8),affine,"EPSG:4326")
+
+
+def test_zero_tolerance_exact_vertex_and_native_fallback_parity(monkeypatch):
+    path=[[0,0],[.01,0],[.01,.01],[0,.01],[0,0]]
+    cases=[([0,0],0),([.000001,.000001],10),([.005,-.00001],10),([1,1],10)]
+    native=[editing.snap(click,[path],tolerance) for click,tolerance in cases]
+    monkeypatch.setattr(editing,"_native",lambda:None)
+    for (click,tolerance),expected in zip(cases,native):
+        actual=editing.snap(click,[path],tolerance)
+        assert actual["kind"]==expected["kind"]
+        assert actual["coordinate"]==pytest.approx(expected["coordinate"],abs=1e-8)
+        assert actual["distance_m"]==pytest.approx(expected["distance_m"],abs=1e-7) if expected["distance_m"] is not None else actual["distance_m"] is None
+    assert editing.snap([0,0],[path],0)["snapped"]

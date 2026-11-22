@@ -119,23 +119,30 @@ def snap(coordinate_pair, paths, tolerance_m):
             result=(ctypes.c_double*3)()
             kind=fn(arr,len(xy),int(closed),0,0,tolerance_m,result)
             if kind<0: raise GeometryError("Native snapping failed.")
-            if kind and result[2]<best_distance:
+            if kind and (best is None or result[2]<best_distance):
                 best_distance=float(result[2])
                 best=(bw.transform(result[0],result[1]),"vertex" if kind==1 else "edge")
                 mode="cpp"
         else:
+            # Match the native per-path contract: prefer an in-tolerance
+            # vertex, and only consider an edge when no vertex qualifies.
+            candidate=None
+            candidate_distance=tolerance_m
             for pt in xy:
                 dist=math.hypot(*pt)
-                if dist<best_distance:
-                    best_distance=dist
-                    best=(bw.transform(*pt),"vertex")
-            if len(xy)>1:
+                if dist<=candidate_distance:
+                    candidate_distance=dist
+                    candidate=(bw.transform(*pt),"vertex")
+            if candidate is None and len(xy)>1:
                 line=LineString(xy + xy[:1] if closed else xy)
                 nearest=line.interpolate(line.project(Point(0,0)))
                 dist=math.hypot(nearest.x,nearest.y)
-                if dist<best_distance:
-                    best_distance=dist
-                    best=(bw.transform(nearest.x,nearest.y),"edge")
+                if dist*dist<tolerance_m*tolerance_m-1e-12:
+                    candidate_distance=dist
+                    candidate=(bw.transform(nearest.x,nearest.y),"edge")
+            if candidate is not None and (best is None or candidate_distance<best_distance):
+                best_distance=candidate_distance
+                best=candidate
     return {"coordinate":list(best[0] if best else origin),
             "snapped":best is not None,"kind":best[1] if best else "none",
             "distance_m":best_distance if best else None,"engine":mode}

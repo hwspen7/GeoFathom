@@ -6,6 +6,7 @@ import {createInstrumenter} from 'istanbul-lib-instrument';
 import {relative,resolve,sep} from 'node:path';
 
 export const root=resolve(import.meta.dirname,'..');
+export const coverageEnabled=process.env.GEOFATHOM_WEB_COVERAGE==='1';
 export function sourceName(file){
   const name=relative(root,file.split('?')[0]).split(sep).join('/');
   if(!/^src\/.+\.(ts|tsx)$/.test(name)||/\.(test|spec|d)\.(ts|tsx)$/.test(name))return null;
