@@ -590,3 +590,6 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .gis-settings-panel select{padding:4px;border:1px solid #c9d3da;background:white}
 .gis-settings-panel .professional-form{display:flex;flex-direction:column;gap:6px}
 .raster-remove{display:block;margin-top:6px;width:100%;border:1px solid #c9d3da;background:#fff;padding:5px;color:#304656;font-size:11px}
+
+.desktop-gis .map-edge-value,.desktop-gis .map-dimension-total{color:var(--dimension-text,#fff);-webkit-text-stroke:0;text-shadow:0 1px 2px var(--dimension-halo,#000),1px 0 1px var(--dimension-halo,#000),-1px 0 1px var(--dimension-halo,#000),0 -1px 1px var(--dimension-halo,#000)}
+.gis-settings-panel>label{display:flex;align-items:center;justify-content:space-between;margin:5px 0;gap:6px;font-size:11px}

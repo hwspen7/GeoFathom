@@ -22,7 +22,22 @@ export function customBasemap(url:string,attribution:string,maxzoom:number):Cust
   return {url:template,attribution:credit,maxzoom};
 }
 export function defaultCustom():CustomBasemap|null{
-  try{return import.meta.env.VITE_SATELLITE_TILES_URL?customBasemap(import.meta.env.VITE_SATELLITE_TILES_URL,
+  try{if(import.meta.env.VITE_MAPTILER_KEY)return mapTilerImagery(import.meta.env.VITE_MAPTILER_KEY);
+ return import.meta.env.VITE_SATELLITE_TILES_URL?customBasemap(import.meta.env.VITE_SATELLITE_TILES_URL,
     import.meta.env.VITE_SATELLITE_ATTRIBUTION||'Configured imagery provider',20):null;}
   catch{return null;}
+}
+
+// The global Sentinel composite is a fallback, not building-scale imagery.
+export function preferredSatellite(viewport:[number,number,number,number]|null,licensed:boolean):BasemapId{
+ if(licensed)return 'custom';
+ if(viewport){
+  const [w,s,e,n]=viewport,lon=(w+e)/2,lat=(s+n)/2;
+  if(lon>=-125&&lon<=-66&&lat>=24&&lat<=50)return 'satellite';
+ }
+ return 'sentinel';
+}
+export function mapTilerImagery(key:string):CustomBasemap{
+ if(!key.trim())throw Error('Enter a restricted MapTiler browser API key.');
+ return customBasemap('https://api.maptiler.com/tiles/satellite-v2/{z}/{x}/{y}.jpg?key='+encodeURIComponent(key.trim()),'© MapTiler, imagery providers',22);
 }

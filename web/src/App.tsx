@@ -10,7 +10,8 @@ import {
   type Capabilities, type Measurement, type Place,
 } from './api';
 import MapCanvas, { type FocusPoint } from './MapCanvas';
-import {BASEMAPS,customBasemap,defaultCustom,type BasemapId,type CustomBasemap} from './basemaps';
+import {loadDisplay,saveDisplay,areaText,distanceText,type AreaUnit} from './displaySettings';
+import {BASEMAPS,customBasemap,defaultCustom,preferredSatellite,mapTilerImagery,type BasemapId,type CustomBasemap} from './basemaps';
 import {ScratchHistory} from './scratchHistory';
 import {localMeasurement,localShape,readScratch,writeScratch,SCRATCH_LIMIT,OFFLINE_METHOD,type ScratchFeature} from './scratch';
 import SurveyTools from './SurveyTools';
@@ -89,7 +90,11 @@ export default function App() {
   const [terrainPicking,setTerrainPicking]=useState(false);
   const [terrainOrigin,setTerrainOrigin]=useState<Position|null>(null);
   const [terrainHover,setTerrainHover]=useState<Position|null>(null);
-  const [showMeasurements,setShowMeasurements]=useState(true);
+  const [display,setDisplay]=useState(loadDisplay);
+  const showMeasurements=display.dimensions;
+  const setShowMeasurements=(value:boolean)=>setDisplay(old=>({...old,dimensions:value}));
+  const [mapTilerKey,setMapTilerKey]=useState('');
+  useEffect(()=>saveDisplay(display),[display]);
   const [rasterVisible,setRasterVisible]=useState(true);
   const [rasterOpacity,setRasterOpacity]=useState(.88);
   const [imageLayer, setImageLayer] = useState<RasterAsset | null>(null);
@@ -130,7 +135,8 @@ export default function App() {
     preview:SharedTopologyPreview;old:[number,number];next:[number,number];
   }|null>(null);
   const [preview, setPreview] = useState<ReturnType<typeof approximateMeasurement> | null>(null);
-  const [areaUnit, setAreaUnit] = useState<'m2' | 'ha' | 'km2' | 'mu'>('m2');
+  const areaUnit=display.area;
+  const setAreaUnit=(value:AreaUnit)=>setDisplay(old=>({...old,area:value}));
   const timeline = useRef(new GeometryTimeline());
   const lastValid = useRef<GeoJSON.Geometry | null>(null);
   // Geometry responses must belong to the latest editing intent, not
@@ -754,9 +760,18 @@ export default function App() {
             <div className="section-heading">Display</div>
               <label className="gis-check"><input aria-label="Map dimensions" type="checkbox" checked={showMeasurements} onChange={e=>setShowMeasurements(e.target.checked)}/> Map dimensions</label>
             <label>Area unit <select aria-label="Default area unit" value={areaUnit} onChange={event=>setAreaUnit(event.target.value as typeof areaUnit)}>
-              <option value="m2">m²</option><option value="ha">ha</option><option value="km2">km²</option><option value="mu">亩</option>
+              <option value="auto">Automatic</option><option value="m2">m²</option><option value="ha">ha</option><option value="km2">km²</option><option value="mu">亩</option>
             </select></label>
+            <label>Distance <select aria-label="Distance unit" value={display.distance} onChange={e=>setDisplay(old=>({...old,distance:e.target.value as typeof display.distance}))}>
+              <option value="auto">Automatic</option><option value="m">m</option><option value="km">km</option></select></label>
+            <label>Map contrast <select aria-label="Map contrast" value={display.contrast} onChange={e=>setDisplay(old=>({...old,contrast:e.target.value as typeof display.contrast}))}>
+              <option value="auto">Automatic</option><option value="light">Light lines</option><option value="dark">Dark lines</option></select></label>
+            <label>Selection fill <input aria-label="Selection fill opacity" type="range" min="0" max=".7" step=".02" value={display.fill} onChange={e=>setDisplay(old=>({...old,fill:Number(e.target.value)}))}/></label>
             <div className="section-heading">Imagery sources</div>
+            <form className="professional-form" onSubmit={event=>{event.preventDefault();try{setCustom(mapTilerImagery(mapTilerKey));setBasemap('custom');setTileError('');setMapTilerKey('');}catch(e){setTileError(String(e));}}}>
+              <input type="password" autoComplete="off" aria-label="MapTiler browser API key" placeholder="MapTiler key (licensed)" value={mapTilerKey} onChange={e=>setMapTilerKey(e.target.value)}/>
+              <button disabled={!mapTilerKey.trim()}>Connect global HD imagery</button>
+            </form>
               <details className="custom-basemap">
                 <summary>Connect high-resolution imagery</summary>
                 <form className="professional-form" onSubmit={event=>{
@@ -788,7 +803,7 @@ export default function App() {
         <div className="gis-survey-commands" ref={setToolbarTarget}/>
         <div className="gis-quick-basemap" aria-label="Quick basemap tools">
           <button aria-pressed={basemap==='street'} onClick={()=>setBasemap('street')}>Street</button>
-          <button aria-pressed={basemap==='sentinel'||basemap==='custom'} onClick={()=>setBasemap(custom?'custom':'sentinel')}>Satellite</button>
+          <button aria-pressed={['sentinel','satellite','custom'].includes(basemap)} onClick={()=>setBasemap(preferredSatellite(viewport,Boolean(custom)))}>Satellite</button>
           <button aria-pressed={basemap==='topo'||basemap==='relief'} onClick={()=>setBasemap('topo')}>Terrain (US)</button>
         </div>
       </div>
@@ -992,7 +1007,7 @@ export default function App() {
               if (feature) openStoredFeature(feature);
             }}
             focus={focus} basemap={basemap} customBasemap={custom} onBasemapStatus={setMapStatus}
-            measurement={preview?null:measurement} showMeasurements={showMeasurements}
+            measurement={preview?null:measurement} showMeasurements={showMeasurements} display={display}
             selectedFeatureId={selectedFeatureId??scratchId}
             onFinishDrawing={()=>{void finishDrawing();}}
             imageLayer={rasterVisible?imageLayer:null} rasterOpacity={rasterOpacity}
@@ -1160,7 +1175,7 @@ export default function App() {
                       ? number(measurement.area_km2, 4) + ' km²'
                       : measurement.length_m !== null ? number(measurement.length_m / 1000, 3) + ' km' : 'Location only'}</strong>
                   </div>
-                  {measurement.perimeter_m !== null && <div className="metric secondary"><span>Perimeter</span><strong>{number(measurement.perimeter_m / 1000, 3)} km</strong></div>}
+                  {measurement.perimeter_m !== null && <div className="metric secondary"><span>Perimeter</span><strong>{distanceText(measurement.perimeter_m,display.distance)}</strong></div>}
                   {measurement.area_m2 !== null && <div className="metric secondary"><span>Square meters</span><strong>{number(measurement.area_m2)} m²</strong></div>}
                   <p className="analysis-footnote">{measurement.method}</p>
                   {measurement.method===OFFLINE_METHOD&&<button onClick={()=>{if(geometry)void commitGeometry(geometry,'Exact measurement updated.');}}>Validate exact measurement</button>}
@@ -1184,13 +1199,12 @@ export default function App() {
                   <label htmlFor="area-unit">Area unit</label>
                   <select id="area-unit" value={areaUnit}
                     onChange={event => setAreaUnit(event.target.value as typeof areaUnit)}>
-                    <option value="m2">Square meters</option>
+                    <option value="auto">Automatic</option><option value="m2">Square meters</option>
                     <option value="ha">Hectares</option>
                     <option value="km2">Square kilometers</option>
                     <option value="mu">Mu (亩)</option>
                   </select>
-                  <strong>{number((measurement.area_m2 ?? 0) /
-                    (areaUnit === 'ha' ? 10000 : areaUnit === 'km2' ? 1000000 : areaUnit === 'mu' ? 2000 / 3 : 1),4)}</strong>
+                  <strong>{areaText(measurement.area_m2??0,areaUnit)}</strong>
                 </div>
               )}
               {geometry && ['Polygon','MultiPolygon','LineString','MultiLineString'].includes(geometry.type) && (

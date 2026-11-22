@@ -5,6 +5,7 @@ import { rasterPreviewUrl, protectedRasterPreview, type RasterAsset } from './ap
 import { PixelSnapIndex } from './spatialIndex';
 import {BASEMAPS,type BasemapId,type CustomBasemap} from './basemaps';
 import {OFFLINE_METHOD} from './scratch';
+import {areaText,distanceText,mapPalette,type DisplaySettings} from './displaySettings';
 import {drawingPreview,measurementAnchor,approximateMeasurement,geodesicDrag as edgeDistance} from './editing';
 import { featureLabel } from './labels';
 import type { ExternalTile } from './DataServicesPanel';
@@ -45,6 +46,7 @@ interface Props {
   onBasemapStatus:(status:string)=>void;
   measurement:Measurement|null;
   showMeasurements:boolean;
+  display:DisplaySettings;
   selectedFeatureId:string|null;
   rasterOpacity:number;
   onMapClick: (position: Position) => void;
@@ -232,7 +234,7 @@ type Drag = {
 };
 
 export default function MapCanvas({
-  selected,drawingMode,vertices,focus,basemap,customBasemap,onBasemapStatus,measurement,showMeasurements,selectedFeatureId,rasterOpacity,onMapClick,onFinishDrawing,
+  selected,drawingMode,vertices,focus,basemap,customBasemap,onBasemapStatus,measurement,showMeasurements,display,selectedFeatureId,rasterOpacity,onMapClick,onFinishDrawing,
   terrainPicking,terrainMarker,terrainResults,onTerrainPick,onContextMenu,onEditingError,
   onViewportChange, discovered, imageLayer, traceMode, onTraceClick,
   editing, moving,edgeMoving, snapping, selectedLocked, layerFeatures,
@@ -965,6 +967,17 @@ export default function MapCanvas({
     };
   }, [imageLayer, ready]);
   useEffect(()=>{const map=mapRef.current;if(map?.getLayer('imported-imagery'))map.setPaintProperty('imported-imagery','raster-opacity',rasterOpacity);},[rasterOpacity,imageLayer,ready]);
+  useEffect(()=>{
+    const map=mapRef.current;if(!ready||!map)return;
+    const palette=mapPalette(basemap,display.contrast);
+    const color:maplibregl.ExpressionSpecification=['match',['get','role'],'selected',palette.selected,'drawing',palette.draw,['coalesce',['get','color'],'#2563eb']];
+    map.setPaintProperty('workspace-lines','line-color',color);
+    map.setPaintProperty('workspace-fill','fill-color',color);
+    map.setPaintProperty('workspace-fill','fill-opacity',['match',['get','role'],'selected',display.fill,'drawing',display.fill,['coalesce',['get','fillOpacity'],.17]]);
+    map.setPaintProperty('terrain-result-lines','line-color',['case',['has','elevation_m'],['case',['==',['get','major'],true],palette.major,palette.contour],['==',['get','name'],'Visible terrain'],'#21bb72','#1ea8df']);
+    map.setPaintProperty('terrain-result-labels','text-color',palette.text);
+    map.setPaintProperty('terrain-result-labels','text-halo-color',palette.halo);
+  },[ready,basemap,display]);
   useEffect(()=>{setCursor(null);},[drawingMode]);
 
   useEffect(() => {
@@ -994,7 +1007,8 @@ export default function MapCanvas({
     const exact=!draft&&measurement?.method!==OFFLINE_METHOD?measurement:null;
     const totals=exact??approximateMeasurement(g);
     const prefix=exact?'':'~ ';
-    const format=(n:number)=>n.toLocaleString('en-US',{maximumFractionDigits:2});
+    const palette=mapPalette(basemap,display.contrast);
+    overlay.style.setProperty('--dimension-text',palette.text);overlay.style.setProperty('--dimension-halo',palette.halo);
     const labels:Array<{a:Position;b?:Position;node:HTMLDivElement}>=[];
     function label(text:string,a:Position,b?:Position){
       const node=document.createElement('div');
@@ -1003,8 +1017,8 @@ export default function MapCanvas({
     }
     const anchor=measurementAnchor(g);
     if(anchor){
-      if(totals.area_m2!==null)label(prefix+format(totals.area_m2)+' m²\n'+prefix+format(totals.perimeter_m??0)+' m perimeter',anchor);
-      else if(totals.length_m!==null)label(prefix+format(totals.length_m)+' m total',anchor);
+      if(totals.area_m2!==null)label(prefix+areaText(totals.area_m2,display.area)+'\n'+prefix+distanceText(totals.perimeter_m??0,display.distance)+' perimeter',anchor);
+      else if(totals.length_m!==null)label(prefix+distanceText(totals.length_m,display.distance)+' total',anchor);
       else if(g.type==='Point')label(anchor[0].toFixed(6)+'°, '+anchor[1].toFixed(6)+'°',anchor);
     }
     let index=0;
@@ -1012,7 +1026,7 @@ export default function MapCanvas({
       for(let i=1;i<path.length&&index<48;i++,index++){
         const a=path[i-1],b=path[i];
         const value=exact?.edge_lengths_m?.[index];
-        label((value===undefined?'~ ':'')+format(value??edgeDistance(a,b).distance_m)+' m',a,b);
+        label((value===undefined?'~ ':'')+distanceText(value??edgeDistance(a,b).distance_m,display.distance),a,b);
       }
       if(index>=48)break;
     }
@@ -1030,7 +1044,7 @@ export default function MapCanvas({
     };
     layout();map.on('render',layout);
     return ()=>{map.off('render',layout);overlay.replaceChildren();};
-  },[ready,selected,drawingMode,vertices,cursor,measurement,showMeasurements]);
+  },[ready,selected,drawingMode,vertices,cursor,measurement,showMeasurements,display,basemap]);
 
   return <>
     <div aria-label="Interactive geospatial map" data-label-layer-ready={ready ? "true" : "false"} className="map-canvas" ref={container}/>
