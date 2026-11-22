@@ -76,8 +76,13 @@ def _read_result(receive):
         message=json.loads(receive.recv_bytes(maxlength=5_000_100))
     except (EOFError,OSError,ValueError) as error:
         raise RuntimeError("Raster subprocess IPC closed or returned invalid data.") from error
-    if message["status"]!="ok":
+    # A crashed or corrupted child must never masquerade as a valid result.
+    if not isinstance(message, dict):
+        raise RuntimeError("Raster subprocess IPC returned an invalid envelope.")
+    if message.get("status") == "error" and isinstance(message.get("error"), str):
         raise RuntimeError(message["error"])
+    if message.get("status") != "ok" or "result" not in message:
+        raise RuntimeError("Raster subprocess IPC returned an invalid envelope.")
     return message["result"]
 
 
@@ -117,6 +122,8 @@ def _run_isolated(path,uid,owner,kind,project_id,payload,lost,scratch):
             if time.monotonic()-started > timeout:
                 raise RuntimeError("Raster processing exceeded the wall-time budget.")
             if receive.poll(.15):
+                if lost.is_set():
+                    raise RuntimeError("Worker lease lost during raster processing.")
                 return _read_result(receive)
             if not process.is_alive():
                 # Check for a late IPC write, then report any native crash.

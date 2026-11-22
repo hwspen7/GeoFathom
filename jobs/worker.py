@@ -8,6 +8,7 @@ the SAME local database file and filesystem; no networked SQLite over NFS.
 import argparse
 from concurrent.futures import ThreadPoolExecutor
 import os
+import logging
 from pathlib import Path
 from threading import Event
 import time
@@ -30,8 +31,14 @@ def run_worker(poll=1.,stop=None,max_workers=2):
         while not stop.is_set():
             for uid,future in list(running.items()):
                 if future.done():
-                    future.result()
-                    del running[uid]
+                    try:
+                        future.result()
+                    except Exception:
+                        # An unexpected task failure must not stop unrelated jobs.
+                        # Lease recovery remains authoritative for orphaned rows.
+                        logging.getLogger(__name__).exception("External worker task failed: %s", uid)
+                    finally:
+                        del running[uid]
             with _connect() as connection:
                 _schema(connection)
                 recover_expired(connection)

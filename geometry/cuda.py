@@ -7,19 +7,21 @@ from threading import RLock
 _lock=RLock()
 _owner=None
 _library=None
+_policy=None
 
 def _close():
-    global _owner,_library
+    global _owner,_library,_policy
     with _lock:
         if _owner:
             _library.gf_cuda_runtime_destroy(_owner)
         _owner=None
         _library=None
+        _policy=None
 
 atexit.register(_close)
 
 def handle(lib,count):
-    global _owner,_library
+    global _owner,_library,_policy
     if not hasattr(lib,"gf_cuda_runtime_create"):
         raise RuntimeError("Native CUDA backend was not built.")
     capacity=int(os.getenv("GEOFATHOM_CUDA_SPECTRAL_MAX_PIXELS","16777216"))
@@ -27,12 +29,18 @@ def handle(lib,count):
     if not 1<=budget<=4096:
         raise ValueError("CUDA spectral budget must be 1–4096 MiB.")
     capacity=min(capacity,budget*1024*1024//15)
-    if not 1<=capacity<=16777216 or count>capacity:
+    if not 1<=count<=capacity<=16777216:
         raise ValueError("CUDA spectral call exceeds the buffer capacity.")
+    device=int(os.getenv("GEOFATHOM_CUDA_DEVICE_ID","0"))
+    if device < 0:
+        raise ValueError("CUDA device ID must be nonnegative.")
+    policy=(capacity,device)
     with _lock:
         if _owner:
             if lib is not _library:
                 raise RuntimeError("Another native library already owns the CUDA runtime.")
+            if policy != _policy:
+                raise RuntimeError("CUDA runtime configuration changed; restart the worker to apply it.")
             return _owner
         create=lib.gf_cuda_runtime_create
         create.argtypes=[ctypes.c_size_t,ctypes.c_int]
@@ -40,10 +48,11 @@ def handle(lib,count):
         destroy=lib.gf_cuda_runtime_destroy
         destroy.argtypes=[ctypes.c_void_p]
         destroy.restype=None
-        _owner=create(capacity,int(os.getenv("GEOFATHOM_CUDA_DEVICE_ID","0")))
+        _owner=create(capacity,device)
         if not _owner:
             raise RuntimeError("CUDA allocation failed.")
         _library=lib
+        _policy=policy
         return _owner
 
 def trim():

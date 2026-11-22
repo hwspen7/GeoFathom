@@ -7,6 +7,7 @@ replaying work. All lease timestamps use the PostgreSQL server clock.
 """
 import argparse
 import json
+import logging
 import os
 import re
 import time
@@ -19,6 +20,7 @@ from storage.versions import materialize,archive_inputs
 
 KINDS={"spectral_index","spectral_change","semantic_segmentation"}
 _LEASE=30
+_LOG=logging.getLogger(__name__)
 
 class Broker:
     def __init__(self,dsn,queue="default"):
@@ -153,7 +155,12 @@ def dispatch(kind,payload,provenance,progress):
             progress(.2)
             time.sleep(.5)
     finally:
-        broker.cancel(uid,token)
+        # During a network outage, cancellation may fail. Preserve the original
+        # task outcome; server-clock lease expiry still fences the remote worker.
+        try:
+            broker.cancel(uid,token)
+        except Exception:
+            _LOG.warning("Distributed cancellation unavailable; relying on lease expiry.", exc_info=True)
 
 def _remote_child(send,spec,root,scratch):
     """Decode only pure compute specs. All inputs are verified private copies."""
@@ -242,7 +249,12 @@ def worker_once(broker,node,root):
                 except psutil.NoSuchProcess:
                     continue
         except Exception as error:
-            broker.finish(uid,owner,error=str(error))
+            # The database can disappear during heartbeat/result publication.
+            # Never keep a child running or overwrite another owner's result.
+            try:
+                broker.finish(uid,owner,error=str(error))
+            except Exception:
+                _LOG.warning("Distributed failure publication unavailable; lease will expire.", exc_info=True)
         finally:
             if process.pid is not None:
                 _terminate(process);process.join(3);process.close()

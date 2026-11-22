@@ -19,6 +19,8 @@ def backup_database(destination):
     source=database_path().resolve()
     if destination==source:
         raise ValueError("Backup destination must differ from source.")
+    if not source.is_file():
+        raise ValueError("Backup source database does not exist.")
     destination.parent.mkdir(parents=True,exist_ok=True)
     temp=destination.with_suffix(destination.suffix+".tmp")
     if temp.exists():
@@ -26,7 +28,7 @@ def backup_database(destination):
     try:
         # sqlite3.Connection.__exit__ commits but does not CLOSE the file.
         # Explicit closing is required for atomic rename on Windows.
-        with closing(sqlite3.connect(source)) as original:
+        with closing(sqlite3.connect(source.as_uri()+"?mode=ro",uri=True)) as original:
             with closing(sqlite3.connect(temp)) as target:
                 original.backup(target,pages=100,sleep=.05)
                 row=target.execute("PRAGMA integrity_check").fetchone()
@@ -105,11 +107,16 @@ def audit_imagery():
         if not image.is_file():
             bad.append(sidecar.stem+":missing-image")
             continue
-        info=json.loads(sidecar.read_text(encoding="utf-8"))
-        expected=info.get("sha256")
         checked+=1
-        if expected and expected!=file_sha256(image):
-            bad.append(sidecar.stem+":sha256-mismatch")
+        try:
+            info=json.loads(sidecar.read_text(encoding="utf-8"))
+            if not isinstance(info,dict):
+                raise ValueError("Sidecar must be an object.")
+            expected=info.get("sha256")
+            if expected and expected!=file_sha256(image):
+                bad.append(sidecar.stem+":sha256-mismatch")
+        except (OSError,ValueError,UnicodeError):
+            bad.append(sidecar.stem+":invalid-sidecar")
     return {"checked":checked,"mismatches":bad}
 
 

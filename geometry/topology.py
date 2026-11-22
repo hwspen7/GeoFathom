@@ -27,14 +27,16 @@ def _native() -> ctypes.CDLL | None:
     filename = ("geofathom_native" if sys.platform == "win32"
                 else "libgeofathom_native") + extension
     override = os.getenv("GEOFATHOM_NATIVE_LIBRARY", "")
-    candidates = [
-        Path(override) if override else None,
+    # An explicit library pins the build identity; never substitute a different DLL.
+    candidates = [Path(override)] if override else [
         _ROOT / "build" / "native" / filename,
         _ROOT / "build" / "native" / "Release" / filename,
         Path(__file__).resolve().parent / "native" / filename,
     ]
+    failures = []
     for candidate in candidates:
-        if candidate is None or not candidate.is_file():
+        if not candidate.is_file():
+            failures.append(f"{candidate}: missing")
             continue
         try:
             # Register the active Windows toolkit before loading native dependencies.
@@ -54,8 +56,10 @@ def _native() -> ctypes.CDLL | None:
             ]
             library.gf_bbox_overlaps.restype = ctypes.c_int
             return library
-        except (OSError, AttributeError):
-            continue
+        except (OSError, AttributeError) as error:
+            failures.append(f"{candidate}: {error}")
+    if override or os.getenv("GEOFATHOM_REQUIRE_NATIVE") == "1":
+        raise RuntimeError("Required native library could not be loaded: " + "; ".join(failures))
     return None
 
 
