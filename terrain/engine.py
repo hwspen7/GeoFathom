@@ -24,7 +24,10 @@ _GEOD=Geod(ellps="WGS84")
 def _check_dem(src):
     if not src.crs or not src.crs.is_projected or src.crs.linear_units.lower() not in {"metre","meter","metres","meters"}:
         raise RasterError("DEM terrain analysis requires projected horizontal coordinates in meters.")
-    if src.count<1:raise RasterError("DEM needs one elevation band.")
+    if src.count!=1:raise RasterError("DEM needs exactly one elevation band.")
+    unit=(src.units[0] or src.tags().get("VERTICAL_UNIT","")).strip().lower()
+    if unit and unit not in {"m","metre","meter","metres","meters"}:
+        raise RasterError("DEM vertical units must be meters.")
     if abs(src.transform.b)>1e-9 or abs(src.transform.d)>1e-9:
         raise RasterError("DEM must be north-up; rectify rotated imagery before analysis.")
     if src.transform.a<=0 or src.transform.e>=0:
@@ -83,7 +86,9 @@ def analyze_area(path,geometry,vertical_unit="meter"):
         bounds=shape(polygon).bounds
         try:
             w=from_bounds(*bounds,transform=src.transform)
-            w=w.round_offsets().round_lengths()
+            left,top=math.floor(w.col_off),math.floor(w.row_off)
+            right,bottom=math.ceil(w.col_off+w.width),math.ceil(w.row_off+w.height)
+            w=Window(left,top,right-left,bottom-top)
             w=w.intersection(Window(0,0,src.width,src.height))
         except Exception as error:
             raise RasterError("Selected region is outside DEM raster.") from error
@@ -134,8 +139,9 @@ def elevation_profile(path,geometry,samples=80):
             i=int(np.searchsorted(distance,d,side="right")-1)
             i=min(i,len(coords)-2)
             t=(d-distance[i])/(distance[i+1]-distance[i]) if distance[i+1]>distance[i] else 0
-            interpolated.append([coords[i][0]+(coords[i+1][0]-coords[i][0])*t,
-                                 coords[i][1]+(coords[i+1][1]-coords[i][1])*t])
+            bearing,_,segment=_GEOD.inv(*coords[i],*coords[i+1])
+            lon,lat,_=_GEOD.fwd(*coords[i],bearing,segment*t)
+            interpolated.append([lon,lat])
         xs,ys=transform("EPSG:4326",src.crs,
                         [p[0] for p in interpolated],[p[1] for p in interpolated])
         heights=[]

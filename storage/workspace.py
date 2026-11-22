@@ -288,8 +288,8 @@ def restore_version(project_id,feature_id,revision):
 
 def add_in_layer(project_id, inputs, layer_id=None):
     """Create and assign features atomically, respecting lock state."""
-    if not 1 <= len(inputs) <= 100:
-        raise StorageError("Submit between 1 and 100 geographic features.")
+    if not 1 <= len(inputs) <= 512:
+        raise StorageError("Submit between 1 and 512 geographic features.")
     with _connect() as c:
         _schema(c)
         c.execute("BEGIN IMMEDIATE")
@@ -297,6 +297,7 @@ def add_in_layer(project_id, inputs, layer_id=None):
         target=_layer(c,project_id,layer_id or _default(c,project_id))
         if target["locked"]: raise StorageError("The target layer is locked.")
         results=[]
+        vertices=0
         for item in inputs:
             props=item.get("properties",{})
             if not isinstance(props,dict) or len(json.dumps(props,allow_nan=False))>100000:
@@ -310,6 +311,9 @@ def add_in_layer(project_id, inputs, layer_id=None):
                 )
             except (GeometryError,TypeError,ValueError) as error:
                 raise StorageError(str(error)) from error
+            vertices+=new["measurement"]["coordinate_count"]
+            if vertices>400000:
+                raise StorageError("Atomic batch exceeds 400,000 geometry vertices.")
             c.execute(
                 "INSERT INTO geo_layer_members(project_id,feature_id,layer_id) VALUES(?,?,?)",
                 (project_id,new["id"],target["id"]),

@@ -110,7 +110,7 @@ class NewFeature(BaseModel):
 
 
 class BatchFeatures(BaseModel):
-    features: list[NewFeature] = Field(min_length=1,max_length=100)
+    features: list[NewFeature] = Field(min_length=1,max_length=512)
     layer_id: str | None = None
 
 

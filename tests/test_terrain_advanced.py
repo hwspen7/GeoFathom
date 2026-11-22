@@ -78,3 +78,26 @@ def test_long_contours_split_without_losing_segments():
     assert all(len(g.coords)<=10000 for g in groups)
     assert sum(g.length for g in groups)==line.length
     assert all(a.coords[-1]==b.coords[0] for a,b in zip(groups,groups[1:]))
+
+
+def test_visibility_over_128_and_exact_ray_parity():
+    # A flat plane is fully visible from any cell; a masked path is unknown.
+    affine=from_origin(0,1500,10,10)
+    z=np.zeros((150,160),float)
+    valid=np.ones_like(z,dtype=bool)
+    seen,known=_visibility(z,valid,(75,80),affine,1.7,0.)
+    assert seen.all() and known.all()
+    valid[:,90]=False
+    seen,known=_visibility(z,valid,(75,80),affine,1.7,0.)
+    assert not known[75,100] and not seen[75,100] and seen[75,85]
+
+
+def test_coverage_reports_partial_footprint(dem):
+    path,_=dem
+    convert=Transformer.from_crs("EPSG:32617","EPSG:4326",always_xy=True)
+    polygon={"type":"Polygon","coordinates":[[convert.transform(x,y) for x,y in
+        [(499900,4500000),(500100,4500000),(500100,4499800),(499900,4499800),(499900,4500000)]]]}
+    result=run_terrain(path,polygon,"volume",reference=105)
+    assert result["metrics"]["dataset_overlap_pct"]==pytest.approx(50,abs=.01)
+    assert result["metrics"]["valid_grid_pct"]==100
+    assert "intersection only" in result["warning"]

@@ -44,8 +44,8 @@ def _grid(bbox,resolution):
     y1=math.ceil(y1/resolution)*resolution+2*resolution
     width=max(5,math.ceil((x1-x0)/resolution)+2)
     height=max(5,math.ceil((y1-y0)/resolution)+2)
-    if max(width,height)>256:
-        raise RasterError("Area exceeds 256 DEM cells per side. Select a smaller area (about 7 km at 30 m, 22 km at 90 m).")
+    if max(width,height)>1024 or width*height>1_000_000:
+        raise RasterError("DEM request exceeds the 1 million cell budget. Select a smaller area or coarser resolution.")
     return crs,from_origin(x0,y1,resolution,resolution),width,height
 
 def _tile_indices(bounds):

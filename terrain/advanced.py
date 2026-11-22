@@ -5,7 +5,7 @@ import rasterio
 from rasterio.features import geometry_mask, shapes
 from rasterio.windows import Window, from_bounds
 from rasterio.warp import transform_geom, transform
-from shapely.geometry import LineString, MultiLineString, shape, mapping
+from shapely.geometry import LineString, MultiLineString, MultiPolygon, box, shape, mapping
 from shapely.ops import linemerge
 from shapely import make_valid
 from geometry.measure import measure_geometry
@@ -36,7 +36,11 @@ def _window(path, geometry, maximum):
         values=z.filled(np.nan)
         valid=covered&np.isfinite(values)&~np.ma.getmaskarray(z)
         if not valid.any():raise RasterError("No valid DEM cells in the study area.")
-        return values,valid,covered,affine,source.crs,boundary
+        # Separate source-footprint overlap from cells lost to nodata.
+        footprint=box(*source.bounds)
+        overlap=boundary.intersection(footprint).area
+        coverage=100*overlap/boundary.area if boundary.area>0 else 0.
+        return values,valid,covered,affine,source.crs,boundary,min(100.,coverage)
 
 def _feature(g,crs,properties):
     geographic=transform_geom(crs,"EPSG:4326",mapping(g))
@@ -100,7 +104,8 @@ def _contours(z,valid,affine,crs,boundary,interval):
         above=[v>=level for v in corners]
         flags=above[0].astype(np.uint8)+2*above[1]+4*above[2]+8*above[3]
         rows,cols=np.nonzero(good&(flags!=0)&(flags!=15))
-        if len(rows)>50000:raise RasterError("Contour is too fragmented; narrow the selection.")
+        if len(rows)>_CONTOUR_VERTEX_BUDGET:
+            raise RasterError("Contour complexity exceeds the geometry budget.")
         segments=[]
         for r,c in zip(rows,cols):
             vals=[v[r,c] for v in corners]
@@ -156,16 +161,29 @@ def _visibility(z,valid,origin,affine,observer_height,target_height):
     seen=np.zeros(z.shape,bool);known=np.zeros(z.shape,bool)
     seen[r0,c0]=known[r0,c0]=True
     eye=z[r0,c0]+observer_height
-    for r,c in zip(*np.nonzero(valid)):
-        steps=max(abs(r-r0),abs(c-c0))
+    # Batch rays by integer step count. This preserves the exact nearest-cell
+    # ray sampling / nodata semantics while bounding temporary arrays.
+    rows,cols=np.nonzero(valid)
+    distances=np.maximum(np.abs(rows-r0),np.abs(cols-c0))
+    if int(distances.sum())>100_000_000:
+        raise RasterError("Visibility exceeds 100 million ray samples; reduce the area or use a coarser DEM.")
+    order=np.argsort(distances,kind="stable")
+    rows,cols,distances=rows[order],cols[order],distances[order]
+    edges=np.flatnonzero(np.r_[True,distances[1:]!=distances[:-1],True])
+    for first,last in zip(edges[:-1],edges[1:]):
+        steps=int(distances[first])
         if not steps:continue
-        fractions=np.arange(1,steps)/steps
-        rr=np.rint(r0+(r-r0)*fractions).astype(int)
-        cc=np.rint(c0+(c-c0)*fractions).astype(int)
-        if not valid[rr,cc].all():continue
-        known[r,c]=True
-        line=eye+(z[r,c]+target_height-eye)*fractions
-        seen[r,c]=bool(np.all(z[rr,cc]<=line+1e-8))
+        fractions=np.arange(1,steps,dtype=np.float64)/steps
+        chunk=max(1,min(1024,262144//max(1,steps-1)))
+        for start in range(first,last,chunk):
+            rr_end=rows[start:min(last,start+chunk)]
+            cc_end=cols[start:min(last,start+chunk)]
+            rr=np.rint(r0+(rr_end[:,None]-r0)*fractions).astype(np.intp)
+            cc=np.rint(c0+(cc_end[:,None]-c0)*fractions).astype(np.intp)
+            complete=valid[rr,cc].all(axis=1)
+            line=eye+(z[rr_end,cc_end,None]+target_height-eye)*fractions
+            known[rr_end,cc_end]=complete
+            seen[rr_end,cc_end]=complete&np.all(z[rr,cc]<=line+1e-8,axis=1)
     return seen,known
 
 def _watershed(z,valid,origin,affine):
@@ -194,21 +212,42 @@ def _watershed(z,valid,origin,affine):
                 basin[index]=True;queue.append(index)
     return basin.reshape(z.shape)
 
+def _polygon_parts(geometry):
+    if geometry.geom_type=="Polygon":
+        if not geometry.is_empty:yield geometry
+    elif geometry.geom_type in {"MultiPolygon","GeometryCollection"}:
+        for part in geometry.geoms:yield from _polygon_parts(part)
+
 def _mask_features(mask,affine,crs,name):
-    output=[]
-    for geom,_ in shapes(mask.astype(np.uint8),mask=mask,transform=affine,connectivity=4):
-        fixed=make_valid(shape(geom))
-        pieces=[fixed] if fixed.geom_type=="Polygon" else list(getattr(fixed,"geoms",[]))
-        for piece in pieces:
-            if piece.geom_type=="Polygon" and not piece.is_empty:
-                output.append(_feature(piece,crs,{"name":name,"source_type":"dem_derived"}))
-                if len(output)>100:raise RasterError("Result too fragmented for interactive GIS; use a smaller area.")
+    # Tiled vectorization bounds individual geometry complexity without
+    # discarding any true cells. Adjacent chunks share boundaries only.
+    output=[];total=0
+    for row in range(0,mask.shape[0],64):
+        for col in range(0,mask.shape[1],64):
+            tile=mask[row:row+64,col:col+64]
+            if not tile.any():continue
+            local=affine*rasterio.Affine.translation(col,row)
+            parts=[];count=0
+            def emit():
+                if parts:
+                    output.append(_feature(parts[0] if len(parts)==1 else MultiPolygon(parts),crs,
+                        {"name":name,"source_type":"dem_derived"}))
+            for geom,_ in shapes(tile.astype(np.uint8),mask=tile,transform=local,connectivity=4):
+                for part in _polygon_parts(make_valid(shape(geom))):
+                    points=len(part.exterior.coords)+sum(len(r.coords) for r in part.interiors)
+                    if count+points>10000:
+                        emit();parts=[];count=0
+                    if points>20000:raise RasterError("One mask component exceeds the geometry budget.")
+                    total+=points
+                    if total>400000:raise RasterError("Mask exceeds 400,000 vertices; use a coarser DEM.")
+                    parts.append(part);count+=points
+            emit()
     return output
 
 def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,observer_height=1.7,target_height=0.):
     if operation not in {"contours","volume","visibility","watershed","mesh"}:
         raise RasterError("Unknown terrain operation.")
-    z,valid,covered,affine,crs,boundary=_window(path,geometry,128 if operation=="visibility" else 256)
+    z,valid,covered,affine,crs,boundary,coverage=_window(path,geometry,512 if operation=="visibility" else 1024)
     cell=abs(affine.a*affine.e)
     result={"operation":operation,"source_crs":str(crs),"valid_cells":int(valid.sum()),
         "missing_cells":int((covered&~valid).sum()),"cell_area_m2":cell,"metrics":{},"features":[]}
@@ -246,6 +285,10 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
             "heights":[float(v) if ok else None for v,ok in zip(heights.flat,mask.flat)]}
         result["metrics"]={"minimum_m":float(z[valid].min()),"maximum_m":float(z[valid].max())}
         result["warning"]="Interactive 3D elevation preview sampled from the DEM; gaps represent nodata."
-    if operation!="contours":
-        _collection(result["features"])
+    result["metrics"].update({"dataset_overlap_pct":coverage,
+        "valid_grid_pct":100*int(valid.sum())/int(covered.sum())})
+    if coverage<99.99:
+        result["warning"]+=" Study area extends beyond the DEM footprint; results cover the intersection only."
+    if int((covered&~valid).sum()):
+        result["warning"]+=" Some covered cells are nodata."
     return result
