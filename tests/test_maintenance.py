@@ -46,3 +46,39 @@ def test_detect_and_repair_partial_rtree_corruption():
     assert repaired["missing_before"]==1
     assert repaired["missing_after"]==0
     assert verify_spatial_indexes()["missing_after"]==0
+
+
+def test_backup_missing_source_does_not_create_empty_database(tmp_path):
+    from storage.database import database_path
+    dest = tmp_path / "backup.sqlite"
+    with pytest.raises(ValueError, match="does not exist"):
+        backup_database(dest)
+    assert not database_path().exists() and not dest.exists()
+
+
+def test_restore_rejects_unrelated_sqlite_and_cleans_destination(tmp_path):
+    from storage.maintenance import restore_to_new_database
+    source = tmp_path / "unrelated.sqlite"
+    conn = sqlite3.connect(source)
+    try:
+        conn.execute("CREATE TABLE unrelated(value)")
+        conn.commit()
+    finally:
+        conn.close()
+    dest = tmp_path / "restored.sqlite"
+    with pytest.raises(RuntimeError, match="not a GeoFathom"):
+        restore_to_new_database(source, dest)
+    assert not dest.exists()
+
+
+def test_audit_imagery_keeps_scanning_after_bad_sidecar(monkeypatch, tmp_path):
+    from storage.maintenance import audit_imagery
+    monkeypatch.setenv("GEOFATHOM_IMAGERY_DIR", str(tmp_path))
+    for name in ("bad", "mismatch"):
+        (tmp_path / (name + ".tif")).write_bytes(b"sample")
+    (tmp_path / "bad.json").write_text("{broken")
+    (tmp_path / "mismatch.json").write_text('{"sha256":"incorrect"}')
+    (tmp_path / "missing.json").write_text("{}")
+    report = audit_imagery()
+    assert report["checked"] == 2
+    assert set(report["mismatches"]) == {"bad:invalid-sidecar", "mismatch:sha256-mismatch", "missing:missing-image"}

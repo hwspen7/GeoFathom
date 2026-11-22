@@ -71,3 +71,36 @@ def test_distributed_real_raster_pipeline(broker,tmp_path,monkeypatch):
     assert result["valid_pixels"]==128*128
     assert len(result["features"])==1
     assert len(list(archive.glob("*/*")))==1
+
+
+def test_live_cancellation_fences_late_worker_and_prunes_terminal_rows(broker):
+    uid, token = broker.submit({"kind": "spectral_index"})
+    claimed = broker.claim("cancel-node")
+    assert claimed[0] == uid
+    owner = claimed[1]
+    broker.cancel(uid, "not-the-client")
+    assert broker.heartbeat(uid, owner)
+    broker.cancel(uid, token)
+    assert broker.poll(uid, token)["status"] == "cancelled"
+    assert not broker.heartbeat(uid, owner)
+    assert not broker.finish(uid, owner, result={"late": True})
+    with broker.connect() as conn:
+        conn.execute("UPDATE gf_distributed_jobs SET updated=now()-interval '31 days' WHERE id=%s", (uid,))
+    assert broker.prune(30) == 1
+    with pytest.raises(RuntimeError, match="lease lost"):
+        broker.poll(uid, token)
+
+
+def test_live_client_expiry_and_result_limit(broker):
+    uid, token = broker.submit({"kind": "spectral_index"})
+    _, owner, _ = broker.claim("size-node")
+    assert broker.finish(uid, owner, result={"oversize": "x" * 5_000_001})
+    row = broker.poll(uid, token)
+    assert row["status"] == "failed" and "5 MB" in row["error"]
+    uid, token = broker.submit({"kind": "spectral_index"})
+    _, owner, _ = broker.claim("size-node")
+    with broker.connect() as conn:
+        conn.execute("UPDATE gf_distributed_jobs SET client_until=now()-interval '1 second' WHERE id=%s", (uid,))
+    assert not broker.heartbeat(uid, owner)
+    assert not broker.finish(uid, owner, result={"late": True})
+    assert broker.poll(uid, token)["status"] == "interrupted"
