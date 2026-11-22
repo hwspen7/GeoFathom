@@ -91,6 +91,8 @@ interface Props {
   onSelectSavedFeature: (id: string) => void;
   onDeselect:()=>void;
   preservePlaceSelection?:boolean;
+  pinnedPlaces?:Array<{id:string;geometry:GeoJSON.Geometry}>;
+  onSelectPinnedPlace?:(id:string)=>void;
 }
 
 function mapStyle():StyleSpecification{
@@ -120,8 +122,14 @@ function featureCollection(
   offsetPoint?:(point:Position,dx:number,dy:number)=>Position,
   cursor:Position|null=null,
   selectedFeatureId:string|null=null,
+  pinnedPlaces:Array<{id:string;geometry:GeoJSON.Geometry}>=[],
 ): GeoJSON.FeatureCollection {
   const features: GeoJSON.Feature[] = [];
+  // Retained reference locations cannot be implicitly removed by tool switches.
+  for(const place of pinnedPlaces){
+    features.push({type:'Feature',geometry:place.geometry,
+      properties:{role:'pinned-place',id:place.id,color:'#168c85',fillOpacity:.07,lineWidth:2,strokeColor:'#168c85',pointRadius:6}});
+  }
   for (const saved of layerFeatures) {
     if (!saved.visible || (selected&&saved.id===selectedFeatureId&&saved.id.startsWith('scratch-')) || (selected&&editing&&saved.id===selectedFeatureId)) continue;
     features.push({
@@ -246,6 +254,7 @@ export default function MapCanvas({
   selectionBoxMode,onSelectionBox,selectedIds,qualityIssues,projectGrid,externalTiles,
   labelMoveMode,onLabelMove,
   onGeometryPreview, onGeometryCommit, onSelectSavedFeature,onDeselect,preservePlaceSelection=false,
+  pinnedPlaces=[],onSelectPinnedPlace,
 }: Props) {
   const container = useRef<HTMLDivElement>(null);
   const coordinateRef = useRef<HTMLDivElement>(null);
@@ -256,7 +265,7 @@ export default function MapCanvas({
   const eventRef = useRef({
     selected,selectedFeatureId,drawingMode, traceMode, annotationMode,selectionBoxMode,labelMoveMode,editing, moving,edgeMoving, snapping, selectedLocked,
     layerFeatures, onMapClick,onFinishDrawing,terrainPicking,onTerrainPick,onContextMenu,onEditingError, onTraceClick,onAnnotationClick,onSelectionBox,onLabelMove,onViewportChange,
-    onGeometryPreview, onGeometryCommit, onSelectSavedFeature,onDeselect,preservePlaceSelection,
+    onGeometryPreview, onGeometryCommit, onSelectSavedFeature,onDeselect,preservePlaceSelection,onSelectPinnedPlace,
   });
   const renderRef = useRef({
     selected,vertices,drawingMode,discovered,layerFeatures,editing,
@@ -276,7 +285,7 @@ export default function MapCanvas({
   eventRef.current = {
     selected,selectedFeatureId,drawingMode, traceMode, annotationMode,selectionBoxMode,labelMoveMode,editing, moving,edgeMoving, snapping, selectedLocked,
     layerFeatures, onMapClick,onFinishDrawing,terrainPicking,onTerrainPick,onContextMenu,onEditingError, onTraceClick,onAnnotationClick,onSelectionBox,onLabelMove,onViewportChange,
-    onGeometryPreview, onGeometryCommit, onSelectSavedFeature,onDeselect,preservePlaceSelection,
+    onGeometryPreview, onGeometryCommit, onSelectSavedFeature,onDeselect,preservePlaceSelection,onSelectPinnedPlace,
   };
 
   useEffect(() => {
@@ -580,13 +589,13 @@ export default function MapCanvas({
       else if (state.traceMode) state.onTraceClick(coordinates(event));
       else if (state.drawingMode) state.onMapClick(snapAt(coordinates(event), null));
       else if (!state.editing) {
-        const feature = hits(event).find(f => f.properties?.role === 'saved');
-        if (feature?.properties?.id) state.onSelectSavedFeature(String(feature.properties.id));
-        // A search result is a chosen location, not a transient hover. Plain
-        // map clicks must not discard it before Terrain can use the location.
-        // Saved-feature clicks still switch the active selection, and the
-        // explicit Deselect button remains available.
-        else if(!state.preservePlaceSelection&&!hits(event).some(f=>f.properties?.role==='selected'))state.onDeselect();
+        const features=hits(event);
+        const saved=features.find(f=>f.properties?.role==='saved');
+        const retained=features.find(f=>f.properties?.role==='pinned-place');
+        if(saved?.properties?.id)state.onSelectSavedFeature(String(saved.properties.id));
+        else if(retained?.properties?.id)state.onSelectPinnedPlace?.(String(retained.properties.id));
+        // Blank map clicks are navigation, never an implicit deletion or Deselect.
+        // Deselect and Remove are explicit controls only.
       }
     }
     function removeByRightClick(event: MapMouseEvent) {
@@ -853,7 +862,7 @@ export default function MapCanvas({
         const p=map.project(point as maplibregl.LngLatLike);
         const shifted=map.unproject([p.x+dx,p.y+dy]);
         return [shifted.lng,shifted.lat];
-      },cursor,selectedFeatureId);
+      },cursor,selectedFeatureId,pinnedPlaces);
     (map.getSource('workspace') as GeoJSONSource).setData(collection);
     if(container.current && import.meta.env.DEV){
       container.current.setAttribute('data-label-feature-count',
@@ -866,7 +875,7 @@ export default function MapCanvas({
     }
     if (!drag.current) spatialSnap.current=null;
   }, [selected, vertices, drawingMode, discovered, layerFeatures, editing,
-      promptPositive,promptNegative,promptBox,selectedIds,qualityIssues,ready,cursor,selectedFeatureId]);
+      promptPositive,promptNegative,promptBox,selectedIds,qualityIssues,ready,cursor,selectedFeatureId,pinnedPlaces]);
 
   useEffect(()=>{
     const map=mapRef.current;

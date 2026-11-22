@@ -15,6 +15,7 @@ import {BASEMAPS,customBasemap,defaultCustom,preferredSatellite,mapTilerImagery,
 import {ScratchHistory} from './scratchHistory';
 import {addRaster,changeRaster,selectDEM,hideDEMs,type RasterLayerView} from './rasterLayers';
 import {terrainContainsCenter} from './terrainSource';
+import {PIN_LIMIT,readPinnedPlaces,writePinnedPlaces,pinPlace,unpinPlace,visibleGeometry} from './pinnedPlaces';
 import {localMeasurement,localShape,readScratch,writeScratch,SCRATCH_LIMIT,OFFLINE_METHOD,type ScratchFeature} from './scratch';
 import SurveyTools from './SurveyTools';
 import ProfessionalPanel from './ProfessionalPanel';
@@ -53,6 +54,17 @@ export default function App() {
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
   const [geometry, setGeometry] = useState<GeoJSON.Geometry | null>(null);
   const scratchScope=useRef<string|null>(null);
+  const [pins,setPins]=useState(()=>({scope:null as string|null,places:readPinnedPlaces(null)}));
+  const [pinStorageError,setPinStorageError]=useState(false);
+  const pinnedPlaces=pins.places;
+  function retainPlace(place:Place){
+    const scope=scratchScope.current;
+    setPins(old=>({scope,places:pinPlace(old.scope===scope?old.places:readPinnedPlaces(scope),place)}));
+  }
+  function removePinnedPlace(id:string){
+    setPins(old=>({...old,places:unpinPlace(old.places,id)}));
+    if(selectedPlace?.id===id)deselect();
+  }
   const [scratchDocument,setScratchDocument]=useState(()=>({scope:null as string|null,features:readScratch()}));
   const scratch=scratchDocument.features;
   const scratchHistory=useRef<ScratchHistory|null>(null);
@@ -175,6 +187,7 @@ export default function App() {
     projectWorkspace?.layers.find(layer => layer.id === selectedSaved.layer_id)?.locked);
 
   useEffect(()=>{setScratchStorageError(!writeScratch(scratchDocument.features,scratchDocument.scope));},[scratchDocument]);
+  useEffect(()=>{setPinStorageError(!writePinnedPlaces(pins.scope,pins.places));},[pins]);
 
   function storeScratch(next:GeoJSON.Geometry,measured:Measurement,id:string|null=scratchId,metadata?:{source:string;properties:Record<string,unknown>;name?:string}){
     const key=id??'scratch-'+crypto.randomUUID();
@@ -322,6 +335,7 @@ export default function App() {
 
   async function selectPlace(place: Place) {
     const sequence = ++geometrySequence.current;
+    retainPlace(place);
     setSelectedPlace(place);setScratchId(null);setPreview(null);setPendingShared(null);
     // A new place outside the old DEM must not silently inherit an unrelated source.
     if(demLayer&&!terrainContainsCenter(demLayer.bbox,[place.longitude,place.latitude,place.longitude,place.latitude])){
@@ -411,7 +425,7 @@ export default function App() {
       setCandidates(answer.results);
       setMessage(answer.message);
       if (answer.intent.action === 'discover') {
-        deselect();setDiscovered(answer.results);
+        setDiscovered(answer.results);
       } else {
         setDiscovered([]);
         if (answer.results.length) await selectPlace(answer.results[0]);
@@ -908,6 +922,7 @@ export default function App() {
                 const view=rasterScopes.current.get(id??'local');
                 setRasterLayers(view?.layers??[]);setImageLayer(view?.image??null);setDemLayer(view?.dem??null);
                 scratchScope.current=id;scratchHistory.current=new ScratchHistory(next);setScratchState(next);
+                setPins({scope:id,places:readPinnedPlaces(id)});
                 projectEpoch.current++;projectIdentity.current=null;geometrySequence.current++;
                 setProjectWorkspace(null);setActiveProjectId(null);clearWorkspace();
                 setExtentMode(false);setExtentGeometry(null);
@@ -1011,6 +1026,16 @@ export default function App() {
                 <ArrowRight size={17} />
               </button>
             </form>
+            {pinStorageError&&<small role="alert" className="discovery-error">Pinned locations cannot be saved in browser storage.</small>}
+            {!!pinnedPlaces.length&&<div className="pinned-places" aria-label="Pinned places">
+              <small>Retained locations · remove manually ({pinnedPlaces.length}/{PIN_LIMIT})</small>
+              {pinnedPlaces.map(place=><div key={place.id} className="survey-action-bar">
+                <button aria-label={'Select pinned '+place.name} aria-pressed={selectedPlace?.id===place.id}
+                  onClick={()=>void selectPlace(place)}>{place.name}</button>
+                <button aria-label={'Remove pinned '+place.name} title="Remove this retained location"
+                  onClick={()=>removePinnedPlace(place.id)}>Remove</button>
+              </div>)}
+            </div>}
           </section>
 
 
@@ -1019,7 +1044,7 @@ export default function App() {
             <DiscoveryPanel viewport={viewport} busy={busy} onFound={(result: DiscoveryResponse) => {
               setDiscovered(result.results);
               setCandidates(result.results);
-              deselect();
+              // Discovery updates candidate results but does not delete retained map locations.
               setMessage(result.results.length
                 ? 'Found ' + result.results.length + ' mapped features. ' + result.warning
                 : 'No mapped features matched the filter. ' + result.warning);
@@ -1054,6 +1079,8 @@ export default function App() {
             selected={geometry} drawingMode={drawingMode} vertices={vertices}
             terrainPicking={terrainPicking} terrainMarker={showTools&&activeTool==='tools-terrain'?(terrainHover??terrainOrigin):null}
             preservePlaceSelection={!!selectedPlace}
+            pinnedPlaces={pinnedPlaces.map(place=>({id:place.id,geometry:visibleGeometry(place)}))}
+            onSelectPinnedPlace={id=>{const place=pinnedPlaces.find(p=>p.id===id);if(place)void selectPlace(place);}}
             terrainResults={[...(terrainVisible?terrainFeatures:[]),...(terrainProfileLine?[{type:'Feature' as const,geometry:terrainProfileLine,properties:{name:'Profile measurement line',color:'#d26b2f'}}]:[])]} terrainRasters={terrainVisible?terrainRasters:[]}
             terrainFetchTarget={showTools&&activeTool==='tools-terrain'?terrainFetchTarget:null}
             onTerrainPick={position=>{setTerrainOrigin(position);setTerrainPicking(false);setMessage('Terrain point selected.');}}
