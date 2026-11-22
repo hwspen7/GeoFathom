@@ -6,6 +6,7 @@ import {GPUView} from './TerrainMeshView';
 import type {Position} from './editing';
 import {measurementAnchor} from './editing';
 import {terrainMetricDifferences,sameGeometryFootprint} from './terrainComparison';
+import {readTerrainRuns,writeTerrainRuns,insertTerrainRun,summarizeTerrainRun} from './terrainRunRegistry';
 import {terrainFetchBounds,terrainGeometryBounds,terrainFetchBudget,terrainBoundsOverlap,terrainRasterMatchesTarget,describeTerrainBounds,preferredTerrainFetchScope,type FetchScope,type TerrainBBox} from './terrainSource';
 
 function MeshView({mesh}:{mesh:TerrainMesh}){
@@ -115,6 +116,9 @@ export default function TerrainWorkbench(p:Props){
  const [sectionSpacing,setSectionSpacing]=useState('50'),[sectionWidth,setSectionWidth]=useState('20'),[drape,setDrape]=useState(false),[expanded,setExpanded]=useState(false);
  const [pickEnd,setPickEnd]=useState(false);
  const [records,setRecords]=useState<TerrainRecord[]>([]);
+ const [runHistory,setRunHistory]=useState(()=>readTerrainRuns(p.projectId));
+ const [historyStorageError,setHistoryStorageError]=useState(false);
+ useEffect(()=>{setHistoryStorageError(!writeTerrainRuns(p.projectId,runHistory));},[runHistory,p.projectId]);
  const [selectedRecord,setSelectedRecord]=useState<string|null>(null);
  const [compareRecordId,setCompareRecordId]=useState('');
  const selected=records.find(r=>r.id===selectedRecord);
@@ -231,6 +235,10 @@ export default function TerrainWorkbench(p:Props){
        // available but must be explicitly enabled to avoid opaque stacking.
        return [...kept.map(r=>r.advanced?.raster?{...r,visible:false}:r),record];
      });
+     setRunHistory(old=>insertTerrainRun(old,summarizeTerrainRun(
+       record.id,record.createdAt,record.operation,record.source,record.geometry,
+       physicalMetrics(record),
+     )));
      setSelectedRecord(record.id);latest.current.onHover(null);
    }catch(e){if(ticket===sequence.current&&!controller.signal.aborted)setError(e instanceof Error?e.message:'Terrain analysis failed.');}
    finally{if(ticket===sequence.current){setBusy(false);analysisRequest.current=null;}}
@@ -402,6 +410,24 @@ export default function TerrainWorkbench(p:Props){
        <button aria-label={'Remove result '+record.title} onClick={()=>{setRecords(old=>old.filter(r=>r.id!==record.id));if(selectedRecord===record.id)setSelectedRecord(null);}}>×</button>
      </div>)}
    </section>}
+   <details className="terrain-run-provenance" aria-label="Local terrain run history">
+     <summary>Local run history · {runHistory.length} metadata versions</summary>
+     <small className="compact-notice">Project-scoped browser history only. Previous raster files and charts must be regenerated or exported separately. Clearing browser data removes these receipts.</small>
+     {historyStorageError&&<small className="discovery-error" role="alert">Browser storage unavailable; export run history now.</small>}
+     <div className="survey-action-bar">
+       <button disabled={!runHistory.length} onClick={()=>{
+         const url=URL.createObjectURL(new Blob([JSON.stringify(runHistory,null,2)],{type:'application/json'}));
+         const a=document.createElement('a');a.href=url;a.download='terrain-run-history.json';
+         document.body.appendChild(a);a.click();a.remove();
+         window.setTimeout(()=>URL.revokeObjectURL(url),1000);
+       }}>Export run metadata</button>
+     </div>
+     {runHistory.slice(0,12).map(item=><div className="scratch-row" key={item.id}>
+       <span title={item.sourceName+' · '+item.sourceId}>{item.operation} · {item.sourceName} · {new Date(item.createdAt).toLocaleTimeString()} · {item.id.slice(0,8)}</span>
+       <button aria-label={'Remove history '+item.id.slice(0,8)} title="Remove metadata receipt only"
+         onClick={()=>setRunHistory(old=>old.filter(r=>r.id!==item.id))}>×</button>
+     </div>)}
+   </details>
    {(result||slope||profile)&&<ResultPane expanded={expanded} onClose={()=>setExpanded(false)}>
      <div className="section-heading">{selected?.title} <span><button onClick={()=>setExpanded(!expanded)}>{expanded?'Close expanded':'Expand'}</button> <button onClick={exportResult} title="Export result data">Export</button></span></div>
      <small className="compact-notice">{selected?.source.name}{inputsChanged?' · previous inputs':''}</small>
