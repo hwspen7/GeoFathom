@@ -17,7 +17,8 @@ test('offline drawing finishes, multiple local features remain selectable and re
  await expect(toolbar.getByRole('button',{name:'Finish',exact:true})).toHaveCount(0);
  await toolbar.getByRole('button',{name:'Rectangle',exact:true}).click();
  await page.mouse.click(x+2*d,y);await page.mouse.click(x+3*d,y+d);
- await expect(page.getByText(/Local drawings · 2/)).toBeVisible();
+ // The layer list and map legend both display the count; assert the legend explicitly.
+ await expect(page.getByLabel('Map legend',{exact:true}).getByText('Local drawings · 2',{exact:true})).toBeVisible();
  await page.reload();
  await expect(page.getByLabel('Local drawings').getByRole('button',{name:'Polygon 1',exact:true})).toBeVisible();
  await page.getByLabel('Local drawings').getByRole('button',{name:'Polygon 1',exact:true}).click();
