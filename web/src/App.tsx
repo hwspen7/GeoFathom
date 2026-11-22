@@ -594,6 +594,8 @@ export default function App() {
         setSplitParts([]);setDiscovered([]);
         result=pieces[0].geometry;measured=pieces[0].measurement;
         setSelectedFeatureId(null);featureIdentity.current=null;
+        // The split parts become new local objects; the source reference stays pinned.
+        setSelectedPlace(null);
       }
       if(sequence!==geometrySequence.current)return;
       if(mode!=='hole'&&mode!=='split'){
