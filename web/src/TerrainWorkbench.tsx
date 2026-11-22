@@ -5,6 +5,7 @@ import {ProfilePlot,MetricBars,ElevationDistribution,AspectRose,SectionPlot,Resu
 import {GPUView} from './TerrainMeshView';
 import type {Position} from './editing';
 import {measurementAnchor} from './editing';
+import {terrainMetricDifferences,sameGeometryFootprint} from './terrainComparison';
 import {terrainFetchBounds,terrainGeometryBounds,terrainFetchBudget,terrainBoundsOverlap,terrainRasterMatchesTarget,describeTerrainBounds,preferredTerrainFetchScope,type FetchScope,type TerrainBBox} from './terrainSource';
 
 function MeshView({mesh}:{mesh:TerrainMesh}){
@@ -115,9 +116,21 @@ export default function TerrainWorkbench(p:Props){
  const [pickEnd,setPickEnd]=useState(false);
  const [records,setRecords]=useState<TerrainRecord[]>([]);
  const [selectedRecord,setSelectedRecord]=useState<string|null>(null);
+ const [compareRecordId,setCompareRecordId]=useState('');
  const selected=records.find(r=>r.id===selectedRecord);
  const result=selected?.advanced??null,slope=selected?.slope??null,profile=selected?.profile??null;
  const activeProfileSamples=profile?.samples??null;
+ const comparableRuns=selected?records.filter(r=>r.id!==selected.id&&r.operation===selected.operation):[];
+ const comparison=comparableRuns.find(r=>r.id===compareRecordId)??null;
+ function physicalMetrics(r:TerrainRecord):Record<string,number>{
+   if(r.advanced)return r.advanced.metrics;
+   if(r.slope)return {mean_slope_deg:r.slope.mean_slope_deg,maximum_slope_deg:r.slope.maximum_slope_deg,
+     mean_elevation_m:r.slope.elevation_mean_m};
+   if(r.profile){const values=r.profile.samples.map(p=>p.elevation_m).filter((n):n is number=>n!==null&&Number.isFinite(n));
+     return {length_m:r.profile.length_m,...(values.length?{mean_elevation_m:values.reduce((a,b)=>a+b,0)/values.length}:{})};}
+   return {};
+ }
+ const comparisons=selected&&comparison?terrainMetricDifferences(physicalMetrics(selected),physicalMetrics(comparison)):[];
  const analysisRequest=useRef<AbortController|null>(null);
  const alive=useRef(true);
  const sourceIntent=useRef(0);
@@ -392,6 +405,43 @@ export default function TerrainWorkbench(p:Props){
    {(result||slope||profile)&&<ResultPane expanded={expanded} onClose={()=>setExpanded(false)}>
      <div className="section-heading">{selected?.title} <span><button onClick={()=>setExpanded(!expanded)}>{expanded?'Close expanded':'Expand'}</button> <button onClick={exportResult} title="Export result data">Export</button></span></div>
      <small className="compact-notice">{selected?.source.name}{inputsChanged?' · previous inputs':''}</small>
+     {selected&&<details className="terrain-run-provenance" aria-label="Terrain run provenance">
+       <summary>Source & run details · {selected.id.slice(0,8)}</summary>
+       <div className="terrain-source-details">
+         <div>Operation: {selected.title}</div>
+         <div>Run: {new Date(selected.createdAt).toLocaleString()} · ID {selected.id}</div>
+         <div>Input DEM: {selected.source.name}</div>
+         <div>Source ID: {selected.source.id}</div>
+         <div>Acquired: {selected.source.acquired_at??'Not recorded'}</div>
+         <div>Grid: {selected.source.width} × {selected.source.height} · {selected.source.crs}</div>
+         <div>Geographic footprint: {selected.source.bbox.map(n=>n.toFixed(5)).join(', ')}</div>
+         <div>Provenance: {selected.source.provenance}</div>
+         <small>Requested output spacing or pixel size does not establish native DEM accuracy.</small>
+       </div>
+     </details>}
+     {selected&&comparableRuns.length>0&&<div className="terrain-run-comparison">
+       <label>Compare historical result
+         <select aria-label="Compare terrain run" value={comparison?.id??''}
+           onChange={e=>setCompareRecordId(e.target.value)}>
+           <option value="">Choose prior run</option>
+           {comparableRuns.map(r=><option key={r.id} value={r.id}>
+             {r.source.name} · {new Date(r.createdAt).toLocaleTimeString()} · {r.id.slice(0,8)}
+           </option>)}
+         </select>
+       </label>
+       {comparison&&<>
+         {!sameGeometryFootprint(selected.geometry,comparison.geometry)&&
+           <small role="status">Different study geometry: numerical deltas are not directly comparable.</small>}
+         {(selected.source.id!==comparison.source.id||selected.source.crs!==comparison.source.crs||
+           selected.source.width!==comparison.source.width||selected.source.height!==comparison.source.height)&&
+           <small role="status">Different DEM source/grid: compare regional statistics only, not individual pixels or native resolution.</small>}
+         <div className="terrain-metrics">
+           {comparisons.map(m=><div key={m.key}><span>{names[m.key]??m.key.replaceAll('_',' ')}</span>
+             <strong>{m.delta>0?'+':''}{fmt(m.delta)}</strong></div>)}
+         </div>
+         {!comparisons.length&&<small>No common comparable physical statistics.</small>}
+       </>}
+     </div>}
      {slope&&<><div className="terrain-metrics">
        <div><span>Elevation range</span><strong>{fmt(slope.elevation_min_m)}–{fmt(slope.elevation_max_m)} m</strong></div>
        <div><span>Mean elevation</span><strong>{fmt(slope.elevation_mean_m)} m</strong></div>

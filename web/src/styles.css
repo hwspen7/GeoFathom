@@ -622,3 +622,11 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 
 .desktop-gis .terrain-opacity-control{display:flex;align-items:center;gap:8px;font-size:11px;color:#526270;padding:4px 0}
 .desktop-gis .terrain-opacity-control input{min-width:70px;flex:1}
+
+/* Dataset/run version transparency, without covering the active GIS canvas. */
+.desktop-gis .terrain-run-provenance,.desktop-gis .terrain-run-comparison{margin:5px 0;padding:6px 0;border-top:1px solid #dfe6e9;font-size:11px}
+.desktop-gis .terrain-run-provenance summary{cursor:pointer;color:#42647b}
+.desktop-gis .terrain-source-details{display:grid;gap:3px;overflow-wrap:anywhere;padding:6px 0;color:#526270}
+.desktop-gis .terrain-run-comparison label{display:grid;gap:4px}
+.desktop-gis .terrain-run-comparison select{max-width:100%}
+.desktop-gis .terrain-run-comparison small{display:block;color:#805d32}
