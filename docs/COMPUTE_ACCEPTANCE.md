@@ -152,3 +152,27 @@ and cuDNN when the installed ONNX Runtime provides the preload API.
 The runtime rejects whole-provider CUDA-to-CPU fallback. Ordinary ONNX
 per-node CPU placement is still possible for unsupported operators; strict
 hardware qualification requires a profiling-based CUDA operator audit.
+
+
+### Automated local host workflow
+
+After installing the project test dependencies, ONNX, the matching GPU ORT
+package/cuDNN, CUDA Toolkit, CMake/MSVC, Docker and Node.js, run from the root:
+
+```powershell
+python scripts/host_acceptance.py --soak-seconds 60
+```
+
+Use `--docker ABSOLUTE_DOCKER_EXE` if the CLI is outside PATH.
+The script creates a disposable loopback-only PostGIS container with an
+ephemeral port and generated password, and stops only that container.
+An existing **disposable** test database can be explicitly opted into with
+`--reuse-test-postgis` and GEOFATHOM_TEST_POSTGIS_DSN. It does not install
+system tools or alter the production .env. Reports, isolated data, native
+builds, synthetic ONNX fixture and GPU profiling are under
+`build/host-acceptance/<run-id>`. The full Python run rejects skipped tests,
+records statement/branch coverage, and the web suite starts fresh test
+servers. Keep ports 8000 and 5173 free. `--skip-web` explicitly omits web
+qualification. `--soak-seconds 86400` runs separate 24-hour CPU and GPU
+soaks; synthetic model qualification still does not measure real
+satellite segmentation accuracy or physical multi-host behavior.

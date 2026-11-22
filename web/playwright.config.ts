@@ -23,7 +23,7 @@ export default defineConfig({
       cwd:'..',url:'http://127.0.0.1:8000/health',
       timeout:90_000,reuseExistingServer:!process.env.CI,
       env:{...process.env,
-        GEOFATHOM_DATABASE_PATH:'data/e2e-geofathom.sqlite',
+        GEOFATHOM_DATABASE_PATH:process.env.GEOFATHOM_E2E_DATABASE_PATH || 'data/e2e-geofathom.sqlite',
         GEOFATHOM_CORS_ORIGINS:'http://localhost:5173',
       },
     },

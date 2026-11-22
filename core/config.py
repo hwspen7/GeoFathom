@@ -6,7 +6,9 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+# Acceptance runs must not load production credentials or data paths.
+if os.getenv("GEOFATHOM_SKIP_DOTENV") != "1":
+    load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 
 @dataclass(frozen=True)
