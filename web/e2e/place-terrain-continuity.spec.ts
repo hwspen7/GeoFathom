@@ -195,6 +195,9 @@ test('OSU disconnected mapped properties default to campus, with inspectable edi
  // This distinguishes a covered node from React selection propagation.
  await expect(map).toHaveAttribute('data-edit-native-hit',JSON.stringify({polygon:0,ring:0,vertex:2}));
  await expect(page.getByLabel('Boundary node',{exact:true})).toHaveValue('2');
+ // Selecting (without dragging) must not silently create an edited local copy
+ // or discard the original geocoded campus parcel.
+ await expect(page.getByLabel('Study area parcel')).toHaveValue('0');
  await expect(page.getByLabel('Pinned places').getByRole('button',{name:'Select pinned The Ohio State University'})).toBeVisible();
  await page.getByLabel('Boundary node',{exact:true}).selectOption('1');
  await expect(page.getByLabel('Boundary longitude')).toHaveValue('-83.0100000');
