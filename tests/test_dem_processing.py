@@ -108,3 +108,90 @@ def test_resample_preserves_exact_source_grid_origin(tmp_path,monkeypatch):
     assert result['valid_cells']==25
     assert captured['grid']==affine
     np.testing.assert_array_equal(captured['heights'],values)
+
+
+def test_mosaic_tiled_working_set_and_overlap_priority(tmp_path,monkeypatch):
+    """Chunk seams cannot alter first-source priority or create false NoData."""
+    affine=from_origin(500003,4500007,10,10)
+    first=np.full((9,9),100,dtype=np.float32)
+    second=np.full((9,9),200,dtype=np.float32)
+    first[4,4]=-9999
+    a=tmp_path/'first.tif'
+    b=tmp_path/'second.tif'
+    make=lambda path,data,grid: _write_dem_fixture(path,data,grid)
+    make(a,first,affine)
+    make(b,second,from_origin(500033,4500007,10,10))
+    monkeypatch.setattr(dem_processing,'_BLOCK',3)
+    monkeypatch.setattr(dem_processing,'imagery_dir',lambda:tmp_path)
+    original_reproject=dem_processing.reproject
+    tile_shapes=[]
+    def watched_reproject(**kwargs):
+        tile_shapes.append(kwargs['destination'].shape)
+        return original_reproject(**kwargs)
+    monkeypatch.setattr(dem_processing,'reproject',watched_reproject)
+    observed={}
+    def retain(path,name,provenance):
+        with rasterio.open(path) as source:
+            observed['values']=source.read(1)
+            observed['transform']=source.transform
+            observed['nodata']=source.nodata
+        return {'width':observed['values'].shape[1],'height':observed['values'].shape[0]}
+    monkeypatch.setattr(dem_processing,'store_upload',retain)
+    outcome=dem_processing.prepare_dem([a,b],'mosaic',resolution_m=10)
+    values=observed['values']
+    assert values.shape==(9,12)
+    assert observed['transform']==affine
+    assert values[4,4]==200  # Filled by the second source
+    assert values[0,4]==100  # Original source wins on overlap
+    assert values[0,9]==200  # Outside the first source
+    assert np.all(np.isfinite(values))
+    assert outcome['valid_cells']==108
+    assert len(tile_shapes)>4
+    assert all(h<=3 and w<=3 for h,w in tile_shapes)
+    assert np.isnan(observed['nodata'])
+
+
+def _write_dem_fixture(path,values,affine):
+    with rasterio.open(path,'w',driver='GTiff',width=values.shape[1],
+                       height=values.shape[0],count=1,dtype='float32',
+                       crs='EPSG:32617',transform=affine,nodata=-9999) as sink:
+        sink.write(values,1)
+
+
+def test_resample_cancel_cleans_partial_output(source_dems,tmp_path,monkeypatch):
+    """Cancelled runs must leave no half-filled raster or library receipt."""
+    from threading import Event
+    from terrain.cancellation import TerrainCancelled
+    sources,_=source_dems
+    monkeypatch.setattr(dem_processing,'_BLOCK',2)
+    marker=Event()
+    original_reproject=dem_processing.reproject
+    def interrupt(**kwargs):
+        result=original_reproject(**kwargs)
+        marker.set()
+        return result
+    monkeypatch.setattr(dem_processing,'reproject',interrupt)
+    with pytest.raises(TerrainCancelled):
+        dem_processing.prepare_dem([sources[0]],'resample',resolution_m=5,cancel=marker)
+    assert not list(tmp_path.glob('.dem-work-*.tif'))
+
+
+def test_dem_clip_with_multiple_tiles_and_no_data_outside_polygon(source_dems,tmp_path,monkeypatch):
+    sources,_=source_dems
+    monkeypatch.setattr(dem_processing,'_BLOCK',2)
+    transform=Transformer.from_crs('EPSG:32617','EPSG:4326',always_xy=True)
+    ring=[transform.transform(x,y) for x,y in [
+        (500000,4500000),(500030,4500000),(500030,4499970),
+        (500000,4499970),(500000,4500000)]]
+    polygon={'type':'Polygon','coordinates':[ring]}
+    snapshot={}
+    def retain(path,name,provenance):
+        with rasterio.open(path) as src:
+            snapshot['array']=src.read(1)
+            snapshot['nodata']=src.nodata
+        return {'width':snapshot['array'].shape[1]}
+    monkeypatch.setattr(dem_processing,'store_upload',retain)
+    processed=dem_processing.prepare_dem([sources[1]],'clip',polygon,10)
+    assert 1<=processed['valid_cells']<=9
+    assert np.all(np.isfinite(snapshot['array'][0:2,0:2]))
+    assert np.isnan(snapshot['nodata'])
