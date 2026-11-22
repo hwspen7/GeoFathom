@@ -181,3 +181,49 @@ test('OSU disconnected mapped properties default to campus, with inspectable edi
  await expect(page.getByLabel('Pinned places').getByRole('button',{name:'Select pinned The Ohio State University'})).toBeVisible();
  await expect(page.getByLabel('DEM download target')).toContainText('N 40.01240°');
 });
+
+test('Hong Kong airport area uses global DEM provider and stays within enlarged budget',async({page})=>{
+ await page.goto('/');
+ const map=page.getByLabel('Interactive geospatial map');
+ await expect(map).toHaveAttribute('data-label-layer-ready','true',{timeout:25000});
+ const hkg={...cmh,id:'hkg-acceptance',name:'Hong Kong airport study area',
+   longitude:113.92,latitude:22.31,bbox:[113.87,22.27,113.99,22.36],
+   geometry:{type:'Polygon',coordinates:[[
+     [113.885,22.275],[113.965,22.275],[113.965,22.345],
+     [113.885,22.345],[113.885,22.275],
+   ]]}};
+ await search(page,hkg);
+ await page.getByRole('navigation',{name:'Workspace tools'}).getByRole('button',{name:'Terrain',exact:true}).click();
+ await expect(page.getByLabel('DEM fetch area')).toHaveValue('selection');
+ await expect(page.getByLabel('Public DEM resolution')).toHaveValue('30');
+ await expect(page.getByLabel('Public DEM resolution').locator('option[value="1"]')).toBeDisabled();
+ await expect(page.getByLabel('Public DEM resolution').locator('option[value="3"]')).toBeDisabled();
+ await expect(page.getByLabel('Public DEM resolution').locator('option[value="10"]')).toBeDisabled();
+ await expect(page.getByLabel('DEM download target')).toContainText('Selected geometry');
+ await expect(page.getByRole('button',{name:'Auto-fit DEM resolution'})).toContainText('30 m');
+ await expect(page.getByText('USGS 3DEP is not a global data source.',{exact:false})).toBeVisible();
+ await expect(page.getByText(/8-million-cell.*budget/)).toHaveCount(0);
+ await expect(page.getByLabel('Pinned places').getByRole('button',{name:'Select pinned Hong Kong airport study area'})).toBeVisible();
+});
+
+test('large US university footprint automatically finds usable 3 m grid without deleting boundaries',async({page})=>{
+ await page.goto('/');
+ const map=page.getByLabel('Interactive geospatial map');
+ await expect(map).toHaveAttribute('data-label-layer-ready','true',{timeout:25000});
+ const large={...cmh,id:'large-campus-acceptance',name:'Large Campus Acceptance',
+   longitude:-83.018,latitude:40.01,bbox:[-83.05,39.98,-82.984,40.036],
+   geometry:{type:'Polygon',coordinates:[[
+     [-83.05,39.98],[-82.984,39.98],[-82.984,40.036],
+     [-83.05,40.036],[-83.05,39.98],
+   ]]}};
+ await search(page,large);
+ await page.getByRole('navigation',{name:'Workspace tools'}).getByRole('button',{name:'Terrain',exact:true}).click();
+ await page.getByLabel('Public DEM resolution').selectOption('1');
+ await expect(page.getByRole('alert')).toContainText('8-million-cell');
+ await expect(page.getByRole('button',{name:'Fetch DEM'})).toBeDisabled();
+ await page.getByRole('button',{name:'Auto-fit DEM resolution'}).click();
+ await expect(page.getByLabel('Public DEM resolution')).toHaveValue('3');
+ await expect(page.getByRole('button',{name:'Fetch DEM'})).toBeEnabled();
+ await expect(page.getByLabel('DEM download target')).toContainText('Selected geometry');
+ await expect(page.getByLabel('Pinned places').getByRole('button',{name:'Select pinned Large Campus Acceptance'})).toBeVisible();
+});
