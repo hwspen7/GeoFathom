@@ -1003,6 +1003,7 @@ export default function MapCanvas({
       }
     }
     container.current?.setAttribute('data-terrain-raster-count',String(derivedRasters.current.size));
+    container.current?.setAttribute('data-terrain-raster-opacity',String((terrainRasters??[])[0]?.opacity??0));
   },[terrainRasters,ready]);
   useEffect(()=>{
     const map=mapRef.current;

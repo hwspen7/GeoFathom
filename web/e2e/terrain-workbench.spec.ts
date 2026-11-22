@@ -75,6 +75,14 @@ with tempfile.TemporaryDirectory() as directory:
  await page.getByRole('button',{name:'Run terrain operation'}).click();
  await expect(page.getByAltText('Derived terrain raster')).toBeVisible();
  await expect(map).toHaveAttribute('data-terrain-raster-count','1');
+ const countMetric=page.locator('.terrain-metrics > div').filter({hasText:'Calculated raster cells'}).first();
+ await expect(countMetric.locator('strong')).not.toBeEmpty();
+ await expect(countMetric.locator('strong')).not.toContainText('°');
+ await expect(page.getByLabel('Slope edge cells explanation')).toContainText('boundary cells excluded');
+ const opacity=page.getByLabel('Terrain raster opacity');
+ await expect(opacity).toHaveValue('50');
+ await opacity.fill('25');
+ await expect(map).toHaveAttribute('data-terrain-raster-opacity','0.25');
  const download=page.waitForEvent('download');await page.getByRole('button',{name:'GeoTIFF',exact:true}).click();
  expect((await download).suggestedFilename()).toBe('slope_map.tif');
  await page.getByLabel('Terrain tool group').selectOption('Quick');
