@@ -111,7 +111,8 @@ def test_terrain_source_errors(client,monkeypatch,route,error,status):
 @pytest.mark.parametrize("route,operation",[("analyze","analyze_area"),("profile","elevation_profile")])
 def test_terrain_computation_errors(client,monkeypatch,tmp_path,route,operation):
     monkeypatch.setattr(terrain,"image_file",lambda _:tmp_path/"dem.tif")
-    def fail(*args):raise RasterError("No valid DEM data")
+    # Match the cancellable terrain engine signature while injecting a raster failure.
+    def fail(*args, **kwargs):raise RasterError("No valid DEM data")
     monkeypatch.setattr(terrain,operation,fail)
     r=client.post("/terrain/"+route,json={"image_id":"test","geometry":POINT})
     assert r.status_code==422 and r.json()["detail"]=="No valid DEM data"
