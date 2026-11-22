@@ -98,8 +98,23 @@ def analyze_area(path,geometry,vertical_unit="meter",cancel=None):
             w=w.intersection(Window(0,0,src.width,src.height))
         except Exception as error:
             raise RasterError("Selected region is outside DEM raster.") from error
-        if w.width<3 or w.height<3 or w.width>4096 or w.height>4096 or w.width*w.height>8_000_000:
-            raise RasterError("Slope analysis supports up to 8 million pixels and 4096 pixels per side. Select a coarser DEM or smaller region.")
+        if w.width<3 or w.height<3 or w.width>8192 or w.height>8192 or w.width*w.height>32_000_000:
+            raise RasterError("Slope analysis supports up to 32 million pixels and 8192 pixels per side. Select a coarser DEM or smaller region.")
+        # Keep the high-performance C++ Horn kernel for small study areas.
+        # Large windows use exactly overlapping 3x3 NumPy blocks and do not
+        # allocate an 8+ million-cell elevation/mask array in one piece.
+        if w.width>4096 or w.height>4096 or w.width*w.height>8_000_000:
+            from .tiled import analyze_area_tiled
+            result=analyze_area_tiled(src,polygon,w,cancel)
+            return {
+                "source":"User-provided projected GeoTIFF DEM",
+                "source_crs":str(src.crs),"vertical_unit":"meter",
+                "cell_resolution_m":[abs(src.transform.a),abs(src.transform.e)],
+                **result,
+                "warning":"Slope and aspect use complete 3x3 Horn neighborhoods "
+                          "with one-pixel halos across processing tiles; "
+                          "DEM vertical units and datum must be verified. Not survey-grade.",
+            }
         values=src.read(1,window=w,masked=True).astype(np.float32)
         cover=geometry_mask([polygon],out_shape=values.shape,
                             transform=src.window_transform(w),invert=True)
