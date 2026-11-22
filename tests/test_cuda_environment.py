@@ -65,3 +65,25 @@ def test_no_toolkit_and_non_windows(monkeypatch):
     env.prepare_onnx_cuda(ort)
     assert calls == [{}]
     env.prepare_onnx_cuda(SimpleNamespace())  # Older supported ORT versions.
+
+
+def test_conflicting_runtime_versions_are_rejected(monkeypatch,tmp_path):
+    (tmp_path/"cudart64_12.dll").touch()
+    (tmp_path/"cudart64_13.dll").touch()
+    monkeypatch.setenv("GEOFATHOM_CUDA_BIN",str(tmp_path))
+    with pytest.raises(RuntimeError,match="Conflicting CUDA"):
+        env.cuda_bin_directory()
+
+
+def test_loaded_toolkit_cannot_be_switched_in_place(monkeypatch,tmp_path):
+    first=tmp_path/"first";second=tmp_path/"second"
+    for path in (first,second):
+        path.mkdir()
+        (path/"cudart64_13.dll").touch()
+    monkeypatch.setattr(env,"_is_windows",lambda:True)
+    monkeypatch.setattr(env.os,"add_dll_directory",lambda path:object(),raising=False)
+    monkeypatch.setenv("GEOFATHOM_CUDA_BIN",str(first))
+    env.prepare_native_cuda()
+    monkeypatch.setenv("GEOFATHOM_CUDA_BIN",str(second))
+    with pytest.raises(RuntimeError,match="restart"):
+        env.prepare_native_cuda()

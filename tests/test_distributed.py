@@ -104,3 +104,31 @@ def test_live_client_expiry_and_result_limit(broker):
     assert not broker.heartbeat(uid, owner)
     assert not broker.finish(uid, owner, result={"late": True})
     assert broker.poll(uid, token)["status"] == "interrupted"
+
+
+def test_live_probe_through_independent_worker_process(broker,tmp_path):
+    import subprocess
+    import sys
+    from pathlib import Path
+    from scripts.distributed_acceptance import coordinator
+    archive=tmp_path/"shared";archive.mkdir()
+    root=Path(__file__).resolve().parents[1]
+    code=("from jobs.distributed import configured_broker; "
+          "from scripts.distributed_acceptance import worker; "
+          "import sys; worker(configured_broker(),sys.argv[1],sys.argv[2],60)")
+    # The worker entry itself spawns a real raster child. A -c launcher has
+    # no stdin pseudo-file and is safe provided the target is importable.
+    process=subprocess.Popen([sys.executable,"-c",code,str(archive),"independent-node"],
+                             cwd=root)
+    try:
+        report=coordinator(broker,archive,"independent-node",60)
+        assert report["passed"] and report["valid_pixels"]==128*128
+        assert report["physical_host_verified"] is False
+        assert process.wait(timeout=15)==0
+    finally:
+        if process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill();process.wait(timeout=5)

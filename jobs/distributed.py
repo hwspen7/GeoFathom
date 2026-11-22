@@ -15,7 +15,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from uuid import UUID,uuid4
 
-from .isolation import _limit,ResultReader,cleanup_child
+from .isolation import _limit,_terminate,ResultReader,cleanup_child
 from storage.versions import materialize,archive_inputs
 
 KINDS={"spectral_index","spectral_change","semantic_segmentation"}
@@ -42,7 +42,10 @@ class Broker:
     def connect(self):
         import psycopg
         from psycopg.rows import dict_row
-        return psycopg.connect(self.dsn,row_factory=dict_row,connect_timeout=5)
+        # Bound server-side statement and lock waits; TCP failures remain
+        # subject to transport/OS detection and server-clock lease expiry.
+        return psycopg.connect(self.dsn,row_factory=dict_row,connect_timeout=5,
+            options="-c statement_timeout=10000 -c lock_timeout=5000")
 
     def submit(self,spec):
         if spec.get("kind") not in KINDS:
@@ -257,7 +260,9 @@ def worker_once(broker,node,root):
                     continue
         except Exception as error:
             # The database can disappear during heartbeat/result publication.
-            # Never keep a child running or overwrite another owner's result.
+            # Stop compute before attempting another potentially failing database call.
+            if process.pid is not None:
+                _terminate(process)
             try:
                 broker.finish(uid,owner,error=str(error))
             except Exception:
@@ -276,10 +281,21 @@ def main():
         print("Removed",broker.prune(args.cleanup_days),"terminal broker tasks")
         return
     root=os.environ["GEOFATHOM_VERSION_DIR"]
+    from psycopg import OperationalError
+    backoff=1.
     try:
         while True:
-            if not worker_once(broker,args.node,root):
-                time.sleep(.5)
+            try:
+                attempted=worker_once(broker,args.node,root)
+                backoff=1.
+                if not attempted:
+                    time.sleep(.5)
+            except OperationalError:
+                # A transient connection failure must not permanently stop
+                # an otherwise healthy compute node. Do not replay expired work.
+                _LOG.warning("Distributed broker temporarily unavailable; retrying in %.1fs.",backoff)
+                time.sleep(backoff)
+                backoff=min(15.,backoff*2)
     except KeyboardInterrupt:
         pass
 

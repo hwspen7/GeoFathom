@@ -214,3 +214,34 @@ Frontend coverage uses the same locked Vitest version and coverage provider:
 uncovered application files, so high coverage of three geometry helper suites
 must not be mistaken for high coverage of the whole UI. Browser E2E reports
 are separate from unit coverage.
+
+
+### Independent model and multi-host gates
+
+For a real operator-provisioned model, set GEOFATHOM_VISION_MODELS_DIR and
+provide a JSON dataset manifest with a dataset_id, model_id and scenes:
+each scene has image, labels, and optional scl paths relative to the manifest.
+Run `python scripts/model_qualification.py --dataset labels.json --min-iou 0.8 --min-coverage 0.95 --output model-quality.json`.
+Choose thresholds for the intended application before evaluating. Synthetic
+acceptance weights are rejected. This reports unfiltered aggregate accuracy,
+confidence retention, per-class support, hashes and scene-level metrics.
+
+For distributed qualification, provision a disposable PostgreSQL database
+and a shared archive on both nodes. Set GEOFATHOM_DISTRIBUTED_DSN privately
+on both. Choose a new acceptance-* queue and distinct compute node name.
+On the compute host run:
+
+```text
+python scripts/distributed_acceptance.py worker --queue acceptance-example --archive <shared-directory> --node compute-b
+```
+
+On the coordinator host run:
+
+```text
+python scripts/distributed_acceptance.py coordinator --queue acceptance-example --archive <shared-directory> --expected-node compute-b --output broker-quality.json
+```
+
+The probe verifies the actual broker-assigned node and real raster counts
+from the shared content-addressed archive. Physical separation is an
+operator-established fact, not something a hostname string proves.
+The test suite also runs a separate worker interpreter on one host.
