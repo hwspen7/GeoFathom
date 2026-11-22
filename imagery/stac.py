@@ -55,7 +55,10 @@ async def search_stac(
                      "User-Agent": "GeoFathom-public-STAC-metadata-search"},
         )
         response.raise_for_status()
-        data = response.json()
+        try:
+            data = response.json()
+        except ValueError as error:
+            raise ValueError("Catalog returned an invalid STAC feature collection.") from error
     if (not isinstance(data, dict) or data.get("type") != "FeatureCollection"
             or not isinstance(data.get("features"), list)):
         raise ValueError("Catalog returned an invalid STAC feature collection.")

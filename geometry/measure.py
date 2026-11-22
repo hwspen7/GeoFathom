@@ -58,10 +58,27 @@ def measure_geometry(geometry: dict[str, Any]) -> dict[str, Any]:
 
     area = perimeter = length = None
     if kind in {"Polygon", "MultiPolygon"}:
-        signed_area, perimeter = _GEOD.geometry_area_perimeter(item)
-        area = abs(signed_area)
+        # GeoJSON producers do not always follow right-hand ring ordering.
+        # Compute each boundary independently: holes subtract, independent
+        # polygon components add, and all boundary lengths contribute.
+        polygons = [item] if kind == "Polygon" else list(item.geoms)
+        areas, lengths = [], []
+        for polygon in polygons:
+            exterior_area, exterior_length = _GEOD.polygon_area_perimeter(
+                *zip(*(p[:2] for p in polygon.exterior.coords)))
+            holes = [_GEOD.polygon_area_perimeter(
+                *zip(*(p[:2] for p in ring.coords))) for ring in polygon.interiors]
+            component = abs(exterior_area) - math.fsum(abs(a) for a, _ in holes)
+            if not math.isfinite(component) or component <= 0:
+                raise GeometryError("Polygon has no positive local ellipsoidal area.")
+            areas.append(component)
+            lengths.extend([exterior_length, *(length for _, length in holes)])
+        area, perimeter = math.fsum(areas), math.fsum(lengths)
     elif kind in {"LineString", "MultiLineString"}:
         length = _GEOD.geometry_length(item)
+
+    if any(v is not None and not math.isfinite(v) for v in (area, perimeter, length)):
+        raise GeometryError("Geometry measurement is outside the supported numerical domain.")
 
     return {
         "geometry_type": kind,
@@ -72,5 +89,5 @@ def measure_geometry(geometry: dict[str, Any]) -> dict[str, Any]:
         "bounds": list(item.bounds),
         "coordinate_count": points,
         "method": "WGS84 ellipsoidal geodesic",
-        "note": "A geometric measurement, not a verified legal land parcel.",
+        "note": "A geometric measurement, not a verified legal land parcel. Polygon perimeter includes exterior and hole boundaries.",
     }

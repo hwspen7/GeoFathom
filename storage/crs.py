@@ -5,7 +5,8 @@ Project CRS affects coordinate readouts, analysis requests and projected
 grids. The app never pretends that changing CRS reprojects the tile canvas.
 """
 from pyproj import CRS,Transformer
-from pyproj.exceptions import CRSError
+from pyproj.exceptions import CRSError, ProjError
+import math
 from storage.database import StorageError,_connect,_now,_required_project
 
 def _epsg(text):
@@ -13,6 +14,13 @@ def _epsg(text):
         raise StorageError("Use a registered EPSG:<code> coordinate reference system.")
     try:
         crs=CRS.from_user_input(text.upper())
+        # Only horizontal 2D coordinates are stored and transformed here;
+        # vertical, geocentric, compound and other 3D CRSs require a
+        # different data contract rather than silently dropping a dimension.
+        if not (crs.is_geographic or crs.is_projected) or len(crs.axis_info)!=2:
+            raise ValueError("Expected a horizontal 2D CRS")
+        if crs.is_geographic and any(axis.unit_name.lower() not in {"degree","degrees"} for axis in crs.axis_info):
+            raise ValueError("Expected angular coordinates in degrees")
         authority=crs.to_authority()
         if not authority or authority[0]!="EPSG":
             raise ValueError("Expected EPSG authority")
@@ -58,13 +66,18 @@ def transform_positions(points,source="EPSG:4326",target="EPSG:3857"):
     src=_epsg(source);dst=_epsg(target)
     if not 1<=len(points)<=2000:
         raise StorageError("Transform between 1 and 2000 coordinate pairs.")
-    import math
+    source_crs=CRS.from_user_input(src)
     for p in points:
-        if len(p)!=2 or not all(isinstance(x,(int,float)) and
+        if not isinstance(p,(tuple,list)) or len(p)!=2 or not all(isinstance(x,(int,float)) and
             not isinstance(x,bool) and math.isfinite(x) for x in p):
             raise StorageError("Coordinate pairs must contain two finite numbers.")
-    to=Transformer.from_crs(src,dst,always_xy=True)
-    result=[list(to.transform(*p)) for p in points]
+        if source_crs.is_geographic and not (-180<=p[0]<=180 and -90<=p[1]<=90):
+            raise StorageError("Geographic coordinates exceed longitude/latitude bounds.")
+    try:
+        to=Transformer.from_crs(src,dst,always_xy=True,allow_ballpark=False)
+        result=[list(to.transform(*p,errcheck=True)) for p in points]
+    except (ProjError, ValueError) as error:
+        raise StorageError("No valid coordinate transformation in the supported projection domain.") from error
     if not all(math.isfinite(x) for pair in result for x in pair):
         raise StorageError("Coordinates are outside the target projection domain.")
     return {"source":src,"target":dst,"coordinates":result,
@@ -72,15 +85,17 @@ def transform_positions(points,source="EPSG:4326",target="EPSG:3857"):
 
 def projected_grid(project_id,bbox,divisions=5):
     from storage.paging import _bounds
-    import math
     if not 2<=divisions<=10:raise StorageError("Grid subdivisions must be 2–10.")
     west,south,east,north=_bounds(bbox)
     source=get_crs(project_id)["epsg"]
     target=CRS.from_user_input(source)
     coords=[(west,south),(west,north),(east,south),(east,north)]
-    fwd=Transformer.from_crs("EPSG:4326",target,always_xy=True)
-    inv=Transformer.from_crs(target,"EPSG:4326",always_xy=True)
-    corners=[fwd.transform(*p) for p in coords]
+    try:
+        fwd=Transformer.from_crs("EPSG:4326",target,always_xy=True,allow_ballpark=False)
+        inv=Transformer.from_crs(target,"EPSG:4326",always_xy=True,allow_ballpark=False)
+        corners=[fwd.transform(*p,errcheck=True) for p in coords]
+    except (ProjError, ValueError) as error:
+        raise StorageError("Viewport cannot be represented in the chosen CRS.") from error
     if not all(math.isfinite(a) and math.isfinite(b) for a,b in corners):
         raise StorageError("Viewport cannot be represented in the chosen CRS.")
     xs=[p[0] for p in corners];ys=[p[1] for p in corners]
