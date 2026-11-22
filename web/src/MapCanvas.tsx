@@ -1058,15 +1058,21 @@ export default function MapCanvas({
       if(index>=48)break;
     }
     const layout=()=>{
-      const placed:Array<{x:number;y:number}>=[];
+      const placed:Array<{left:number;right:number;top:number;bottom:number}>=[];
       const width=map.getContainer().clientWidth,height=map.getContainer().clientHeight;
-      for(const item of labels){
+      // Use actual measured text dimensions, including the two-line total.
+      // Keep hidden elements measurable without covering the map.
+      const sizes=labels.map(({node})=>({w:node.offsetWidth+8,h:node.offsetHeight+6}));
+      for(const [index,item] of labels.entries()){
         const a=map.project(item.a),b=item.b?map.project(item.b):null;
         const x=b?(a.x+b.x)/2:a.x,y=b?(a.y+b.y)/2:a.y;
-        const hidden=x<30||y<18||x>width-30||y>height-18||
-          (b&&(Math.hypot(a.x-b.x,a.y-b.y)<42||placed.some(p=>Math.abs(p.x-x)<70&&Math.abs(p.y-y)<24)));
-        item.node.hidden=Boolean(hidden);
-        if(!hidden){item.node.style.transform='translate('+x+'px,'+y+'px) translate(-50%,-50%)';placed.push({x,y});}
+        const {w,h}=sizes[index];
+        const rect={left:x-w/2,right:x+w/2,top:y-h/2,bottom:y+h/2};
+        const collision=placed.some(p=>rect.left<p.right&&rect.right>p.left&&rect.top<p.bottom&&rect.bottom>p.top);
+        const hidden=rect.left<3||rect.top<3||rect.right>width-3||rect.bottom>height-3||
+          !!(b&&(Math.hypot(a.x-b.x,a.y-b.y)<Math.min(w,42)||collision));
+        item.node.style.visibility=hidden?'hidden':'visible';
+        if(!hidden){item.node.style.transform='translate('+x+'px,'+y+'px) translate(-50%,-50%)';placed.push(rect);}
       }
     };
     layout();map.on('render',layout);

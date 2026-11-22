@@ -51,9 +51,14 @@ export default function App() {
   const [candidates, setCandidates] = useState<Place[]>([]);
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
   const [geometry, setGeometry] = useState<GeoJSON.Geometry | null>(null);
-  const [scratch,setScratchState]=useState<ScratchFeature[]>(readScratch);
+  const scratchScope=useRef<string|null>(null);
+  const [scratchDocument,setScratchDocument]=useState(()=>({scope:null as string|null,features:readScratch()}));
+  const scratch=scratchDocument.features;
   const scratchHistory=useRef<ScratchHistory|null>(null);
   if(!scratchHistory.current)scratchHistory.current=new ScratchHistory(scratch);
+  function setScratchState(features:ScratchFeature[]){
+    setScratchDocument({scope:scratchScope.current,features});
+  }
   function setScratch(update:(old:ScratchFeature[])=>ScratchFeature[]){
     setScratchState(scratchHistory.current!.change(update));
   }
@@ -100,8 +105,8 @@ export default function App() {
   const [imageLayer,setImageLayer]=useState<RasterAsset|null>(null);
   const [demLayer,setDemLayer]=useState<RasterAsset|null>(null);
   const [extentMode,setExtentMode]=useState(false);
-  const terrainExtent=useState<GeoJSON.Polygon|null>(null);
-  const [extentGeometry,setExtentGeometry]=terrainExtent;
+  const [extentGeometry,setExtentGeometry]=useState<GeoJSON.Polygon|null>(null);
+  const rasterScopes=useRef(new Map<string,{layers:RasterLayerView[];image:RasterAsset|null;dem:RasterAsset|null}>());
   const selectedRaster=imageLayer??demLayer;
   const setRasterVisible=(visible:boolean)=>{if(selectedRaster)setRasterLayers(old=>changeRaster(old,selectedRaster.id,{visible}));};
   const [traceMode, setTraceMode] = useState(false);
@@ -163,7 +168,7 @@ export default function App() {
   const selectedLocked = Boolean(selectedSaved &&
     projectWorkspace?.layers.find(layer => layer.id === selectedSaved.layer_id)?.locked);
 
-  useEffect(()=>{setScratchStorageError(!writeScratch(scratch));},[scratch]);
+  useEffect(()=>{setScratchStorageError(!writeScratch(scratchDocument.features,scratchDocument.scope));},[scratchDocument]);
 
   function storeScratch(next:GeoJSON.Geometry,measured:Measurement,id:string|null=scratchId,metadata?:{source:string;properties:Record<string,unknown>;name?:string}){
     const key=id??'scratch-'+crypto.randomUUID();
@@ -265,7 +270,7 @@ export default function App() {
     geometrySequence.current++;setBusy(false);setTerrainPicking(false);setTraceMode(false);setPromptMode(null);
     setPendingAnnotation(null);setSelectionBoxMode(false);setLabelMoveMode(false);
     if (featureIdentity.current !== feature.id) {
-      timeline.current = new GeometryTimeline();
+      timeline.current = new GeometryTimeline(feature.geometry);
       setLinked(false);
     }
     featureIdentity.current = feature.id;
@@ -680,7 +685,7 @@ export default function App() {
     setPreview(null);setPendingShared(null);setPromptMode(null);setTraceMode(false);setPendingAnnotation(null);
     setTerrainPicking(false);setSelectionBoxMode(false);setLabelMoveMode(false);setSplitParts([]);
     lastValid.current=null;timeline.current=new GeometryTimeline();setHistoryPulse(v=>v+1);
-    setGeometrySource('');setFeatureProperties({});setContextMenu(null);setError('');
+    setGeometrySource('');setFeatureProperties({});setContextMenu(null);setExtentMode(false);setExtentGeometry(null);setError('');
   }
   function historyStep(redo=false){
     if(busy||drawingMode)return;
@@ -843,6 +848,31 @@ export default function App() {
               splitParts={splitParts}
               refreshToken={refreshToken}
               extraFeatures={pagedFeatures}
+              onProjectSwitch={(id,created)=>{
+                const previous=scratchScope.current;
+                if(previous===id)return;
+                const source=scratchHistory.current!.current;
+                // Move only an explicitly selected local draft into a newly
+                // created project; never carry saved objects into another project.
+                const carry=created&&scratchId?source.find(f=>f.id===scratchId):null;
+                const unbound=created&&!selectedFeatureId&&!scratchId&&geometry&&measurement&&!preview;
+                const next=readScratch(id);
+                if(carry&&!next.some(f=>f.id===carry.id))next.push(carry);
+                const old=carry&&previous===null?source.filter(f=>f.id!==carry.id):source;
+                if(!writeScratch(old,previous))setScratchStorageError(true);
+                rasterScopes.current.set(previous??'local',{layers:rasterLayers,image:imageLayer,dem:demLayer});
+                const view=rasterScopes.current.get(id??'local');
+                setRasterLayers(view?.layers??[]);setImageLayer(view?.image??null);setDemLayer(view?.dem??null);
+                scratchScope.current=id;scratchHistory.current=new ScratchHistory(next);setScratchState(next);
+                projectEpoch.current++;projectIdentity.current=null;geometrySequence.current++;
+                setProjectWorkspace(null);setActiveProjectId(null);clearWorkspace();
+                setExtentMode(false);setExtentGeometry(null);
+                if(carry)selectScratch(carry,false);
+                else if(unbound&&geometry&&measurement){
+                  storeScratch(geometry,measurement,null,{source:geometrySource,properties:featureProperties});
+                  lastValid.current=structuredClone(geometry);setGeometry(geometry);setMeasurement(measurement);setGeometrySource(geometrySource);setFeatureProperties(featureProperties);
+                }
+              }}
               onWorkspace={(data, id) => {
                 if(projectIdentity.current!==id){
                   projectIdentity.current=id;
@@ -1176,8 +1206,11 @@ export default function App() {
                   {item.labels&&<small>Labels</small>}
                 </div>
               ))}
-              {!(projectWorkspace?.layers??[]).some(layer=>Boolean(layer.visible))&&
-                <small>No visible project layers</small>}
+              {scratch.some(f=>f.visible)&&<div className="map-legend-item"><span className="legend-swatch" style={{background:'#168047'}}/><span>Local drawings · {scratch.filter(f=>f.visible).length}</span></div>}
+              {rasterLayers.filter(l=>l.visible).map(l=><div key={l.asset.id} className="map-legend-item"><span className="legend-swatch" style={{background:'#a8adb0'}}/><span>{l.kind==='dem'?'DEM':'Raster'} · {l.asset.name}</span></div>)}
+              {terrainVisible&&terrainFeatures.length>0&&<div className="map-legend-item"><span className="legend-swatch" style={{background:'#d7b65e'}}/><span>Terrain results · {terrainFeatures.length}</span></div>}
+              {!(projectWorkspace?.layers??[]).some(layer=>Boolean(layer.visible))&&!scratch.some(f=>f.visible)&&!rasterLayers.some(l=>l.visible)&&!terrainFeatures.length&&
+                <small>No visible overlays</small>}
             </div>}
           </div>
           {pendingAnnotation&&<div className="annotation-banner">
@@ -1200,9 +1233,9 @@ export default function App() {
                 <>
                   <div className="metric">
                     <span>{measurement.area_m2 !== null ? 'Geographic area' : 'Distance'}</span>
-                    <strong>{measurement.area_km2 !== null
-                      ? number(measurement.area_km2, 4) + ' km²'
-                      : measurement.length_m !== null ? number(measurement.length_m / 1000, 3) + ' km' : 'Location only'}</strong>
+                    <strong>{measurement.area_m2 !== null
+                      ? areaText(measurement.area_m2,areaUnit)
+                      : measurement.length_m !== null ? distanceText(measurement.length_m,display.distance) : 'Location only'}</strong>
                   </div>
                   {measurement.perimeter_m !== null && <div className="metric secondary"><span>Perimeter</span><strong>{distanceText(measurement.perimeter_m,display.distance)}</strong></div>}
                   {measurement.area_m2 !== null && <div className="metric secondary"><span>Square meters</span><strong>{number(measurement.area_m2)} m²</strong></div>}
@@ -1350,6 +1383,7 @@ export default function App() {
               asset={imageLayer} localImport={capabilities?.local_raster_import===true} refreshToken={connectionRetry+refreshToken}
               onSelect={(asset) => {
                 geometrySequence.current++;
+                if(!projectCurrent())return;
                 setImageLayer(asset);setRasterLayers(old=>addRaster(old,asset,'image'));
                 setTraceMode(false);
                 setPromptMode(null);setPositivePoints([]);setNegativePoints([]);setBoxPoints([]);

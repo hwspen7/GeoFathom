@@ -49,12 +49,13 @@ export function localShape(mode:ShapeMode,points:Position[]){
   if(!geometry||((mode==='circle'||mode==='rectangle')&&geometry.type!=='Polygon'))throw Error('Invalid or oversized shape.');
   return {geometry,measurement:localMeasurement(geometry)};
 }
-export function readScratch():ScratchFeature[]{
-  try{const value:unknown=JSON.parse(localStorage.getItem(KEY)||'[]');
+const scopedKey=(scope:string|null)=>scope?KEY+':'+scope:KEY;
+export function readScratch(scope:string|null=null):ScratchFeature[]{
+  try{const value:unknown=JSON.parse(localStorage.getItem(scopedKey(scope))||'[]');
     if(!Array.isArray(value))return [];
-    return value.slice(0,SCRATCH_LIMIT).filter(f=>f&&typeof f.id==='string'&&f.id.startsWith('scratch-')&&typeof f.name==='string'&&typeof f.visible==='boolean'&&f.geometry&&f.measurement&&Array.isArray(f.measurement.bounds));
+    return value.filter(f=>f&&typeof f.id==='string'&&f.id.startsWith('scratch-')&&typeof f.name==='string'&&typeof f.visible==='boolean'&&f.geometry&&f.measurement&&Array.isArray(f.measurement.bounds));
   }catch{return [];}
 }
-export function writeScratch(features:ScratchFeature[]):boolean{
-  try{localStorage.setItem(KEY,JSON.stringify(features));return true;}catch{return false;}
+export function writeScratch(features:ScratchFeature[],scope:string|null=null):boolean{
+  try{localStorage.setItem(scopedKey(scope),JSON.stringify(features));return true;}catch{return false;}
 }

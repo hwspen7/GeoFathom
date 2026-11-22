@@ -26,13 +26,14 @@ interface Props {
   onPlaceAnnotation: (projectId:string,layerId:string,text:string)=>void;
   onFeatureDeleted:()=>void;
   onSavedDraft?:()=>void;
+  onProjectSwitch?:(id:string|null,created:boolean)=>void;
   extraFeatures:WorkspaceFeature[];
 }
 
 export default function ProjectsPanel({
   geometry, featureName, featureSource, featureProperties, selectedFeatureId,
   splitParts, refreshToken, onOpen, onWorkspace, onPlaceAnnotation, onFeatureDeleted,
-  extraFeatures,onSavedDraft,
+  extraFeatures,onSavedDraft,onProjectSwitch,
 }: Props) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [listRetry,setListRetry]=useState(0);
@@ -53,6 +54,7 @@ export default function ProjectsPanel({
   const [trashPulse,setTrashPulse]=useState(0);
   const notify = useRef(onWorkspace);
   notify.current = onWorkspace;
+  const notifySwitch=useRef(onProjectSwitch);notifySwitch.current=onProjectSwitch;
   const selection = useRef('');
   const requestSequence = useRef(0);
   const styleWriting=useRef(false);
@@ -60,10 +62,11 @@ export default function ProjectsPanel({
   const featureIdentity = useRef(selectedFeatureId);
   featureIdentity.current = selectedFeatureId;
 
-  const chooseProject = useCallback((id: string) => {
+  const chooseProject = useCallback((id: string,created=false) => {
     if (selection.current === id) return;
     // Invalidate outstanding reads synchronously, before React commits the switch.
     selection.current = id;
+    notifySwitch.current?.(id||null,created);
     requestSequence.current++;
     historySequence.current++;
     rememberProject(id);
@@ -161,7 +164,7 @@ export default function ProjectsPanel({
     try {
       const created = await newProject(draftName.trim());
       setProjects(await getProjects());
-      chooseProject(created.id);
+      chooseProject(created.id,true);
       setDraftName('');
       setInfo('Project created.');
     } catch (cause) { setError(String(cause)); }

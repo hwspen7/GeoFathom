@@ -168,8 +168,9 @@ export function snapPixels(
 }
 
 export class GeometryTimeline {
-  private states: Array<GeoJSON.Geometry | null> = [null];
+  private states: Array<GeoJSON.Geometry | null>;
   private index = 0;
+  constructor(baseline:GeoJSON.Geometry|null=null){this.states=[copyNullable(baseline)];}
   get current(): GeoJSON.Geometry | null { return copyNullable(this.states[this.index]); }
   get canUndo(): boolean { return this.index > 0; }
   get canRedo(): boolean { return this.index + 1 < this.states.length; }
