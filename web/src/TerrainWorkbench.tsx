@@ -183,7 +183,9 @@ export default function TerrainWorkbench(p:Props){
      if(ticket!==sequence.current||controller.signal.aborted)return;
      setRecords(old=>{
        const kept=old.filter(r=>r.inputKey!==inputKey||r.saved);
-       return [...kept,record];
+       // Show only the newest derived raster by default. Older results remain
+       // available but must be explicitly enabled to avoid opaque stacking.
+       return [...kept.map(r=>r.advanced?.raster?{...r,visible:false}:r),record];
      });
      setSelectedRecord(record.id);latest.current.onHover(null);
    }catch(e){if(ticket===sequence.current&&!controller.signal.aborted)setError(e instanceof Error?e.message:'Terrain analysis failed.');}

@@ -905,18 +905,39 @@ export default function MapCanvas({
       geometry:{type:'Polygon',coordinates:[[[box[0],box[1]],[box[2],box[1]],
         [box[2],box[3]],[box[0],box[3]],[box[0],box[1]]]]}
     }]:[]});
+    // The requested footprint must stay legible above imported and derived raster layers.
+    if(map.getLayer('terrain-fetch-target-fill'))map.moveLayer('terrain-fetch-target-fill');
+    if(map.getLayer('terrain-fetch-target-outline'))map.moveLayer('terrain-fetch-target-outline');
     container.current?.setAttribute('data-dem-target-visible',box?'true':'false');
   },[terrainFetchTarget,ready]);
+  // Keep derived raster image sources stable when layer visibility changes.
+  // Recreating dozens of map images on each result checkbox causes flicker and GPU churn.
+  const derivedRasters=useRef(new Set<string>());
   useEffect(()=>{
     const map=mapRef.current;if(!ready||!map)return;
-    const ids:string[]=[];
-    for(const item of terrainRasters??[]){
-      const id='terrain-raster-'+item.id;
-      map.addSource(id,{type:'image',url:item.raster.png,coordinates:item.raster.corners});
-      map.addLayer({id,source:id,type:'raster',paint:{'raster-opacity':.72,'raster-fade-duration':0}},'terrain-result-lines');ids.push(id);
+    const desired=new Set((terrainRasters??[]).map(item=>item.id));
+    for(const id of derivedRasters.current){
+      if(desired.has(id))continue;
+      const name='terrain-raster-'+id;
+      if(map.getLayer(name))map.removeLayer(name);
+      if(map.getSource(name))map.removeSource(name);
+      derivedRasters.current.delete(id);
     }
-    container.current?.setAttribute('data-terrain-raster-count',String(ids.length));
-    return()=>{for(const id of ids){if(map.getLayer(id))map.removeLayer(id);if(map.getSource(id))map.removeSource(id);}};
+    for(const item of terrainRasters??[]){
+      if(derivedRasters.current.has(item.id))continue;
+      const name='terrain-raster-'+item.id;
+      try{
+        map.addSource(name,{type:'image',url:item.raster.png,coordinates:item.raster.corners});
+        map.addLayer({id:name,source:name,type:'raster',
+          paint:{'raster-opacity':.72,'raster-fade-duration':0}},'terrain-result-lines');
+        derivedRasters.current.add(item.id);
+      }catch(e){
+        if(map.getLayer(name))map.removeLayer(name);
+        if(map.getSource(name))map.removeSource(name);
+        rasterErrors.current('Derived terrain '+item.title+': '+String(e));
+      }
+    }
+    container.current?.setAttribute('data-terrain-raster-count',String(derivedRasters.current.size));
   },[terrainRasters,ready]);
   useEffect(()=>{
     const map=mapRef.current;

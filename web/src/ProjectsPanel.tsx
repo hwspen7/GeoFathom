@@ -430,7 +430,7 @@ export default function ProjectsPanel({
                 </label>
                 <label>Label source field
                   <input aria-label="Label source field" list="geo-label-fields"
-                    key={activeLayer.id+'-field-'+activeLayer.style_revision}
+                    key={activeLayer.id+'-field'}
                     defaultValue={activeLayer.style.labels.field}
                     maxLength={64}
                     onBlur={event=>{
@@ -459,14 +459,14 @@ export default function ProjectsPanel({
                   <label>Text color
                     <input type="color" aria-label="Label text color" disabled={busy}
                       defaultValue={activeLayer.style.labels.text_color}
-                      key={activeLayer.id+'-text-'+activeLayer.style_revision}
+                      key={activeLayer.id+'-text'}
                       onBlur={event=>{if(event.currentTarget.value!==activeLayer.style.labels.text_color)
                         void styleLayer({labels:{text_color:event.currentTarget.value}});}}/>
                   </label>
                   <label>Halo color
                     <input type="color" aria-label="Label halo color" disabled={busy}
                       defaultValue={activeLayer.style.labels.halo_color}
-                      key={activeLayer.id+'-halo-'+activeLayer.style_revision}
+                      key={activeLayer.id+'-halo'}
                       onBlur={event=>{if(event.currentTarget.value!==activeLayer.style.labels.halo_color)
                         void styleLayer({labels:{halo_color:event.currentTarget.value}});}}/>
                   </label>
@@ -510,7 +510,7 @@ export default function ProjectsPanel({
                 <label>Category color attribute
                   <input aria-label="Category color field" maxLength={64}
                     placeholder="e.g. category, landuse, status"
-                    key={activeLayer.id+'-category-field-'+activeLayer.style_revision}
+                    key={activeLayer.id+'-category-field'}
                     defaultValue={activeLayer.style.symbol.category_field}
                     onBlur={event=>{
                       const value=event.currentTarget.value.trim();
