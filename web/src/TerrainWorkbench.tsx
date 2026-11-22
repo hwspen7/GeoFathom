@@ -70,6 +70,7 @@ interface Props{
  viewport:[number,number,number,number]|null;
  localImport:boolean;refreshToken:number;origin:Position|null;picking:boolean;
  onSelectRaster:(r:RasterAsset)=>void;onDraw:(line:boolean)=>void;onUseExtent:()=>void;onPick:()=>void;
+ extentMode:boolean;onUseSelection:()=>void;
  onHover:(point:Position|null)=>void;onPreview:(g:GeoJSON.Feature[])=>void;onSaved:()=>void;
 }
 export default function TerrainWorkbench(p:Props){
@@ -205,9 +206,10 @@ export default function TerrainWorkbench(p:Props){
    <div className="professional-form">
      <div className="survey-action-bar">
        <button onClick={()=>p.onDraw(operation==='profile')}>{operation==='profile'?'Draw profile line':'Draw study area'}</button>
-       {operation!=='profile'&&<button disabled={!dem} onClick={p.onUseExtent}>DEM extent</button>}
+       {operation!=='profile'&&<button disabled={!dem} aria-pressed={p.extentMode} onClick={p.onUseExtent}>DEM extent</button>}
+       {p.extentMode&&<button onClick={p.onUseSelection}>Use selection</button>}
      </div>
-     <small className="compact-notice">{correctShape?'✓ Geometry selected':operation==='profile'?'Select or draw a line':'Select or draw a polygon'}</small>
+     <small className="compact-notice">{correctShape?(p.extentMode?'✓ DEM footprint':'✓ Geometry selected'):operation==='profile'?'Select or draw a line':'Select or draw a polygon'}</small>
      {operation==='contours'&&<label>Interval (m)<input aria-label="Contour interval" type="number" min=".01" step="any" value={interval} onChange={e=>setInterval(e.target.value)}/></label>}
      {operation==='volume'&&<label>Reference elevation (m)<input aria-label="Reference elevation" type="number" step="any" value={reference} onChange={e=>setReference(e.target.value)}/></label>}
      {needsPoint&&<>

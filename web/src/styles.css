@@ -593,3 +593,5 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 
 .desktop-gis .map-edge-value,.desktop-gis .map-dimension-total{color:var(--dimension-text,#fff);-webkit-text-stroke:0;text-shadow:0 1px 2px var(--dimension-halo,#000),1px 0 1px var(--dimension-halo,#000),-1px 0 1px var(--dimension-halo,#000),0 -1px 1px var(--dimension-halo,#000)}
 .gis-settings-panel>label{display:flex;align-items:center;justify-content:space-between;margin:5px 0;gap:6px;font-size:11px}
+
+.raster-layer-row{border-top:1px solid #dce3e8;padding:6px 0;font-size:11px}.raster-layer-row .gis-check{overflow-wrap:anywhere}.raster-layer-row>label:not(.gis-check){display:flex;align-items:center;gap:5px}.raster-layer-row input[type=range]{flex:1;min-width:0}

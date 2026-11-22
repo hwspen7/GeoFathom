@@ -93,7 +93,7 @@ export default function RasterPanel({
             if (selected) onSelect(selected);
           }}>
           <option value="">{assets.length?'Choose raster layer':'No raster layers'}</option>
-          {assets.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+          {[...assets,...(asset&&!assets.some(a=>a.id===asset.id)?[asset]:[])].map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
         </select>
       )}
       {asset && (

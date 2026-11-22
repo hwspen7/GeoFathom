@@ -13,6 +13,7 @@ import MapCanvas, { type FocusPoint } from './MapCanvas';
 import {loadDisplay,saveDisplay,areaText,distanceText,type AreaUnit} from './displaySettings';
 import {BASEMAPS,customBasemap,defaultCustom,preferredSatellite,mapTilerImagery,type BasemapId,type CustomBasemap} from './basemaps';
 import {ScratchHistory} from './scratchHistory';
+import {addRaster,changeRaster,type RasterLayerView} from './rasterLayers';
 import {localMeasurement,localShape,readScratch,writeScratch,SCRATCH_LIMIT,OFFLINE_METHOD,type ScratchFeature} from './scratch';
 import SurveyTools from './SurveyTools';
 import ProfessionalPanel from './ProfessionalPanel';
@@ -95,9 +96,14 @@ export default function App() {
   const setShowMeasurements=(value:boolean)=>setDisplay(old=>({...old,dimensions:value}));
   const [mapTilerKey,setMapTilerKey]=useState('');
   useEffect(()=>saveDisplay(display),[display]);
-  const [rasterVisible,setRasterVisible]=useState(true);
-  const [rasterOpacity,setRasterOpacity]=useState(.88);
-  const [imageLayer, setImageLayer] = useState<RasterAsset | null>(null);
+  const [rasterLayers,setRasterLayers]=useState<RasterLayerView[]>([]);
+  const [imageLayer,setImageLayer]=useState<RasterAsset|null>(null);
+  const [demLayer,setDemLayer]=useState<RasterAsset|null>(null);
+  const [extentMode,setExtentMode]=useState(false);
+  const terrainExtent=useState<GeoJSON.Polygon|null>(null);
+  const [extentGeometry,setExtentGeometry]=terrainExtent;
+  const selectedRaster=imageLayer??demLayer;
+  const setRasterVisible=(visible:boolean)=>{if(selectedRaster)setRasterLayers(old=>changeRaster(old,selectedRaster.id,{visible}));};
   const [traceMode, setTraceMode] = useState(false);
   const [promptMode,setPromptMode] = useState<PromptMode>(null);
   const [positivePoints,setPositivePoints] = useState<Position[]>([]);
@@ -169,6 +175,7 @@ export default function App() {
     });
   }
   function selectScratch(item:ScratchFeature,zoom=true){
+    setExtentMode(false);
     geometrySequence.current++;setBusy(false);setScratchId(item.id);setSelectedFeatureId(null);featureIdentity.current=null;
     timeline.current=new GeometryTimeline();timeline.current.push(item.geometry);setHistoryPulse(v=>v+1);
     lastValid.current=structuredClone(item.geometry);setGeometry(item.geometry);setMeasurement(item.measurement);
@@ -251,6 +258,7 @@ export default function App() {
   function openStoredFeature(feature: WorkspaceFeature) {
     // A callback from a previous project may finish after navigation.
     if (feature.project_id !== projectIdentity.current) return;
+    setExtentMode(false);
     geometrySequence.current++;setBusy(false);setTerrainPicking(false);setTraceMode(false);setPromptMode(null);
     setPendingAnnotation(null);setSelectionBoxMode(false);setLabelMoveMode(false);
     if (featureIdentity.current !== feature.id) {
@@ -417,7 +425,7 @@ export default function App() {
       return;
     }
     geometrySequence.current++;
-    setDrawingMode(next);setEdgeMoving(false);setTerrainPicking(false);setTerrainHover(null);
+    setDrawingMode(next);setEdgeMoving(false);setTerrainPicking(false);setTerrainHover(null);setExtentMode(false);
     setTraceMode(false);
     setPromptMode(null);setPendingAnnotation(null);setSelectionBoxMode(false);setLabelMoveMode(false);
     if (!operation) {
@@ -827,7 +835,7 @@ export default function App() {
                 if(projectIdentity.current!==id){
                   projectIdentity.current=id;
                   projectEpoch.current++;
-                  geometrySequence.current++;setBusy(false);setTerrainPicking(false);setTerrainOrigin(null);setTerrainHover(null);
+                  geometrySequence.current++;setBusy(false);setTerrainPicking(false);setTerrainOrigin(null);setTerrainHover(null);setExtentMode(false);setExtentGeometry(null);
                   // Keep an explicitly unsaved draft when creating a project,
                   // but never carry a saved feature or its undo stack across
                   // project identities.
@@ -892,14 +900,21 @@ export default function App() {
               </select>
               <small role="status" className="basemap-status">{mapStatus}</small>
               {terrainFeatures.length>0&&<label className="gis-check"><input aria-label="Terrain result layer" type="checkbox" checked={terrainVisible} onChange={e=>setTerrainVisible(e.target.checked)}/> Terrain result · {terrainFeatures.length}</label>}
-              {imageLayer&&<><label className="gis-check"><input type="checkbox" checked={rasterVisible} onChange={e=>setRasterVisible(e.target.checked)}/> {imageLayer.name}</label>
-              <label>Raster opacity <input aria-label="Raster opacity" type="range" min="0" max="1" step=".05" value={rasterOpacity} onChange={e=>setRasterOpacity(Number(e.target.value))}/></label>
-              <button className="raster-remove" title="Remove the active raster from the map; the source file remains in the imagery library" onClick={()=>{
-                if(!window.confirm('Remove raster from map? Unsaved terrain results for this source will be cleared. The library file is retained.'))return;
-                geometrySequence.current++;setBusy(false);setImageLayer(null);setTraceMode(false);setPromptMode(null);
-                setPositivePoints([]);setNegativePoints([]);setBoxPoints([]);setTerrainPicking(false);setTerrainOrigin(null);setTerrainHover(null);
-                setTerrainFeatures([]);setMessage('Raster removed from map. Source retained in library.');
-              }}>Remove raster from map</button></>}
+              {rasterLayers.map(layer=><div key={layer.asset.id} className="raster-layer-row">
+                <label className="gis-check"><input aria-label={'Show raster '+layer.asset.name} type="checkbox" checked={layer.visible}
+                  onChange={e=>setRasterLayers(old=>changeRaster(old,layer.asset.id,{visible:e.target.checked}))}/> {layer.kind==='dem'?'DEM · ':''}{layer.asset.name}</label>
+                <label>Opacity <input aria-label={'Opacity '+layer.asset.name} type="range" min="0" max="1" step=".05" value={layer.opacity}
+                  onChange={e=>setRasterLayers(old=>changeRaster(old,layer.asset.id,{opacity:Number(e.target.value)}))}/></label>
+                <div className="survey-action-bar"><button onClick={()=>{
+                  const [w,s,e,n]=layer.asset.bbox;setFocus({longitude:(w+e)/2,latitude:(s+n)/2,bbox:layer.asset.bbox,key:Date.now()});
+                }}>Fit</button>
+                <button title="Remove layer; original library file is retained" aria-label={'Remove raster '+layer.asset.name} onClick={()=>{
+                  geometrySequence.current++;setBusy(false);setRasterLayers(old=>old.filter(l=>l.asset.id!==layer.asset.id));
+                  if(imageLayer?.id===layer.asset.id){setImageLayer(null);setTraceMode(false);setPromptMode(null);setPositivePoints([]);setNegativePoints([]);setBoxPoints([]);}
+                  if(demLayer?.id===layer.asset.id){setDemLayer(null);setExtentMode(false);setExtentGeometry(null);setTerrainPicking(false);setTerrainOrigin(null);setTerrainHover(null);setTerrainFeatures([]);}
+                  setMessage('Raster removed from map. Source retained in library.');
+                }}>Remove</button></div>
+              </div>)}
             </section>
           <section className="panel-section">
             <div className="section-heading"><Search size={16} /><span>Find a place</span></div>
@@ -1010,7 +1025,7 @@ export default function App() {
             measurement={preview?null:measurement} showMeasurements={showMeasurements} display={display}
             selectedFeatureId={selectedFeatureId??scratchId}
             onFinishDrawing={()=>{void finishDrawing();}}
-            imageLayer={rasterVisible?imageLayer:null} rasterOpacity={rasterOpacity}
+            rasterLayers={rasterLayers} onRasterError={setError}
             traceMode={traceMode||promptMode!==null}
             promptPositive={positivePoints} promptNegative={negativePoints}
             promptBox={boxPoints}
@@ -1101,7 +1116,7 @@ export default function App() {
               }
             }}
             discovered={[...discovered.map(place => place.geometry).filter((item): item is GeoJSON.Geometry => item !== null),
-              ...externalFeatures,...splitParts.slice(1)]}
+              ...externalFeatures,...splitParts.slice(1),...(extentMode&&extentGeometry?[extentGeometry]:[])]}
             annotationMode={Boolean(pendingAnnotation)}
             onAnnotationClick={async position=>{
               if(!pendingAnnotation||busy||pendingAnnotation.projectId!==projectIdentity.current)return;
@@ -1318,10 +1333,10 @@ export default function App() {
           <section id="tools-raster" hidden={activeTool!=='tools-raster'} className="panel-section">
             <div className="section-heading"><Layers3 size={16} /><span>Georeferenced imagery</span></div>
             <RasterPanel
-              asset={imageLayer} localImport={capabilities?.local_raster_import===true} refreshToken={connectionRetry}
+              asset={imageLayer} localImport={capabilities?.local_raster_import===true} refreshToken={connectionRetry+refreshToken}
               onSelect={(asset) => {
                 geometrySequence.current++;
-                setImageLayer(asset);setRasterVisible(true);
+                setImageLayer(asset);setRasterLayers(old=>addRaster(old,asset,'image'));
                 setTraceMode(false);
                 setPromptMode(null);setPositivePoints([]);setNegativePoints([]);setBoxPoints([]);
                 const [west, south, east, north] = asset.bbox;
@@ -1406,7 +1421,7 @@ export default function App() {
               projectId={activeProjectId}
               workspace={projectWorkspace}
               geometry={geometry}
-              raster={imageLayer}
+              raster={demLayer??imageLayer}
               refreshToken={refreshToken}
               onRefresh={()=>setRefreshToken(v=>v+1)}
               onOpen={id=>{
@@ -1421,23 +1436,22 @@ export default function App() {
             <div className="section-heading"><Layers3 size={16}/><span>Terrain analysis</span></div>
             <TerrainWorkbench key={'terrain-'+(activeProjectId??'no-project')} projectId={activeProjectId}
               active={activeTool==='tools-terrain'&&showTools}
-              geometry={preview||drawingMode?null:geometry} raster={imageLayer} viewport={viewport}
+              geometry={preview||drawingMode?null:extentMode?extentGeometry:geometry} raster={demLayer} viewport={viewport}
               connected={Boolean(capabilities)} localImport={capabilities?.local_raster_import===true}
               refreshToken={refreshToken+connectionRetry} origin={terrainOrigin} picking={terrainPicking}
               onSelectRaster={asset=>{
-                setImageLayer(asset);setRasterVisible(true);setTerrainOrigin(null);
+                if(!projectCurrent())return;
+                setDemLayer(asset);setRasterLayers(old=>addRaster(old,asset,'dem'));setTerrainOrigin(null);setExtentMode(false);setExtentGeometry(null);
                 const [west,south,east,north]=asset.bbox;
                 setFocus({longitude:(west+east)/2,latitude:(south+north)/2,bbox:asset.bbox,key:Date.now()});
                 setMessage('DEM selected: '+asset.name);
               }}
-              onDraw={line=>startDrawing(line?'line':'polygon')}
+              onDraw={line=>{setExtentMode(false);setExtentGeometry(null);startDrawing(line?'line':'polygon');}}
+              extentMode={extentMode} onUseSelection={()=>setExtentMode(false)}
               onUseExtent={()=>{
-                if(!imageLayer)return;
-                const [w,s,e,n]=imageLayer.bbox;
-                const next:GeoJSON.Polygon={type:'Polygon',coordinates:[[[w,s],[e,s],[e,n],[w,n],[w,s]]]};
-                setSelectedFeatureId(null);setScratchId(null);setLinked(false);
-                setGeometrySource('DEM extent');setFeatureProperties({source_type:'dem_extent'});
-                void commitGeometry(next,'DEM extent selected.',true);
+                if(!demLayer)return;
+                setExtentGeometry({type:'Polygon',coordinates:[[...demLayer.corners,demLayer.corners[0]]]});
+                setExtentMode(true);setMessage('DEM footprint selected for analysis only.');
               }}
               onPick={()=>{
                 setTerrainPicking(value=>!value);setDrawingMode(null);setVertices([]);

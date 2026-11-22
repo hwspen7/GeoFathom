@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import maplibregl, { type GeoJSONSource, type MapMouseEvent, type StyleSpecification } from 'maplibre-gl';
 
-import { rasterPreviewUrl, protectedRasterPreview, type RasterAsset } from './api';
+import { rasterPreviewUrl, protectedRasterPreview } from './api';
 import { PixelSnapIndex } from './spatialIndex';
 import {BASEMAPS,type BasemapId,type CustomBasemap} from './basemaps';
 import {OFFLINE_METHOD} from './scratch';
+import type {RasterLayerView} from './rasterLayers';
 import {areaText,distanceText,mapPalette,type DisplaySettings} from './displaySettings';
 import {drawingPreview,measurementAnchor,approximateMeasurement,geodesicDrag as edgeDistance} from './editing';
 import { featureLabel } from './labels';
@@ -48,7 +49,8 @@ interface Props {
   showMeasurements:boolean;
   display:DisplaySettings;
   selectedFeatureId:string|null;
-  rasterOpacity:number;
+  rasterLayers:RasterLayerView[];
+  onRasterError:(message:string)=>void;
   onMapClick: (position: Position) => void;
   onFinishDrawing:()=>void;
   terrainPicking:boolean;
@@ -59,7 +61,6 @@ interface Props {
   onEditingError:(message:string)=>void;
   onViewportChange: (bbox: [number, number, number, number]) => void;
   discovered: GeoJSON.Geometry[];
-  imageLayer: RasterAsset | null;
   traceMode: boolean;
   onTraceClick: (position: Position) => void;
   editing: boolean;
@@ -234,9 +235,9 @@ type Drag = {
 };
 
 export default function MapCanvas({
-  selected,drawingMode,vertices,focus,basemap,customBasemap,onBasemapStatus,measurement,showMeasurements,display,selectedFeatureId,rasterOpacity,onMapClick,onFinishDrawing,
+  selected,drawingMode,vertices,focus,basemap,customBasemap,onBasemapStatus,measurement,showMeasurements,display,selectedFeatureId,rasterLayers,onRasterError,onMapClick,onFinishDrawing,
   terrainPicking,terrainMarker,terrainResults,onTerrainPick,onContextMenu,onEditingError,
-  onViewportChange, discovered, imageLayer, traceMode, onTraceClick,
+  onViewportChange, discovered, traceMode, onTraceClick,
   editing, moving,edgeMoving, snapping, selectedLocked, layerFeatures,
   promptPositive,promptNegative,promptBox,annotationMode,onAnnotationClick,
   selectionBoxMode,onSelectionBox,selectedIds,qualityIssues,projectGrid,externalTiles,
@@ -932,41 +933,53 @@ export default function MapCanvas({
     return()=>{map.off('error',error);map.off('sourcedata',data);};
   },[basemap,customBasemap,ready,onBasemapStatus]);
 
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!ready || !map) return;
-    let cancelled = false;
-    let blobUrl: string | null = null;
-    if (map.getLayer('imported-imagery')) map.removeLayer('imported-imagery');
-    if (map.getSource('imported-imagery')) map.removeSource('imported-imagery');
-    function add(url: string) {
-      if (!map || cancelled || !imageLayer) return;
-      if (map.getSource('imported-imagery')) return;
-      map.addSource('imported-imagery', {
-        type: 'image', url, coordinates: imageLayer.corners,
-      });
-      map.addLayer({
-        id: 'imported-imagery', type: 'raster', source: 'imported-imagery',
-        paint: { 'raster-opacity': rasterOpacity, 'raster-fade-duration': 0 },
-      }, 'terrain-result-fill');
-    }
-    if (imageLayer) {
-      if (window.sessionStorage.getItem('geofathom-api-token')) {
-        protectedRasterPreview(imageLayer).then(url => {
-          if (cancelled) { URL.revokeObjectURL(url); return; }
-          blobUrl = url;
-          add(url);
-        }).catch(() => {});
-      } else {
-        add(rasterPreviewUrl(imageLayer));
-      }
-    }
-    return () => {
-      cancelled = true;
-      if (blobUrl) URL.revokeObjectURL(blobUrl);
+  // Maintain independent image sources. Updating opacity or visibility never
+  // recreates tiles, and removing a source invalidates its pending fetch.
+  const attachedRasters=useRef(new Map<string,{cancelled:boolean;url?:string}>());
+  const rasterErrors=useRef(onRasterError);rasterErrors.current=onRasterError;
+  useEffect(()=>{
+    const map=mapRef.current;if(!ready||!map)return;
+    const attached=attachedRasters.current;
+    const remove=(id:string,entry:{cancelled:boolean;url?:string})=>{
+      entry.cancelled=true;
+      const name='imported-'+id;
+      if(map.getLayer(name))map.removeLayer(name);
+      if(map.getSource(name))map.removeSource(name);
+      if(entry.url)URL.revokeObjectURL(entry.url);
     };
-  }, [imageLayer, ready]);
-  useEffect(()=>{const map=mapRef.current;if(map?.getLayer('imported-imagery'))map.setPaintProperty('imported-imagery','raster-opacity',rasterOpacity);},[rasterOpacity,imageLayer,ready]);
+    for(const [id,entry] of attached)if(!rasterLayers.some(l=>l.asset.id===id)){remove(id,entry);attached.delete(id);}
+    for(const layer of rasterLayers){
+      const asset=layer.asset,name='imported-'+asset.id;
+      const current=attached.get(asset.id);
+      if(current){
+        if(map.getLayer(name)){map.setPaintProperty(name,'raster-opacity',layer.opacity);map.setLayoutProperty(name,'visibility',layer.visible?'visible':'none');}
+        continue;
+      }
+      const entry:{cancelled:boolean;url?:string}={cancelled:false};attached.set(asset.id,entry);
+      const add=(url:string)=>{
+        if(entry.cancelled)return;
+        try{
+          map.addSource(name,{type:'image',url,coordinates:asset.corners});
+          map.addLayer({id:name,type:'raster',source:name,layout:{visibility:layer.visible?'visible':'none'},paint:{'raster-opacity':layer.opacity,'raster-fade-duration':0}},'terrain-result-fill');
+        }catch(e){rasterErrors.current('Raster '+asset.name+': '+String(e));}
+      };
+      if(window.sessionStorage.getItem('geofathom-api-token')){
+        protectedRasterPreview(asset).then(url=>{if(entry.cancelled){URL.revokeObjectURL(url);return;}entry.url=url;add(url);}).catch(e=>{
+          if(!entry.cancelled)rasterErrors.current('Raster '+asset.name+': '+String(e));
+        });
+      }else add(rasterPreviewUrl(asset));
+    }
+    // Layer order is the layer panel order, irrespective of request completion.
+    for(const layer of rasterLayers){const name='imported-'+layer.asset.id;if(map.getLayer(name))map.moveLayer(name,'terrain-result-fill');}
+  },[rasterLayers,ready]);
+  useEffect(()=>{
+    const map=mapRef.current;if(!map||!ready)return;
+    const handler=(event:unknown)=>{
+      const e=event as {sourceId?:string;error?:Error};if(e.sourceId?.startsWith('imported-'))rasterErrors.current('Raster preview failed: '+(e.error?.message??e.sourceId));
+    };
+    map.on('error',handler);
+    return()=>{map.off('error',handler);for(const entry of attachedRasters.current.values()){entry.cancelled=true;if(entry.url)URL.revokeObjectURL(entry.url);}attachedRasters.current.clear();};
+  },[ready]);
   useEffect(()=>{
     const map=mapRef.current;if(!ready||!map)return;
     const palette=mapPalette(basemap,display.contrast);

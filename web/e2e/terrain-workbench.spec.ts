@@ -30,8 +30,8 @@ with tempfile.TemporaryDirectory() as directory:
  expect(feature.status(),await feature.text()).toBe(201);
  await page.goto('/');
  await page.getByLabel('Active project').selectOption(id);
- await page.getByRole('navigation',{name:'Workspace tools'}).getByRole('button',{name:'Raster / AI',exact:true}).click();
- await page.getByLabel('Select georeferenced imagery').selectOption(fixture.id);
+ await page.getByRole('navigation',{name:'Workspace tools'}).getByRole('button',{name:'Terrain',exact:true}).click();
+ await page.getByLabel('DEM elevation layer').selectOption(fixture.id);
  await page.getByRole('button',{name:/DEM study area/}).click();
  await page.getByRole('navigation',{name:'Workspace tools'}).getByRole('button',{name:'Terrain',exact:true}).click();
  const tools=page.getByLabel('Terrain tools');
@@ -47,7 +47,7 @@ with tempfile.TemporaryDirectory() as directory:
  await page.getByRole('button',{name:'Save terrain features'}).click();
  await expect(page.getByText(/Saved .* terrain features/)).toBeVisible();
  await tools.getByRole('button',{name:'Cut / fill',exact:true}).click();
- await page.getByLabel('Reference elevation').fill('110');
+ await page.getByLabel('Reference elevation',{exact:true}).fill('110');
  await page.getByRole('button',{name:'Run terrain operation'}).click();
  await expect(page.getByLabel('Terrain results').getByText('Cut',{exact:true}).first()).toBeVisible();
  await expect(page.getByRole('img',{name:'Earthwork volume (m³)'})).toBeVisible();

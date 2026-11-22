@@ -217,7 +217,7 @@ export default function GeoAIAnalysisPanel(p:Props){
               min={-0.99} max={0.99} value={threshold}
               onChange={e=>setThreshold(Number(e.target.value))}/>
           </label>
-          <p className="project-hint">Public COG range requests and Sentinel-2
+          <p className="compact-notice">Public COG range requests and Sentinel-2
             scene-classification masking; source resolution may be reduced
             to satisfy the configured pixel budget.</p>
         </>:operation!=='semantic_segmentation'?<>
@@ -268,7 +268,7 @@ export default function GeoAIAnalysisPanel(p:Props){
               min={0} max={1} value={confidence}
               onChange={e=>setConfidence(Number(e.target.value))}/>
           </label>
-          <p className="project-hint">ONNX runtime: {models?.runtime_available?'installed':'not installed'};
+          <p className="compact-notice">ONNX runtime: {models?.runtime_available?'installed':'not installed'};
             model weights and class/band metadata must be provisioned on the server.
             No model is silently downloaded.</p>
         </>}
