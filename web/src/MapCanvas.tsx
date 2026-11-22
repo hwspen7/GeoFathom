@@ -722,8 +722,8 @@ export default function MapCanvas({
         filter:['==',['geometry-type'],'Polygon'],
         paint:{'fill-color':['case',['==',['get','name'],'Visible terrain'],'#1bba66','#2ca9df'],'fill-opacity':.42}});
       map.addLayer({id:'terrain-result-lines',source:'terrain-result',type:'line',
-        paint:{'line-color':['case',['==',['geometry-type'],'LineString'],'#994b13',['==',['get','name'],'Visible terrain'],'#137842','#126caa'],
-          'line-width':2,'line-opacity':.95}});
+        paint:{'line-color':['case',['has','elevation_m'],['case',['==',['get','major'],true],'#ffde8b','#f2bd68'],['==',['get','name'],'Visible terrain'],'#137842','#126caa'],
+          'line-width':['case',['has','elevation_m'],['case',['==',['get','major'],true],2.4,1.25],2],'line-opacity':.95}});
       map.addLayer({id:'terrain-result-labels',source:'terrain-result',type:'symbol',
         filter:['all',['==',['geometry-type'],'LineString'],['has','elevation_m']],
         layout:{'symbol-placement':'line','text-field':['concat',['to-string',['get','elevation_m']],' m'],

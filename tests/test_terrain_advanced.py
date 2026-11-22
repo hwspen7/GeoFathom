@@ -48,3 +48,33 @@ def test_visibility_and_watershed_require_valid_origin(dem):
     path,polygon=dem
     with pytest.raises(RasterError,match="Observer/outlet"):
         run_terrain(path,polygon,"visibility",point=[0,0])
+
+
+def test_contours_preserve_more_than_100_disconnected_paths():
+    from shapely.geometry import box,shape
+    from terrain.advanced import _contours
+    # Same raster dimensions as a real 219x140, 30-m DEM acceptance case.
+    # Isolated hills produce hundreds of legitimate contours at 10 m.
+    z=np.full((140,219),100.0)
+    z[3:-3:8,3:-3:8]=120.0
+    affine=from_origin(500000,4500000,30,30)
+    result=_contours(z,np.ones_like(z,bool),affine,"EPSG:32617",
+        box(500000,4500000-140*30,500000+219*30,4500000),10)
+    expected=len(range(3,137,8))*len(range(3,216,8))
+    assert expected>100
+    assert sum(f["properties"]["contour_path_count"] for f in result)==expected
+    assert len(result)==1
+    assert result[0]["geometry"]["type"]=="MultiLineString"
+    assert len(shape(result[0]["geometry"]).geoms)==expected
+    assert all(line.is_closed for line in shape(result[0]["geometry"]).geoms)
+
+
+def test_long_contours_split_without_losing_segments():
+    from shapely.geometry import LineString
+    from terrain.advanced import _contour_groups
+    line=LineString([(i,0) for i in range(25001)])
+    groups=list(_contour_groups([line]))
+    assert len(groups)==3
+    assert all(len(g.coords)<=10000 for g in groups)
+    assert sum(g.length for g in groups)==line.length
+    assert all(a.coords[-1]==b.coords[0] for a,b in zip(groups,groups[1:]))

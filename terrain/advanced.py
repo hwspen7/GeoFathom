@@ -48,6 +48,39 @@ def _collection(features):
         raise RasterError("Result exceeds 100 features; reduce the study area or contour density.")
     return {"type":"FeatureCollection","features":features}
 
+# Bound actual geometry complexity rather than the number of disconnected
+# contour paths. A DEM with many small hills is a normal GIS input.
+_CONTOUR_VERTEX_BUDGET=400_000
+_CONTOUR_FEATURE_VERTICES=10_000
+_CONTOUR_LEVEL_LIMIT=64
+
+def _line_parts(geometry):
+    if geometry.geom_type=="LineString":
+        if not geometry.is_empty and geometry.length>0:
+            yield geometry
+    elif geometry.geom_type in {"MultiLineString","GeometryCollection"}:
+        for part in geometry.geoms:
+            yield from _line_parts(part)
+
+def _contour_groups(lines):
+    """Group disconnected lines at one elevation without deleting vertices.
+
+    Split exceptionally long lines at shared endpoints to maintain the
+    per-feature geometry budget accepted by the measurement/storage API.
+    """
+    group=[]
+    count=0
+    for line in lines:
+        coords=list(line.coords)
+        for offset in range(0,len(coords)-1,_CONTOUR_FEATURE_VERTICES-1):
+            part=coords[offset:offset+_CONTOUR_FEATURE_VERTICES]
+            if count+len(part)>_CONTOUR_FEATURE_VERTICES:
+                yield group[0] if len(group)==1 else MultiLineString(group)
+                group=[];count=0
+            group.append(LineString(part));count+=len(part)
+    if group:
+        yield group[0] if len(group)==1 else MultiLineString(group)
+
 def _contours(z,valid,affine,crs,boundary,interval):
     if not math.isfinite(interval) or interval<=0:
         raise RasterError("Contour interval must be a positive finite number.")
@@ -55,11 +88,13 @@ def _contours(z,valid,affine,crs,boundary,interval):
     if hi==lo:return []
     start=math.floor(lo/interval)+1
     end=math.ceil(hi/interval)-1
-    if end-start+1>32:raise RasterError("Choose a larger interval (at most 32 contour levels).")
+    if end-start+1>_CONTOUR_LEVEL_LIMIT:
+        raise RasterError(f"Choose a larger interval (at most {_CONTOUR_LEVEL_LIMIT} elevation levels, not individual lines).")
     corners=[z[:-1,:-1],z[:-1,1:],z[1:,1:],z[1:,:-1]]
     good=valid[:-1,:-1]&valid[:-1,1:]&valid[1:,1:]&valid[1:,:-1]
     offsets=[(0,0),(1,0),(1,1),(0,1)]
     features=[]
+    vertex_count=0
     for n in range(start,end+1):
         level=n*interval
         above=[v>=level for v in corners]
@@ -86,12 +121,13 @@ def _contours(z,valid,affine,crs,boundary,interval):
                     segments.append([affine*crossings[i],affine*crossings[j]])
         if not segments:continue
         merged=linemerge(MultiLineString(segments)).intersection(boundary)
-        lines=[merged] if merged.geom_type=="LineString" else [
-            g for g in getattr(merged,"geoms",[]) if g.geom_type=="LineString"]
-        for line in lines:
-            if not line.is_empty and line.length>0:
-                features.append(_feature(line,crs,{"name":f"Contour {level:g} m","elevation_m":level}))
-                if len(features)>100:raise RasterError("Too many contour lines; enlarge interval or reduce area.")
+        for group in _contour_groups(_line_parts(merged)):
+            parts=[group] if group.geom_type=="LineString" else list(group.geoms)
+            vertex_count+=sum(len(part.coords) for part in parts)
+            if vertex_count>_CONTOUR_VERTEX_BUDGET:
+                raise RasterError("Contour geometry exceeds 400,000 vertices; use a larger interval or smaller study area.")
+            features.append(_feature(group,crs,{"name":f"Contour {level:g} m","elevation_m":level,
+                "major":n%5==0,"contour_path_count":len(parts)}))
     return features
 
 def _origin(point,crs,affine,valid):
@@ -178,7 +214,9 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
         "missing_cells":int((covered&~valid).sum()),"cell_area_m2":cell,"metrics":{},"features":[]}
     if operation=="contours":
         result["features"]=_contours(z,valid,affine,crs,boundary,interval)
-        result["metrics"]={"contour_lines":len(result["features"]),"interval_m":interval}
+        result["metrics"]={"contour_lines":sum(f["properties"]["contour_path_count"] for f in result["features"]),
+            "contour_levels":len({f["properties"]["elevation_m"] for f in result["features"]}),
+            "interval_m":interval,"minimum_m":float(z[valid].min()),"maximum_m":float(z[valid].max())}
         result["warning"]="Interpolated contours on the source DEM grid; no extrapolation across nodata."
     elif operation=="volume":
         if not math.isfinite(reference):raise RasterError("Reference elevation must be finite.")
@@ -208,5 +246,6 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
             "heights":[float(v) if ok else None for v,ok in zip(heights.flat,mask.flat)]}
         result["metrics"]={"minimum_m":float(z[valid].min()),"maximum_m":float(z[valid].max())}
         result["warning"]="Interactive 3D elevation preview sampled from the DEM; gaps represent nodata."
-    _collection(result["features"])
+    if operation!="contours":
+        _collection(result["features"])
     return result

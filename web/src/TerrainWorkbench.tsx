@@ -60,9 +60,9 @@ const modes:Array<{id:Operation;title:string}>=[
  {id:'volume',title:'Cut / fill'},{id:'visibility',title:'Viewshed'},{id:'watershed',title:'Watershed (D8)'},{id:'mesh',title:'3D terrain'}
 ];
 const units:Record<string,string>={cut_m3:'m³',fill_m3:'m³',net_cut_m3:'m³',covered_grid_area_m2:'m²',reference_elevation_m:'m',
- contour_lines:'',interval_m:'m',visible_cells:'',visible_grid_area_m2:'m²',unknown_cells:'',upstream_cells:'',upstream_grid_area_m2:'m²',minimum_m:'m',maximum_m:'m'};
+ contour_lines:'',contour_levels:'',interval_m:'m',visible_cells:'',visible_grid_area_m2:'m²',unknown_cells:'',upstream_cells:'',upstream_grid_area_m2:'m²',minimum_m:'m',maximum_m:'m'};
 const names:Record<string,string>={cut_m3:'Cut',fill_m3:'Fill',net_cut_m3:'Net cut',covered_grid_area_m2:'Grid area',reference_elevation_m:'Reference',
- contour_lines:'Contour lines',interval_m:'Interval',visible_cells:'Visible cells',visible_grid_area_m2:'Visible area',unknown_cells:'Unknown cells',
+ contour_lines:'Contour paths',contour_levels:'Elevation levels',interval_m:'Interval',visible_cells:'Visible cells',visible_grid_area_m2:'Visible area',unknown_cells:'Unknown cells',
  upstream_cells:'Upstream cells',upstream_grid_area_m2:'Catchment area',minimum_m:'Lowest elevation',maximum_m:'Highest elevation'};
 const fmt=(n:number)=>n.toLocaleString('en-US',{maximumFractionDigits:2});
 interface Props{
@@ -162,7 +162,7 @@ export default function TerrainWorkbench(p:Props){
    finally{setFetching(false);}
  }
  async function save(){
-   if(!p.projectId||!dem||!result)return;
+   if(!p.projectId||!dem||!result||result.features.length>100)return;
    const ticket=sequence.current;setBusy(true);setError('');
    try{
      const saved=await saveFeatureBatch(p.projectId,result.features.map((f,i)=>({
@@ -241,7 +241,7 @@ export default function TerrainWorkbench(p:Props){
        {operation==='watershed'&&<MetricBars label="Catchment (cells)" values={[{name:'Upstream',value:result.metrics.upstream_cells,color:'#3687b9'},{name:'Other',value:Math.max(0,result.valid_cells-result.metrics.upstream_cells),color:'#9ba7ad'}]}/>}
        {result.mesh&&<MeshView mesh={result.mesh}/>}
        <small className="compact-notice" title={result.warning}>{result.valid_cells} valid · {result.missing_cells} missing · Method ⓘ</small>
-       {result.features.length>0&&<div className="survey-action-bar"><button disabled={!p.projectId||busy} onClick={()=>void save()}>Save terrain features</button>
+       {result.features.length>0&&<div className="survey-action-bar"><button disabled={!p.projectId||busy||result.features.length>100} title={result.features.length>100?'Export GeoJSON for results exceeding the atomic project batch limit.':'Save to project'} onClick={()=>void save()}>Save terrain features</button>
          <button onClick={()=>p.onPreview(result.features)}>Show on map</button><button onClick={()=>p.onPreview([])}>Hide</button></div>}
      </>}
    </section>}
