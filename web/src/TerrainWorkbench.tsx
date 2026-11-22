@@ -1,6 +1,6 @@
 import {useEffect,useMemo,useRef,useState,type ChangeEvent} from 'react';
 import {Mountain} from 'lucide-react';
-import {advancedTerrain,saveFeatureBatch,analyzeTerrain,terrainProfile,listImagery,uploadImagery,fetchPublicDEM,type TerrainResult,type TerrainMesh,type TerrainOperation,type AdvancedTerrainResult,type RasterAsset,type TerrainRasterLayer} from './api';
+import {advancedTerrain,saveFeatureBatch,analyzeTerrain,terrainProfile,listImagery,uploadImagery,fetchPublicDEM,prepareDEM,type DEMProcessMode,type TerrainResult,type TerrainMesh,type TerrainOperation,type AdvancedTerrainResult,type RasterAsset,type TerrainRasterLayer} from './api';
 import {ProfilePlot,MetricBars,ElevationDistribution,AspectRose,SectionPlot,ResultPane} from './TerrainCharts';
 import {GPUView} from './TerrainMeshView';
 import type {Position} from './editing';
@@ -112,6 +112,8 @@ export default function TerrainWorkbench(p:Props){
  const [lon,setLon]=useState(''),[lat,setLat]=useState(''),[height,setHeight]=useState('1.7'),[target,setTarget]=useState('0');
  const [endLon,setEndLon]=useState(''),[endLat,setEndLat]=useState('');
  const [comparisonId,setComparisonId]=useState('');
+ const [demProcessMode,setDemProcessMode]=useState<DEMProcessMode>('clip'),[processSecond,setProcessSecond]=useState('');
+ const [processResolution,setProcessResolution]=useState('30'),[processSampling,setProcessSampling]=useState<'nearest'|'bilinear'>('bilinear');
  const [maxSlope,setMaxSlope]=useState('30'),[minElevation,setMinElevation]=useState('-12000'),[maxElevation,setMaxElevation]=useState('12000'),[maxTri,setMaxTri]=useState('100');
  const [streamCells,setStreamCells]=useState('100'),[azimuth,setAzimuth]=useState('315'),[altitude,setAltitude]=useState('45');
  const [fillSinks,setFillSinks]=useState(true),[considerCurvature,setConsiderCurvature]=useState(true),[refractionCoeff,setRefractionCoeff]=useState('0.13');
@@ -281,6 +283,29 @@ export default function TerrainWorkbench(p:Props){
    }catch(e){if(alive.current&&ticket===sourceIntent.current)setError(e instanceof Error?e.message:String(e));}
    finally{if(alive.current)setImporting(false);}
  }
+ async function processDEM(){
+   if(!dem||!p.connected||importing||fetching)return;
+   const polygon=p.geometry?.type==='Polygon'||p.geometry?.type==='MultiPolygon'?p.geometry:null;
+   if(demProcessMode==='clip'&&!polygon){setError('Select a polygon to clip DEM.');return;}
+   if(demProcessMode==='mosaic'&&(!processSecond||processSecond===dem.id)){setError('Choose a different second DEM for mosaic.');return;}
+   const spacing=Number(processResolution);
+   if(!Number.isFinite(spacing)||spacing<1||spacing>1000){setError('DEM output resolution must be 1–1,000 m.');return;}
+   const ticket=++sourceIntent.current;
+   setImporting(true);setError('');setInfo('');
+   try{
+     if(!p.localImport&&!token.trim())throw Error('Enter import access token.');
+     const data=await prepareDEM({
+       image_ids:demProcessMode==='mosaic'?[dem.id,processSecond]:[dem.id],
+       mode:demProcessMode,resolution_m:spacing,sampling:processSampling,
+       geometry:demProcessMode==='clip'?polygon:null
+     },token);
+     if(!alive.current||ticket!==sourceIntent.current)return;
+     setAssets(old=>[data.asset,...old.filter(a=>a.id!==data.asset.id)]);
+     latest.current.onSelectRaster(data.asset);
+     setInfo('DEM '+data.operation+' · '+data.valid_cells.toLocaleString()+'/'+data.total_cells.toLocaleString()+' valid cells · '+data.warning);
+   }catch(e){if(alive.current&&ticket===sourceIntent.current)setError(e instanceof Error?e.message:String(e));}
+   finally{if(alive.current)setImporting(false);}
+ }
  async function fetchDEM(){
    if(!p.connected||fetching||importing)return;
    const bbox=fetchArea,requestKey=currentFetchKey.current;
@@ -386,6 +411,23 @@ export default function TerrainWorkbench(p:Props){
      {sourceInfo&&<small className="compact-notice" title="Copernicus is DSM; 3DEP is bare-earth DEM. Requested grid size is not native resolution.">{sourceInfo}</small>}
      {!supportsUSGS&&fetchArea&&<small className="compact-notice">USGS 3DEP is not a global data source. For local 1–3 m elevation, import a georeferenced DEM supplied by an authorized regional provider.</small>}
      {dem&&<small className="compact-notice" title={dem.provenance}>{dem.width} × {dem.height} · {dem.crs} · elevation m · {describeTerrainBounds(dem.bbox)}</small>}
+     {dem&&<details className="terrain-dem-tools"><summary>DEM processing · Clip / Resample / Mosaic</summary>
+       <div className="professional-form">
+         <label>Operation<select aria-label="DEM processing operation" value={demProcessMode} onChange={e=>setDemProcessMode(e.target.value as DEMProcessMode)}>
+           <option value="clip">Clip selected polygon</option><option value="resample">Resample source</option><option value="mosaic">Mosaic two DEMs</option>
+         </select></label>
+         {demProcessMode==='mosaic'&&<label>Second DEM<select aria-label="DEM mosaic second source" value={processSecond} onChange={e=>setProcessSecond(e.target.value)}>
+           <option value="">Choose second DEM</option>{assets.filter(a=>a.bands===1&&a.id!==dem.id).map(a=><option key={a.id} value={a.id}>{a.name}</option>)}
+         </select></label>}
+         <label>Output grid (m)<input aria-label="DEM processing resolution" type="number" min="1" max="1000" step="any" value={processResolution} onChange={e=>setProcessResolution(e.target.value)}/></label>
+         <label>Sampling<select aria-label="DEM processing sampling" value={processSampling} onChange={e=>setProcessSampling(e.target.value as 'nearest'|'bilinear')}>
+           <option value="bilinear">Bilinear</option><option value="nearest">Nearest</option>
+         </select></label>
+         <button disabled={!p.connected||fetching||importing||demProcessMode==='clip'&&!['Polygon','MultiPolygon'].includes(p.geometry?.type??'')||demProcessMode==='mosaic'&&(!processSecond||processSecond===dem.id)}
+           onClick={()=>void processDEM()}>{importing?'Processing…':'Create processed DEM'}</button>
+         <small className="compact-notice">Processing changes the output grid, not the native input resolution or vertical datum.</small>
+       </div>
+     </details>}
      {mapMismatch&&<small className="discovery-error" role="status">Selected DEM is outside the current map. Choose a local source or use Fit explicitly.</small>}
      {sourceMismatch&&<small className="discovery-error" role="status">Selected analysis shape is not completely covered by this DEM. Select a matching source.</small>}
      {dem&&!/Copernicus DEM GLO-|USGS 3DEP Bare Earth DEM/.test(dem.provenance)&&<label className="gis-check"><input aria-label="Confirm DEM meter elevations" type="checkbox" checked={verticalConfirmed} onChange={e=>setVerticalConfirmed(e.target.checked)}/> Confirm single-band meter elevations</label>}
