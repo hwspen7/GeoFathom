@@ -765,6 +765,7 @@ export default function MapCanvas({
         map.once('render',inspectRenderedHandles);
     };
     map.on('sourcedata',inspectWorkspaceSource);
+    map.on('moveend',inspectRenderedHandles);
     map.on('moveend', bounds);
     const onEscape=(event:KeyboardEvent)=>{
       if(event.key==='Escape'){
@@ -797,6 +798,18 @@ export default function MapCanvas({
           hit?JSON.stringify(hit.path):'none');
         container.current.setAttribute('data-edit-native-pointer',
           JSON.stringify([pointer.x,pointer.y]));
+        // If a pointer misses, keep a generic nearest-vertex distance for
+        // diagnosing moving cameras or wrong coordinate spaces, without
+        // hard-coding any particular place or vertex index.
+        let nearest:{distancePx:number;path:GeometryPath;pixel:[number,number]}|null=null;
+        for(const vertex of verticesOf(state.selected).filter(item=>!item.midpoint)){
+          const xy=map.project(vertex.point as maplibregl.LngLatLike);
+          const distancePx=Math.hypot(pointer.x-xy.x,pointer.y-xy.y);
+          if(!nearest||distancePx<nearest.distancePx)
+            nearest={distancePx,path:vertex.path,pixel:[xy.x,xy.y]};
+        }
+        container.current.setAttribute('data-edit-native-nearest',
+          JSON.stringify({nearest,moving:map.isMoving(),sourceReady:map.isSourceLoaded('workspace')}));
       }
       if(hit)state.onSelectBoundaryNode?.(hit.path);
     };
@@ -976,6 +989,7 @@ export default function MapCanvas({
       map.off('movestart',clearHandleDiagnostics);
       map.off('idle',inspectRenderedHandles);
       map.off('sourcedata',inspectWorkspaceSource);
+      map.off('moveend',inspectRenderedHandles);
       map.off('mousemove', dragging);
       map.off('mousemove',displayCoordinates);
       map.off('mousemove',profileCursor);
