@@ -121,6 +121,12 @@ def main():
     original = os.environ.copy()
     # Start clean rather than inherit deployment or previous test policies.
     env = {k: v for k, v in original.items() if not k.startswith("GEOFATHOM_")}
+    # Ambient test filters, coverage files and provider keys may silently
+    # invalidate isolation or cause live external API calls during acceptance.
+    for key in ("PYTEST_ADDOPTS", "PYTEST_PLUGINS", "PYTHONPATH", "COVERAGE_FILE",
+                "COVERAGE_PROCESS_START", "COVERAGE_RCFILE", "GROQ_API_KEY",
+                "GEMINI_API_KEY", "OPENAI_API_KEY", "CI"):
+        env.pop(key, None)
     if original.get("GEOFATHOM_CUDA_BIN"):
         env["GEOFATHOM_CUDA_BIN"] = original["GEOFATHOM_CUDA_BIN"]
     env["PATH"] = str(Path(sys.executable).parent) + os.pathsep + env.get("PATH", "")
@@ -182,12 +188,9 @@ def main():
              "--output", out / "strict-gpu.json"], env)
         benchmark_env = {**env, "GEOFATHOM_VISION_DEVICE_POSTPROCESS": "1",
                          "GEOFATHOM_VISION_IO_BINDING": "1"}
-        result = run([python, "benchmarks/gpu_acceptance.py", "--model", "gpu_acceptance",
-                      "--runs", "100"], benchmark_env, capture=True)
-        benchmark = json.loads(result.stdout)
-        (out / "gpu-inference.json").write_text(json.dumps(benchmark, indent=2), encoding="utf-8")
-        if result.stderr:
-            print(result.stderr, file=sys.stderr)
+        run([python, "benchmarks/gpu_acceptance.py", "--model", "gpu_acceptance",
+             "--runs", "100", "--output", out / "gpu-inference.json"], benchmark_env)
+        json.loads((out / "gpu-inference.json").read_text(encoding="utf-8"))
         report["stages"].append("Strict synthetic ONNX GPU inference")
         if args.baseline:
             from quality_report import compare_performance

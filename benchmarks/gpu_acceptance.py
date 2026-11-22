@@ -102,8 +102,12 @@ def main():
     parser.add_argument("--model",required=True)
     parser.add_argument("--runs",type=int,default=50)
     parser.add_argument("--warmup",type=int,default=5)
+    parser.add_argument("--output",type=Path)
     args=parser.parse_args()
-    print(json.dumps(acceptance(args.model,args.runs,args.warmup),indent=2))
+    result=json.dumps(acceptance(args.model,args.runs,args.warmup),indent=2)
+    if args.output:
+        args.output.write_text(result,encoding="utf-8")
+    print(result)
 
 
 if __name__=="__main__":

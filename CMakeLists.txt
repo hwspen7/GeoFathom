@@ -11,7 +11,9 @@ if(GEOFATHOM_NATIVE_COVERAGE)
   if(NOT CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR GEOFATHOM_NATIVE_SANITIZERS OR GEOFATHOM_NATIVE_CUDA)
     message(FATAL_ERROR "Native coverage requires a separate GCC CPU build")
   endif()
-  add_compile_options(--coverage -O0 -g)
+  # Concurrent kernels must update gcov counters atomically; otherwise branch
+  # counts may become corrupt even when the native tests pass.
+  add_compile_options(--coverage -fprofile-update=atomic -O0 -g)
   add_link_options(--coverage)
 endif()
 

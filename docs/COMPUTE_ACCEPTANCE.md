@@ -176,3 +176,34 @@ servers. Keep ports 8000 and 5173 free. `--skip-web` explicitly omits web
 qualification. `--soak-seconds 86400` runs separate 24-hour CPU and GPU
 soaks; synthetic model qualification still does not measure real
 satellite segmentation accuracy or physical multi-host behavior.
+
+
+### Qualification is distinct from a successful smoke run
+
+The host report records the tested commit, tracked-tree status, runtime versions,
+CPU/GPU and per-stage results. A new report always remains isolated in its own
+directory. Pass `--baseline <previous-report-directory>` to compare the
+same-hardware, same-duration CPU/CUDA throughput and ONNX p95 inference latency.
+The default regression allowance is 15 percent. Use
+`--max-regression-percent` to explicitly select another bound.
+
+The CUDA soak records sampled total device memory **and** runtime-owned device
+allocation; the latter is not total process VRAM. Use an otherwise idle,
+non-remapped GPU when collecting comparable acceptance measurements.
+The device-wide measurement can include other applications. A long soak still
+does not exercise every real-world model or GIS pipeline.
+
+Coverage collection now includes Python threads and subprocesses, subject to
+coverage data being flushed at child shutdown. An intentionally killed child
+may not produce a coverage file. The separate GCC CPU instrumented CTest build
+uses atomic gcov counters; it measures host C++ code, not CUDA device branches.
+The strict quality-report utility rejects insufficient coverage rather than
+declaring a general release qualified after a successful smoke run.
+
+```bash
+python scripts/quality_report.py --python coverage.json --native native-coverage.xml --web web/coverage/coverage-summary.json --output quality.json
+```
+
+Release coverage targets are 95% Python statements, 90% Python branches,
+90% native CPU lines, 90% frontend statements and 85% frontend branches.
+These are gates to satisfy using measured reports, not asserted achievements.
