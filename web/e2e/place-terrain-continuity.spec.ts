@@ -110,7 +110,7 @@ test('Cancel stops an independent profile drawing without discarding CMH',async(
  await page.getByRole('navigation',{name:'Workspace tools'}).getByRole('button',{name:'Terrain',exact:true}).click();
  await page.getByLabel('Terrain tools').getByRole('button',{name:'Elevation profile',exact:true}).click();
  await page.getByRole('button',{name:'Draw profile line',exact:true}).click();
- await page.getByLabel('Survey toolbar').getByRole('button',{name:'Cancel',exact:true}).click();
+ await page.getByLabel('Survey toolbar').getByRole('button',{name:'Cancel drawing',exact:true}).click();
  await expect(page.getByText('Drawing cancelled. Retained locations are unchanged.')).toBeVisible();
  await expect(page.locator('.results .result.active')).toHaveCount(1);
  await expect(page.getByLabel('Pinned places').getByRole('button',{name:'Select pinned CMH Acceptance Airport'})).toBeVisible();
