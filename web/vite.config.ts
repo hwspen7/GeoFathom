@@ -1,8 +1,5 @@
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
-import {execFileSync} from 'node:child_process';
-import {dirname,resolve} from 'node:path';
-import {fileURLToPath} from 'node:url';
 import {coveragePlugin,coverageEnabled} from './scripts/instrument.mjs';
 
 // Local-only development proxy; the production deployment must route /api
@@ -10,13 +7,10 @@ import {coveragePlugin,coverageEnabled} from './scripts/instrument.mjs';
 const proxy={'/api':{target:'http://127.0.0.1:8000',changeOrigin:true,
   rewrite:(path:string)=>path.replace(/^\/api(?=\/|$)/,'')}};
 
-// Surface the actual frontend commit, so a stale Vite process can be identified.
-let frontendRevision='unknown';
-try{
-  frontendRevision=execFileSync('git',['rev-parse','--short','HEAD'],{
-    cwd:resolve(dirname(fileURLToPath(import.meta.url)),'..'),encoding:'utf8',timeout:2000,
-  }).trim();
-}catch{/* Source archives may legitimately omit .git. */}
+// The launcher injects its checked-out git SHA. CI supplies GITHUB_SHA.
+ // Avoid Node imports here: the frontend tsconfig intentionally excludes Node types.
+const frontendRevision=process.env.VITE_GEOFATHOM_REVISION ??
+  process.env.GITHUB_SHA?.slice(0,7) ?? 'unavailable';
 
 export default defineConfig({
   define:{'import.meta.env.VITE_GEOFATHOM_REVISION':JSON.stringify(frontendRevision)},

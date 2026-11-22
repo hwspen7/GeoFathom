@@ -31,6 +31,12 @@ def main():
     if not npm:raise SystemExit("Install Node.js and make npm available on PATH.")
     if not (ROOT/"web"/"node_modules"/"vite").exists():
         subprocess.run([npm,"ci","--no-audit","--no-fund"],cwd=ROOT/"web",check=True)
+    # Publish the exact working-tree revision to the dev UI for stale-server diagnosis.
+    try:
+        revision=subprocess.run(["git","rev-parse","--short","HEAD"],cwd=ROOT,
+                                capture_output=True,text=True,timeout=3,check=True).stdout.strip()
+    except (OSError,subprocess.CalledProcessError,subprocess.TimeoutExpired):
+        revision="unavailable"
     children=[]
     try:
         if ready("http://127.0.0.1:8000/health/ready"):
@@ -39,7 +45,7 @@ def main():
         children.append(api)
         wait(api,"http://127.0.0.1:8000/health/ready")
         front=subprocess.Popen([npm,"run","dev","--","--host","127.0.0.1"],cwd=ROOT/"web",
-            env={**os.environ,"VITE_API_URL":"/api"})
+            env={**os.environ,"VITE_API_URL":"/api","VITE_GEOFATHOM_REVISION":revision})
         children.append(front)
         wait(front,"http://127.0.0.1:5173/api/health/ready")
         print("GeoFathom ready: http://127.0.0.1:5173",flush=True)
