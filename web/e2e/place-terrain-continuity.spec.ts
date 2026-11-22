@@ -166,6 +166,12 @@ test('OSU disconnected mapped properties default to campus, with inspectable edi
   return raw?JSON.parse(raw).length:0;
  },{timeout:18000}).toBeGreaterThan(3);
  await expect(page.getByLabel('Boundary longitude')).toHaveValue('-83.0450000');
+ // Wait for MapLibre's worker and the animated camera to settle before
+ // reading a projected handle position. Cached geometry alone can be stale.
+ await expect.poll(async()=>{
+  const raw=await map.getAttribute('data-rendered-handle-pixels');
+  return raw?JSON.parse(raw).length:0;
+ },{timeout:18000}).toBeGreaterThan(3);
  // Click a real rendered map vertex. Selecting it must not mutate the shape.
  const pixels=JSON.parse((await map.getAttribute('data-edit-handle-pixels'))||'[]') as number[][];
  const rect=(await map.boundingBox())!;
