@@ -60,6 +60,7 @@ export interface Capabilities {
   vision_segmentation: boolean;
   spatial_discovery: string;
   imagery: string;
+  local_raster_import?:boolean;
 }
 
 export function setApiAccessToken(token: string): void {
@@ -317,7 +318,7 @@ export async function uploadImagery(file: File, adminToken: string): Promise<Ras
   data.append('file', file);
   return request<RasterAsset>('/imagery/upload', {
     method: 'POST',
-    headers: { 'X-GeoFathom-Admin-Token': adminToken },
+    headers: adminToken ? { 'X-GeoFathom-Admin-Token': adminToken } : { 'X-GeoFathom-Local-Import': '1' },
     body: data,
   });
 }

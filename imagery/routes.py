@@ -4,7 +4,9 @@ import os
 from datetime import date
 import tempfile
 
-from fastapi import APIRouter, File, Header, HTTPException, UploadFile
+from fastapi import APIRouter, File, Header, HTTPException, UploadFile, Request
+from core.config import get_settings
+from core.security import _loopback
 import httpx
 from pydantic import BaseModel, Field
 from fastapi.responses import Response
@@ -72,13 +74,26 @@ def image_tile(image_id:str,level:int,x:int,y:int):
 
 @router.post("/upload", status_code=201)
 async def upload_image(
+    request: Request,
     file: UploadFile = File(...),
     token: str | None = Header(default=None, alias="X-GeoFathom-Admin-Token"),
 ) -> dict:
-    try:
-        require_admin(token)
-    except PermissionError as error:
-        raise HTTPException(status_code=403, detail=str(error)) from error
+    # A single-user local desktop may import its own imagery without a
+    # model-management token. Deployed/explicitly protected servers retain
+    # the administrator check. A non-simple header prevents cross-site forms.
+    origin = request.headers.get("origin")
+    local_import = (
+        os.getenv("GEOFATHOM_AUTH_MODE", "local").lower() == "local"
+        and not os.getenv("GEOFATHOM_MODEL_ADMIN_TOKEN")
+        and request.client is not None and _loopback(request.client.host)
+        and request.headers.get("X-GeoFathom-Local-Import") == "1"
+        and (origin is None or origin in get_settings().cors_origins)
+    )
+    if not local_import:
+        try:
+            require_admin(token)
+        except PermissionError as error:
+            raise HTTPException(status_code=403, detail=str(error)) from error
 
     if not file.filename or not file.filename.lower().endswith((".tif", ".tiff")):
         raise HTTPException(status_code=422, detail="Upload a georeferenced .tif/.tiff file.")

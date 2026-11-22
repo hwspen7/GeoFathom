@@ -682,7 +682,7 @@ export default function App() {
           <div className="dock-heading"><Layers3 size={15}/> Project / Layers</div>
           <div className="sidebar-scroll">
           <section className="panel-section">
-            <div className="section-heading"><Layers3 size={16} /><span>Projects & saved geometry</span></div>
+            <div className="section-heading"><Layers3 size={16} /><span>Projects</span></div>
             {!capabilities&&connectionError&&<div className="discovery-error" role="alert">{connectionError} <button onClick={()=>setConnectionRetry(v=>v+1)}>Reconnect</button></div>}
             <ProjectsPanel
               geometry={busy || preview || pendingShared || drawingMode ? null : geometry}
@@ -734,7 +734,7 @@ export default function App() {
             <section className="panel-section scratch-layer">
               <div className="section-heading"><Layers3 size={15}/><span>Local drawings · {scratch.length}</span></div>
               {scratchStorageError&&<p className="discovery-error">Browser storage unavailable. Export drawings before closing.</p>}
-              {!scratch.length&&<small>Draw a shape to create the first local feature.</small>}
+              {!scratch.length&&<small className="compact-notice">No drawings</small>}
               <div className="scratch-list" aria-label="Local drawings">
                 {scratch.map(item=><div key={item.id} className={'scratch-row '+(scratchId===item.id?'active':'')}>
                   <input type="checkbox" aria-label={'Show '+item.name} checked={item.visible} onChange={event=>{
@@ -772,7 +772,7 @@ export default function App() {
                   <input aria-label="Imagery attribution" placeholder="Provider attribution" value={tileCredit} onChange={e=>setTileCredit(e.target.value)} required/>
                   <label>Native maximum zoom <input type="number" min="1" max="23" value={tileZoom} onChange={e=>setTileZoom(Number(e.target.value))}/></label>
                   <button type="submit">Connect imagery</button>
-                  <small>Use a provider you are licensed to access. URLs are session-only; do not enter private long-lived credentials.</small>
+                  <small className="compact-notice" title="Use a provider you are licensed to access. URLs are session-only; never enter private long-lived credentials.">Licensed source · session only</small>
                   {tileError&&<p className="discovery-error">{tileError}</p>}
                 </form>
               </details>
@@ -1092,7 +1092,7 @@ export default function App() {
                     {previewEdgeLengths(geometry).edges.map((edge, index) =>
                       <div key={index}><span>{edge.label}</span><strong>{!preview&&measurement?.method!==OFFLINE_METHOD&&measurement?.edge_lengths_m?.[index]!==undefined?'':'~ '}{number(!preview?(measurement?.edge_lengths_m?.[index]??edge.length_m):edge.length_m,2)} m</strong></div>)}
                   </div>
-                  <p className="project-hint">Live spherical preview. Final area/perimeter is calculated on the WGS84 ellipsoid.</p>
+                  <small className="compact-notice" title="Live spherical preview. Final area and perimeter use the WGS84 ellipsoid.">~ estimated · WGS84 after validation</small>
                 </details>
               )}
               {selectedPlace && <p className="data-source">Data: {selectedPlace.source} · {selectedPlace.boundary_status === 'mapped' ? 'Mapped outline' : 'Coordinates only'}</p>}
@@ -1196,7 +1196,7 @@ export default function App() {
           <section id="tools-raster" hidden={activeTool!=='tools-raster'} className="panel-section">
             <div className="section-heading"><Layers3 size={16} /><span>Georeferenced imagery</span></div>
             <RasterPanel
-              asset={imageLayer}
+              asset={imageLayer} localImport={capabilities?.local_raster_import===true} refreshToken={connectionRetry}
               onSelect={(asset) => {
                 geometrySequence.current++;
                 setImageLayer(asset);setRasterVisible(true);
@@ -1390,7 +1390,7 @@ export default function App() {
           </section>
 
 
-            <ApiAccessPanel/>
+            <div hidden={activeTool!=='tools-services'}><ApiAccessPanel/></div>
           </div>
         </aside>
       </div>

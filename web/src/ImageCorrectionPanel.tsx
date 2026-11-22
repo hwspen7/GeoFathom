@@ -20,7 +20,7 @@ export default function ImageCorrectionPanel({
 }:Props) {
   return (
     <div className="image-review">
-      <p className="project-hint">Refine an image-derived outline with SAM 2 positive/negative clicks or a bounding box. This requires optional local CUDA model installation.</p>
+      <div className="section-heading" title="Requires a georeferenced image and optional installed SAM 2 model">SAM 2 refinement</div>
       <div className="survey-mode-grid">
         <button disabled={!enabled} className={mode==='positive'?'active':''}
           onClick={()=>onMode(mode==='positive'?null:'positive')}>
@@ -44,7 +44,7 @@ export default function ImageCorrectionPanel({
         </button>
         <button disabled={busy} onClick={onClear}>Clear prompts</button>
       </div>
-      <p className="project-hint">After refining, use the vertex editor to inspect and correct the polygon. A segmentation result is not a surveyed boundary.</p>
+      {enabled&&<small className="compact-notice" title="A segmentation result is not a surveyed boundary.">Review extracted boundary</small>}
     </div>
   );
 }

@@ -201,3 +201,19 @@ def test_local_cog_import_preserves_overviews_and_source_checksum(tmp_path,monke
     assert metadata(source)["block_shapes"][0]==[128,128]
     with pytest.raises(Exception,match="already inside"):
         import_local_image(image_file(item["id"]))
+
+
+def test_local_desktop_import_needs_explicit_header_and_trusted_origin(geotiff, monkeypatch):
+    monkeypatch.delenv("GEOFATHOM_MODEL_ADMIN_TOKEN")
+    monkeypatch.setenv("GEOFATHOM_AUTH_MODE", "local")
+    monkeypatch.setenv("GEOFATHOM_CORS_ORIGINS", "http://127.0.0.1:5173")
+    files={"file":("local.tif",geotiff.read_bytes(),"image/tiff")}
+    assert client.post("/imagery/upload",files=files).status_code==403
+    assert client.post("/imagery/upload",files=files,headers={
+        "X-GeoFathom-Local-Import":"1","Origin":"https://untrusted.example"}).status_code==403
+    accepted=client.post("/imagery/upload",files=files,headers={
+        "X-GeoFathom-Local-Import":"1","Origin":"http://127.0.0.1:5173"})
+    assert accepted.status_code==201,accepted.text
+    monkeypatch.setenv("GEOFATHOM_MODEL_ADMIN_TOKEN","protected")
+    assert client.post("/imagery/upload",files=files,headers={
+        "X-GeoFathom-Local-Import":"1"}).status_code==403

@@ -19,10 +19,12 @@ interface Props {
   settings: TraceSettings;
   onSettings: (value: TraceSettings) => void;
   viewport: [number, number, number, number] | null;
+  localImport?:boolean;
+  refreshToken?:number;
 }
 
 export default function RasterPanel({
-  asset, onSelect, tracing, onTracing, settings, onSettings, viewport,
+  asset, onSelect, tracing, onTracing, settings, onSettings, viewport,localImport=false,refreshToken=0,
 }: Props) {
   const [assets, setAssets] = useState<RasterAsset[]>([]);
   const [token, setToken] = useState('');
@@ -32,14 +34,16 @@ export default function RasterPanel({
   const [searching, setSearching] = useState(false);
 
   useEffect(() => {
-    listImagery().then(setAssets).catch(() => setError('Imagery library unavailable.'));
-  }, []);
+    let active=true;
+    listImagery().then(value=>{if(active){setAssets(value);setError('');}}).catch(cause=>{if(active)setError(cause instanceof Error?cause.message:'Imagery library unavailable.');});
+    return()=>{active=false;};
+  }, [refreshToken]);
 
   async function importFile(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
     event.target.value = '';
-    if (!token) {
+    if (!token && !localImport) {
       setError('Enter the server administration token to import a GeoTIFF.');
       return;
     }
@@ -73,22 +77,22 @@ export default function RasterPanel({
 
   return (
     <div className="raster-panel">
-      <p className="project-hint">Use your own georeferenced GeoTIFF. The preview keeps its original geographic placement. Maximum upload: 64 MB.</p>
+      {!localImport&&<details open={!localImport} className="access-settings"><summary>Import access</summary>
       <input type="password" autoComplete="off" aria-label="Image import administration token"
         placeholder="Server administration token" value={token}
-        onChange={event => setToken(event.target.value)} />
-      <label className="raster-upload">
+        onChange={event => setToken(event.target.value)} /></details>}
+      <label className="raster-upload" title="Import a georeferenced GeoTIFF, up to 64 MB">
         <UploadCloud size={15} /> {uploading ? 'Importing…' : 'Import GeoTIFF'}
         <input type="file" accept=".tif,.tiff,image/tiff" disabled={uploading}
           onChange={event => void importFile(event)} />
       </label>
-      {assets.length > 0 && (
-        <select aria-label="Select georeferenced imagery" value={asset?.id || ''}
+      {(
+        <select disabled={!assets.length} aria-label="Select georeferenced imagery" value={asset?.id || ''}
           onChange={event => {
             const selected = assets.find(item => item.id === event.target.value);
             if (selected) onSelect(selected);
           }}>
-          <option value="">Choose raster layer</option>
+          <option value="">{assets.length?'Choose raster layer':'No raster layers'}</option>
           {assets.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
         </select>
       )}
@@ -127,14 +131,14 @@ export default function RasterPanel({
             <MousePointer2 size={15}/>
             {tracing ? 'Click your target on the map' : 'Start automatic outline'}
           </button>
-          <p className="project-hint">The outline is an image-derived estimate, not a surveyed or legally verified boundary. Regions extending past the analysis window are flagged.</p>
+          <small className="compact-notice" title="An image-derived outline is not a surveyed or legal boundary. Regions extending past the analysis window are flagged.">Image-derived outline · review required</small>
         </>
       )}
       <div className="stac-search">
-        <button type="button" onClick={() => void searchCatalog()} disabled={!viewport || searching}>
+        <button title="Find public STAC scene metadata; not an imported raster" type="button" onClick={() => void searchCatalog()} disabled={!viewport || searching}>
           {searching ? 'Searching catalog…' : 'Find public satellite scenes in map view'}
         </button>
-        <p className="project-hint">Public STAC metadata only. Open a scene to inspect source and usage terms. Trace requires a georeferenced GeoTIFF imported above.</p>
+        {catalogItems.length>0&&<small className="compact-notice">Catalog · {catalogItems.length} scenes</small>}
         {catalogItems.length > 0 && (
           <div className="stac-results">
             {catalogItems.map(item => (

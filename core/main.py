@@ -1,5 +1,6 @@
 """Compose independent geospatial, discovery and AI services."""
 
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -41,7 +42,7 @@ app.add_middleware(
     allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
     allow_headers=["Content-Type", "Authorization", "X-GeoFathom-API-Key",
-                   "X-GeoFathom-Admin-Token"],
+                   "X-GeoFathom-Admin-Token", "X-GeoFathom-Local-Import"],
 )
 app.include_router(health_router)
 app.include_router(geometry_router)
@@ -87,6 +88,8 @@ def capabilities() -> dict:
         "vision_segmentation": True,
         "vision_methods": ["color", "sam2_optional"],
         "georeferenced_imagery": True,
+        "local_raster_import": os.getenv("GEOFATHOM_AUTH_MODE","local").lower()=="local"
+            and not os.getenv("GEOFATHOM_MODEL_ADMIN_TOKEN"),
         "spatial_discovery": "bounded_osm",
         "imagery": "local_geotiff_and_public_stac_metadata",
         "native_geometry": native_available(),

@@ -511,3 +511,19 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .gis-quick-basemap button[aria-pressed=true]{background:#d8e8f5;border-color:#7197b9;color:#153d60}
 .basemap-status{display:block;color:#526270;line-height:1.35;padding:5px 0;font-size:11px}
 .custom-basemap summary{cursor:pointer;font-size:11px;padding:5px 0;color:#304656}
+
+/* Desktop tools: brief labels, data, and errors; explanatory copy belongs
+   in context help rather than permanently occupying the workspace. */
+.desktop-gis .project-hint,.desktop-gis .discovery-caution{display:none}
+.desktop-gis .section-heading{margin-bottom:6px}
+.desktop-gis .panel-section{padding:8px 0}
+.desktop-gis .professional-form,.desktop-gis .raster-panel,.desktop-gis .image-review{gap:6px}
+.desktop-gis .professional-form button,.desktop-gis .raster-panel button,.desktop-gis .project-actions button{min-height:27px;padding:5px 7px}
+.desktop-gis .professional-panel details,.desktop-gis .image-review,.desktop-gis .raster-panel{border-radius:3px;box-shadow:none}
+.desktop-gis .professional-panel details>summary{padding:6px}
+.desktop-gis .raster-upload{padding:7px}
+.desktop-gis .compact-notice{font-size:11px;color:#526270;line-height:1.3}
+.desktop-gis .access-settings{font-size:11px;margin-bottom:3px}
+.desktop-gis .access-settings summary{cursor:pointer;padding:3px 0}
+.desktop-gis .results-summary .analysis-card{border:none;background:transparent;padding:0}
+.desktop-gis .analysis-footnote{font-size:10px;margin:3px 0}
