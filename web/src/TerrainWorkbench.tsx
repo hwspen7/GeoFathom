@@ -199,7 +199,7 @@ export default function TerrainWorkbench(p:Props){
    const controller=new AbortController();analysisRequest.current=controller;
    const ticket=++sequence.current;setBusy(true);setError('');setInfo('');
    const record:TerrainRecord={id:crypto.randomUUID(),title:modes.find(m=>m.id===operation)!.title,
-     operation,source:dem,geometry:structuredClone(analysisGeometry),inputKey,visible:true,opacity:.48,createdAt:Date.now()};
+     operation,source:dem,geometry:structuredClone(analysisGeometry),inputKey,visible:true,opacity:.5,createdAt:Date.now()};
    try{
      if(operation==='profile')record.profile=await terrainProfile(dem.id,analysisGeometry,controller.signal);
      else if(operation==='slope')record.slope=await analyzeTerrain(dem.id,analysisGeometry,controller.signal);
@@ -407,9 +407,9 @@ export default function TerrainWorkbench(p:Props){
        {result.operation==='watershed'&&<MetricBars label="Catchment (cells)" values={[{name:'Upstream',value:result.metrics.upstream_cells,color:'#3687b9'},{name:'Other',value:Math.max(0,result.valid_cells-result.metrics.upstream_cells),color:'#9ba7ad'}]}/>}
        {result.distribution&&<ElevationDistribution bins={result.distribution}/>}
        {result.raster&&<div className="terrain-profile-chart">
-         <label className="terrain-opacity-control">Result opacity · {Math.round((selected?.opacity??.48)*100)}%
+         <label className="terrain-opacity-control">Result opacity · {Math.round((selected?.opacity??.5)*100)}%
            <input aria-label="Terrain raster opacity" type="range" min="0" max="100" step="5"
-             value={Math.round((selected?.opacity??.48)*100)}
+             value={Math.round((selected?.opacity??.5)*100)}
              onChange={e=>{const opacity=Number(e.target.value)/100;setRecords(old=>old.map(r=>r.id===selectedRecord?{...r,opacity}:r));}}/>
          </label>
          <img src={result.raster.png} alt="Derived terrain raster" style={{width:'100%',maxHeight:180,objectFit:'contain'}}/>
