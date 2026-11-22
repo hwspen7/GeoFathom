@@ -1,7 +1,7 @@
 /* Pure, testable browser geometry state. Server PyProj is authoritative. */
 
 export type Position = [number, number];
-export type ShapeMode = 'polygon' | 'line' | 'rectangle' | 'circle' | 'hole' | 'split' | 'trace-along' | null;
+export type ShapeMode = 'point' | 'polygon' | 'line' | 'rectangle' | 'circle' | 'hole' | 'split' | 'trace-along' | null;
 export type GeometryPath = { polygon: number; ring: number; vertex: number };
 type Rings = Position[][][];
 
@@ -13,6 +13,7 @@ function rings(geometry: GeoJSON.Geometry): Rings {
   if (geometry.type === 'Polygon') return [geometry.coordinates as Position[][]];
   if (geometry.type === 'MultiPolygon') return geometry.coordinates as Position[][][];
   if (geometry.type === 'LineString') return [[geometry.coordinates as Position[]]];
+  if (geometry.type === 'MultiLineString') return (geometry.coordinates as Position[][]).map(line=>[line]);
   return [];
 }
 
@@ -20,10 +21,12 @@ function ringAt(geometry: GeoJSON.Geometry, path: GeometryPath): Position[] | nu
   return rings(geometry)[path.polygon]?.[path.ring] ?? null;
 }
 
+const isClosed=(geometry:GeoJSON.Geometry)=>geometry.type==='Polygon'||geometry.type==='MultiPolygon';
+
 /** Closing polygon coordinate is a duplicate, never an independent vertex. */
 function editableIndex(geometry: GeoJSON.Geometry, ring: Position[], index: number): boolean {
   return Number.isInteger(index) && index >= 0 &&
-    index < ring.length - (geometry.type === 'LineString' ? 0 : 1);
+    index < ring.length - (isClosed(geometry) ? 1 : 0);
 }
 function closeRing(vertices: Position[]): void {
   if (vertices.length && (vertices[0][0] !== vertices[vertices.length - 1][0] ||
@@ -36,8 +39,9 @@ export function verticesOf(geometry: GeoJSON.Geometry): Array<{
   path: GeometryPath; point: Position; midpoint: boolean;
 }> {
   const output: Array<{ path: GeometryPath; point: Position; midpoint: boolean }> = [];
+  if(geometry.type==='Point')return [{path:{polygon:0,ring:0,vertex:0},point:geometry.coordinates as Position,midpoint:false}];
   rings(geometry).forEach((polygon, p) => polygon.forEach((ring, r) => {
-    const closed = geometry.type !== 'LineString';
+    const closed = isClosed(geometry);
     const size = closed ? ring.length - 1 : ring.length;
     for (let v = 0; v < size; v++) {
       output.push({ path: { polygon: p, ring: r, vertex: v }, point: ring[v], midpoint: false });
@@ -57,10 +61,14 @@ export function moveVertex(
   geometry: GeoJSON.Geometry, path: GeometryPath, coordinate: Position,
 ): GeoJSON.Geometry {
   const result = copyGeometry(geometry);
+  if(result.type==='Point'){
+    if(path.polygon===0&&path.ring===0&&path.vertex===0)result.coordinates=[...coordinate,...result.coordinates.slice(2)];
+    return result;
+  }
   const ring = ringAt(result, path);
   if (!ring || !editableIndex(result,ring,path.vertex)) return result;
-  ring[path.vertex] = [...coordinate];
-  if (result.type !== 'LineString' && path.vertex === 0) closeRing(ring);
+  ring[path.vertex] = [...coordinate,...ring[path.vertex].slice(2)] as Position;
+  if (isClosed(result) && path.vertex === 0) closeRing(ring);
   return result;
 }
 
@@ -78,10 +86,10 @@ export function removeVertex(geometry: GeoJSON.Geometry, path: GeometryPath): Ge
   const result = copyGeometry(geometry);
   const ring = ringAt(result, path);
   if (!ring || !editableIndex(result,ring,path.vertex)) return result;
-  const min = result.type === 'LineString' ? 2 : 4;
+  const min = isClosed(result) ? 4 : 2;
   if (ring.length <= min) throw new Error('Cannot delete another vertex from this shape.');
   ring.splice(path.vertex, 1);
-  if (result.type !== 'LineString' && path.vertex === 0) closeRing(ring);
+  if (isClosed(result) && path.vertex === 0) closeRing(ring);
   return result;
 }
 
@@ -112,9 +120,7 @@ export function approximateMeasurement(geometry: GeoJSON.Geometry): {
   const radius = 6371008.8;
   const toRad = Math.PI / 180;
   function segment(a: Position, b: Position): number {
-    const x = (b[0] - a[0]) * toRad * Math.cos((a[1] + b[1]) * toRad / 2);
-    const y = (b[1] - a[1]) * toRad;
-    return radius * Math.hypot(x, y);
+    return geodesicDrag(a,b).distance_m;
   }
   function ringStats(ring: Position[]) {
     let perimeter = 0;
@@ -122,17 +128,17 @@ export function approximateMeasurement(geometry: GeoJSON.Geometry): {
     for (let i = 0; i < ring.length - 1; i++) {
       const a = ring[i], b = ring[i + 1];
       perimeter += segment(a, b);
-      signedArea += (b[0] - a[0]) * toRad *
-        (2 + Math.sin(a[1] * toRad) + Math.sin(b[1] * toRad));
+      // Remove the constant term to reduce cancellation for small parcels.
+      const delta=b[0]-a[0];
+      const wrapped=delta>180?delta-360:delta< -180?delta+360:delta;
+      const reference=Math.sin(ring[0][1]*toRad);
+      signedArea += wrapped*toRad*(Math.sin(a[1]*toRad)+Math.sin(b[1]*toRad)-2*reference);
     }
     return { perimeter, area: Math.abs(signedArea) * radius * radius / 2 };
   }
-  if (geometry.type === 'LineString') {
-    const pts = geometry.coordinates as Position[];
-    return {
-      area_m2: null, perimeter_m: null,
-      length_m: pts.slice(1).reduce((sum, point, i) => sum + segment(pts[i], point), 0),
-    };
+  if (geometry.type === 'LineString'||geometry.type==='MultiLineString') {
+    return {area_m2:null,perimeter_m:null,
+      length_m:pathsOf(geometry).reduce((total,pts)=>total+pts.slice(1).reduce((sum,point,i)=>sum+segment(pts[i],point),0),0)};
   }
   if (geometry.type === 'Polygon' || geometry.type === 'MultiPolygon') {
     let area = 0, perimeter = 0;
@@ -240,7 +246,6 @@ export function snapToPaths(
 export function previewEdgeLengths(geometry: GeoJSON.Geometry, limit = 30): {
   edges: Array<{ label: string; length_m: number }>; total: number;
 } {
-  const radius = 6371008.8, degrees = Math.PI / 180;
   const paths = pathsOf(geometry);
   const total = paths.reduce((sum, path) => sum + Math.max(0,path.length - 1), 0);
   const edges: Array<{ label: string; length_m: number }> = [];
@@ -248,12 +253,9 @@ export function previewEdgeLengths(geometry: GeoJSON.Geometry, limit = 30): {
     for (let i = 0; i + 1 < path.length; i++) {
       if (edges.length >= limit) return { edges, total };
       const a=path[i],b=path[i+1];
-      const longitude=(b[0]-a[0])*degrees;
-      const latitude=(b[1]-a[1])*degrees;
-      const factor=Math.cos(((a[1]+b[1])/2)*degrees);
       edges.push({
         label: 'Ring '+(ringIndex+1)+' · edge '+(i+1),
-        length_m: radius*Math.hypot(longitude*factor,latitude),
+        length_m: geodesicDrag(a,b).distance_m,
       });
     }
   }
@@ -326,4 +328,57 @@ export function translateSpherical(
       shifted((result as GeoJSON.Geometry&{coordinates:unknown}).coordinates);
   }
   return result;
+}
+
+/** Actual shape preview including the uncommitted cursor. */
+export function drawingPreview(mode:ShapeMode,points:Position[],cursor:Position|null=null):GeoJSON.Geometry|null{
+  if(!mode||!points.length)return null;
+  const last=points[points.length-1];
+  const p=cursor&&(last[0]!==cursor[0]||last[1]!==cursor[1])?[...points,cursor]:points;
+  if(mode==='point')return {type:'Point',coordinates:points[0]};
+  if(mode==='rectangle'&&p.length>=2){
+    const [a,b]=p;
+    if(a[0]!==b[0]&&a[1]!==b[1])return {type:'Polygon',coordinates:[[a,[b[0],a[1]],b,[a[0],b[1]],a]]};
+  }
+  if(mode==='circle'&&p.length>=2){
+    const r=geodesicDrag(p[0],p[1]).distance_m;
+    if(r>0&&r<=100000){
+      const ring=Array.from({length:72},(_,i)=>
+        (translateSpherical({type:'Point',coordinates:p[0]},i*5,r) as GeoJSON.Point).coordinates);
+      ring.push(ring[0]);
+      return {type:'Polygon',coordinates:[ring]};
+    }
+  }
+  if((mode==='polygon'||mode==='hole')&&p.length>=3)return {type:'Polygon',coordinates:[[...p,p[0]]]};
+  return p.length>=2?{type:'LineString',coordinates:p}:null;
+}
+
+/** Display an interior scanline anchor rather than a vertex average for
+ * concave polygons and polygons containing holes. */
+export function measurementAnchor(g:GeoJSON.Geometry):Position|null{
+  if(g.type==='Point')return g.coordinates as Position;
+  const paths=pathsOf(g);
+  if(!paths.length)return null;
+  if(!isClosed(g)){
+    const line=paths.reduce((a,b)=>a.length>=b.length?a:b);
+    return line[Math.floor(line.length/2)]??null;
+  }
+  const polygons=rings(g);
+  let best:Position|null=null,span=0;
+  for(const polygon of polygons){
+    const ys=polygon[0].map(p=>p[1]),min=Math.min(...ys),max=Math.max(...ys);
+    for(const fraction of [.5,.25,.75,.125,.875]){
+      const y=min+(max-min)*fraction,intersections:number[]=[];
+      for(const ring of polygon)for(let i=1;i<ring.length;i++){
+        const a=ring[i-1],b=ring[i];
+        if((a[1]>y)!==(b[1]>y))intersections.push(a[0]+(y-a[1])*(b[0]-a[0])/(b[1]-a[1]));
+      }
+      intersections.sort((a,b)=>a-b);
+      for(let i=0;i+1<intersections.length;i+=2){
+        const width=intersections[i+1]-intersections[i];
+        if(width>span){span=width;best=[(intersections[i]+intersections[i+1])/2,y];}
+      }
+    }
+  }
+  return best??paths[0][0]??null;
 }

@@ -16,6 +16,7 @@ export interface Place {
 
 export interface Measurement {
   geometry_type: string;
+  edge_lengths_m?: number[];
   area_m2: number | null;
   area_km2: number | null;
   perimeter_m: number | null;

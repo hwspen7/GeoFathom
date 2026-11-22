@@ -119,8 +119,32 @@ def measure_geometry(geometry: dict[str, Any]) -> dict[str, Any]:
     if any(v is not None and not math.isfinite(v) for v in (area, perimeter, length)):
         raise GeometryError("Geometry measurement is outside the supported numerical domain.")
 
+    # Bounded edge measurements for on-map dimension labels. The ordering
+    # matches GeoJSON parts/rings, including closing edges and holes.
+    if kind in {"Polygon", "MultiPolygon"}:
+        boundaries = [ring.coords for polygon in polygons for ring in
+                      (polygon.exterior, *polygon.interiors)]
+    elif kind == "LineString":
+        boundaries = [item.coords]
+    elif kind == "MultiLineString":
+        boundaries = [line.coords for line in item.geoms]
+    else:
+        boundaries = []
+    segments = []
+    for boundary in boundaries:
+        for i in range(min(len(boundary)-1, 48-len(segments))):
+            segments.append((boundary[i], boundary[i+1]))
+        if len(segments) == 48:
+            break
+    edges = []
+    if segments:
+        _, _, distances = _GEOD.inv(
+            [a[0] for a,b in segments], [a[1] for a,b in segments],
+            [b[0] for a,b in segments], [b[1] for a,b in segments])
+        edges = [float(distance) for distance in distances]
     return {
         "geometry_type": kind,
+        "edge_lengths_m": edges,
         "area_m2": area,
         "area_km2": area / 1_000_000 if area is not None else None,
         "perimeter_m": perimeter,
