@@ -28,9 +28,12 @@ test('CMH Find a place remains selected across map clicks and Terrain activation
  await page.mouse.click(bounds.x+bounds.width*.08,bounds.y+bounds.height*.12);
  await expect(page.locator('.results .result.active')).toHaveCount(1);
  await page.getByRole('navigation',{name:'Workspace tools'}).getByRole('button',{name:'Terrain',exact:true}).click();
- await expect(page.getByLabel('DEM fetch area')).toHaveValue('viewport');
- await page.getByLabel('DEM fetch area').selectOption('selection');
+ await expect(page.getByLabel('DEM fetch area')).toHaveValue('selection');
  await expect(page.getByLabel('DEM download target')).toContainText('Selected geometry');
+ await page.getByLabel('DEM fetch area').selectOption('viewport');
+ await expect(page.getByLabel('DEM download target')).toContainText('Current map');
+ await page.getByRole('button',{name:'Use selected area'}).click();
+ await expect(page.getByLabel('DEM fetch area')).toHaveValue('selection');
  await page.mouse.click(bounds.x+bounds.width*.90,bounds.y+bounds.height*.85);
  await expect(page.locator('.results .result.active')).toHaveCount(1);
  await expect(page.getByLabel('DEM fetch area')).toHaveValue('selection');

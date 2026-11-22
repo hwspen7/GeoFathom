@@ -1,9 +1,20 @@
 import {describe,it,expect} from 'vitest';
-import {terrainFetchBounds,terrainRasterMatchesTarget,terrainGeometryBounds,terrainBoundsOverlap,terrainFetchBudget} from './terrainSource';
+import {terrainFetchBounds,terrainRasterMatchesTarget,terrainGeometryBounds,terrainBoundsOverlap,terrainFetchBudget,preferredTerrainFetchScope} from './terrainSource';
 
 const cmh:[number,number,number,number]=[-82.93,39.96,-82.85,40.03];
 const old={type:'Polygon' as const,coordinates:[[[-82.59,39.41],[-82.50,39.41],[-82.50,39.46],[-82.59,39.46],[-82.59,39.41]]]};
 describe('intent-safe DEM requests',()=>{
+ it('automatically downloads the selected OSU campus, not an unrelated large viewport',()=>{
+  const campus:GeoJSON.Polygon={type:'Polygon',coordinates:[[[-83.042,39.986],[-83.012,39.986],[-83.012,40.01],[-83.042,40.01],[-83.042,39.986]]]};
+  const huge:[number,number,number,number]=[-83.08,39.97,-82.99,40.06];
+  expect(preferredTerrainFetchScope(campus)).toBe('selection');
+  const actual=terrainFetchBounds(huge,campus,preferredTerrainFetchScope(campus));
+  expect(actual).not.toEqual(huge);
+  expect(actual).toEqual([-83.0424,39.9856,-83.0116,40.0104]);
+  expect(terrainFetchBudget(actual,10)?.warning).toBeNull();
+  expect(preferredTerrainFetchScope({type:'Point',coordinates:[-83.02,40]})).toBe('viewport');
+  expect(preferredTerrainFetchScope(null)).toBe('viewport');
+ });
  it('uses CMH viewport by default even when a distant polygon remains selected',()=>{
   expect(terrainFetchBounds(cmh,old,'viewport')).toEqual(cmh);
   const selected=terrainFetchBounds(cmh,old,'selection');

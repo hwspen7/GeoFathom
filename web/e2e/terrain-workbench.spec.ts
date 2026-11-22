@@ -35,12 +35,14 @@ with tempfile.TemporaryDirectory() as directory:
  await page.getByLabel('DEM elevation layer').selectOption(fixture.id);
  await page.getByLabel('Confirm DEM meter elevations').check();
  await page.getByRole('button',{name:/DEM study area/}).click();
- await expect(page.getByLabel('DEM fetch area')).toHaveValue('viewport');
- await expect(page.getByLabel('DEM download target')).toContainText('Current map');
- await expect(page.getByLabel('Interactive geospatial map')).toHaveAttribute('data-dem-target-visible','true');
- await page.getByLabel('DEM fetch area').selectOption('selection');
+ await expect(page.getByLabel('DEM fetch area')).toHaveValue('selection');
  await expect(page.getByLabel('DEM download target')).toContainText('Selected geometry');
+ await expect(page.getByLabel('Interactive geospatial map')).toHaveAttribute('data-dem-target-visible','true');
  await page.getByLabel('DEM fetch area').selectOption('viewport');
+ await expect(page.getByLabel('DEM download target')).toContainText('Current map');
+ await page.getByRole('button',{name:'Use selected area',exact:true}).click();
+ await expect(page.getByLabel('DEM fetch area')).toHaveValue('selection');
+ await expect(page.getByLabel('DEM download target')).toContainText('Selected geometry');
  const terrainTab=page.getByRole('navigation',{name:'Workspace tools'}).getByRole('button',{name:'Terrain',exact:true});
  await expect(terrainTab).toHaveAttribute('aria-pressed','true');
  await terrainTab.click();
