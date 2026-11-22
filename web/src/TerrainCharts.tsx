@@ -15,12 +15,13 @@ export function profileSegments(samples:ProfileSample[],length:number,lo:number,
  if(current.length)segments.push(current);
  return segments.map(s=>s.join(' '));
 }
-export function ProfilePlot({samples,length,onHover}:{samples:ProfileSample[];length:number;onHover:(pt:Position|null)=>void}){
+export function ProfilePlot({samples,length,onHover,mapIndex=null}:{samples:ProfileSample[];length:number;onHover:(pt:Position|null)=>void;mapIndex?:number|null}){
  const [index,setIndex]=useState<number|null>(null);
  const valid=samples.filter(s=>s.elevation_m!==null&&Number.isFinite(s.elevation_m));
  if(!valid.length)return <p className="discovery-error">No valid elevation samples.</p>;
  const lo=Math.min(...valid.map(s=>s.elevation_m!)),hi=Math.max(...valid.map(s=>s.elevation_m!)),top=hi===lo?hi+1:hi;
- const selected=index===null?null:samples[index];
+ const activeIndex=index??mapIndex;
+ const selected=activeIndex===null?null:samples[activeIndex]??null;
  function choose(distance:number){
    let best=0;
    for(let i=1;i<samples.length;i++)if(Math.abs(samples[i].distance_m-distance)<Math.abs(samples[best].distance_m-distance))best=i;

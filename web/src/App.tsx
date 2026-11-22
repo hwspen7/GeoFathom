@@ -127,6 +127,8 @@ export default function App() {
   const [terrainPicking,setTerrainPicking]=useState(false);
   const [terrainOrigin,setTerrainOrigin]=useState<Position|null>(null);
   const [terrainHover,setTerrainHover]=useState<Position|null>(null);
+  const [terrainProfileSamples,setTerrainProfileSamples]=useState<import('./TerrainCharts').ProfileSample[]>([]);
+  const [terrainProfileMapIndex,setTerrainProfileMapIndex]=useState<number|null>(null);
   const [display,setDisplay]=useState(loadDisplay);
   const showMeasurements=display.dimensions;
   const setShowMeasurements=(value:boolean)=>setDisplay(old=>({...old,dimensions:value}));
@@ -1175,7 +1177,11 @@ export default function App() {
         <div className="map-wrap">
           <MapCanvas
             selected={geometry} drawingMode={drawingMode} vertices={vertices}
-            terrainPicking={terrainPicking} terrainMarker={showTools&&activeTool==='tools-terrain'?(terrainHover??terrainOrigin):null}
+            terrainPicking={terrainPicking}
+            terrainMarker={showTools&&activeTool==='tools-terrain'?
+              (terrainHover??(terrainProfileMapIndex!==null?terrainProfileSamples[terrainProfileMapIndex]?.coordinate??null:null)??terrainOrigin):null}
+            profileSamples={showTools&&activeTool==='tools-terrain'?terrainProfileSamples:[]}
+            onProfileCursor={setTerrainProfileMapIndex}
             preservePlaceSelection={!!selectedPlace}
             pinnedPlaces={pinnedPlaces.map(place=>({id:place.id,geometry:visibleGeometry(place)}))}
             onSelectPinnedPlace={id=>{const place=pinnedPlaces.find(p=>p.id===id);if(place)void selectPlace(place);}}
@@ -1710,6 +1716,8 @@ export default function App() {
                 }
               }}
               onHover={setTerrainHover}
+              profileMapIndex={terrainProfileMapIndex}
+              onProfileSamples={samples=>{setTerrainProfileSamples(samples);setTerrainProfileMapIndex(null);}}
               onPreview={value=>{if(projectCurrent())setTerrainFeatures(value);}}
               onRasterPreview={value=>{if(projectCurrent())setTerrainRasters(value);}}
               onSaved={()=>{if(projectCurrent())setRefreshToken(v=>v+1);}}/>

@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import maplibregl, { type GeoJSONSource, type MapMouseEvent, type StyleSpecification } from 'maplibre-gl';
+import {nearestProfileSample} from './profileLink';
+import type {ProfileSample} from './TerrainCharts';
 
 import { rasterPreviewUrl, protectedRasterPreview } from './api';
 import { PixelSnapIndex } from './spatialIndex';
@@ -55,6 +57,8 @@ interface Props {
   onFinishDrawing:()=>void;
   terrainPicking:boolean;
   terrainMarker:Position|null;
+  profileSamples?:ProfileSample[];
+  onProfileCursor?:(index:number|null)=>void;
   terrainResults:GeoJSON.Feature[];
   terrainRasters?:TerrainRasterLayer[];
   terrainFetchTarget?:[number,number,number,number]|null;
@@ -264,7 +268,7 @@ type Drag = {
 
 export default function MapCanvas({
   selected,drawingMode,vertices,focus,basemap,customBasemap,onBasemapStatus,measurement,showMeasurements,display,selectedFeatureId,rasterLayers,onRasterError,onMapClick,onFinishDrawing,
-  terrainPicking,terrainMarker,terrainResults,terrainRasters,terrainFetchTarget,onTerrainPick,onContextMenu,onEditingError,
+  terrainPicking,terrainMarker,profileSamples=[],onProfileCursor,terrainResults,terrainRasters,terrainFetchTarget,onTerrainPick,onContextMenu,onEditingError,
   onViewportChange, discovered, traceMode, onTraceClick,
   editing, moving,edgeMoving, snapping, selectedLocked, layerFeatures,
   promptPositive,promptNegative,promptBox,annotationMode,onAnnotationClick,
@@ -283,6 +287,7 @@ export default function MapCanvas({
     selected,selectedFeatureId,drawingMode, traceMode, annotationMode,selectionBoxMode,labelMoveMode,editing, moving,edgeMoving, snapping, selectedLocked,
     layerFeatures, onMapClick,onFinishDrawing,terrainPicking,onTerrainPick,onContextMenu,onEditingError, onTraceClick,onAnnotationClick,onSelectionBox,onLabelMove,onViewportChange,
     onGeometryPreview, onGeometryCommit, onSelectSavedFeature,onDeselect,preservePlaceSelection,onSelectPinnedPlace,onSelectBoundaryNode,
+    profileSamples,onProfileCursor,
   });
   const renderRef = useRef({
     selected,vertices,drawingMode,discovered,layerFeatures,editing,
@@ -305,6 +310,7 @@ export default function MapCanvas({
     selected,selectedFeatureId,drawingMode, traceMode, annotationMode,selectionBoxMode,labelMoveMode,editing, moving,edgeMoving, snapping, selectedLocked,
     layerFeatures, onMapClick,onFinishDrawing,terrainPicking,onTerrainPick,onContextMenu,onEditingError, onTraceClick,onAnnotationClick,onSelectionBox,onLabelMove,onViewportChange,
     onGeometryPreview, onGeometryCommit, onSelectSavedFeature,onDeselect,preservePlaceSelection,onSelectPinnedPlace,onSelectBoundaryNode,
+    profileSamples,onProfileCursor,
   };
 
   useEffect(() => {
@@ -748,6 +754,23 @@ export default function MapCanvas({
     map.on('mousedown', beginDrag);
     map.on('mousemove', dragging);
     map.on('mousemove',displayCoordinates);
+    let lastProfileIndex:number|null=null;
+    function profileCursor(event:MapMouseEvent){
+      const state=eventRef.current;
+      const samples=state.profileSamples;
+      // During drawing/editing, keep the terrain cursor out of the way.
+      const index=!samples?.length||state.drawingMode||state.editing||state.terrainPicking?
+        null:nearestProfileSample(samples,event.point,
+          coordinate=>map.project(coordinate as maplibregl.LngLatLike));
+      if(index!==lastProfileIndex){
+        lastProfileIndex=index;state.onProfileCursor?.(index);
+      }
+    }
+    function clearProfileCursor(){
+      if(lastProfileIndex!==null){lastProfileIndex=null;eventRef.current.onProfileCursor?.(null);}
+    }
+    map.on('mousemove',profileCursor);
+    map.on('mouseout',clearProfileCursor);
     map.on('mouseup', finishDrag);
     window.addEventListener('mouseup',finishDrag);
     map.on('contextmenu', removeByRightClick);
@@ -891,6 +914,8 @@ export default function MapCanvas({
       map.off('idle',inspectRenderedHandles);
       map.off('mousemove', dragging);
       map.off('mousemove',displayCoordinates);
+      map.off('mousemove',profileCursor);
+      map.off('mouseout',clearProfileCursor);
       map.off('mouseup', finishDrag);
       window.removeEventListener('mouseup',finishDrag);
       window.removeEventListener('keydown',onEscape);

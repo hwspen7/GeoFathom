@@ -93,6 +93,7 @@ interface Props{
  onFitSelectedArea?:()=>void;
  extentMode:boolean;onUseSelection:()=>void;
  onHover:(point:Position|null)=>void;onPreview:(g:GeoJSON.Feature[])=>void;onRasterPreview?:(layers:TerrainRasterLayer[])=>void;onSaved:()=>void;
+ onProfileSamples?:(samples:ProfileResult['samples'])=>void;profileMapIndex?:number|null;
 }
 export default function TerrainWorkbench(p:Props){
  // Opening Terrain never preselects a calculation.
@@ -115,6 +116,7 @@ export default function TerrainWorkbench(p:Props){
  const [selectedRecord,setSelectedRecord]=useState<string|null>(null);
  const selected=records.find(r=>r.id===selectedRecord);
  const result=selected?.advanced??null,slope=selected?.slope??null,profile=selected?.profile??null;
+ const activeProfileSamples=profile?.samples??null;
  const analysisRequest=useRef<AbortController|null>(null);
  const alive=useRef(true);
  const sourceIntent=useRef(0);
@@ -160,6 +162,7 @@ export default function TerrainWorkbench(p:Props){
    (!needsPoint||validNumber(lon,-180,180)&&validNumber(lat,-90,90))&&
    (operation!=='visibility'||validNumber(height,0,1000)&&validNumber(target,0,1000));
  const canRun=operation!==null&&p.connected&&verified&&!!correctShape&&!sourceMismatch&&!mapMismatch&&parametersValid;
+ useEffect(()=>{latest.current.onProfileSamples?.(activeProfileSamples??[]);},[activeProfileSamples]);
  const inputKey=JSON.stringify([dem?.id,analysisGeometry,operation,interval,reference,lon,lat,height,target,endLon,endLat,maxSlope,minElevation,maxElevation,maxTri,streamCells,azimuth,altitude,sectionSpacing,sectionWidth,drape,drape?p.imageRaster?.id:null]);
  const inputsChanged=!!selected&&selected.inputKey!==inputKey;
  useEffect(()=>{
@@ -396,7 +399,7 @@ export default function TerrainWorkbench(p:Props){
        <div><span>Aspect</span><strong>{slope.mean_aspect_deg===null?'Flat':fmt(slope.mean_aspect_deg)+'°'}</strong></div>
      </div><MetricBars label="Slope (degrees)" max={90} values={[{name:'Mean',value:slope.mean_slope_deg,color:'#3977aa'},{name:'Maximum',value:slope.maximum_slope_deg,color:'#d18b31'}]}/>
      <small className="compact-notice" title={slope.warning}>{slope.valid_pixels} valid cells · {slope.engine}</small></>}
-     {profile&&<ProfilePlot samples={profile.samples} length={profile.length_m} onHover={p.onHover}/>}
+     {profile&&<ProfilePlot samples={profile.samples} length={profile.length_m} onHover={p.onHover} mapIndex={p.profileMapIndex??null}/>}
      {result&&<>
        <div className="terrain-metrics">{Object.entries(result.metrics).map(([k,v])=><div key={k}><span>{names[k]??k.replaceAll('_',' ')}</span><strong>{fmt(v)} {units[k]??(['product_min','product_max','product_mean'].includes(k)?(
           ['elevation','tpi','tri','cutfill_map'].includes(result.operation)?'m':
