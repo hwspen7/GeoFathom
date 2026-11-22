@@ -17,25 +17,64 @@ class GeometryError(ValueError):
     """An invalid or unsupported geographic geometry."""
 
 
-def _check_coordinates(value: Any) -> int:
-    if not isinstance(value, (list, tuple)):
-        raise GeometryError("Coordinates must be arrays.")
-    if (
-        len(value) >= 2
-        and isinstance(value[0], (int, float))
-        and isinstance(value[1], (int, float))
-    ):
-        lon, lat = value[:2]
-        if (
-            isinstance(lon, bool)
-            or isinstance(lat, bool)
-            or not math.isfinite(lon)
-            or not math.isfinite(lat)
-            or not (-180 <= lon <= 180 and -90 <= lat <= 90)
-        ):
+def _check_coordinates(value: Any, kind: str) -> int:
+    """Validate fixed GeoJSON nesting before allocating native geometry."""
+    count = 0
+    dimension = None
+
+    def array(node, minimum):
+        if not isinstance(node, (list, tuple)) or len(node) < minimum:
+            raise GeometryError("Invalid GeoJSON coordinate structure.")
+        return node
+
+    def position(node):
+        nonlocal count, dimension
+        array(node, 2)
+        if len(node) not in (2, 3):
+            raise GeometryError("Coordinate positions must have two or three ordinates.")
+        if dimension is None:
+            dimension = len(node)
+        if len(node) != dimension:
+            raise GeometryError("Coordinate positions must have consistent dimensions.")
+        for v in node:
+            if isinstance(v, bool) or not isinstance(v, (int, float)):
+                raise GeometryError("Coordinates must be finite WGS84 longitude/latitude pairs.")
+            try:
+                finite = math.isfinite(v)
+            except OverflowError:
+                finite = False
+            if not finite:
+                raise GeometryError("Coordinates must be finite WGS84 longitude/latitude pairs.")
+        if not (-180 <= node[0] <= 180 and -90 <= node[1] <= 90):
             raise GeometryError("Coordinates must be finite WGS84 longitude/latitude pairs.")
-        return 1
-    return sum(_check_coordinates(part) for part in value)
+        count += 1
+        if count > _MAX_POINTS:
+            raise GeometryError("Geometry must contain between 1 and 20,000 coordinates.")
+
+    def line(node, ring=False):
+        array(node, 4 if ring else 2)
+        for pos in node:
+            position(pos)
+        if ring and tuple(node[0]) != tuple(node[-1]):
+            raise GeometryError("GeoJSON polygon rings must be closed.")
+
+    def polygon(node):
+        for ring in array(node, 1):
+            line(ring, ring=True)
+
+    if kind == "Point":
+        position(value)
+    elif kind == "LineString":
+        line(value)
+    elif kind == "MultiLineString":
+        for item in array(value, 1):
+            line(item)
+    elif kind == "Polygon":
+        polygon(value)
+    else:
+        for item in array(value, 1):
+            polygon(item)
+    return count
 
 
 def measure_geometry(geometry: dict[str, Any]) -> dict[str, Any]:
@@ -43,15 +82,15 @@ def measure_geometry(geometry: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(geometry, dict):
         raise GeometryError("A GeoJSON geometry object is required.")
     kind = geometry.get("type")
-    if kind not in _ALLOWED:
+    if not isinstance(kind, str) or kind not in _ALLOWED:
         raise GeometryError("Supported types: Polygon, MultiPolygon, LineString, MultiLineString, Point.")
-    points = _check_coordinates(geometry.get("coordinates"))
+    points = _check_coordinates(geometry.get("coordinates"), kind)
     if points == 0 or points > _MAX_POINTS:
         raise GeometryError("Geometry must contain between 1 and 20,000 coordinates.")
 
     try:
         item = shape(geometry)
-    except (TypeError, ValueError, KeyError, GEOSException) as error:
+    except (TypeError, ValueError, KeyError, IndexError, OverflowError, GEOSException) as error:
         raise GeometryError("Invalid GeoJSON coordinates.") from error
     if item.is_empty or not item.is_valid:
         raise GeometryError(f"Invalid geometry: {explain_validity(item)}")

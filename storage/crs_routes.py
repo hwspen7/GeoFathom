@@ -1,6 +1,6 @@
 """Per-project EPSG coordinate references and map grid endpoints."""
 from fastapi import APIRouter,HTTPException,Query
-from pydantic import BaseModel,Field
+from pydantic import BaseModel,Field,field_validator
 from storage.database import StorageError
 from .crs import get_crs,update_crs,transform_positions,projected_grid
 router=APIRouter(prefix="/projects",tags=["coordinate-systems"])
@@ -14,6 +14,19 @@ class CoordinatesTransform(BaseModel):
     points:list[tuple[float,float]]=Field(min_length=1,max_length=2000)
     source:str="EPSG:4326"
     target:str="EPSG:3857"
+
+    @field_validator("points",mode="before")
+    @classmethod
+    def numeric_coordinates(cls,points):
+        # Reject coercion of booleans and numeric strings before Pydantic
+        # converts them to floats and erases their original input type.
+        if not isinstance(points,list):
+            raise ValueError("Points must be an array.")
+        for point in points:
+            if not isinstance(point,(list,tuple)) or len(point)!=2 or any(
+                isinstance(v,bool) or not isinstance(v,(int,float)) for v in point):
+                raise ValueError("Coordinates must contain two numeric ordinates.")
+        return points
 
 def fail(error):
     message=str(error)

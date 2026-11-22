@@ -287,3 +287,35 @@ instrumentation. A successful Windows short run is functional/hardware
 evidence; `--require-coverage-targets` additionally enforces its local
 Python and combined web coverage. The independent GCC CI job provides native
 line/branch evidence.
+
+
+### Core capability acceptance (research and personal GIS scope)
+
+The project prioritizes correctness of these six capabilities over pursuing
+coverage percentages in unrelated enterprise integrations. The complete
+host acceptance remains required, including zero failed or skipped Python
+tests, actual native CPU/CUDA tests, strict synthetic ONNX GPU inference,
+real isolated PostGIS, and browser E2E. Global coverage is still reported
+and the separate strict coverage check is retained; it is not proof of
+algorithmic precision. Final project-level resource soak is 600 seconds per
+device, not 24 hours.
+
+- Geodesy: WGS84 area, complete exterior/hole boundary perimeter, ring
+  winding independence, multipart sums, numeric control points and finite
+  structurally valid coordinates. Horizontally measured, not legal survey
+  accuracy or 3D terrain surface area.
+- CRS: explicit horizontal 2D EPSG contracts, longitude/latitude order,
+  independent Web Mercator equations, UTM control points and round trips.
+  Reject unsupported vertical/3D systems and unavailable non-ballpark
+  transforms; geodetic datum/epoch accuracy still depends on installed PROJ
+  operations and source metadata.
+- CPU/CUDA: seeded adverse inputs, odd tile sizes, exact masks and class
+  IDs, normalized index absolute tolerance of 1e-6, fused pipeline and
+  allocation trim checks on real hardware.
+- Memory: variable-size continuous native computation, sampled host/device
+  growth, allocator limits and cleanup, with existing sanitizer and fuzzer
+  jobs. Bounded tests cannot prove absence of all leaks.
+- Storage: atomic optimistic writes, coherent workspace snapshots, complete
+  revision history, locked layers and cross-project identity checks.
+- Map editing: real Chromium and MapLibre interactions, revision history
+  isolation, stale response fencing, undo/redo and saved-feature identity.

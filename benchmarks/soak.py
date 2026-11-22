@@ -1,7 +1,8 @@
 """Continuous real native CPU/CUDA spectral acceptance and memory-growth gate.
 
-Short CI runs exercise the gate; use --seconds 86400 on the target machine
-for a separate 24-hour qualification. No extrapolation from the short run.
+Short CI runs exercise the gate; use --seconds 600 for the final
+project-level qualification. Longer production runs are optional.
+No extrapolation from the short run.
 """
 import argparse
 import json
@@ -25,19 +26,43 @@ def run(seconds=10,min_rate=1_000_000,max_growth_mb=128,device="cpu",
     os.environ["GEOFATHOM_SPECTRAL_DEVICE"]=device
     if not native_available():
         raise RuntimeError("Native library is required for soak acceptance.")
-    shape=(512,512)
-    a=np.full(shape,200,np.float32);b=np.full(shape,50,np.float32)
-    valid=np.ones(shape,np.uint8)
+    # Alternate a full tile and odd/small shapes to exercise allocation
+    # reuse, edge blocks and array boundaries. Precompute expected masks and
+    # values using an independent float64 reference outside the timed loop.
+    rng=np.random.default_rng(3567)
+    fixtures=[]
+    for shape in ((512,512),(257,259),(511,513),(63,65)):
+        a=rng.uniform(1,1000,shape).astype(np.float32)
+        b=rng.uniform(1,1000,shape).astype(np.float32)
+        valid=rng.integers(0,2,shape,dtype=np.uint8)
+        a.flat[:4]=[0,np.nan,np.inf,np.finfo(np.float32).max]
+        b.flat[:4]=[0,1,1,np.finfo(np.float32).max]
+        valid.flat[:4]=1
+        x,y=a.astype(np.float64),b.astype(np.float64)
+        with np.errstate(invalid="ignore"):
+            denominator=x+y
+            mask=(valid!=0)&np.isfinite(x)&np.isfinite(y)&(np.abs(denominator)>1e-9)
+            index=np.zeros(shape,np.float32)
+            np.divide(x-y,denominator,out=index,where=mask,casting="unsafe")
+        np.clip(index,-1,1,out=index)
+        delta=-2*index.astype(np.float64)
+        labels=np.zeros(shape,np.uint8)
+        labels[mask&(delta>=.25)]=1
+        labels[mask&(delta<=-.25)]=2
+        fixtures.append((a,b,valid,index,mask,labels))
     process=psutil.Process()
     expected="cuda-spectral" if device=="cuda" else "cpp-spectral"
-    def iteration():
+    def iteration(i):
+        a,b,valid,index,expected_mask,expected_labels=fixtures[i%len(fixtures)]
         values,mask,engine=normalized_difference(a,b,valid)
-        if engine!=expected or not mask.all() or not np.allclose(values,.6):
+        if engine!=expected or not np.array_equal(mask,expected_mask) or not np.allclose(values,index,rtol=0,atol=1e-6):
             raise RuntimeError("Native spectral invariant failed.")
-        labels,both,_,_=paired_change((a,b),valid,(b,a),valid,.25)
-        if not both.all() or not np.all(labels==2):
+        labels,both,paired_engine,_=paired_change((a,b),valid,(b,a),valid,.25)
+        expected_paired="cuda-spectral-fused" if device=="cuda" else expected
+        if paired_engine!=expected_paired or not np.array_equal(both,expected_mask) or not np.array_equal(labels,expected_labels):
             raise RuntimeError("Native change classification invariant failed.")
-    for _ in range(20):iteration()
+        return a.size*3
+    for i in range(20):iteration(i)
     initial=process.memory_info().rss
     peak=initial
     # Native allocated bytes are per runtime; nvidia-smi is device-wide.
@@ -55,8 +80,9 @@ def run(seconds=10,min_rate=1_000_000,max_growth_mb=128,device="cpu",
     started=time.perf_counter()
     next_sample=started+2
     iterations=0
+    processed_pixels=0
     while time.perf_counter()-started<seconds:
-        iteration()
+        processed_pixels+=iteration(iterations)
         iterations+=1
         peak=max(peak,process.memory_info().rss)
         if device=="cuda" and time.perf_counter()>=next_sample:
@@ -71,10 +97,12 @@ def run(seconds=10,min_rate=1_000_000,max_growth_mb=128,device="cpu",
         device_peak=max(device_peak,device_used)
         samples+=1
     elapsed=time.perf_counter()-started
-    rate=iterations*shape[0]*shape[1]*3/elapsed
+    rate=processed_pixels/elapsed
     growth=(peak-initial)/1024**2
     result={"device":device,"seconds":elapsed,"iterations":iterations,
-            "pixels_per_second":round(rate),"peak_rss_growth_mb":round(growth,2),
+            "pixels_per_second":round(rate),"processed_pixels":processed_pixels,
+            "fixture_shapes":[list(f[0].shape) for f in fixtures],
+            "pixel_tolerance":1e-6,"peak_rss_growth_mb":round(growth,2),
             "min_pixels_per_second":min_rate,"max_rss_growth_mb":max_growth_mb,
             "passed":rate>=min_rate and growth<=max_growth_mb}
     if device=="cuda":

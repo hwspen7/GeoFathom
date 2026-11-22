@@ -70,3 +70,41 @@ def test_2d_transform_rejects_unrepresentable_crs(crs):
 def test_transform_rejects_invalid_coordinate_pairs(point):
     with pytest.raises(StorageError):
         transform_positions([point])
+
+
+@pytest.mark.parametrize("geometry",[
+    {"type":[],"coordinates":[0,0]},
+    {"type":"Point","coordinates":[0,0,float("nan")]},
+    {"type":"Point","coordinates":[0,0,0,0]},
+    {"type":"Point","coordinates":[10**1000,0]},
+    {"type":"Point","coordinates":[[0,0]]},
+    {"type":"LineString","coordinates":[[0,0],[1,0,2]]},
+    {"type":"LineString","coordinates":[[0,0]]},
+    {"type":"MultiLineString","coordinates":[[]]},
+    {"type":"Polygon","coordinates":[[[0,0],[1,0],[1,1],[0,1]]]},
+    {"type":"Polygon","coordinates":[[[0,0],[1,0],[0,1],[]]]},
+    {"type":"MultiPolygon","coordinates":[[]]},
+])
+def test_malformed_geojson_is_rejected_before_native_geometry(geometry):
+    with pytest.raises(GeometryError):
+        measure_geometry(geometry)
+
+def test_coordinate_budget_is_checked_before_shapely_allocation():
+    line={"type":"LineString","coordinates":[[i/100000,0] for i in range(20001)]}
+    with pytest.raises(GeometryError,match="20,000"):
+        measure_geometry(line)
+
+def test_3d_positions_keep_horizontal_measurement_without_misleading_elevation_claim():
+    value=measure_geometry({"type":"LineString","coordinates":[[0,0,0],[0,1,1000]]})
+    assert value["length_m"]==pytest.approx(110574.3885578,abs=.001)
+
+def test_http_coordinate_contract_rejects_boolean_and_numeric_strings(tmp_path,monkeypatch):
+    from fastapi.testclient import TestClient
+    from core.main import app
+    monkeypatch.setenv("GEOFATHOM_DATABASE_PATH",str(tmp_path/"strict-crs.sqlite"))
+    client=TestClient(app)
+    pid=client.post("/projects",json={"name":"Strict CRS"}).json()["id"]
+    url=f"/projects/{pid}/crs/transform"
+    for points in [[[True,0]],[["10",20]],[[0,91]]]:
+        assert client.post(url,json={"points":points}).status_code==422
+    assert client.post(url,json={"points":[[10,20]]}).status_code==200
