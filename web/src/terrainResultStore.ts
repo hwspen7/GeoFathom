@@ -12,7 +12,7 @@ export interface PersistedTerrainResult {
  inputKey:string;visible:boolean;createdAt:number;saved?:boolean;opacity:number;
  resampling:'nearest'|'linear';
  advanced?:AdvancedTerrainResult;slope?:TerrainResult;
- profile?:{samples:Array<{distance_m:number;elevation_m:number|null;coordinate:number[]}>;length_m:number;source_crs:string;vertical_unit:string;warning:string};
+ profile?:{samples:Array<{distance_m:number;elevation_m:number|null;coordinate?:[number,number]}>;length_m:number;warning:string};
 }
 
 interface IndexedResult extends PersistedTerrainResult {projectKey:string}
