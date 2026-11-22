@@ -13,6 +13,7 @@ import numpy as np
 import rasterio
 from rasterio.features import geometry_mask
 from rasterio.transform import from_origin
+from rasterio.windows import Window, transform as window_transform
 from rasterio.warp import reproject, transform_bounds, transform_geom, Resampling
 
 from geometry.measure import measure_geometry
@@ -23,8 +24,11 @@ from terrain.cancellation import checkpoint
 from terrain.vertical import vertical_datum, check_vertical_compatibility
 
 _PREPARE_SLOT=BoundedSemaphore(1)
-_MAX_PIXELS=8_000_000
-_MAX_SIDE=4096
+# The output is written in 512 x 512 windows. A conservative on-disk grid
+# ceiling protects compute time and catalog size, not working-set RAM.
+_MAX_PIXELS=32_000_000
+_MAX_SIDE=8192
+_BLOCK=512
 
 
 def prepare_dem(paths, mode, geometry=None, resolution_m=None, sampling='bilinear', cancel=None):
@@ -89,27 +93,9 @@ def prepare_dem(paths, mode, geometry=None, resolution_m=None, sampling='bilinea
             y1=anchor_y-r0*res
             width=int(c1-c0);height=int(r1-r0)
             if width<1 or height<1 or width>_MAX_SIDE or height>_MAX_SIDE or width*height>_MAX_PIXELS:
-                raise RasterError('DEM processing exceeds 8 million pixels or 4096 per side; choose coarser output.')
+                raise RasterError('DEM processing exceeds 32 million pixels or 8192 per side; choose a coarser output grid.')
             affine=from_origin(x0,y1,res,res)
-            merged=np.full((height,width),np.nan,dtype=np.float32)
             method=Resampling.nearest if sampling=='nearest' else Resampling.bilinear
-            for src in sources:
-                checkpoint(cancel)
-                part=np.full_like(merged,np.nan)
-                reproject(source=rasterio.band(src,1),destination=part,
-                          src_nodata=src.nodata,dst_nodata=np.nan,
-                          dst_transform=affine,dst_crs=crs,
-                          resampling=method,num_threads=1,warp_mem_limit=32)
-                fresh=np.isfinite(part)&~np.isfinite(merged)
-                merged[fresh]=part[fresh]
-            if projected_geometry is not None:
-                inside=geometry_mask([projected_geometry],out_shape=merged.shape,
-                                     transform=affine,invert=True)
-                merged[~inside]=np.nan
-            valid=np.isfinite(merged)
-            count=int(valid.sum())
-            if not count:
-                raise RasterError('DEM operation produced no valid source elevations.')
             checkpoint(cancel)
             root=imagery_dir();root.mkdir(parents=True,exist_ok=True)
             with tempfile.NamedTemporaryFile(prefix='.dem-work-',suffix='.tif',dir=root,delete=False) as handle:
@@ -117,22 +103,51 @@ def prepare_dem(paths, mode, geometry=None, resolution_m=None, sampling='bilinea
             provenance=(f'GeoFathom DEM {mode}; {len(paths)} local input(s); first-source overlap precedence; '
                         f'projected meter grid {res:g} m; {sampling} resampling. '
                         'NoData preserved. Input native resolution, epochs and vertical datums must be independently verified.')
+            count=0
+            # Keep raster reprojection, polygon clipping and nodata merging in
+            # one bounded window. Both small and large DEMs share this path.
+            # The first source wins where multiple datasets overlap.
             with rasterio.open(temporary,'w',driver='GTiff',width=width,height=height,count=1,
                                dtype='float32',crs=crs,transform=affine,nodata=np.nan,
+                               tiled=True,blockxsize=256,blockysize=256,
                                compress='deflate') as target:
-                target.write(merged,1)
+                for top in range(0,height,_BLOCK):
+                    for left in range(0,width,_BLOCK):
+                        checkpoint(cancel)
+                        h=min(_BLOCK,height-top);w=min(_BLOCK,width-left)
+                        window=Window(left,top,w,h)
+                        local_transform=window_transform(window,affine)
+                        merged=np.full((h,w),np.nan,dtype=np.float32)
+                        for source in sources:
+                            checkpoint(cancel)
+                            part=np.full((h,w),np.nan,dtype=np.float32)
+                            reproject(source=rasterio.band(source,1),destination=part,
+                                      src_nodata=source.nodata,dst_nodata=np.nan,
+                                      dst_transform=local_transform,dst_crs=crs,
+                                      resampling=method,num_threads=1,warp_mem_limit=32,
+                                      init_dest_nodata=True)
+                            fresh=np.isfinite(part)&~np.isfinite(merged)
+                            merged[fresh]=part[fresh]
+                        if projected_geometry is not None:
+                            inside=geometry_mask([projected_geometry],out_shape=merged.shape,
+                                                 transform=local_transform,invert=True)
+                            merged[~inside]=np.nan
+                        count+=int(np.count_nonzero(np.isfinite(merged)))
+                        target.write(merged,1,window=window)
                 output_tags={'SOURCE':provenance,'VERTICAL_UNIT':'meter'}
-                # Do not label a mosaic with a datum if a contributor's
-                # reference is unknown, even when another input is labelled.
+                # An unknown contributor must not silently inherit a known
+                # vertical reference from another source in the mosaic.
                 if datum is not None and all_datums_known:
                     output_tags['VERTICAL_DATUM']=datum
                 target.update_tags(**output_tags)
+            if not count:
+                raise RasterError('DEM operation produced no valid source elevations.')
             checkpoint(cancel)
             asset=store_upload(temporary,f'Terrain {mode} {res:g} m.tif',provenance)
             quality=('Vertical datum labels match but are not independently verified. '
                      if all_datums_known else
                      'One or more source vertical datum labels are missing; vertical compatibility is unverified. ')
-            return {'asset':asset,'operation':mode,'valid_cells':count,'total_cells':int(merged.size),
+            return {'asset':asset,'operation':mode,'valid_cells':count,'total_cells':int(width*height),
                     'resolution_m':res,'warning':quality+'Output grid resolution is not a certificate of native source elevation accuracy or vertical-datum correctness.'}
     except rasterio.errors.RasterioError as error:
         raise RasterError('DEM preparation failed to read or transform the input GeoTIFF.') from error
