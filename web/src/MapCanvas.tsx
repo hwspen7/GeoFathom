@@ -320,6 +320,10 @@ export default function MapCanvas({
       eventRef.current.onViewportChange([
         extent.getWest(), extent.getSouth(), extent.getEast(), extent.getNorth(),
       ]);
+      if(import.meta.env.DEV&&container.current){
+        const center=map.getCenter();
+        container.current.setAttribute('data-map-center',JSON.stringify([center.lng,center.lat]));
+      }
     }
     let lastCoordinateUpdate=0;
     function displayCoordinates(event:MapMouseEvent){

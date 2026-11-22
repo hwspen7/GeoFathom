@@ -118,3 +118,18 @@ test('Cancel stops an independent profile drawing without discarding CMH',async(
  await expect(page.locator('.results .result.active')).toHaveCount(1);
  await expect(page.getByLabel('Pinned places').getByRole('button',{name:'Select pinned CMH Acceptance Airport'})).toBeVisible();
 });
+
+test('search centers on true selected campus outline, not unrelated broad search bbox',async({page})=>{
+ await page.goto('/');
+ const map=page.getByLabel('Interactive geospatial map');
+ await expect(map).toHaveAttribute('data-label-layer-ready','true',{timeout:25000});
+ await search(page,{...cmh,bbox:[-84,41,-83,42]});
+ await expect.poll(async()=>{
+   const raw=await map.getAttribute('data-map-center');
+   const center=raw?JSON.parse(raw) as number[]:[];
+   return center.length===2&&Math.abs(center[0]+82.8925)<.02&&Math.abs(center[1]-39.9965)<.02;
+ },{timeout:20000}).toBe(true);
+ await page.getByRole('navigation',{name:'Workspace tools'}).getByRole('button',{name:'Terrain',exact:true}).click();
+ await expect(page.getByLabel('DEM fetch area')).toHaveValue('selection');
+ await expect(page.getByLabel('DEM download target')).toContainText('W -82.91540°');
+});
