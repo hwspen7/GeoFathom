@@ -78,3 +78,40 @@ test('Draw profile line keeps CMH selected before and after Finish, until explic
  await page.getByLabel('Pinned places').getByRole('button',{name:'Remove pinned CMH Acceptance Airport'}).click();
  await expect(page.getByLabel('Pinned places')).toHaveCount(0);
 });
+
+test('general survey drawing does not delete the selected airport region',async({page})=>{
+ await page.goto('/');
+ const map=page.getByLabel('Interactive geospatial map');
+ await expect(map).toHaveAttribute('data-label-layer-ready','true',{timeout:25000});
+ await search(page,cmh);
+ const retained=page.getByLabel('Pinned places').getByRole('button',{name:'Select pinned CMH Acceptance Airport'});
+ await expect(retained).toBeVisible();
+ const toolbar=page.getByLabel('Survey toolbar');
+ await toolbar.getByRole('button',{name:'Polygon',exact:true}).click();
+ await expect(page.locator('.results .result.active')).toHaveCount(1);
+ await expect(retained).toBeVisible();
+ const box=(await map.boundingBox())!;
+ const x=box.x+box.width*.43,y=box.y+box.height*.47,d=Math.min(45,box.width*.08,box.height*.08);
+ for(const [px,py] of [[x,y],[x+d,y],[x+d,y+d],[x,y+d]])await page.mouse.click(px,py);
+ await toolbar.getByRole('button',{name:'Finish',exact:true}).click();
+ await expect(page.getByText(/Drawing completed and measured/)).toBeVisible();
+ await expect(retained).toBeVisible();
+ await retained.click();
+ await expect(page.locator('.results .result.active')).toHaveCount(1);
+ await page.getByRole('button',{name:'Deselect',exact:true}).click();
+ await expect(retained).toBeVisible();
+});
+
+test('Cancel stops an independent profile drawing without discarding CMH',async({page})=>{
+ await page.goto('/');
+ const map=page.getByLabel('Interactive geospatial map');
+ await expect(map).toHaveAttribute('data-label-layer-ready','true',{timeout:25000});
+ await search(page,cmh);
+ await page.getByRole('navigation',{name:'Workspace tools'}).getByRole('button',{name:'Terrain',exact:true}).click();
+ await page.getByLabel('Terrain tools').getByRole('button',{name:'Elevation profile',exact:true}).click();
+ await page.getByRole('button',{name:'Draw profile line',exact:true}).click();
+ await page.getByLabel('Survey toolbar').getByRole('button',{name:'Cancel',exact:true}).click();
+ await expect(page.getByText('Drawing cancelled. Retained locations are unchanged.')).toBeVisible();
+ await expect(page.locator('.results .result.active')).toHaveCount(1);
+ await expect(page.getByLabel('Pinned places').getByRole('button',{name:'Select pinned CMH Acceptance Airport'})).toBeVisible();
+});
