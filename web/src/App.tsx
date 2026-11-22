@@ -77,7 +77,9 @@ export default function App() {
   const [shortcutHelp,setShortcutHelp]=useState(false);
   const [contextMenu,setContextMenu]=useState<{x:number;y:number}|null>(null);
   const [activeTool,setActiveTool]=useState('tools-survey');
-  const [terrainFeatures,setTerrainFeatures]=useState<GeoJSON.Geometry[]>([]);
+  const [terrainFeatures,setTerrainFeatures]=useState<GeoJSON.Feature[]>([]);
+  const [terrainVisible,setTerrainVisible]=useState(true);
+  const [showLayers,setShowLayers]=useState(true);
   const [terrainPicking,setTerrainPicking]=useState(false);
   const [terrainOrigin,setTerrainOrigin]=useState<Position|null>(null);
   const [terrainHover,setTerrainHover]=useState<Position|null>(null);
@@ -706,6 +708,7 @@ export default function App() {
             <button key={id} aria-pressed={activeTool===id&&showTools} onClick={()=>revealPanel(id)}>{title}</button>)}
         </nav>
         <button className="gis-shortcut-help" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts" onClick={()=>setShortcutHelp(true)}>?</button>
+        <button className="gis-inspector-toggle" aria-pressed={showLayers} onClick={()=>setShowLayers(v=>!v)}>Layers</button>
         <button className="gis-inspector-toggle" aria-pressed={showTools} onClick={()=>setShowTools(v=>!v)}>Inspector</button>
         <button className="gis-connection" title={connectionError||'Check backend connection'} onClick={()=>setConnectionRetry(v=>v+1)}>{capabilities?<Wifi size={14}/>:<WifiOff size={14}/>} {capabilities?'Connected':'Reconnect API'}</button>
       </header>
@@ -722,7 +725,7 @@ export default function App() {
         </div>
       </div>
       <div className="gis-body">
-        <aside className="sidebar gis-layers">
+        <aside className="sidebar gis-layers" hidden={!showLayers}>
           <div className="dock-heading"><Layers3 size={15}/> Project / Layers</div>
           <div className="sidebar-scroll">
           <section className="panel-section">
@@ -820,6 +823,7 @@ export default function App() {
                   {tileError&&<p className="discovery-error">{tileError}</p>}
                 </form>
               </details>
+              {terrainFeatures.length>0&&<label className="gis-check"><input aria-label="Terrain result layer" type="checkbox" checked={terrainVisible} onChange={e=>setTerrainVisible(e.target.checked)}/> Terrain result · {terrainFeatures.length}</label>}
               <label className="gis-check"><input aria-label="Map dimensions" type="checkbox" checked={showMeasurements} onChange={e=>setShowMeasurements(e.target.checked)}/> Map dimensions</label>
               {imageLayer&&<><label className="gis-check"><input type="checkbox" checked={rasterVisible} onChange={e=>setRasterVisible(e.target.checked)}/> {imageLayer.name}</label>
               <label>Raster opacity <input aria-label="Raster opacity" type="range" min="0" max="1" step=".05" value={rasterOpacity} onChange={e=>setRasterOpacity(Number(e.target.value))}/></label></>}
@@ -877,7 +881,8 @@ export default function App() {
         <div className="map-wrap">
           <MapCanvas
             selected={geometry} drawingMode={drawingMode} vertices={vertices}
-            terrainPicking={terrainPicking} terrainMarker={terrainHover??terrainOrigin}
+            terrainPicking={terrainPicking} terrainMarker={activeTool==='tools-terrain'?(terrainHover??terrainOrigin):null}
+            terrainResults={terrainVisible?terrainFeatures:[]}
             onTerrainPick={position=>{setTerrainOrigin(position);setTerrainPicking(false);setMessage('Terrain point selected.');}}
             onContextMenu={(x,y)=>setContextMenu({x,y})}
             onEditingError={setError}
@@ -1026,7 +1031,7 @@ export default function App() {
               }
             }}
             discovered={[...discovered.map(place => place.geometry).filter((item): item is GeoJSON.Geometry => item !== null),
-              ...externalFeatures,...terrainFeatures,...splitParts.slice(1)]}
+              ...externalFeatures,...splitParts.slice(1)]}
             annotationMode={Boolean(pendingAnnotation)}
             onAnnotationClick={async position=>{
               if(!pendingAnnotation||busy||pendingAnnotation.projectId!==projectIdentity.current)return;
@@ -1371,7 +1376,7 @@ export default function App() {
                 setSelectionBoxMode(false);setLabelMoveMode(false);setPendingAnnotation(null);
               }}
               onHover={setTerrainHover}
-              onPreview={value=>{if(projectCurrent())setTerrainFeatures(value);}}
+              onPreview={value=>{if(projectCurrent()){setTerrainFeatures(value);if(value.length)setTerrainVisible(true);}}}
               onSaved={()=>{if(projectCurrent())setRefreshToken(v=>v+1);}}/>
           </section>
 

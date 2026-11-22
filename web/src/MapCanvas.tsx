@@ -51,6 +51,7 @@ interface Props {
   onFinishDrawing:()=>void;
   terrainPicking:boolean;
   terrainMarker:Position|null;
+  terrainResults:GeoJSON.Feature[];
   onTerrainPick:(point:Position)=>void;
   onContextMenu:(x:number,y:number)=>void;
   onEditingError:(message:string)=>void;
@@ -231,7 +232,7 @@ type Drag = {
 
 export default function MapCanvas({
   selected,drawingMode,vertices,focus,basemap,customBasemap,onBasemapStatus,measurement,showMeasurements,selectedFeatureId,rasterOpacity,onMapClick,onFinishDrawing,
-  terrainPicking,terrainMarker,onTerrainPick,onContextMenu,onEditingError,
+  terrainPicking,terrainMarker,terrainResults,onTerrainPick,onContextMenu,onEditingError,
   onViewportChange, discovered, imageLayer, traceMode, onTraceClick,
   editing, moving,edgeMoving, snapping, selectedLocked, layerFeatures,
   promptPositive,promptNegative,promptBox,annotationMode,onAnnotationClick,
@@ -716,6 +717,18 @@ export default function MapCanvas({
         paint:{'fill-color':'#20a9cf','fill-opacity':.15}});
       map.addLayer({id:'selection-preview-line',source:'selection-preview',type:'line',
         paint:{'line-color':'#20a9cf','line-width':2,'line-dasharray':[2,2]}});
+      map.addSource('terrain-result',{type:'geojson',data:{type:'FeatureCollection',features:[]}});
+      map.addLayer({id:'terrain-result-fill',source:'terrain-result',type:'fill',
+        filter:['==',['geometry-type'],'Polygon'],
+        paint:{'fill-color':['case',['==',['get','name'],'Visible terrain'],'#1bba66','#2ca9df'],'fill-opacity':.42}});
+      map.addLayer({id:'terrain-result-lines',source:'terrain-result',type:'line',
+        paint:{'line-color':['case',['==',['geometry-type'],'LineString'],'#994b13',['==',['get','name'],'Visible terrain'],'#137842','#126caa'],
+          'line-width':2,'line-opacity':.95}});
+      map.addLayer({id:'terrain-result-labels',source:'terrain-result',type:'symbol',
+        filter:['all',['==',['geometry-type'],'LineString'],['has','elevation_m']],
+        layout:{'symbol-placement':'line','text-field':['concat',['to-string',['get','elevation_m']],' m'],
+          'text-font':['Open Sans Regular'],'text-size':11,'symbol-spacing':180},
+        paint:{'text-color':'#70401a','text-halo-color':'#fff','text-halo-width':1.3}});
       map.addLayer({
         id: 'workspace-fill', type: 'fill', source: 'workspace',
         filter: ['==', ['geometry-type'], 'Polygon'],
@@ -794,7 +807,9 @@ export default function MapCanvas({
       bounds();
     });
     mapRef.current = map;
+    const resize=new ResizeObserver(()=>map.resize());resize.observe(container.current);
     return () => {
+      resize.disconnect();
       map.off('zoomend',refreshZoomLabels);
       map.off('idle',inspectRenderedHandles);
       map.off('mousemove', dragging);
@@ -854,10 +869,17 @@ export default function MapCanvas({
         attribution:tile.attribution||tile.title,maxzoom:19,
       });
       map.addLayer({id,source:sourceId,type:'raster',
-        paint:{'raster-opacity':.82,'raster-fade-duration':0}},'workspace-fill');
+        paint:{'raster-opacity':.82,'raster-fade-duration':0}},'terrain-result-fill');
     }
   },[externalTiles,ready]);
 
+  useEffect(()=>{
+    const map=mapRef.current;
+    if(!ready||!map)return;
+    const source=map.getSource('terrain-result') as GeoJSONSource|undefined;
+    source?.setData({type:'FeatureCollection',features:terrainResults});
+    container.current?.setAttribute('data-terrain-feature-count',String(terrainResults.length));
+  },[terrainResults,ready]);
   useEffect(()=>{
     const map=mapRef.current;
     if(!ready||!map)return;
@@ -922,7 +944,7 @@ export default function MapCanvas({
       map.addLayer({
         id: 'imported-imagery', type: 'raster', source: 'imported-imagery',
         paint: { 'raster-opacity': rasterOpacity, 'raster-fade-duration': 0 },
-      }, 'workspace-fill');
+      }, 'terrain-result-fill');
     }
     if (imageLayer) {
       if (window.sessionStorage.getItem('geofathom-api-token')) {

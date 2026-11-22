@@ -5,6 +5,7 @@ const API='http://127.0.0.1:8000';
 const tile=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/ZecAAAAASUVORK5CYII=','base64');
 
 test('real DEM is imported, analyzed, visualized and saved through workbench',async({page})=>{
+ test.setTimeout(90000);
  const fixture=JSON.parse(execFileSync('python',['-c',`
 import json,tempfile
 from pathlib import Path
@@ -34,10 +35,15 @@ with tempfile.TemporaryDirectory() as directory:
  await page.getByRole('button',{name:/DEM study area/}).click();
  await page.getByRole('navigation',{name:'Workspace tools'}).getByRole('button',{name:'Terrain',exact:true}).click();
  const tools=page.getByLabel('Terrain tools');
+ const map=page.getByLabel('Interactive geospatial map');
+ await tools.getByRole('button',{name:'Slope / aspect',exact:true}).click();
+ await page.getByRole('button',{name:'Run terrain operation'}).click();
+ await expect(page.getByRole('img',{name:'Slope (degrees)'})).toBeVisible();
  await tools.getByRole('button',{name:'Contours',exact:true}).click();
  await page.getByLabel('Contour interval').fill('5');
  await page.getByRole('button',{name:'Run terrain operation'}).click();
  await expect(page.getByRole('button',{name:'Save terrain features'})).toBeEnabled();
+ await expect.poll(async()=>Number(await map.getAttribute('data-terrain-feature-count'))).toBeGreaterThan(0);
  await page.getByRole('button',{name:'Save terrain features'}).click();
  await expect(page.getByText(/Saved .* terrain features/)).toBeVisible();
  await tools.getByRole('button',{name:'Cut / fill',exact:true}).click();
@@ -48,4 +54,30 @@ with tempfile.TemporaryDirectory() as directory:
  await tools.getByRole('button',{name:'3D terrain',exact:true}).click();
  await page.getByRole('button',{name:'Run terrain operation'}).click();
  await expect(page.getByLabel('Interactive 3D terrain preview')).toBeVisible();
+ await tools.getByRole('button',{name:'Viewshed',exact:true}).click();
+ await page.getByRole('button',{name:'Pick observer',exact:true}).click();
+ const bounds=(await map.boundingBox())!;
+ await page.mouse.click(bounds.x+bounds.width/2,bounds.y+bounds.height/2);
+ await expect(page.getByLabel('Terrain sample location')).toHaveCount(1);
+ await page.getByRole('button',{name:'Run terrain operation'}).click();
+ await expect(page.getByRole('img',{name:'Visibility (cells)'})).toBeVisible();
+ await tools.getByRole('button',{name:'Watershed (D8)',exact:true}).click();
+ await page.getByRole('button',{name:'Area center',exact:true}).click();
+ await page.getByRole('button',{name:'Run terrain operation'}).click();
+ await expect(page.getByRole('img',{name:'Catchment (cells)'})).toBeVisible();
+ const ring=fixture.geometry.coordinates[0];
+ const path={type:'LineString',coordinates:[ring[0],ring[2]]};
+ const line=await page.request.post(API+'/projects/'+id+'/features',{data:{name:'DEM profile line',geometry:path,source:'Synthetic DEM'}});
+ expect(line.status(),await line.text()).toBe(201);
+ // Reload the workspace instead of relying on a stale list from a different query.
+ await page.reload();
+ await page.getByRole('navigation',{name:'Workspace tools'}).getByRole('button',{name:'Terrain',exact:true}).click();
+ await page.getByLabel('DEM elevation layer').selectOption(fixture.id);
+ await page.getByRole('button',{name:/DEM profile line/}).click();
+ await page.getByLabel('Terrain tools').getByRole('button',{name:'Elevation profile',exact:true}).click();
+ await page.getByRole('button',{name:'Run terrain operation'}).click();
+ const chart=page.getByRole('img',{name:'Interactive elevation profile'});
+ await expect(chart).toBeVisible();await chart.hover();
+ await expect(page.getByLabel('Terrain sample location')).toHaveCount(1);
+ await expect(page.getByLabel('Profile sample position')).toBeVisible();
 });

@@ -51,6 +51,7 @@ export default function ProjectsPanel({
   notify.current = onWorkspace;
   const selection = useRef('');
   const requestSequence = useRef(0);
+  const styleWriting=useRef(false);
   const historySequence = useRef(0);
   const featureIdentity = useRef(selectedFeatureId);
   featureIdentity.current = selectedFeatureId;
@@ -98,7 +99,7 @@ export default function ProjectsPanel({
   }, []);
 
   useEffect(() => {
-    if (!selected) return;
+    if (!selected || styleWriting.current) return;
     let cancelled = false;
     reload(selected).catch(() => {
       if (!cancelled && selection.current === selected) setError('Cannot load project layers.');
@@ -242,7 +243,8 @@ export default function ProjectsPanel({
     labels?:Partial<GeoLayer['style']['labels']>;
     symbol?:Partial<GeoLayer['style']['symbol']>;
   }){
-    if(!selected||!activeLayer||busy)return;
+    if(!selected||!activeLayer||busy||styleWriting.current)return;
+    styleWriting.current=true;
     const projectId=selected,layer=activeLayer;
     // React controlled inputs must update immediately. Revert from the
     // authoritative server state if an optimistic style write is rejected.
@@ -265,7 +267,7 @@ export default function ProjectsPanel({
     }catch(failure){
       setError(failure instanceof Error?failure.message:'Could not save layer style.');
       try{await reload(projectId);}catch{ /* Surface the original error. */ }
-    }finally{setBusy(false);}
+    }finally{styleWriting.current=false;setBusy(false);}
   }
 
   function placeNote(event:FormEvent<HTMLFormElement>){

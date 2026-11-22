@@ -566,3 +566,10 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .gis-shortcuts header{display:flex;justify-content:space-between;align-items:center;padding-bottom:8px;border-bottom:1px solid #cbd5dc}
 .gis-shortcuts header button{background:white;border:1px solid #c9d3da;padding:3px 8px}
 .shortcut-table>div{display:flex;justify-content:space-between;gap:8px;padding:6px 3px;border-bottom:1px solid #e1e6ea;font-size:12px}
+
+.desktop-gis .gis-layers[hidden]{display:none!important}
+.desktop-gis .gis-toolbar .survey-command-bar{gap:4px}
+.desktop-gis .gis-toolbar .survey-action-bar{gap:3px}
+.desktop-gis .gis-toolbar button{font-size:11px}
+.desktop-gis .gis-toolbar .gis-quick-basemap{flex:none}
+.desktop-gis .gis-layer .panel-section{border-radius:0}

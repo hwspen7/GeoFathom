@@ -70,7 +70,7 @@ interface Props{
  viewport:[number,number,number,number]|null;
  localImport:boolean;refreshToken:number;origin:Position|null;picking:boolean;
  onSelectRaster:(r:RasterAsset)=>void;onDraw:(line:boolean)=>void;onUseExtent:()=>void;onPick:()=>void;
- onHover:(point:Position|null)=>void;onPreview:(g:GeoJSON.Geometry[])=>void;onSaved:()=>void;
+ onHover:(point:Position|null)=>void;onPreview:(g:GeoJSON.Feature[])=>void;onSaved:()=>void;
 }
 export default function TerrainWorkbench(p:Props){
  const [operation,setOperation]=useState<Operation>('slope');
@@ -115,17 +115,17 @@ export default function TerrainWorkbench(p:Props){
          interval:Number(interval),reference:Number(reference),point:needsPoint?[Number(lon),Number(lat)]:null,
          observer_height:Number(height),target_height:Number(target)});
        if(ticket!==sequence.current)return;
-       setResult(value);latest.current.onPreview(value.features.map(f=>f.geometry));
+       setResult(value);latest.current.onPreview(value.features);
      }
    }catch(e){if(ticket===sequence.current)setError(e instanceof Error?e.message:'Terrain analysis failed.');}
    finally{if(ticket===sequence.current)setBusy(false);}
  }
  useEffect(()=>{
    sequence.current++;setBusy(false);setError('');resetResult();
-   if(!p.active||!live||!canRun)return;
+   if(!live||!canRun)return;
    const timer=window.setTimeout(()=>void run(),450);
    return()=>{window.clearTimeout(timer);sequence.current++;};
- },[p.projectId,p.geometry,dem?.id,operation,interval,reference,lon,lat,height,target,live,p.active,p.connected]);
+ },[p.projectId,p.geometry,dem?.id,operation,interval,reference,lon,lat,height,target,live,p.connected]);
  useEffect(()=>()=>{sequence.current++;},[]);
  async function importDEM(e:ChangeEvent<HTMLInputElement>){
    const file=e.target.files?.[0];e.target.value='';if(!file)return;
@@ -242,7 +242,7 @@ export default function TerrainWorkbench(p:Props){
        {result.mesh&&<MeshView mesh={result.mesh}/>}
        <small className="compact-notice" title={result.warning}>{result.valid_cells} valid · {result.missing_cells} missing · Method ⓘ</small>
        {result.features.length>0&&<div className="survey-action-bar"><button disabled={!p.projectId||busy} onClick={()=>void save()}>Save terrain features</button>
-         <button onClick={()=>p.onPreview(result.features.map(f=>f.geometry))}>Show on map</button></div>}
+         <button onClick={()=>p.onPreview(result.features)}>Show on map</button><button onClick={()=>p.onPreview([])}>Hide</button></div>}
      </>}
    </section>}
    {info&&<p className="project-info">{info}</p>}{error&&<p className="discovery-error" role="alert">{error}</p>}
