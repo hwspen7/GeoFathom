@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import maplibregl, { type GeoJSONSource, type MapMouseEvent, type StyleSpecification } from 'maplibre-gl';
 import {nearestProfileSample} from './profileLink';
+import {boundaryNodeVisible} from './boundaryDensity';
 import type {ProfileSample} from './TerrainCharts';
 
 import { rasterPreviewUrl, protectedRasterPreview } from './api';
@@ -226,18 +227,20 @@ function featureCollection(
       geometry:{type:'Polygon',coordinates:[[[west,south],[east,south],
         [east,north],[west,north],[west,south]]]}});
   }
-  // Compact real coordinate nodes are visible even before entering edit mode.
+  // Only visual markers are sampled by zoom; the exact 521+ node geometry
+  // remains unchanged. Editing always renders every true drag handle.
   if(selected&&['Polygon','MultiPolygon','LineString','MultiLineString'].includes(selected.type)){
-    for(const node of verticesOf(selected)){
-      if(node.midpoint)continue;
+    const nodes=verticesOf(selected).filter(n=>!n.midpoint);
+    nodes.forEach((node,i)=>{
       const highlighted=!!selectedBoundaryNode&&selectedBoundaryNode.polygon===node.path.polygon&&
         selectedBoundaryNode.ring===node.path.ring&&selectedBoundaryNode.vertex===node.path.vertex;
+      if(!boundaryNodeVisible(i,nodes.length,zoom,editing,highlighted))return;
       features.push({type:'Feature',properties:{
         role:highlighted?'boundary-node-selected':'boundary-node',
         polygon:node.path.polygon,ring:node.path.ring,vertex:node.path.vertex,
         longitude:node.point[0],latitude:node.point[1],
       },geometry:{type:'Point',coordinates:node.point}});
-    }
+    });
   }
   if (editing && selected) {
     for (const node of verticesOf(selected)) {
@@ -944,6 +947,9 @@ export default function MapCanvas({
         return [p.x,p.y];
       }):[];
       container.current.setAttribute('data-edit-handle-pixels',JSON.stringify(handles));
+    }
+    if(container.current&&import.meta.env.DEV){
+      container.current.setAttribute('data-boundary-node-count',String(collection.features.filter(f=>f.properties?.role==='boundary-node'||f.properties?.role==='boundary-node-selected').length));
     }
     if (!drag.current) spatialSnap.current=null;
   }, [selected, vertices, drawingMode, discovered, layerFeatures, editing,
