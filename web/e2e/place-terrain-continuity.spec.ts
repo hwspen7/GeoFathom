@@ -36,6 +36,7 @@ test('CMH Find a place remains selected across map clicks and Terrain activation
  await expect(page.getByLabel('DEM fetch area')).toHaveValue('selection');
  await page.getByRole('button',{name:'Deselect',exact:true}).click();
  await expect(page.locator('.results .result.active')).toHaveCount(0);
+ await expect(page.getByLabel('Pinned places').getByRole('button',{name:'Select pinned CMH Acceptance Airport'})).toBeVisible();
 });
 
 test('point-only airport search result stays selected and cannot masquerade as area',async({page})=>{
@@ -50,4 +51,30 @@ test('point-only airport search result stays selected and cannot masquerade as a
  await page.getByRole('navigation',{name:'Workspace tools'}).getByRole('button',{name:'Terrain',exact:true}).click();
  await expect(page.getByLabel('DEM fetch area')).toHaveValue('viewport');
  await expect(page.getByLabel('DEM fetch area').locator('option[value="selection"]')).toBeDisabled();
+});
+
+test('Draw profile line keeps CMH selected before and after Finish, until explicit removal',async({page})=>{
+ await page.goto('/');
+ const map=page.getByLabel('Interactive geospatial map');
+ await expect(map).toHaveAttribute('data-label-layer-ready','true',{timeout:25000});
+ await search(page,cmh);
+ const toolbar=page.getByLabel('Survey toolbar');
+ await page.getByRole('navigation',{name:'Workspace tools'}).getByRole('button',{name:'Terrain',exact:true}).click();
+ await page.getByLabel('Terrain tools').getByRole('button',{name:'Elevation profile',exact:true}).click();
+ await page.getByRole('button',{name:'Draw profile line',exact:true}).click();
+ await expect(page.locator('.results .result.active')).toHaveCount(1);
+ await expect(page.getByLabel('Pinned places').getByRole('button',{name:'Select pinned CMH Acceptance Airport'})).toBeVisible();
+ const rect=(await map.boundingBox())!;
+ const x=rect.x+rect.width*.43,y=rect.y+rect.height*.52;
+ await page.mouse.click(x,y);
+ await page.mouse.click(x+Math.min(100,rect.width*.12),y);
+ await toolbar.getByRole('button',{name:'Finish',exact:true}).click();
+ await expect(page.getByText('Profile line ready. Your selected study area remains unchanged.')).toBeVisible();
+ await expect(page.getByText('✓ Independent profile line')).toBeVisible();
+ await expect(page.locator('.results .result.active')).toHaveCount(1);
+ await expect(page.getByRole('button',{name:'Remove profile line'})).toBeVisible();
+ await page.reload();
+ await expect(page.getByLabel('Pinned places').getByRole('button',{name:'Select pinned CMH Acceptance Airport'})).toBeVisible();
+ await page.getByLabel('Pinned places').getByRole('button',{name:'Remove pinned CMH Acceptance Airport'}).click();
+ await expect(page.getByLabel('Pinned places')).toHaveCount(0);
 });

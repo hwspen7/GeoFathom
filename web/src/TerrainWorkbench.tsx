@@ -127,7 +127,8 @@ export default function TerrainWorkbench(p:Props){
  const area=p.geometry?.type==='Polygon'||p.geometry?.type==='MultiPolygon';
  const needsPoint=operation==='watershed'||operation==='visibility'||operation==='least_cost';
  const lineOperation=operation==='profile'||operation==='cross_sections';
- const analysisGeometry=lineOperation?p.profileGeometry:p.geometry;
+ // A manually drawn profile line is independent; existing saved line features also remain valid.
+ const analysisGeometry=lineOperation?(p.profileGeometry??(p.geometry?.type==='LineString'?p.geometry:null)):p.geometry;
  const correctShape=lineOperation?analysisGeometry?.type==='LineString':area;
  const dem=p.raster?.bands===1?p.raster:null;
  const analysisBounds=useMemo(()=>terrainGeometryBounds(analysisGeometry??null),[analysisGeometry]);

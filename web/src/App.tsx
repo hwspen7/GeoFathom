@@ -334,6 +334,9 @@ export default function App() {
   },[connectionRetry]);
 
   async function selectPlace(place: Place) {
+    if(pinnedPlaces.length>=PIN_LIMIT&&!pinnedPlaces.some(item=>item.id===place.id)){
+      setError('Retained location limit reached. Remove a pinned place explicitly before adding another.');return;
+    }
     const sequence = ++geometrySequence.current;
     retainPlace(place);
     setSelectedPlace(place);setScratchId(null);setPreview(null);setPendingShared(null);

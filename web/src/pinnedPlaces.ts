@@ -28,7 +28,8 @@ export function writePinnedPlaces(scope:string|null,places:Place[]):boolean{
   catch{return false;}
 }
 export function pinPlace(places:Place[],place:Place):Place[]{
-  return [place,...places.filter(p=>p.id!==place.id)].slice(0,PIN_LIMIT);
+  if(!places.some(p=>p.id===place.id)&&places.length>=PIN_LIMIT)return places;
+  return [place,...places.filter(p=>p.id!==place.id)];
 }
 export function unpinPlace(places:Place[],id:string):Place[]{
   return places.filter(p=>p.id!==id);
