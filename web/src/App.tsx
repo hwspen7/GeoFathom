@@ -164,7 +164,8 @@ export default function App() {
   const [pendingAnnotation,setPendingAnnotation] = useState<{
     projectId:string;layerId:string;text:string;
   }|null>(null);
-  const [showLegend,setShowLegend] = useState(true);
+  // Keep the map unobstructed by default; legends remain available on demand.
+  const [showLegend,setShowLegend] = useState(false);
   const [selectionBoxMode,setSelectionBoxMode]=useState(false);
   const [selectionBox,setSelectionBox]=useState<[number,number,number,number]|null>(null);
   const [spatialSelected,setSpatialSelected]=useState<string[]>([]);
@@ -815,6 +816,9 @@ export default function App() {
   }
   function editMode(mode:'vertices'|'edge'|'move'){
     if(!geometry||selectedLocked||busy||drawingMode)return;
+    // Do not let a floating legend obscure selectable boundary handles.
+    // Preserve access to the same legend after the edit session ends.
+    setShowLegend(false);
     if(preview||pendingShared){setGeometry(lastValid.current);setPreview(null);setPendingShared(null);}
     geometrySequence.current++;
     setEditing(true);setMoving(mode==='move');setEdgeMoving(mode==='edge');
@@ -1369,10 +1373,12 @@ export default function App() {
           />
           <div className="map-legend">
             <button className="map-legend-toggle" aria-label="Toggle map legend"
+              aria-expanded={showLegend&&!editing} disabled={editing}
+              title={editing?'Finish geometry editing to open the map legend':'Toggle map legend'}
               onClick={()=>setShowLegend(value=>!value)}>
               <Layers3 size={15}/> Legend
             </button>
-            {showLegend&&<div className="map-legend-items" aria-label="Map legend">
+            {showLegend&&!editing&&<div className="map-legend-items" aria-label="Map legend">
               {legendEntries(projectWorkspace?.layers??[],projectWorkspace?.features??[]).map(item=>(
                 <div key={item.id} className="map-legend-item">
                   <span className="legend-swatch" style={{
