@@ -7,7 +7,7 @@ import type {Position} from './editing';
 import {measurementAnchor} from './editing';
 import {terrainMetricDifferences,sameGeometryFootprint} from './terrainComparison';
 import {readTerrainRuns,writeTerrainRuns,insertTerrainRun,summarizeTerrainRun} from './terrainRunRegistry';
-import {terrainFetchBounds,terrainGeometryBounds,terrainFetchBudget,terrainBoundsOverlap,terrainRasterMatchesTarget,describeTerrainBounds,preferredTerrainFetchScope,type FetchScope,type TerrainBBox} from './terrainSource';
+import {terrainFetchBounds,terrainGeometryBounds,terrainFetchBudget,terrainBoundsOverlap,terrainRasterMatchesTarget,describeTerrainBounds,preferredTerrainFetchScope,terrainSupportsUSGS,recommendDEMResolution,availableDEMResolutions,type FetchScope,type TerrainBBox} from './terrainSource';
 
 function MeshView({mesh}:{mesh:TerrainMesh}){
   const canvas=useRef<HTMLCanvasElement>(null);
@@ -154,6 +154,16 @@ export default function TerrainWorkbench(p:Props){
    }
  },[selectedAreaKey]);
  const fetchArea=useMemo(()=>terrainFetchBounds(p.viewport,p.geometry,fetchScope),[p.viewport,p.geometry,fetchScope]);
+ const supportsUSGS=terrainSupportsUSGS(fetchArea);
+ const recommendedResolution=recommendDEMResolution(fetchArea);
+ const supportedResolutions=availableDEMResolutions(fetchArea);
+ // Never advertise US-only 3DEP coverage at global locations such as HKG.
+ useEffect(()=>{
+   if(fetchArea&&!supportsUSGS&&resolution<30){
+     setResolution(30);
+     setInfo('USGS 3DEP is unavailable here. Selected Copernicus GLO-30; requested output grid is not native resolution.');
+   }
+ },[supportsUSGS,resolution,fetchArea?.[0],fetchArea?.[1],fetchArea?.[2],fetchArea?.[3]]);
  const budget=terrainFetchBudget(fetchArea,resolution);
  const fetchKey=JSON.stringify([fetchScope,fetchArea,resolution]);
  const currentFetchKey=useRef(fetchKey);currentFetchKey.current=fetchKey;
@@ -346,12 +356,31 @@ export default function TerrainWorkbench(p:Props){
        {budget?' · ~'+budget.approximateCells.toLocaleString()+' grid cells':''}
      </small>
      {budget?.warning&&<small role="alert" className="discovery-error">{budget.warning}</small>}
+     {fetchArea&&<div className="survey-action-bar">
+       <button aria-label="Auto-fit DEM resolution" disabled={!recommendedResolution||fetching}
+         onClick={()=>{if(!recommendedResolution)return;setResolution(recommendedResolution);
+           setInfo('Finest supported output grid fitting this study area: '+recommendedResolution+
+             ' m. This does not guarantee native source accuracy.');}}>
+         Auto resolution{recommendedResolution?' · '+recommendedResolution+' m':''}
+       </button>
+       <small className="compact-notice">
+         Up to 8M cells, 4096 px/side · {supportsUSGS?'USGS 3DEP / Copernicus':'Copernicus global'}
+       </small>
+     </div>}
      <div className="area-fields">
-       <select aria-label="Public DEM resolution" value={resolution} onChange={e=>setResolution(Number(e.target.value) as 1|3|10|30|90)}><option value={30}>GLO-30 · 30 m</option><option value={90}>GLO-90 · 90 m</option><option value={10}>USGS 3DEP · 10 m grid</option><option value={3}>USGS 3DEP · 3 m grid</option><option value={1}>USGS 3DEP · 1 m grid</option></select>
+       <select aria-label="Public DEM resolution" value={resolution}
+          onChange={e=>setResolution(Number(e.target.value) as 1|3|10|30|90)}>
+          <option value={30}>GLO-30 · 30 m</option>
+          <option value={90}>GLO-90 · 90 m</option>
+          <option value={10} disabled={!supportedResolutions.includes(10)}>USGS 3DEP · 10 m grid</option>
+          <option value={3} disabled={!supportedResolutions.includes(3)}>USGS 3DEP · 3 m grid</option>
+          <option value={1} disabled={!supportedResolutions.includes(1)}>USGS 3DEP · 1 m grid</option>
+        </select>
        <button disabled={!p.connected||!fetchArea||!!budget?.warning||fetching||importing} title="Download the explicitly displayed area, not a previous selection" onClick={()=>void fetchDEM()}>{fetching?'Fetching…':'Fetch DEM'}</button>
        {fetching&&<button aria-label="Cancel DEM download" onClick={()=>{sourceIntent.current++;fetchAbort.current?.abort();setInfo('Cancelling the previous download…');}}>Cancel</button>}
      </div>
-     {sourceInfo&&<small className="compact-notice" title="Copernicus is DSM; 3DEP is bare-earth DEM. Requested grid size is not native resolution.">{sourceInfo}</small>}
+     {sourceInfo&&<small className="compact-notice" title="Copernicus is DSM; 3DEP is bare-earth DEM. Requested grid size is not native resolution.">{sourceInfo}</small>
+     {!supportsUSGS&&fetchArea&&<small className="compact-notice">USGS 3DEP is not a global data source. For local 1–3 m elevation, import a georeferenced DEM supplied by an authorized regional provider.</small>}}
      {dem&&<small className="compact-notice" title={dem.provenance}>{dem.width} × {dem.height} · {dem.crs} · elevation m · {describeTerrainBounds(dem.bbox)}</small>}
      {mapMismatch&&<small className="discovery-error" role="status">Selected DEM is outside the current map. Choose a local source or use Fit explicitly.</small>}
      {sourceMismatch&&<small className="discovery-error" role="status">Selected analysis shape is not completely covered by this DEM. Select a matching source.</small>}
