@@ -122,14 +122,14 @@ export default function TerrainWorkbench(p:Props){
  const budget=terrainFetchBudget(fetchArea,resolution);
  const fetchKey=JSON.stringify([fetchScope,fetchArea,resolution]);
  const currentFetchKey=useRef(fetchKey);currentFetchKey.current=fetchKey;
- const sourceMismatch=!!dem&&!!selectedGeometry&&!terrainBoundsOverlap(dem.bbox,selectedGeometry);
- const mapMismatch=!!dem&&!!p.viewport&&!terrainBoundsOverlap(dem.bbox,p.viewport);
  const sequence=useRef(0),latest=useRef(p);latest.current=p;
  const area=p.geometry?.type==='Polygon'||p.geometry?.type==='MultiPolygon';
  const needsPoint=operation==='watershed'||operation==='visibility'||operation==='least_cost';
  const lineOperation=operation==='profile'||operation==='cross_sections';
  const correctShape=lineOperation?p.geometry?.type==='LineString':area;
  const dem=p.raster?.bands===1?p.raster:null;
+ const sourceMismatch=!!dem&&!!selectedGeometry&&!terrainBoundsOverlap(dem.bbox,selectedGeometry);
+ const mapMismatch=!!dem&&!!p.viewport&&!terrainBoundsOverlap(dem.bbox,p.viewport);
  const verified=!!dem&&(/Copernicus DEM GLO-|USGS 3DEP Bare Earth DEM/.test(dem.provenance)||verticalConfirmed);
  const validNumber=(value:string,min:number,max:number)=>value.trim()!==''&&Number.isFinite(Number(value))&&Number(value)>=min&&Number(value)<=max;
  const parametersValid=(operation!=='cross_sections'||validNumber(sectionSpacing,1,10000)&&validNumber(sectionWidth,1,2000))&&
