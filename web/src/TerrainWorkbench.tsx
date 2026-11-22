@@ -379,7 +379,7 @@ export default function TerrainWorkbench(p:Props){
        <button disabled={!p.connected||!fetchArea||!!budget?.warning||fetching||importing} title="Download the explicitly displayed area, not a previous selection" onClick={()=>void fetchDEM()}>{fetching?'Fetching…':'Fetch DEM'}</button>
        {fetching&&<button aria-label="Cancel DEM download" onClick={()=>{sourceIntent.current++;fetchAbort.current?.abort();setInfo('Cancelling the previous download…');}}>Cancel</button>}
      </div>
-     {sourceInfo&&<small className="compact-notice" title="Copernicus is DSM; 3DEP is bare-earth DEM. Requested grid size is not native resolution.">{sourceInfo}</small>
+     {sourceInfo&&<small className="compact-notice" title="Copernicus is DSM; 3DEP is bare-earth DEM. Requested grid size is not native resolution.">{sourceInfo}</small>}
      {!supportsUSGS&&fetchArea&&<small className="compact-notice">USGS 3DEP is not a global data source. For local 1–3 m elevation, import a georeferenced DEM supplied by an authorized regional provider.</small>}
      {dem&&<small className="compact-notice" title={dem.provenance}>{dem.width} × {dem.height} · {dem.crs} · elevation m · {describeTerrainBounds(dem.bbox)}</small>}
      {mapMismatch&&<small className="discovery-error" role="status">Selected DEM is outside the current map. Choose a local source or use Fit explicitly.</small>}
