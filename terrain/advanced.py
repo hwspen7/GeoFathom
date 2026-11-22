@@ -12,6 +12,7 @@ from geometry.measure import measure_geometry
 from imagery.raster import RasterError
 from .engine import _check_dem
 from .cancellation import checkpoint
+from .professional import SURFACES, surface
 
 def _window(path, geometry, maximum):
     measure_geometry(geometry)
@@ -251,16 +252,22 @@ def _mask_features(mask,affine,crs,name,cancel=None):
             emit()
     return output
 
-def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,observer_height=1.7,target_height=0.,cancel=None):
+def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,observer_height=1.7,target_height=0.,
+                end_point=None,max_slope=30.,min_elevation=-12000.,max_elevation=12000.,max_tri=100.,
+                stream_cells=100,azimuth=315.,altitude=45.,cancel=None):
     checkpoint(cancel)
-    if operation not in {"contours","volume","visibility","watershed","mesh","distribution"}:
+    if operation not in {"contours","volume","visibility","watershed","mesh","distribution"}|SURFACES:
         raise RasterError("Unknown terrain operation.")
     z,valid,covered,affine,crs,boundary,coverage=_window(path,geometry,512 if operation=="visibility" else 1024)
     checkpoint(cancel)
     cell=abs(affine.a*affine.e)
     result={"operation":operation,"source_crs":str(crs),"valid_cells":int(valid.sum()),
         "missing_cells":int((covered&~valid).sum()),"cell_area_m2":cell,"metrics":{},"features":[]}
-    if operation=="contours":
+    if operation in SURFACES:
+        result["raster"],result["metrics"],result["features"]=surface(z,valid,affine,crs,operation,reference,point,end_point,
+            max_slope,min_elevation,max_elevation,max_tri,stream_cells,azimuth,altitude,_feature,_origin,cancel)
+        result["warning"]="Projected source-grid product; nodata and incomplete neighborhoods excluded. D8 terminates at sinks/flats; suitability and path costs are screening estimates, not engineering certification."
+    elif operation=="contours":
         result["features"]=_contours(z,valid,affine,crs,boundary,interval,cancel)
         result["metrics"]={"contour_lines":sum(f["properties"]["contour_path_count"] for f in result["features"]),
             "contour_levels":len({f["properties"]["elevation_m"] for f in result["features"]}),

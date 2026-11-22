@@ -126,3 +126,23 @@ def test_flat_distribution_excludes_nodata_and_avoids_division_by_zero(dem):
     assert result["distribution"]==[{"lower_m":42.,"upper_m":42.,"cells":255,"area_m2":25500.,"cumulative_pct":100.}]
     assert result["metrics"]["stddev_m"]==0
     assert "hypsometric_integral" not in result["metrics"]
+
+@pytest.mark.parametrize("operation",["elevation","slope_map","aspect_map","hillshade","tri","tpi","curvature","flow_direction","flow_accumulation","streams","suitability","cutfill_map"])
+def test_professional_surface_products(dem,operation):
+    path,polygon=dem
+    result=run_terrain(path,polygon,operation,reference=110,stream_cells=2)
+    assert result["operation"]==operation
+    assert result["raster"]["valid_cells"]>0
+    assert len(result["raster"]["corners"])==4
+    assert sum(b["cells"] for b in result["raster"]["legend"])==result["raster"]["valid_cells"]
+    if operation=="cutfill_map":
+        assert result["metrics"]["cut_m3"]==pytest.approx(44800)
+        assert result["metrics"]["fill_m3"]==pytest.approx(57600)
+
+def test_least_cost_projected_route(dem):
+    path,polygon=dem
+    t=Transformer.from_crs("EPSG:32617","EPSG:4326",always_xy=True)
+    result=run_terrain(path,polygon,"least_cost",point=t.transform(500035,4499965),
+                       end_point=t.transform(500145,4499855),max_slope=45)
+    assert result["metrics"]["route_length_m"]>0
+    assert result["features"][0]["geometry"]["type"]=="LineString"

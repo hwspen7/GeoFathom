@@ -10,7 +10,7 @@ import {areaText,distanceText,mapPalette,type DisplaySettings} from './displaySe
 import {drawingPreview,measurementAnchor,approximateMeasurement,geodesicDrag as edgeDistance} from './editing';
 import { featureLabel } from './labels';
 import type { ExternalTile } from './DataServicesPanel';
-import type { Measurement,LayerStyle } from './api';
+import type { Measurement,LayerStyle,TerrainRasterLayer } from './api';
 import {
   addVertex, moveVertex, removeVertex, translateSpherical, geodesicDrag, pathsOf,
   verticesOf,moveEdge, type GeometryPath, type Position, type ShapeMode,
@@ -56,6 +56,7 @@ interface Props {
   terrainPicking:boolean;
   terrainMarker:Position|null;
   terrainResults:GeoJSON.Feature[];
+  terrainRasters?:TerrainRasterLayer[];
   onTerrainPick:(point:Position)=>void;
   onContextMenu:(x:number,y:number)=>void;
   onEditingError:(message:string)=>void;
@@ -236,7 +237,7 @@ type Drag = {
 
 export default function MapCanvas({
   selected,drawingMode,vertices,focus,basemap,customBasemap,onBasemapStatus,measurement,showMeasurements,display,selectedFeatureId,rasterLayers,onRasterError,onMapClick,onFinishDrawing,
-  terrainPicking,terrainMarker,terrainResults,onTerrainPick,onContextMenu,onEditingError,
+  terrainPicking,terrainMarker,terrainResults,terrainRasters,onTerrainPick,onContextMenu,onEditingError,
   onViewportChange, discovered, traceMode, onTraceClick,
   editing, moving,edgeMoving, snapping, selectedLocked, layerFeatures,
   promptPositive,promptNegative,promptBox,annotationMode,onAnnotationClick,
@@ -892,6 +893,17 @@ export default function MapCanvas({
     container.current?.setAttribute('data-terrain-feature-count',String(terrainResults.length));
   },[terrainResults,ready]);
   useEffect(()=>{
+    const map=mapRef.current;if(!ready||!map)return;
+    const ids:string[]=[];
+    for(const item of terrainRasters??[]){
+      const id='terrain-raster-'+item.id;
+      map.addSource(id,{type:'image',url:item.raster.png,coordinates:item.raster.corners});
+      map.addLayer({id,source:id,type:'raster',paint:{'raster-opacity':.72,'raster-fade-duration':0}},'terrain-result-lines');ids.push(id);
+    }
+    container.current?.setAttribute('data-terrain-raster-count',String(ids.length));
+    return()=>{for(const id of ids){if(map.getLayer(id))map.removeLayer(id);if(map.getSource(id))map.removeSource(id);}};
+  },[terrainRasters,ready]);
+  useEffect(()=>{
     const map=mapRef.current;
     if(!ready||!map)return;
     const source=map.getSource('project-grid') as GeoJSONSource|undefined;
@@ -993,7 +1005,7 @@ export default function MapCanvas({
     map.setPaintProperty('workspace-lines','line-color',color);
     map.setPaintProperty('workspace-fill','fill-color',color);
     map.setPaintProperty('workspace-fill','fill-opacity',['match',['get','role'],'selected',display.fill,'drawing',display.fill,['coalesce',['get','fillOpacity'],.17]]);
-    map.setPaintProperty('terrain-result-lines','line-color',['case',['has','elevation_m'],['case',['==',['get','major'],true],palette.major,palette.contour],['==',['get','name'],'Visible terrain'],'#21bb72','#1ea8df']);
+    map.setPaintProperty('terrain-result-lines','line-color',['case',['has','elevation_m'],['case',['==',['get','major'],true],palette.major,palette.contour],['==',['get','name'],'Visible terrain'],'#21bb72',['coalesce',['get','color'],'#1ea8df']]);
     map.setPaintProperty('terrain-result-labels','text-color',palette.text);
     map.setPaintProperty('terrain-result-labels','text-halo-color',palette.halo);
   },[ready,basemap,display]);

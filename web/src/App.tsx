@@ -39,7 +39,7 @@ import {
   addMapAnnotation, applyOverlay, applyTopology, constructGeometry, editPair, getWorkspace, moveMeasured,
   previewTopology, refineRaster, traceExisting, traceImagery,
   updateProjectFeature,
-  type SharedTopologyPreview, type RasterAsset,
+  type SharedTopologyPreview, type RasterAsset, type TerrainRasterLayer,
 } from './api';
 
 const number = (value: number, digits = 2) =>
@@ -91,6 +91,7 @@ export default function App() {
   const [contextMenu,setContextMenu]=useState<{x:number;y:number}|null>(null);
   const [activeTool,setActiveTool]=useState('tools-survey');
   const [terrainFeatures,setTerrainFeatures]=useState<GeoJSON.Feature[]>([]);
+  const [terrainRasters,setTerrainRasters]=useState<TerrainRasterLayer[]>([]);
   const [terrainVisible,setTerrainVisible]=useState(true);
   const [showLayers,setShowLayers]=useState(true);
   const [terrainPicking,setTerrainPicking]=useState(false);
@@ -608,7 +609,7 @@ export default function App() {
     setSelectionBoxMode(false);setSelectionBox(null);
     setSpatialSelected([]);setQualityIssues([]);setProjectGrid(null);
     setLabelMoveMode(false);
-    setExternalFeatures([]);setTerrainFeatures([]);setPagedFeatures([]);
+    setExternalFeatures([]);setTerrainFeatures([]);setTerrainRasters([]);setPagedFeatures([]);
     setPromptMode(null);setPositivePoints([]);setNegativePoints([]);setBoxPoints([]);
     setPendingShared(null);
     lastValid.current = null;
@@ -891,7 +892,7 @@ export default function App() {
                     setHistoryPulse(value=>value+1);
                   }
                   setPendingAnnotation(null);setPendingShared(null);setLinked(false);
-                  setPagedFeatures([]);setExternalFeatures([]);setTerrainFeatures([]);setExternalTiles([]);
+                  setPagedFeatures([]);setExternalFeatures([]);setTerrainFeatures([]);setTerrainRasters([]);setExternalTiles([]);
                   setSpatialSelected([]);setQualityIssues([]);setProjectGrid(null);
                   setSelectionBox(null);setSelectionBoxMode(false);setLabelMoveMode(false);
                 }
@@ -941,7 +942,7 @@ export default function App() {
                 {BASEMAPS.map(item=><option key={item.id} value={item.id} disabled={item.id==='custom'&&!custom}>{item.name}</option>)}
               </select>
               <small role="status" className="basemap-status">{mapStatus}</small>
-              {terrainFeatures.length>0&&<label className="gis-check"><input aria-label="Terrain result layer" type="checkbox" checked={terrainVisible} onChange={e=>setTerrainVisible(e.target.checked)}/> Terrain result · {terrainFeatures.length}</label>}
+              {(terrainFeatures.length+terrainRasters.length)>0&&<label className="gis-check"><input aria-label="Terrain result layer" type="checkbox" checked={terrainVisible} onChange={e=>setTerrainVisible(e.target.checked)}/> Terrain result · {terrainFeatures.length+terrainRasters.length}</label>}
               {rasterLayers.map(layer=><div key={layer.asset.id} className="raster-layer-row">
                 <label className="gis-check"><input aria-label={'Show raster '+layer.asset.name} type="checkbox" checked={layer.visible}
                   onChange={e=>setRasterLayers(old=>changeRaster(old,layer.asset.id,{visible:e.target.checked}))}/> {layer.kind==='dem'?'DEM · ':''}{layer.asset.name}</label>
@@ -1009,7 +1010,7 @@ export default function App() {
           <MapCanvas
             selected={geometry} drawingMode={drawingMode} vertices={vertices}
             terrainPicking={terrainPicking} terrainMarker={showTools&&activeTool==='tools-terrain'?(terrainHover??terrainOrigin):null}
-            terrainResults={terrainVisible?terrainFeatures:[]}
+            terrainResults={terrainVisible?terrainFeatures:[]} terrainRasters={terrainVisible?terrainRasters:[]}
             onTerrainPick={position=>{setTerrainOrigin(position);setTerrainPicking(false);setMessage('Terrain point selected.');}}
             onContextMenu={(x,y)=>setContextMenu({x,y})} onDeselect={deselect}
             onEditingError={setError}
@@ -1208,8 +1209,8 @@ export default function App() {
               ))}
               {scratch.some(f=>f.visible)&&<div className="map-legend-item"><span className="legend-swatch" style={{background:'#168047'}}/><span>Local drawings · {scratch.filter(f=>f.visible).length}</span></div>}
               {rasterLayers.filter(l=>l.visible).map(l=><div key={l.asset.id} className="map-legend-item"><span className="legend-swatch" style={{background:'#a8adb0'}}/><span>{l.kind==='dem'?'DEM':'Raster'} · {l.asset.name}</span></div>)}
-              {terrainVisible&&terrainFeatures.length>0&&<div className="map-legend-item"><span className="legend-swatch" style={{background:'#d7b65e'}}/><span>Terrain results · {terrainFeatures.length}</span></div>}
-              {!(projectWorkspace?.layers??[]).some(layer=>Boolean(layer.visible))&&!scratch.some(f=>f.visible)&&!rasterLayers.some(l=>l.visible)&&!terrainFeatures.length&&
+              {terrainVisible&&(terrainFeatures.length+terrainRasters.length)>0&&<div className="map-legend-item"><span className="legend-swatch" style={{background:'#d7b65e'}}/><span>Terrain results · {terrainFeatures.length+terrainRasters.length}</span></div>}
+              {!(projectWorkspace?.layers??[]).some(layer=>Boolean(layer.visible))&&!scratch.some(f=>f.visible)&&!rasterLayers.some(l=>l.visible)&&!(terrainFeatures.length+terrainRasters.length)&&
                 <small>No visible overlays</small>}
             </div>}
           </div>
@@ -1510,6 +1511,7 @@ export default function App() {
               }}
               onHover={setTerrainHover}
               onPreview={value=>{if(projectCurrent())setTerrainFeatures(value);}}
+              onRasterPreview={value=>{if(projectCurrent())setTerrainRasters(value);}}
               onSaved={()=>{if(projectCurrent())setRefreshToken(v=>v+1);}}/>
           </section>
 

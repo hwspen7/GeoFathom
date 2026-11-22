@@ -50,6 +50,12 @@ with tempfile.TemporaryDirectory() as directory:
  await page.getByRole('button',{name:'Run terrain operation'}).click();
  await expect(page.getByRole('img',{name:'Elevation distribution and cumulative area'})).toBeVisible();
  await expect(page.getByLabel('Elevation distribution bin')).toBeVisible();
+ await tools.getByRole('button',{name:'Slope map',exact:true}).click();
+ await page.getByRole('button',{name:'Run terrain operation'}).click();
+ await expect(page.getByAltText('Derived terrain raster')).toBeVisible();
+ await expect(map).toHaveAttribute('data-terrain-raster-count','1');
+ const download=page.waitForEvent('download');await page.getByRole('button',{name:'GeoTIFF',exact:true}).click();
+ expect((await download).suggestedFilename()).toBe('slope_map.tif');
  await tools.getByRole('button',{name:'Contours',exact:true}).click();
  await page.getByLabel('Contour interval').fill('5');
  await page.getByRole('button',{name:'Run terrain operation'}).click();
