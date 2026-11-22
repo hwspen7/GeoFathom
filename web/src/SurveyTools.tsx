@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import {createPortal} from 'react-dom';
 import {
   Check, Circle, Copy, CornerDownRight, Eraser, GitMerge, MousePointer2,
   Pencil, Redo2, RotateCcw, Ruler, Scissors, Undo2,
@@ -32,10 +33,14 @@ interface Props {
   onOverlay: (mode: 'union' | 'difference' | 'intersection', featureId: string) => void;
   onDuplicate: () => void;
   linked: boolean;
+  toolbarTarget?: HTMLElement|null;
+  busy?:boolean;
+  locked?:boolean;
   onLinked: (enabled:boolean) => void;
 }
 
 const buttonModes: Array<{ mode: Exclude<ShapeMode, null>; title: string }> = [
+  { mode: 'point', title: 'Point' },
   { mode: 'polygon', title: 'Polygon' },
   { mode: 'line', title: 'Line' },
   { mode: 'rectangle', title: 'Rectangle' },
@@ -49,6 +54,7 @@ export default function SurveyTools({
   mode, geometry, points, editing, moving, snapping, canUndo, canRedo, saved,
   onStart, onFinish, onCancel, onUndoPoint, onUndo, onRedo, onEdit,
   onSnapping, onAddPoint, onNumeric, onOverlay, onDuplicate, linked, onLinked,
+  toolbarTarget,busy=false,locked=false,
 }: Props) {
   const [longitude, setLongitude] = useState('');
   const [latitude, setLatitude] = useState('');
@@ -64,9 +70,11 @@ export default function SurveyTools({
     const first: Position = [Number(longitude), Number(latitude)];
     if (!Number.isFinite(first[0]) || !Number.isFinite(first[1]) || !longitude || !latitude) return;
     if (numericMode === 'point') {
-      onAddPoint(first);
+      if(mode)onAddPoint(first);
+      else onNumeric('point',{vertices:[first]});
       return;
     }
+    if(numericMode==='rectangle'&&(!endLongitude||!endLatitude))return;
     const second: Position = [Number(endLongitude), Number(endLatitude)];
     onNumeric(numericMode, {
       vertices: numericMode === 'rectangle' ? [first, second] : [first],
@@ -75,13 +83,12 @@ export default function SurveyTools({
     });
   }
 
-  return (
-    <div className="survey-tools">
+  const toolbar=<div className="survey-command-bar">
       <div className="survey-mode-grid">
         {buttonModes.map(item => (
           <button key={item.mode} className={mode === item.mode ? 'active' : ''}
             title={'Draw ' + item.title.toLowerCase()} onClick={() => onStart(item.mode)}
-            disabled={['hole','split'].includes(item.mode) && geometry?.type !== 'Polygon' && geometry?.type !== 'MultiPolygon'}>
+            disabled={busy||(['hole','split'].includes(item.mode)&&(locked||(geometry?.type!=='Polygon'&&geometry?.type!=='MultiPolygon')))}>
             {item.mode === 'circle' ? <Circle size={15}/> :
              item.mode === 'line' ? <Ruler size={15}/> :
              item.mode === 'split' || item.mode === 'trace-along' ? <Scissors size={15}/> :
@@ -95,27 +102,31 @@ export default function SurveyTools({
           <span><MousePointer2 size={13}/> {points.length} pts</span>
           <button title="Remove last point" disabled={!points.length} onClick={onUndoPoint}><Undo2 size={14}/></button>
           <button title="Cancel" onClick={onCancel}><RotateCcw size={14}/></button>
-          <button className="finish-button" onClick={onFinish}><Check size={14}/> Finish</button>
+          <button className="finish-button" disabled={busy||points.length<(mode==='point'?1:['polygon','hole'].includes(mode)?3:2)} onClick={onFinish}><Check size={14}/> Finish</button>
         </div>
       )}
       <div className="survey-action-bar">
-        <button title="Edit vertices" disabled={!geometry} className={editing && !moving ? 'active' : ''}
+        <button title="Edit vertices" disabled={!geometry||locked||busy} className={editing && !moving ? 'active' : ''}
           onClick={() => onEdit(!editing || moving, false)}><Pencil size={14}/> Vertices</button>
-        <button title="Move whole shape" disabled={!geometry} className={moving ? 'active' : ''}
+        <button title="Move whole shape" disabled={!geometry||locked||busy} className={moving ? 'active' : ''}
           onClick={() => onEdit(!moving, !moving)}><MousePointer2 size={14}/> Move</button>
         <button title="Snap to nearby vertices" className={snapping ? 'active' : ''}
           onClick={() => onSnapping(!snapping)}>Snap {snapping ? 'ON' : 'OFF'}</button>
       </div>
+      <div className="survey-action-bar">
+        <button disabled={!canUndo||busy} onClick={onUndo}><Undo2 size={14}/> Undo</button>
+        <button disabled={!canRedo||busy} onClick={onRedo}><Redo2 size={14}/> Redo</button>
+        <button disabled={!geometry||busy} onClick={onDuplicate}><Copy size={14}/> Copy</button>
+      </div>
+    </div>;
+  return (
+    <div className="survey-tools">
+      {toolbarTarget?createPortal(toolbar,toolbarTarget):toolbar}
       <label className="linked-vertex-toggle">
         <input type="checkbox" checked={linked} onChange={e=>onLinked(e.target.checked)} />
         Linked/shared vertices (preview neighboring feature edits)
       </label>
       <p className="project-hint">Drag white corner handles to reshape. Drag blue midpoints to insert. Right-click a corner to remove it. Use Move to drag the whole feature.</p>
-      <div className="survey-action-bar">
-        <button disabled={!canUndo} onClick={onUndo}><Undo2 size={14}/> Undo</button>
-        <button disabled={!canRedo} onClick={onRedo}><Redo2 size={14}/> Redo</button>
-        <button disabled={!geometry} onClick={onDuplicate}><Copy size={14}/> Copy</button>
-      </div>
       <form className="survey-numeric" onSubmit={numeric}>
         <div className="section-heading"><CornerDownRight size={14}/> Exact coordinates and construction</div>
         <select aria-label="Numeric construction mode" value={numericMode} onChange={event => setNumericMode(event.target.value)}>

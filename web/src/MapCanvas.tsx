@@ -3,6 +3,8 @@ import maplibregl, { type GeoJSONSource, type MapMouseEvent, type StyleSpecifica
 
 import { rasterPreviewUrl, protectedRasterPreview, type RasterAsset } from './api';
 import { PixelSnapIndex } from './spatialIndex';
+import {BASEMAPS,type BasemapId} from './basemaps';
+import {drawingPreview,measurementAnchor,approximateMeasurement,geodesicDrag as edgeDistance} from './editing';
 import { featureLabel } from './labels';
 import type { ExternalTile } from './DataServicesPanel';
 import type { Measurement,LayerStyle } from './api';
@@ -37,7 +39,11 @@ interface Props {
   drawingMode: ShapeMode;
   vertices: Position[];
   focus: FocusPoint | null;
-  satellite: boolean;
+  basemap: BasemapId;
+  measurement:Measurement|null;
+  showMeasurements:boolean;
+  selectedFeatureId:string|null;
+  rasterOpacity:number;
   onMapClick: (position: Position) => void;
   onViewportChange: (bbox: [number, number, number, number]) => void;
   discovered: GeoJSON.Geometry[];
@@ -69,34 +75,16 @@ interface Props {
   onSelectSavedFeature: (id: string) => void;
 }
 
-const satelliteURL = import.meta.env.VITE_SATELLITE_TILES_URL;
-const satelliteAttribution = import.meta.env.VITE_SATELLITE_ATTRIBUTION || 'Satellite imagery';
-
-function mapStyle(): StyleSpecification {
-  const style: StyleSpecification = {
-    version: 8,
-    glyphs:import.meta.env.VITE_GLYPHS_URL ||
-      'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
-    sources: {
-      street: {
-        type: 'raster',
-        tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
-        tileSize: 256,
-        attribution: '© OpenStreetMap contributors',
-        maxzoom: 19,
-      },
-    },
-    layers: [{ id: 'street', type: 'raster', source: 'street' }],
-  };
-  if (satelliteURL) {
-    style.sources.satellite = {
-      type: 'raster', tiles: [satelliteURL], tileSize: 256,
-      attribution: satelliteAttribution,
-    };
-    style.layers.push({
-      id: 'satellite', type: 'raster', source: 'satellite',
-      layout: { visibility: 'none' },
-    });
+function mapStyle():StyleSpecification{
+  const style:StyleSpecification={version:8,glyphs:import.meta.env.VITE_GLYPHS_URL||
+    'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',sources:{},
+    layers:[{id:'blank',type:'background',paint:{'background-color':'#e4e7ea'}}]};
+  for(const layer of BASEMAPS){
+    if(!layer.url)continue;
+    style.sources[layer.id]={type:'raster',tiles:[layer.url],tileSize:256,
+      attribution:layer.attribution,maxzoom:layer.maxzoom};
+    style.layers.push({id:layer.id,type:'raster',source:layer.id,
+      layout:{visibility:layer.id==='street'?'visible':'none'},paint:{'raster-fade-duration':0}});
   }
   return style;
 }
@@ -112,10 +100,12 @@ function featureCollection(
   selectedIds:string[],qualityIssues:GeoJSON.Geometry[],
   zoom:number,
   offsetPoint?:(point:Position,dx:number,dy:number)=>Position,
+  cursor:Position|null=null,
+  selectedFeatureId:string|null=null,
 ): GeoJSON.FeatureCollection {
   const features: GeoJSON.Feature[] = [];
   for (const saved of layerFeatures) {
-    if (!saved.visible) continue;
+    if (!saved.visible || (selected&&editing&&saved.id===selectedFeatureId)) continue;
     features.push({
       type: 'Feature', geometry: saved.geometry,
       properties: {
@@ -171,22 +161,13 @@ function featureCollection(
   }
   if (selected) {
     features.push({
-      type: 'Feature', properties: { role: 'selected', color: '#2563eb' },
+      type: 'Feature', properties: { role: 'selected', color: '#168047',fillOpacity:.28,lineWidth:2.5 },
       geometry: selected,
     });
   }
 
-  if (vertices.length >= 3 && drawingMode !== 'line' && drawingMode !== 'split') {
-    features.push({
-      type: 'Feature', properties: { role: 'drawing', color: '#ec8b2c' },
-      geometry: { type: 'Polygon', coordinates: [[...vertices, vertices[0]]] },
-    });
-  } else if (vertices.length >= 2) {
-    features.push({
-      type: 'Feature', properties: { role: 'drawing', color: '#ec8b2c' },
-      geometry: { type: 'LineString', coordinates: vertices },
-    });
-  }
+  const draft=drawingPreview(drawingMode,vertices,cursor);
+  if(draft)features.push({type:'Feature',properties:{role:'drawing',color:'#168047',fillOpacity:.22,lineWidth:2},geometry:draft});
   for (const position of vertices) {
     features.push({
       type: 'Feature', properties: { role: 'draw-vertex' },
@@ -239,7 +220,7 @@ type Drag = {
 };
 
 export default function MapCanvas({
-  selected, drawingMode, vertices, focus, satellite, onMapClick,
+  selected,drawingMode,vertices,focus,basemap,measurement,showMeasurements,selectedFeatureId,rasterOpacity,onMapClick,
   onViewportChange, discovered, imageLayer, traceMode, onTraceClick,
   editing, moving, snapping, selectedLocked, layerFeatures,
   promptPositive,promptNegative,promptBox,annotationMode,onAnnotationClick,
@@ -249,19 +230,22 @@ export default function MapCanvas({
 }: Props) {
   const container = useRef<HTMLDivElement>(null);
   const coordinateRef = useRef<HTMLDivElement>(null);
+  const dimensionRef=useRef<HTMLDivElement>(null);
+  const [cursor,setCursor]=useState<Position|null>(null);
+  const cursorTick=useRef(0);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const eventRef = useRef({
-    selected, drawingMode, traceMode, annotationMode,selectionBoxMode,labelMoveMode,editing, moving, snapping, selectedLocked,
+    selected,selectedFeatureId,drawingMode, traceMode, annotationMode,selectionBoxMode,labelMoveMode,editing, moving, snapping, selectedLocked,
     layerFeatures, onMapClick, onTraceClick,onAnnotationClick,onSelectionBox,onLabelMove,onViewportChange,
     onGeometryPreview, onGeometryCommit, onSelectSavedFeature,
   });
   const renderRef = useRef({
     selected,vertices,drawingMode,discovered,layerFeatures,editing,
-    promptPositive,promptNegative,promptBox,selectedIds,qualityIssues,
+    promptPositive,promptNegative,promptBox,selectedIds,qualityIssues,cursor,selectedFeatureId,
   });
   renderRef.current={
     selected,vertices,drawingMode,discovered,layerFeatures,editing,
-    promptPositive,promptNegative,promptBox,selectedIds,qualityIssues,
+    promptPositive,promptNegative,promptBox,selectedIds,qualityIssues,cursor,selectedFeatureId,
   };
   const drag = useRef<Drag | null>(null);
   const selectionDrag=useRef<{start:Position;end:Position}|null>(null);
@@ -271,7 +255,7 @@ export default function MapCanvas({
   const spatialSnap = useRef<PixelSnapIndex|null>(null);
   const [ready, setReady] = useState(false);
   eventRef.current = {
-    selected, drawingMode, traceMode, annotationMode,selectionBoxMode,labelMoveMode,editing, moving, snapping, selectedLocked,
+    selected,selectedFeatureId,drawingMode, traceMode, annotationMode,selectionBoxMode,labelMoveMode,editing, moving, snapping, selectedLocked,
     layerFeatures, onMapClick, onTraceClick,onAnnotationClick,onSelectionBox,onLabelMove,onViewportChange,
     onGeometryPreview, onGeometryCommit, onSelectSavedFeature,
   };
@@ -297,7 +281,7 @@ export default function MapCanvas({
           const p=map.project(point as maplibregl.LngLatLike);
           const shifted=map.unproject([p.x+dx,p.y+dy]);
           return [shifted.lng,shifted.lat];
-        },
+        },view.cursor,view.selectedFeatureId,
       ));
     };
     map.on('zoomend',refreshZoomLabels);
@@ -440,7 +424,7 @@ export default function MapCanvas({
           if(!feature.visible)continue;
           // Do not snap a selected saved polygon onto the geometry that is
           // currently being dragged; keep neighboring polygons available.
-          if(state.selected && JSON.stringify(feature.geometry)===JSON.stringify(state.selected))
+          if(feature.id===state.selectedFeatureId||(state.selected && JSON.stringify(feature.geometry)===JSON.stringify(state.selected)))
             continue;
           paths.push(...pathsOf(feature.geometry));
         }
@@ -489,7 +473,10 @@ export default function MapCanvas({
         return;
       }
       const current = drag.current;
-      if (!current) return;
+      if (!current) {
+        if(eventRef.current.drawingMode&&Date.now()-cursorTick.current>=33){cursorTick.current=Date.now();setCursor(snapAt(coordinates(event),null));}
+        return;
+      }
       const coordinate = coordinates(event);
       current.end=coordinate;
       let changed: GeoJSON.Geometry;
@@ -588,7 +575,7 @@ export default function MapCanvas({
       for (const node of edges) {
         const index = state.selected?.type === 'MultiPolygon'
           ? state.selected.coordinates.slice(0,node.path.polygon).reduce((sum,group) => sum+group.length,0) + node.path.ring
-          : node.path.ring;
+          : state.selected?.type==='MultiLineString'?node.path.polygon:node.path.ring;
         const path = geoms[index];
         if (!path) continue;
         const first = path[node.path.vertex];
@@ -777,7 +764,7 @@ export default function MapCanvas({
         const p=map.project(point as maplibregl.LngLatLike);
         const shifted=map.unproject([p.x+dx,p.y+dy]);
         return [shifted.lng,shifted.lat];
-      });
+      },cursor,selectedFeatureId);
     (map.getSource('workspace') as GeoJSONSource).setData(collection);
     if(container.current && import.meta.env.DEV){
       container.current.setAttribute('data-label-feature-count',
@@ -790,7 +777,7 @@ export default function MapCanvas({
     }
     if (!drag.current) spatialSnap.current=null;
   }, [selected, vertices, drawingMode, discovered, layerFeatures, editing,
-      promptPositive,promptNegative,promptBox,selectedIds,qualityIssues,ready]);
+      promptPositive,promptNegative,promptBox,selectedIds,qualityIssues,ready,cursor,selectedFeatureId]);
 
   useEffect(()=>{
     const map=mapRef.current;
@@ -830,7 +817,7 @@ export default function MapCanvas({
     if (!ready || !map || !focus) return;
     if (focus.bbox && focus.bbox[0] < focus.bbox[2] && focus.bbox[1] < focus.bbox[3]) {
       map.fitBounds([[focus.bbox[0], focus.bbox[1]], [focus.bbox[2], focus.bbox[3]]], {
-        padding: 70, maxZoom: 16, duration: 950,
+        padding: 60, maxZoom: 20, duration: 650,
       });
     } else {
       map.flyTo({ center: [focus.longitude, focus.latitude], zoom: 15, duration: 950 });
@@ -839,10 +826,9 @@ export default function MapCanvas({
 
   useEffect(() => {
     const map = mapRef.current;
-    if (ready && map && satelliteURL) {
-      map.setLayoutProperty('satellite', 'visibility', satellite ? 'visible' : 'none');
-    }
-  }, [satellite, ready]);
+    if(ready&&map)for(const layer of BASEMAPS)if(layer.url&&map.getLayer(layer.id))
+      map.setLayoutProperty(layer.id,'visibility',layer.id===basemap?'visible':'none');
+  },[basemap,ready]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -859,7 +845,7 @@ export default function MapCanvas({
       });
       map.addLayer({
         id: 'imported-imagery', type: 'raster', source: 'imported-imagery',
-        paint: { 'raster-opacity': 0.88, 'raster-fade-duration': 0 },
+        paint: { 'raster-opacity': rasterOpacity, 'raster-fade-duration': 0 },
       }, 'workspace-fill');
     }
     if (imageLayer) {
@@ -878,16 +864,69 @@ export default function MapCanvas({
       if (blobUrl) URL.revokeObjectURL(blobUrl);
     };
   }, [imageLayer, ready]);
+  useEffect(()=>{const map=mapRef.current;if(map?.getLayer('imported-imagery'))map.setPaintProperty('imported-imagery','raster-opacity',rasterOpacity);},[rasterOpacity,imageLayer,ready]);
+  useEffect(()=>{setCursor(null);},[drawingMode]);
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    map.doubleClickZoom[editing ? 'disable' : 'enable']();
+    map.doubleClickZoom[editing||drawingMode ? 'disable' : 'enable']();
     map.getCanvas().style.cursor = drawingMode || traceMode || editing || annotationMode || selectionBoxMode || labelMoveMode ? 'crosshair' : '';
   }, [editing, drawingMode, traceMode, annotationMode, selectionBoxMode,labelMoveMode,ready]);
 
+  // HTML dimension labels do not depend on a remote glyph server.
+  // Reproject on every map movement; never intercept editing gestures.
+  useEffect(()=>{
+    const map=mapRef.current,overlay=dimensionRef.current;
+    if(!map||!overlay||!ready)return;
+    overlay.replaceChildren();
+    const draft=drawingPreview(drawingMode,vertices,cursor);
+    const g=draft??selected;
+    if(!showMeasurements||!g)return;
+    const exact=!draft?measurement:null;
+    const totals=exact??approximateMeasurement(g);
+    const prefix=exact?'':'~ ';
+    const format=(n:number)=>n.toLocaleString('en-US',{maximumFractionDigits:2});
+    const labels:Array<{a:Position;b?:Position;node:HTMLDivElement}>=[];
+    function label(text:string,a:Position,b?:Position){
+      const node=document.createElement('div');
+      node.className=b?'map-edge-value':'map-dimension-total';
+      node.textContent=text;overlay!.appendChild(node);labels.push({a,b,node});
+    }
+    const anchor=measurementAnchor(g);
+    if(anchor){
+      if(totals.area_m2!==null)label(prefix+format(totals.area_m2)+' m²\n'+prefix+format(totals.perimeter_m??0)+' m perimeter',anchor);
+      else if(totals.length_m!==null)label(prefix+format(totals.length_m)+' m total',anchor);
+      else if(g.type==='Point')label(anchor[0].toFixed(6)+'°, '+anchor[1].toFixed(6)+'°',anchor);
+    }
+    let index=0;
+    for(const path of pathsOf(g)){
+      for(let i=1;i<path.length&&index<48;i++,index++){
+        const a=path[i-1],b=path[i];
+        const value=exact?.edge_lengths_m?.[index];
+        label((value===undefined?'~ ':'')+format(value??edgeDistance(a,b).distance_m)+' m',a,b);
+      }
+      if(index>=48)break;
+    }
+    const layout=()=>{
+      const placed:Array<{x:number;y:number}>=[];
+      const width=map.getContainer().clientWidth,height=map.getContainer().clientHeight;
+      for(const item of labels){
+        const a=map.project(item.a),b=item.b?map.project(item.b):null;
+        const x=b?(a.x+b.x)/2:a.x,y=b?(a.y+b.y)/2:a.y;
+        const hidden=x<30||y<18||x>width-30||y>height-18||
+          (b&&(Math.hypot(a.x-b.x,a.y-b.y)<42||placed.some(p=>Math.abs(p.x-x)<70&&Math.abs(p.y-y)<24)));
+        item.node.hidden=Boolean(hidden);
+        if(!hidden){item.node.style.transform='translate('+x+'px,'+y+'px) translate(-50%,-50%)';placed.push({x,y});}
+      }
+    };
+    layout();map.on('render',layout);
+    return ()=>{map.off('render',layout);overlay.replaceChildren();};
+  },[ready,selected,drawingMode,vertices,cursor,measurement,showMeasurements]);
+
   return <>
     <div aria-label="Interactive geospatial map" data-label-layer-ready={ready ? "true" : "false"} className="map-canvas" ref={container}/>
+    <div className="map-dimension-overlay" aria-label="Live map dimensions" ref={dimensionRef}/>
     <div aria-label="Cursor coordinates" className="map-coordinate-readout" ref={coordinateRef}>
       Move cursor to inspect WGS84 coordinates
     </div>

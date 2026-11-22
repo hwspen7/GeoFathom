@@ -10,6 +10,7 @@ import {
   type Capabilities, type Measurement, type Place,
 } from './api';
 import MapCanvas, { type FocusPoint } from './MapCanvas';
+import {BASEMAPS,type BasemapId} from './basemaps';
 import SurveyTools from './SurveyTools';
 import ProfessionalPanel from './ProfessionalPanel';
 import SpatialToolsPanel from './SpatialToolsPanel';
@@ -18,7 +19,7 @@ import DataServicesPanel, {type ExternalTile} from './DataServicesPanel';
 import { featureColor, legendEntries, DEFAULT_LAYER_STYLE } from './labels';
 import ImageCorrectionPanel, { type PromptMode } from './ImageCorrectionPanel';
 import {
-  GeometryTimeline, approximateMeasurement, previewEdgeLengths, pathsOf,
+  GeometryTimeline, approximateMeasurement, previewEdgeLengths, pathsOf, drawingPreview,
   singleMovedVertex, type Position, type ShapeMode,
 } from './editing';
 import DiscoveryPanel from './DiscoveryPanel';
@@ -58,7 +59,12 @@ export default function App() {
   const [modelId, setModelId] = useState('local-saluki');
   const [modelUsed, setModelUsed] = useState<boolean | null>(null);
   const [toolSteps, setToolSteps] = useState<string[]>([]);
-  const [satellite, setSatellite] = useState(false);
+  const [basemap,setBasemap]=useState<BasemapId>('street');
+  const [toolbarTarget,setToolbarTarget]=useState<HTMLDivElement|null>(null);
+  const [showTools,setShowTools]=useState(true);
+  const [showMeasurements,setShowMeasurements]=useState(true);
+  const [rasterVisible,setRasterVisible]=useState(true);
+  const [rasterOpacity,setRasterOpacity]=useState(.88);
   const [imageLayer, setImageLayer] = useState<RasterAsset | null>(null);
   const [traceMode, setTraceMode] = useState(false);
   const [promptMode,setPromptMode] = useState<PromptMode>(null);
@@ -223,7 +229,10 @@ export default function App() {
   }, []);
 
 
-  const satelliteAvailable = Boolean(import.meta.env.VITE_SATELLITE_TILES_URL);
+  function revealPanel(id:string){
+    setShowTools(true);
+    requestAnimationFrame(()=>document.getElementById(id)?.scrollIntoView({block:'start'}));
+  }
 
   useEffect(() => {
     getCapabilities().then(setCapabilities).catch(() => setCapabilities(null));
@@ -347,6 +356,7 @@ export default function App() {
     geometrySequence.current++;
     setDrawingMode(next);
     setTraceMode(false);
+    setPromptMode(null);setPendingAnnotation(null);setSelectionBoxMode(false);setLabelMoveMode(false);
     if (!operation) {
       if(featureIdentity.current){
         timeline.current=new GeometryTimeline();
@@ -373,15 +383,14 @@ export default function App() {
     setCandidates([]);
     setDiscovered([]);
     setError('');
-    setMessage(['polygon', 'hole'].includes(next)
-      ? 'Click at least three corners, then Finish.'
-      : 'Click two or more points to define the geometry, then Finish.');
+    setMessage(next==='point'?'Click a location, then Finish.':
+      ['polygon','hole'].includes(next)?'Click corners, then Finish.':'Click start and end, then Finish.');
   }
 
   async function finishDrawing() {
     if (!drawingMode) return;
     const mode = drawingMode;
-    const required = ['polygon','hole'].includes(mode) ? 3 : 2;
+    const required = mode==='point'?1:['polygon','hole'].includes(mode) ? 3 : 2;
     if (vertices.length < required) {
       setError('Add more points before finishing.');
       return;
@@ -391,7 +400,10 @@ export default function App() {
     try {
       let result: GeoJSON.Geometry;
       let measured: Measurement;
-      if (mode === 'trace-along') {
+      if(mode==='point'){
+        result={type:'Point',coordinates:vertices[0]};
+        measured=await measureGeometry(result);
+      }else if (mode === 'trace-along') {
         const paths=(projectWorkspace?.features ?? [])
           .filter(feature=>feature.geometry.type==='LineString'||feature.geometry.type==='MultiLineString')
           .flatMap(feature=>pathsOf(feature.geometry));
@@ -457,10 +469,9 @@ export default function App() {
     const sequence=++geometrySequence.current;
     setBusy(true); setError('');
     try {
-      const created = await constructGeometry({
-        mode: mode as 'rectangle' | 'circle' | 'bearing',
-        ...body,
-      });
+      const created = mode==='point'
+        ? {geometry:{type:'Point',coordinates:body.vertices[0]} as GeoJSON.Point}
+        : await constructGeometry({mode:mode as 'rectangle'|'circle'|'bearing',...body});
       if(sequence!==geometrySequence.current)return;
       setSelectedFeatureId(null);
       setGeometrySource('Numeric geodesic construction');
@@ -545,215 +556,40 @@ export default function App() {
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
+  useEffect(()=>{
+    function commands(event:KeyboardEvent){
+      if(event.target instanceof HTMLInputElement||event.target instanceof HTMLTextAreaElement||
+        event.target instanceof HTMLSelectElement||event.ctrlKey||event.metaKey)return;
+      if(event.key==='Escape'){
+        geometrySequence.current++;setDrawingMode(null);setVertices([]);
+        setEditing(false);setMoving(false);setTraceMode(false);setPromptMode(null);
+        setSelectionBoxMode(false);setLabelMoveMode(false);setPendingAnnotation(null);
+        if(preview||pendingShared){setGeometry(lastValid.current);setPreview(null);setPendingShared(null);}
+      }else if(drawingMode&&!busy&&event.key==='Enter'){
+        event.preventDefault();void finishDrawing();
+      }else if(drawingMode&&!busy&&event.key==='Backspace'){
+        event.preventDefault();setVertices(value=>value.slice(0,-1));
+      }
+    }
+    window.addEventListener('keydown',commands);
+    return ()=>window.removeEventListener('keydown',commands);
+  });
   return (
-    <div className="workspace">
-      <aside className="sidebar">
-        <div className="brand">
-          <div className="brand-mark"><Globe2 size={23} strokeWidth={1.9} /></div>
-          <div><strong>GeoFathom</strong><span>GEOSPATIAL INTELLIGENCE</span></div>
-        </div>
-        <div className="sidebar-scroll">
-          <ApiAccessPanel />
-          <div className="intro">
-            <div className="eyebrow"><Sparkles size={13} /> LOCAL-FIRST WORKSPACE</div>
-            <h1>Explore the world, <em>spatially.</em></h1>
-            <p>Find geographic features, inspect mapped boundaries, and measure real-world shapes.</p>
-          </div>
-
-          <section className="panel-section">
-            <div className="section-heading"><Search size={16} /><span>Find a place</span></div>
-            <form onSubmit={runSearch} className="search-form">
-              <input aria-label="Search for a place" placeholder="Airport, landmark, city, address…" value={locationInput}
-                onChange={event => setLocationInput(event.target.value)} maxLength={200} />
-              <button aria-label="Search" type="submit" disabled={busy || locationInput.trim().length < 2}>
-                <ArrowRight size={17} />
-              </button>
-            </form>
-          </section>
-
-          <section className="panel-section">
-            <div className="section-heading"><Sparkles size={16} /><span>Ask GeoFathom</span><span className="section-pill">Assistant</span></div>
-            <ModelControls modelId={modelId} onChange={setModelId} />
-            <form onSubmit={runAssistant} className="prompt-form">
-              <textarea aria-label="Ask the geospatial assistant" placeholder="Measure Shanghai Hongqiao Airport's mapped boundary…" value={prompt}
-                onChange={event => setPrompt(event.target.value)} maxLength={500} rows={3} />
-              <div className="prompt-footer">
-                <span>{modelUsed === null ? 'Selected model / GIS fallback' : modelUsed ? 'AI parsed the request' : 'GIS fallback interpretation'}</span>
-                <button type="submit" disabled={busy || prompt.trim().length < 2}>
-                  <Send size={15} /> Run
-                </button>
-              </div>
-            </form>
-            {assistantQuery && <div className="last-prompt">“{assistantQuery}” <span>{modelUsed ? 'AI parsed' : 'Rules parsed'}</span></div>}
-            {toolSteps.length > 0 && <div className="tool-trace"><strong>Execution trace</strong><span>{toolSteps.join(' → ')}</span></div>}
-          </section>
-
-          <section className="panel-section">
-            <div className="section-heading"><Pencil size={16} /><span>Survey & geometry editor</span><span className="section-pill">Precision</span></div>
-            <SurveyTools
-              mode={drawingMode}
-              geometry={geometry}
-              points={vertices}
-              editing={editing}
-              moving={moving}
-              snapping={snapping}
-              linked={linked}
-              onLinked={enabled=>{
-                if(enabled&&!selectedFeatureId){
-                  setError('Open a saved feature to use linked vertex editing.');
-                  return;
-                }
-                setLinked(enabled);setPendingShared(null);
-              }}
-              canUndo={timeline.current.canUndo && historyPulse >= 0}
-              canRedo={timeline.current.canRedo && historyPulse >= 0}
-              saved={activeProjectId ? projectWorkspace?.features ?? [] : []}
-              onStart={startDrawing}
-              onFinish={() => { void finishDrawing(); }}
-              onCancel={() => { geometrySequence.current++; setDrawingMode(null); setVertices([]); }}
-              onUndoPoint={() => setVertices(value => value.slice(0,-1))}
-              onUndo={() => applyHistory(timeline.current.undo())}
-              onRedo={() => applyHistory(timeline.current.redo())}
-              onEdit={(active, shouldMove) => {
-                if (selectedLocked) {
-                  setError('Unlock the feature layer before editing.');
-                } else {
-                  setEditing(active); setMoving(shouldMove);
-                  setDrawingMode(null); setVertices([]);
-                }
-              }}
-              onSnapping={setSnapping}
-              onAddPoint={point => {
-                if (drawingMode) setVertices(value => [...value, point]);
-                else setError('Select a drawing mode before adding precise coordinates.');
-              }}
-              onNumeric={(mode, body) => { void numericShape(mode, body); }}
-              onOverlay={(mode, featureId) => { void combineWith(mode,featureId); }}
-              onDuplicate={() => {
-                if (geometry) {
-                  setSelectedFeatureId(null);
-                  setGeometrySource('Copied from current geometry');
-                  void commitGeometry(structuredClone(geometry), 'Copied geometry. Save as a separate feature.',true);
-                }
-              }}
-            />
- 
-            {pendingShared && <div className="linked-preview">
-              <strong>Shared boundary preview · {pendingShared.preview.count} features</strong>
-              {pendingShared.preview.affected.map(item=><div key={item.id}>
-                {item.name} · r{item.revision}
-                {item.locked?' · LOCKED':''}{!item.valid?' · INVALID':''}
-              </div>)}
-              <div className="survey-action-bar">
-                <button onClick={()=>{
-                  setGeometry(lastValid.current);setPendingShared(null);setPreview(null);
-                }}>Cancel</button>
-                <button disabled={busy||pendingShared.preview.affected.some(x=>x.locked||!x.valid)}
-                  onClick={async()=>{
-                    if(!activeProjectId)return;
-                    setBusy(true);setError('');
-                    try{
-                      const expected=Object.fromEntries(pendingShared.preview.affected.map(item=>
-                        [item.id,item.revision]));
-                      await applyTopology(activeProjectId,pendingShared.old,pendingShared.next,expected);
-                      const updated=await getWorkspace(activeProjectId);
-                      if(!projectCurrent())return;
-                      setProjectWorkspace(updated);
-                      const reopened=updated.features.find(item=>item.id===selectedFeatureId);
-                      if(reopened)openStoredFeature(reopened);
-                      setPendingShared(null);setRefreshToken(v=>v+1);
-                    }catch(failure){
-                      setError(failure instanceof Error?failure.message:'Linked edit failed.');
-                      setGeometry(lastValid.current);setPendingShared(null);
-                    }finally{setBusy(false);}
-                  }}>Apply to all linked features</button>
-              </div>
-            </div>}
-         </section>
-
-          <section className="panel-section">
-            <div className="section-heading"><Layers3 size={16} /><span>Georeferenced imagery</span></div>
-            <RasterPanel
-              asset={imageLayer}
-              onSelect={(asset) => {
-                geometrySequence.current++;
-                setImageLayer(asset);
-                setTraceMode(false);
-                setPromptMode(null);setPositivePoints([]);setNegativePoints([]);setBoxPoints([]);
-                const [west, south, east, north] = asset.bbox;
-                setFocus({
-                  longitude: (west + east) / 2, latitude: (south + north) / 2,
-                  bbox: asset.bbox, key: Date.now(),
-                });
-                setMessage('Loaded georeferenced image ' + asset.name + '. Click automatic outline to select an object.');
-              }}
-              tracing={traceMode}
-              onTracing={(enabled) => {
-                setTraceMode(enabled);
-                if (enabled) { setDrawingMode(null); setVertices([]); }
-              }}
-              settings={traceSettings}
-              onSettings={setTraceSettings}
-              viewport={viewport}
-            />
-            <GeoAIAnalysisPanel
-              key={activeProjectId ?? 'no-project'}
-              projectId={activeProjectId}
-              image={imageLayer}
-              onPreview={value=>{if(projectCurrent())setExternalFeatures(value);}}
-              onSaved={()=>setRefreshToken(value=>value+1)}
-            />
- 
-            <ImageCorrectionPanel
-              enabled={Boolean(imageLayer)}
-              mode={promptMode}
-              onMode={mode=>{
-                setPromptMode(mode);setTraceMode(false);setDrawingMode(null);
-              }}
-              positive={positivePoints}
-              negative={negativePoints}
-              box={boxPoints}
-              busy={busy}
-              onClear={()=>{
-                setPositivePoints([]);setNegativePoints([]);
-                setBoxPoints([]);setPromptMode(null);
-              }}
-              onRefine={async()=>{
-                if(!imageLayer||positivePoints.length===0||busy)return;
-                const sequence=++geometrySequence.current;
-                setBusy(true);setError('');
-                try{
-                  const refined=await refineRaster({
-                    image_id:imageLayer.id,positive_points:positivePoints,
-                    negative_points:negativePoints,
-                    box:boxPoints.length===2?boxPoints:null,
-                    window_size:traceSettings.window_size,
-                  });
-                  if(sequence!==geometrySequence.current)return;
-                  setGeometry(refined.geometry);
-                  lastValid.current=structuredClone(refined.geometry);
-                  timeline.current.push(refined.geometry);
-                  setHistoryPulse(x=>x+1);
-                  setMeasurement(refined.measurement);
-                  setSelectedFeatureId(null);setEditing(false);
-                  setGeometrySource('Local SAM 2 refinement · '+imageLayer.name);
-                  setFeatureProperties({
-                    source_type:'image_derived',image_id:imageLayer.id,
-                    model_id:refined.model_id,method:'sam2-prompt-refinement',
-                    positive_count:refined.positive_count,
-                    negative_count:refined.negative_count,
-                    box_used:refined.box_used,
-                    quality:'requires_user_review',
-                  });
-                  setPromptMode(null);
-                  setMessage(refined.warning);
-                }catch(failure){
-                  setError(failure instanceof Error?failure.message:'SAM 2 refinement unavailable.');
-                }finally{setBusy(false);}
-              }}
-            />
-         </section>
-
+    <div className="workspace desktop-gis">
+      <header className="gis-header">
+        <div className="gis-brand"><Globe2 size={19}/> <strong>GeoFathom</strong></div>
+        <nav aria-label="Workspace tools" className="gis-menu">
+          {([['Survey','tools-survey'],['GIS','tools-gis'],['Analysis','tools-spatial'],['Raster / AI','tools-raster'],['Cartography','tools-style'],['Data','tools-services'],['Assistant','tools-ai']] as const).map(([title,id])=>
+            <button key={id} onClick={()=>revealPanel(id)}>{title}</button>)}
+        </nav>
+        <button className="gis-inspector-toggle" aria-pressed={showTools} onClick={()=>setShowTools(v=>!v)}>Inspector</button>
+        <span className="gis-connection">{capabilities?<Wifi size={14}/>:<WifiOff size={14}/>} {capabilities?'Connected':'Offline'}</span>
+      </header>
+      <div className="gis-toolbar" aria-label="Survey toolbar" ref={setToolbarTarget}/>
+      <div className="gis-body">
+        <aside className="sidebar gis-layers">
+          <div className="dock-heading"><Layers3 size={15}/> Project / Layers</div>
+          <div className="sidebar-scroll">
           <section className="panel-section">
             <div className="section-heading"><Layers3 size={16} /><span>Projects & saved geometry</span></div>
             <ProjectsPanel
@@ -801,86 +637,27 @@ export default function App() {
             />
           </section>
 
+
+            <section className="panel-section gis-basemaps">
+              <div className="section-heading"><Globe2 size={15}/><span>Basemap</span></div>
+              <select aria-label="Basemap" value={basemap} onChange={event=>setBasemap(event.target.value as BasemapId)}>
+                {BASEMAPS.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}
+              </select>
+              <label className="gis-check"><input type="checkbox" checked={showMeasurements} onChange={e=>setShowMeasurements(e.target.checked)}/> Map dimensions</label>
+              {imageLayer&&<><label className="gis-check"><input type="checkbox" checked={rasterVisible} onChange={e=>setRasterVisible(e.target.checked)}/> {imageLayer.name}</label>
+              <label>Raster opacity <input aria-label="Raster opacity" type="range" min="0" max="1" step=".05" value={rasterOpacity} onChange={e=>setRasterOpacity(Number(e.target.value))}/></label></>}
+            </section>
           <section className="panel-section">
-            <div className="section-heading"><Layers3 size={16}/><span>Professional GIS tools</span></div>
-            <ProfessionalPanel
-              key={activeProjectId ?? 'no-project'}
-              projectId={activeProjectId}
-              workspace={projectWorkspace}
-              geometry={geometry}
-              raster={imageLayer}
-              refreshToken={refreshToken}
-              onRefresh={()=>setRefreshToken(v=>v+1)}
-              onOpen={id=>{
-                const feature=projectWorkspace?.features.find(item=>item.id===id);
-                if(feature)openStoredFeature(feature);
-              }}
-            />
+            <div className="section-heading"><Search size={16} /><span>Find a place</span></div>
+            <form onSubmit={runSearch} className="search-form">
+              <input aria-label="Search for a place" placeholder="Airport, landmark, city, address…" value={locationInput}
+                onChange={event => setLocationInput(event.target.value)} maxLength={200} />
+              <button aria-label="Search" type="submit" disabled={busy || locationInput.trim().length < 2}>
+                <ArrowRight size={17} />
+              </button>
+            </form>
           </section>
 
-          <section className="panel-section">
-            <div className="section-heading"><Layers3 size={16}/><span>GIS selection, QA & print layout</span></div>
-            <SpatialToolsPanel
-              key={activeProjectId ?? 'no-project'}
-              projectId={activeProjectId}
-              geometry={geometry}
-              viewport={viewport}
-              selectedIds={spatialSelected}
-              onSelected={value=>{if(projectCurrent())setSpatialSelected(value);}}
-              boxMode={selectionBoxMode}
-              onBoxMode={active=>{
-                setSelectionBoxMode(active);
-                if(active){
-                  setDrawingMode(null);setEditing(false);
-                  setMoving(false);setTraceMode(false);setPromptMode(null);
-                  setPendingAnnotation(null);
-                }
-              }}
-              box={selectionBox}
-              onBox={value=>{if(projectCurrent())setSelectionBox(value);}}
-              onIssues={value=>{if(projectCurrent())setQualityIssues(value);}}
-              onOpen={id=>{
-                const item=projectWorkspace?.features.find(f=>f.id===id);
-                if(item)openStoredFeature(item);
-              }}
-            />
-          </section>
-
-          <section className="panel-section">
-            <div className="section-heading"><Layers3 size={16}/><span>Advanced cartography & EPSG</span></div>
-            <CartographyProPanel
-              key={activeProjectId ?? 'no-project'}
-              projectId={activeProjectId}
-              workspace={projectWorkspace}
-              viewport={viewport}
-              selectedGeometry={geometry}
-              onChanged={()=>setRefreshToken(v=>v+1)}
-              onGrid={value=>{if(projectCurrent())setProjectGrid(value);}}
-              labelMoveMode={labelMoveMode}
-              onLabelMoveMode={active=>{
-                setLabelMoveMode(active);
-                if(active){
-                  setSelectionBoxMode(false);setTraceMode(false);
-                  setDrawingMode(null);setEditing(false);setMoving(false);
-                  setPromptMode(null);setPendingAnnotation(null);
-                }
-              }}
-            />
-          </section>
-
-          <section className="panel-section">
-            <div className="section-heading"><Layers3 size={16}/><span>OGC, indexed stores & background jobs</span></div>
-            <DataServicesPanel
-              key={activeProjectId ?? 'no-project'}
-              projectId={activeProjectId}
-              viewport={viewport}
-              drawnGeometry={geometry}
-              onTiles={value=>{if(projectCurrent())setExternalTiles(value);}}
-              onPreview={value=>{if(projectCurrent())setExternalFeatures(value);}}
-              onPage={value=>{if(projectCurrent())setPagedFeatures(value);}}
-              onRefresh={()=>setRefreshToken(value=>value+1)}
-            />
-          </section>
 
           <section className="panel-section">
             <div className="section-heading"><Search size={16} /><span>Find areas by size</span><span className="section-pill">Spatial query</span></div>
@@ -897,6 +674,7 @@ export default function App() {
               setError('');
             }} />
           </section>
+
 
           {candidates.length > 0 && (
             <section className="panel-section">
@@ -915,86 +693,10 @@ export default function App() {
             </section>
           )}
 
-          <section className="panel-section results-summary">
-            <div className="section-heading"><Compass size={16} /><span>Analysis</span></div>
-            <div className="analysis-card">
-              <div className="analysis-status">{error ? <span className="error">{error}</span> : message}</div>
-              {measurement && (
-                <>
-                  <div className="metric">
-                    <span>{measurement.area_m2 !== null ? 'Geographic area' : 'Distance'}</span>
-                    <strong>{measurement.area_km2 !== null
-                      ? number(measurement.area_km2, 4) + ' km²'
-                      : measurement.length_m !== null ? number(measurement.length_m / 1000, 3) + ' km' : 'Location only'}</strong>
-                  </div>
-                  {measurement.perimeter_m !== null && <div className="metric secondary"><span>Perimeter</span><strong>{number(measurement.perimeter_m / 1000, 3)} km</strong></div>}
-                  {measurement.area_m2 !== null && <div className="metric secondary"><span>Square meters</span><strong>{number(measurement.area_m2)} m²</strong></div>}
-                  <p className="analysis-footnote">{measurement.method}. {measurement.note}</p>
-                </>
-              )}
-              {(() => {
-                const temporary = preview ?? (
-                  drawingMode && vertices.length >= 2
-                    ? approximateMeasurement(vertices.length >= 3 && drawingMode !== 'line' && drawingMode !== 'split'
-                      ? { type: 'Polygon', coordinates: [[...vertices, vertices[0]]] }
-                      : { type: 'LineString', coordinates: vertices })
-                    : null
-                );
-                return temporary ? (
-                  <div className="metric preview">
-                    <span>Live estimate · final accuracy after Finish</span>
-                    <strong>{temporary.area_m2 !== null
-                      ? number(temporary.area_m2, 2) + ' m²'
-                      : number(temporary.length_m ?? 0, 2) + ' m'}</strong>
-                  </div>
-                ) : null;
-              })()}
-              {measurement?.area_m2 !== null && measurement?.area_m2 !== undefined && (
-                <div className="area-unit-picker">
-                  <label htmlFor="area-unit">Area unit</label>
-                  <select id="area-unit" value={areaUnit}
-                    onChange={event => setAreaUnit(event.target.value as typeof areaUnit)}>
-                    <option value="m2">Square meters</option>
-                    <option value="ha">Hectares</option>
-                    <option value="km2">Square kilometers</option>
-                    <option value="mu">Mu (亩)</option>
-                  </select>
-                  <strong>{number((measurement.area_m2 ?? 0) /
-                    (areaUnit === 'ha' ? 10000 : areaUnit === 'km2' ? 1000000 : areaUnit === 'mu' ? 2000 / 3 : 1),4)}</strong>
-                </div>
-              )}
-              {geometry && ['Polygon','MultiPolygon','LineString','MultiLineString'].includes(geometry.type) && (
-                <details className="edge-measurements">
-                  <summary>Edge lengths · {previewEdgeLengths(geometry).total} segments</summary>
-                  <div>
-                    {previewEdgeLengths(geometry).edges.map((edge, index) =>
-                      <div key={index}><span>{edge.label}</span><strong>~ {number(edge.length_m,2)} m</strong></div>)}
-                  </div>
-                  <p className="project-hint">Live spherical preview. Final area/perimeter is calculated on the WGS84 ellipsoid.</p>
-                </details>
-              )}
-              {selectedPlace && <p className="data-source">Data: {selectedPlace.source} · {selectedPlace.boundary_status === 'mapped' ? 'Mapped outline' : 'Coordinates only'}</p>}
-              <div className="analysis-actions">
-                <button onClick={exportGeoJSON} disabled={!geometry}><Download size={15} /> Export GeoJSON</button>
-                <button onClick={clearWorkspace}><RotateCcw size={15} /> Clear</button>
-              </div>
-            </div>
-          </section>
-        </div>
-        <div className="sidebar-footer">
-          {capabilities ? <span><Wifi size={14} /> API connected</span> : <span><WifiOff size={14} /> API not connected</span>}
-          <span>No fabricated measurements</span>
-        </div>
-      </aside>
 
-      <main className="main">
-        <div className="map-topbar">
-          <div className="map-title"><span className="map-title-icon"><Layers3 size={18} /></span><div><strong>Explore</strong><span>Interactive map workspace</span></div></div>
-          <div className="map-controls">
-            <button className={!satellite ? 'map-control selected' : 'map-control'} onClick={() => setSatellite(false)}><Globe2 size={16} /> Streets</button>
-            {satelliteAvailable && <button className={satellite ? 'map-control selected' : 'map-control'} onClick={() => setSatellite(true)}><Layers3 size={16} /> Imagery</button>}
           </div>
-        </div>
+        </aside>
+        <main className="main">
         <div className="map-wrap">
           <MapCanvas
             selected={geometry} drawingMode={drawingMode} vertices={vertices}
@@ -1044,8 +746,11 @@ export default function App() {
                 pagedFeatures.find(item=>item.id===id);
               if (feature) openStoredFeature(feature);
             }}
-            focus={focus} satellite={satellite}
-            imageLayer={imageLayer} traceMode={traceMode||promptMode!==null}
+            focus={focus} basemap={basemap}
+            measurement={preview?null:measurement} showMeasurements={showMeasurements}
+            selectedFeatureId={selectedFeatureId}
+            imageLayer={rasterVisible?imageLayer:null} rasterOpacity={rasterOpacity}
+            traceMode={traceMode||promptMode!==null}
             promptPositive={positivePoints} promptNegative={negativePoints}
             promptBox={boxPoints}
             selectionBoxMode={selectionBoxMode}
@@ -1157,8 +862,9 @@ export default function App() {
             }}
             onViewportChange={setViewport}
             onMapClick={position => {
-              const max = ['rectangle','circle','trace-along'].includes(drawingMode ?? '') ? 2 : 4000;
-              setVertices(value => value.length >= max ? value : [...value, position]);
+              if(busy)return;
+              const max=drawingMode==='point'?1:['rectangle','circle','trace-along'].includes(drawingMode??'')?2:4000;
+              setVertices(value=>value.length>=max||(value.length>0&&value[value.length-1][0]===position[0]&&value[value.length-1][1]===position[1])?value:[...value,position]);
             }}
           />
           <div className="map-legend">
@@ -1188,15 +894,351 @@ export default function App() {
               Cancel
             </button>
           </div>}
-          <div className="map-hint"><MousePointer2 size={15} /> {pendingAnnotation ? 'Click map to place a permanent label' :
-            traceMode ? 'Click imported imagery to trace a region' : drawingMode ? 'Click corners, then Finish' : editing ? 'Drag handles or use Move. Right-click corner to delete.' : 'Pan, zoom, or choose a result'}</div>
-          <div className="map-badge"><span className="live-dot" /> WGS84 GEODESIC ENGINE</div>
         </div>
-        <div className="bottom-bar">
-          <span><Compass size={14} /> Coordinate-based analysis</span>
-          <span><Globe2 size={14} /> OpenStreetMap contributors</span>
-        </div>
-      </main>
+
+        </main>
+        <aside className="gis-inspector" hidden={!showTools}>
+          <div className="dock-heading"><Compass size={15}/> Inspector</div>
+          <div className="sidebar-scroll">
+          <section className="panel-section results-summary">
+            <div className="section-heading"><Compass size={16} /><span>Analysis</span></div>
+            <div className="analysis-card">
+              
+              {measurement && !preview && (
+                <>
+                  <div className="metric">
+                    <span>{measurement.area_m2 !== null ? 'Geographic area' : 'Distance'}</span>
+                    <strong>{measurement.area_km2 !== null
+                      ? number(measurement.area_km2, 4) + ' km²'
+                      : measurement.length_m !== null ? number(measurement.length_m / 1000, 3) + ' km' : 'Location only'}</strong>
+                  </div>
+                  {measurement.perimeter_m !== null && <div className="metric secondary"><span>Perimeter</span><strong>{number(measurement.perimeter_m / 1000, 3)} km</strong></div>}
+                  {measurement.area_m2 !== null && <div className="metric secondary"><span>Square meters</span><strong>{number(measurement.area_m2)} m²</strong></div>}
+                  <p className="analysis-footnote">{measurement.method}</p>
+                </>
+              )}
+              {(() => {
+                const temporary = preview ?? (
+                  drawingPreview(drawingMode,vertices)?approximateMeasurement(drawingPreview(drawingMode,vertices)!):null
+                );
+                return temporary ? (
+                  <div className="metric preview">
+                    <span>Live estimate · final accuracy after Finish</span>
+                    <strong>{temporary.area_m2 !== null
+                      ? number(temporary.area_m2, 2) + ' m²'
+                      : number(temporary.length_m ?? 0, 2) + ' m'}</strong>
+                  </div>
+                ) : null;
+              })()}
+              {measurement?.area_m2 !== null && measurement?.area_m2 !== undefined && (
+                <div className="area-unit-picker">
+                  <label htmlFor="area-unit">Area unit</label>
+                  <select id="area-unit" value={areaUnit}
+                    onChange={event => setAreaUnit(event.target.value as typeof areaUnit)}>
+                    <option value="m2">Square meters</option>
+                    <option value="ha">Hectares</option>
+                    <option value="km2">Square kilometers</option>
+                    <option value="mu">Mu (亩)</option>
+                  </select>
+                  <strong>{number((measurement.area_m2 ?? 0) /
+                    (areaUnit === 'ha' ? 10000 : areaUnit === 'km2' ? 1000000 : areaUnit === 'mu' ? 2000 / 3 : 1),4)}</strong>
+                </div>
+              )}
+              {geometry && ['Polygon','MultiPolygon','LineString','MultiLineString'].includes(geometry.type) && (
+                <details className="edge-measurements">
+                  <summary>Edge lengths · {previewEdgeLengths(geometry).total} segments</summary>
+                  <div>
+                    {previewEdgeLengths(geometry).edges.map((edge, index) =>
+                      <div key={index}><span>{edge.label}</span><strong>{!preview&&measurement?.edge_lengths_m?.[index]!==undefined?'':'~ '}{number(!preview?(measurement?.edge_lengths_m?.[index]??edge.length_m):edge.length_m,2)} m</strong></div>)}
+                  </div>
+                  <p className="project-hint">Live spherical preview. Final area/perimeter is calculated on the WGS84 ellipsoid.</p>
+                </details>
+              )}
+              {selectedPlace && <p className="data-source">Data: {selectedPlace.source} · {selectedPlace.boundary_status === 'mapped' ? 'Mapped outline' : 'Coordinates only'}</p>}
+              <div className="analysis-actions">
+                <button onClick={exportGeoJSON} disabled={!geometry}><Download size={15} /> Export GeoJSON</button>
+                <button onClick={clearWorkspace}><RotateCcw size={15} /> Clear</button>
+              </div>
+            </div>
+          </section>
+
+          <section id="tools-survey" className="panel-section">
+            <div className="section-heading"><Pencil size={16} /><span>Survey & geometry editor</span><span className="section-pill">Precision</span></div>
+            <SurveyTools
+              toolbarTarget={toolbarTarget} busy={busy} locked={selectedLocked}
+              mode={drawingMode}
+              geometry={geometry}
+              points={vertices}
+              editing={editing}
+              moving={moving}
+              snapping={snapping}
+              linked={linked}
+              onLinked={enabled=>{
+                if(enabled&&!selectedFeatureId){
+                  setError('Open a saved feature to use linked vertex editing.');
+                  return;
+                }
+                setLinked(enabled);setPendingShared(null);
+              }}
+              canUndo={timeline.current.canUndo && historyPulse >= 0}
+              canRedo={timeline.current.canRedo && historyPulse >= 0}
+              saved={activeProjectId ? projectWorkspace?.features ?? [] : []}
+              onStart={startDrawing}
+              onFinish={() => { if(!busy)void finishDrawing(); }}
+              onCancel={() => { geometrySequence.current++; setDrawingMode(null); setVertices([]); }}
+              onUndoPoint={() => setVertices(value => value.slice(0,-1))}
+              onUndo={() => applyHistory(timeline.current.undo())}
+              onRedo={() => applyHistory(timeline.current.redo())}
+              onEdit={(active, shouldMove) => {
+                if (selectedLocked) {
+                  setError('Unlock the feature layer before editing.');
+                } else {
+                  setEditing(active); setMoving(shouldMove);
+                  setDrawingMode(null); setVertices([]);setTraceMode(false);setPromptMode(null);setPendingAnnotation(null);setSelectionBoxMode(false);setLabelMoveMode(false);
+                }
+              }}
+              onSnapping={setSnapping}
+              onAddPoint={point => {
+                if(drawingMode)setVertices(value=>value.length>=(drawingMode==='point'?1:['rectangle','circle','trace-along'].includes(drawingMode)?2:4000)?value:[...value,point]);
+                else void numericShape('point',{vertices:[point]});
+              }}
+              onNumeric={(mode, body) => { void numericShape(mode, body); }}
+              onOverlay={(mode, featureId) => { void combineWith(mode,featureId); }}
+              onDuplicate={() => {
+                if (geometry) {
+                  setSelectedFeatureId(null);
+                  setGeometrySource('Copied from current geometry');
+                  void commitGeometry(structuredClone(geometry), 'Copied geometry. Save as a separate feature.',true);
+                }
+              }}
+            />
+ 
+            {pendingShared && <div className="linked-preview">
+              <strong>Shared boundary preview · {pendingShared.preview.count} features</strong>
+              {pendingShared.preview.affected.map(item=><div key={item.id}>
+                {item.name} · r{item.revision}
+                {item.locked?' · LOCKED':''}{!item.valid?' · INVALID':''}
+              </div>)}
+              <div className="survey-action-bar">
+                <button onClick={()=>{
+                  setGeometry(lastValid.current);setPendingShared(null);setPreview(null);
+                }}>Cancel</button>
+                <button disabled={busy||pendingShared.preview.affected.some(x=>x.locked||!x.valid)}
+                  onClick={async()=>{
+                    if(!activeProjectId)return;
+                    setBusy(true);setError('');
+                    try{
+                      const expected=Object.fromEntries(pendingShared.preview.affected.map(item=>
+                        [item.id,item.revision]));
+                      await applyTopology(activeProjectId,pendingShared.old,pendingShared.next,expected);
+                      const updated=await getWorkspace(activeProjectId);
+                      if(!projectCurrent())return;
+                      setProjectWorkspace(updated);
+                      const reopened=updated.features.find(item=>item.id===selectedFeatureId);
+                      if(reopened)openStoredFeature(reopened);
+                      setPendingShared(null);setRefreshToken(v=>v+1);
+                    }catch(failure){
+                      setError(failure instanceof Error?failure.message:'Linked edit failed.');
+                      setGeometry(lastValid.current);setPendingShared(null);
+                    }finally{setBusy(false);}
+                  }}>Apply to all linked features</button>
+              </div>
+            </div>}
+         </section>
+
+
+          <section id="tools-raster" className="panel-section">
+            <div className="section-heading"><Layers3 size={16} /><span>Georeferenced imagery</span></div>
+            <RasterPanel
+              asset={imageLayer}
+              onSelect={(asset) => {
+                geometrySequence.current++;
+                setImageLayer(asset);setRasterVisible(true);
+                setTraceMode(false);
+                setPromptMode(null);setPositivePoints([]);setNegativePoints([]);setBoxPoints([]);
+                const [west, south, east, north] = asset.bbox;
+                setFocus({
+                  longitude: (west + east) / 2, latitude: (south + north) / 2,
+                  bbox: asset.bbox, key: Date.now(),
+                });
+                setMessage('Loaded georeferenced image ' + asset.name + '. Click automatic outline to select an object.');
+              }}
+              tracing={traceMode}
+              onTracing={(enabled) => {
+                setTraceMode(enabled);
+                if (enabled) {setRasterVisible(true);setDrawingMode(null);setVertices([]);setEditing(false);setMoving(false);setPendingAnnotation(null);setSelectionBoxMode(false);setLabelMoveMode(false);setPromptMode(null);}
+              }}
+              settings={traceSettings}
+              onSettings={setTraceSettings}
+              viewport={viewport}
+            />
+            <GeoAIAnalysisPanel
+              key={activeProjectId ?? 'no-project'}
+              projectId={activeProjectId}
+              image={imageLayer}
+              onPreview={value=>{if(projectCurrent())setExternalFeatures(value);}}
+              onSaved={()=>setRefreshToken(value=>value+1)}
+            />
+ 
+            <ImageCorrectionPanel
+              enabled={Boolean(imageLayer)}
+              mode={promptMode}
+              onMode={mode=>{
+                setRasterVisible(true);setPromptMode(mode);setTraceMode(false);setDrawingMode(null);setEditing(false);setMoving(false);setPendingAnnotation(null);setSelectionBoxMode(false);setLabelMoveMode(false);
+              }}
+              positive={positivePoints}
+              negative={negativePoints}
+              box={boxPoints}
+              busy={busy}
+              onClear={()=>{
+                setPositivePoints([]);setNegativePoints([]);
+                setBoxPoints([]);setPromptMode(null);
+              }}
+              onRefine={async()=>{
+                if(!imageLayer||positivePoints.length===0||busy)return;
+                const sequence=++geometrySequence.current;
+                setBusy(true);setError('');
+                try{
+                  const refined=await refineRaster({
+                    image_id:imageLayer.id,positive_points:positivePoints,
+                    negative_points:negativePoints,
+                    box:boxPoints.length===2?boxPoints:null,
+                    window_size:traceSettings.window_size,
+                  });
+                  if(sequence!==geometrySequence.current)return;
+                  setGeometry(refined.geometry);
+                  lastValid.current=structuredClone(refined.geometry);
+                  timeline.current.push(refined.geometry);
+                  setHistoryPulse(x=>x+1);
+                  setMeasurement(refined.measurement);
+                  setSelectedFeatureId(null);setEditing(false);
+                  setGeometrySource('Local SAM 2 refinement · '+imageLayer.name);
+                  setFeatureProperties({
+                    source_type:'image_derived',image_id:imageLayer.id,
+                    model_id:refined.model_id,method:'sam2-prompt-refinement',
+                    positive_count:refined.positive_count,
+                    negative_count:refined.negative_count,
+                    box_used:refined.box_used,
+                    quality:'requires_user_review',
+                  });
+                  setPromptMode(null);
+                  setMessage(refined.warning);
+                }catch(failure){
+                  setError(failure instanceof Error?failure.message:'SAM 2 refinement unavailable.');
+                }finally{setBusy(false);}
+              }}
+            />
+         </section>
+
+
+          <section id="tools-gis" className="panel-section">
+            <div className="section-heading"><Layers3 size={16}/><span>Professional GIS tools</span></div>
+            <ProfessionalPanel
+              key={activeProjectId ?? 'no-project'}
+              projectId={activeProjectId}
+              workspace={projectWorkspace}
+              geometry={geometry}
+              raster={imageLayer}
+              refreshToken={refreshToken}
+              onRefresh={()=>setRefreshToken(v=>v+1)}
+              onOpen={id=>{
+                const feature=projectWorkspace?.features.find(item=>item.id===id);
+                if(feature)openStoredFeature(feature);
+              }}
+            />
+          </section>
+
+          <section id="tools-spatial" className="panel-section">
+            <div className="section-heading"><Layers3 size={16}/><span>GIS selection, QA & print layout</span></div>
+            <SpatialToolsPanel
+              key={activeProjectId ?? 'no-project'}
+              projectId={activeProjectId}
+              geometry={geometry}
+              viewport={viewport}
+              selectedIds={spatialSelected}
+              onSelected={value=>{if(projectCurrent())setSpatialSelected(value);}}
+              boxMode={selectionBoxMode}
+              onBoxMode={active=>{
+                setSelectionBoxMode(active);
+                if(active){
+                  setDrawingMode(null);setEditing(false);
+                  setMoving(false);setTraceMode(false);setPromptMode(null);
+                  setPendingAnnotation(null);
+                }
+              }}
+              box={selectionBox}
+              onBox={value=>{if(projectCurrent())setSelectionBox(value);}}
+              onIssues={value=>{if(projectCurrent())setQualityIssues(value);}}
+              onOpen={id=>{
+                const item=projectWorkspace?.features.find(f=>f.id===id);
+                if(item)openStoredFeature(item);
+              }}
+            />
+          </section>
+
+          <section id="tools-style" className="panel-section">
+            <div className="section-heading"><Layers3 size={16}/><span>Advanced cartography & EPSG</span></div>
+            <CartographyProPanel
+              key={activeProjectId ?? 'no-project'}
+              projectId={activeProjectId}
+              workspace={projectWorkspace}
+              viewport={viewport}
+              selectedGeometry={geometry}
+              onChanged={()=>setRefreshToken(v=>v+1)}
+              onGrid={value=>{if(projectCurrent())setProjectGrid(value);}}
+              labelMoveMode={labelMoveMode}
+              onLabelMoveMode={active=>{
+                setLabelMoveMode(active);
+                if(active){
+                  setSelectionBoxMode(false);setTraceMode(false);
+                  setDrawingMode(null);setEditing(false);setMoving(false);
+                  setPromptMode(null);setPendingAnnotation(null);
+                }
+              }}
+            />
+          </section>
+
+          <section id="tools-services" className="panel-section">
+            <div className="section-heading"><Layers3 size={16}/><span>OGC, indexed stores & background jobs</span></div>
+            <DataServicesPanel
+              key={activeProjectId ?? 'no-project'}
+              projectId={activeProjectId}
+              viewport={viewport}
+              drawnGeometry={geometry}
+              onTiles={value=>{if(projectCurrent())setExternalTiles(value);}}
+              onPreview={value=>{if(projectCurrent())setExternalFeatures(value);}}
+              onPage={value=>{if(projectCurrent())setPagedFeatures(value);}}
+              onRefresh={()=>setRefreshToken(value=>value+1)}
+            />
+          </section>
+
+
+          <section id="tools-ai" className="panel-section">
+            <div className="section-heading"><Sparkles size={16} /><span>Ask GeoFathom</span><span className="section-pill">Assistant</span></div>
+            <ModelControls modelId={modelId} onChange={setModelId} />
+            <form onSubmit={runAssistant} className="prompt-form">
+              <textarea aria-label="Ask the geospatial assistant" placeholder="Measure Shanghai Hongqiao Airport's mapped boundary…" value={prompt}
+                onChange={event => setPrompt(event.target.value)} maxLength={500} rows={3} />
+              <div className="prompt-footer">
+                <span>{modelUsed === null ? 'Selected model / GIS fallback' : modelUsed ? 'AI parsed the request' : 'GIS fallback interpretation'}</span>
+                <button type="submit" disabled={busy || prompt.trim().length < 2}>
+                  <Send size={15} /> Run
+                </button>
+              </div>
+            </form>
+            {assistantQuery && <div className="last-prompt">“{assistantQuery}” <span>{modelUsed ? 'AI parsed' : 'Rules parsed'}</span></div>}
+            {toolSteps.length > 0 && <div className="tool-trace"><strong>Execution trace</strong><span>{toolSteps.join(' → ')}</span></div>}
+          </section>
+
+
+            <ApiAccessPanel/>
+          </div>
+        </aside>
+      </div>
+      <footer className="gis-status" role="status">
+        <span>{error?<span className="error">{error}</span>:busy?'Processing…':message}</span>
+        <span>{drawingMode?'Draw · '+drawingMode:editing?(moving?'Move feature':'Edit vertices'):'Select / pan'} · WGS84</span>
+      </footer>
     </div>
   );
 }
