@@ -48,6 +48,8 @@ jobs:
           GEOFATHOM_STRESS_MILLION_SEGMENTS: '1'
           GEOFATHOM_REQUIRE_REAL_ONNX: '1'
         run: python scripts/run_acceptance.py -q --cov --cov-branch --cov-report=term-missing --cov-report=xml:coverage.xml --cov-report=json:coverage.json --junitxml=build/python-junit.xml
+      - name: Preserve raw Python coverage data
+        run: cp .coverage coverage-data.bin
       - name: Native compute soak and performance smoke gate
         run: python benchmarks/soak.py --seconds 10 --output native-soak.json
       - name: Upload native soak result
@@ -65,6 +67,7 @@ jobs:
             coverage.xml
             coverage.json
             build/python-junit.xml
+            coverage-data.bin
           retention-days: 14
 
   native-coverage:
@@ -162,6 +165,8 @@ jobs:
         env:
           GEOFATHOM_REQUIRE_NATIVE: '1'
         run: python scripts/run_acceptance.py -q --cov --cov-branch --cov-report=xml:coverage.xml --cov-report=json:coverage.json --junitxml=build/windows-junit.xml
+      - name: Preserve raw Windows coverage data
+        run: Copy-Item .coverage coverage-data.bin
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -170,6 +175,7 @@ jobs:
             coverage.xml
             coverage.json
             build/windows-junit.xml
+            coverage-data.bin
 
 
   postgis:
@@ -200,6 +206,8 @@ jobs:
         run: python -m pip install -c requirements/postgis.lock -e ".[dev,postgis]"
       - name: Test real PostGIS sync, GiST indexed query and revision
         run: python scripts/run_acceptance.py -v --cov --cov-branch --cov-report=xml:coverage.xml --cov-report=json:coverage.json --junitxml=postgis-junit.xml tests/test_postgis.py tests/test_distributed.py
+      - name: Preserve raw PostGIS coverage data
+        run: cp .coverage coverage-data.bin
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -208,3 +216,35 @@ jobs:
             coverage.xml
             coverage.json
             postgis-junit.xml
+            coverage-data.bin
+
+
+  quality-measurement:
+    needs: [python, windows, postgis, native-coverage, web]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: geofathom-*-coverage
+          path: reports
+      - name: Combine Python line and branch execution across platforms
+        run: |
+          python -m pip install "coverage==7.17.4"
+          python -m coverage combine --keep reports/geofathom-python-coverage/coverage-data.bin reports/geofathom-windows-coverage/coverage-data.bin reports/geofathom-postgis-coverage/coverage-data.bin
+          python -m coverage json -o combined-coverage.json
+          python -m coverage xml -o combined-coverage.xml
+      - name: Record quality targets without falsely qualifying the release
+        run: |
+          python scripts/quality_report.py --python combined-coverage.json --native reports/geofathom-native-coverage/native-coverage.xml --web reports/geofathom-web-coverage/coverage-summary.json --output quality.json --report-only
+          cat quality.json >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: geofathom-combined-quality
+          path: |
+            combined-coverage.json
+            combined-coverage.xml
+            quality.json

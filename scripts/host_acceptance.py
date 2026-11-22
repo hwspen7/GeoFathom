@@ -4,6 +4,7 @@ Uses an isolated report directory and disposable PostGIS container by default.
 No Python packages, GPU drivers or system tooling are silently installed.
 """
 import argparse
+import hashlib
 import json
 import os
 import platform
@@ -49,14 +50,83 @@ def build_native(directory, env, cuda=False):
     configs = ["Release"] if cuda else ["Release", "Debug"]
     for config in configs:
         run(["cmake", "--build", directory, "--config", config, "--parallel"], env)
-        run(["ctest", "--test-dir", directory, "-C", config, "--output-on-failure", "--no-tests=error"], env)
+        run(["ctest", "--test-dir", directory, "-C", config, "--output-on-failure",
+             "--no-tests=error", "--output-log", directory / f"ctest-{config}.log"], env)
         if config == "Debug":
             run(["ctest", "--test-dir", directory, "-C", config, "--output-on-failure",
-                 "--no-tests=error", "--repeat", "until-fail:20"], env)
+                 "--no-tests=error", "--repeat", "until-fail:20", "--output-log",
+                 directory / "ctest-Debug-repeat.log"], env)
     dll = directory / "Release" / "geofathom_native.dll"
     if not dll.is_file():
         raise RuntimeError("Expected x64 Release native DLL missing.")
     return str(dll)
+
+
+def sha256_file(path):
+    digest=hashlib.sha256()
+    with Path(path).open("rb") as stream:
+        for block in iter(lambda:stream.read(1024*1024),b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def save_report(out, report):
+    temp=out/"acceptance.json.tmp"
+    temp.write_text(json.dumps(report,indent=2),encoding="utf-8")
+    temp.replace(out/"acceptance.json")
+
+
+def stage_files(device):
+    files=[f"native-{device}/Release/geofathom_native.dll",
+           f"native-{device}/ctest-Release.log",f"{device}-soak.json"]
+    if device=="cpu":
+        files.extend(["native-cpu/ctest-Debug.log","native-cpu/ctest-Debug-repeat.log"])
+    return files
+
+
+def verify_resume_metadata(prior,current):
+    if prior.get("tracked_tree_dirty") is not False or current.get("tracked_tree_dirty") is not False:
+        raise ValueError("Resume requires clean source trees.")
+    for key in ("git_commit","platform","gpu","cpu","logical_cpu_count",
+                "python_version","package_versions","soak_seconds_per_device","toolchain"):
+        if key not in prior or prior[key]!=current.get(key):
+            raise ValueError(f"Resume run is incompatible: {key}")
+
+
+def restore_native_stage(previous,out,prior,device):
+    expected=prior.get("native_checkpoints",{}).get(device)
+    if not expected:
+        return False
+    files=stage_files(device)
+    if set(expected)!=set(files):
+        raise ValueError("Incomplete native checkpoint evidence.")
+    for name in files:
+        source=previous/name
+        if not source.is_file() or sha256_file(source)!=expected[name]:
+            raise ValueError(f"Invalid native checkpoint artifact: {name}")
+    soak=json.loads((previous/f"{device}-soak.json").read_text(encoding="utf-8"))
+    if (soak.get("passed") is not True or soak.get("device")!=device
+            or soak.get("seconds",0)<prior["soak_seconds_per_device"]):
+        raise ValueError("Native checkpoint soak did not pass.")
+    for name in files:
+        target=out/name
+        target.parent.mkdir(parents=True,exist_ok=True)
+        shutil.copy2(previous/name,target)
+    return True
+
+
+def native_stage(device,out,env,report,seconds,previous=None,prior=None):
+    resumed=bool(previous and restore_native_stage(previous,out,prior,device))
+    if resumed:
+        report.setdefault("resumed_stages",[]).append(device)
+    else:
+        env["GEOFATHOM_NATIVE_LIBRARY"]=build_native(out/f"native-{device}",env,cuda=device=="cuda")
+        run([sys.executable,"benchmarks/soak.py","--seconds",seconds,
+             "--device",device,"--output",out/f"{device}-soak.json"],env)
+    env["GEOFATHOM_NATIVE_LIBRARY"]=str(out/f"native-{device}"/"Release"/"geofathom_native.dll")
+    report.setdefault("native_checkpoints",{})[device]={name:sha256_file(out/name) for name in stage_files(device)}
+    report["stages"].append(f"{device.upper()} native and soak")
+    save_report(out,report)
 
 
 def start_postgis(docker, name, env, state):
@@ -105,6 +175,8 @@ def main():
                         help="Use the explicitly configured disposable GEOFATHOM_TEST_POSTGIS_DSN")
     parser.add_argument("--skip-web", action="store_true")
     parser.add_argument("--baseline", type=Path, help="Previous host acceptance report directory")
+    parser.add_argument("--resume", type=Path,
+                        help="Reuse hash-verified native checkpoints from a compatible run")
     parser.add_argument("--max-regression-percent", type=float, default=15)
     args = parser.parse_args()
     if not 0 <= args.max_regression_percent <= 50:
@@ -158,7 +230,7 @@ def main():
         if not shutil.which("nvcc", path=env["PATH"]):
             raise RuntimeError("CUDA compiler nvcc is not available on the configured PATH.")
         report["git_commit"] = run(["git", "rev-parse", "HEAD"], env, capture=True).stdout.strip()
-        report["tracked_tree_dirty"] = bool(run(["git", "status", "--porcelain", "--untracked-files=no"],
+        report["tracked_tree_dirty"] = bool(run(["git", "status", "--porcelain", "--untracked-files=all"],
             env, capture=True).stdout.strip())
         report["platform"] = platform.platform()
         report["cpu"] = platform.processor()
@@ -176,14 +248,18 @@ def main():
         if "4070 Ti SUPER" not in gpu:
             raise RuntimeError("Expected RTX 4070 Ti SUPER was not detected.")
         report["gpu"] = gpu.strip()
-        env["GEOFATHOM_NATIVE_LIBRARY"] = build_native(out / "native-cpu", env)
-        run([python, "benchmarks/soak.py", "--seconds", args.soak_seconds,
-             "--device", "cpu", "--output", out / "cpu-soak.json"], env)
-        report["stages"].append("CPU native and soak")
-        env["GEOFATHOM_NATIVE_LIBRARY"] = build_native(out / "native-cuda", env, cuda=True)
-        run([python, "benchmarks/soak.py", "--seconds", args.soak_seconds,
-             "--device", "cuda", "--output", out / "cuda-soak.json"], env)
-        report["stages"].append("CUDA native and soak")
+        report["toolchain"]={
+            "nvcc":run(["nvcc","--version"],env,capture=True).stdout.strip(),
+            "cmake":run(["cmake","--version"],env,capture=True).stdout.strip(),
+            "driver":run(["nvidia-smi","--query-gpu=driver_version","--format=csv,noheader"],env,capture=True).stdout.strip(),
+        }
+        previous=args.resume.resolve(strict=True) if args.resume else None
+        prior=json.loads((previous/"acceptance.json").read_text(encoding="utf-8")) if previous else None
+        if prior is not None:
+            verify_resume_metadata(prior,report)
+            report["resume_from"]=str(previous)
+        for device in ("cpu","cuda"):
+            native_stage(device,out,env,report,args.soak_seconds,previous,prior)
         run([python, "scripts/acceptance_model.py", "--directory", out / "models",
              "--output", out / "strict-gpu.json"], env)
         benchmark_env = {**env, "GEOFATHOM_VISION_DEVICE_POSTPROCESS": "1",
@@ -245,7 +321,7 @@ def main():
             except subprocess.CalledProcessError:
                 report["passed"] = False
                 report["cleanup_failed"] = True
-        (out / "acceptance.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
+        save_report(out,report)
         print("Report:", out / "acceptance.json", flush=True)
     if not report["passed"]:
         raise SystemExit(1)

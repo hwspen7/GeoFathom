@@ -64,6 +64,8 @@ def main():
     parser.add_argument("--native", type=Path, required=True)
     parser.add_argument("--web", type=Path, required=True)
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--report-only", action="store_true",
+                        help="Collect CI measurements without asserting release qualification")
     args = parser.parse_args()
     py, native, web = python_coverage(args.python), native_coverage(args.native), frontend_coverage(args.web)
     checks = {"python_statements_95": py["statements"] >= 95,
@@ -76,7 +78,7 @@ def main():
     if args.output:
         args.output.write_text(data, encoding="utf-8")
     print(data)
-    if not result["passed"]:
+    if not result["passed"] and not args.report_only:
         raise SystemExit(1)
 
 

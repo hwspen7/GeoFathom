@@ -39,3 +39,7 @@ source = ["geometry", "storage", "terrain", "vision", "jobs", "core", "imagery",
 [tool.coverage.report]
 show_missing = true
 precision = 2
+
+
+[tool.coverage.paths]
+source = [".", "*/GeoFathom", '*\GeoFathom']

@@ -245,3 +245,21 @@ The probe verifies the actual broker-assigned node and real raster counts
 from the shared content-addressed archive. Physical separation is an
 operator-established fact, not something a hostname string proves.
 The test suite also runs a separate worker interpreter on one host.
+
+
+### Resuming long native acceptance safely
+
+Every completed native CPU/CUDA stage records hashes of the exact Release DLL,
+CTest logs and passed soak result. To reuse those stages after an unrelated
+later failure, pass `--resume <previous-run-directory>` with the same
+`--soak-seconds`. Source commit, clean tree, hardware, toolchain, dependency
+versions and artifact hashes must match. A fresh report directory is always
+created; database, synthetic GPU inference and web checks are rerun, and a
+missing native stage is executed from scratch. Do not resume after source or
+driver changes.
+
+The CI quality-measurement job merges the raw Linux, Windows and live PostGIS
+Python coverage data, not percentages. It publishes the combined XML/JSON and
+the measured target verdicts. The report-only flag does not qualify a release;
+the standalone strict quality gate (without that flag) exits nonzero if any
+target is unmet.

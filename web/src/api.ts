@@ -57,22 +57,31 @@ export function setApiAccessToken(token: string): void {
   else window.sessionStorage.removeItem('geofathom-api-token');
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const headers = new Headers(init?.headers);
+// Every protected API operation, including binary downloads and DELETEs,
+ // uses the same session-scoped credential. Never put credentials into URLs.
+function sessionHeaders(initial?: HeadersInit): Headers {
+  const headers = new Headers(initial);
   const key = typeof window !== 'undefined'
     ? window.sessionStorage.getItem('geofathom-api-token') : null;
   if (key) headers.set('X-GeoFathom-API-Key', key);
-  const response = await fetch(API_URL + path, {...init, headers});
-  if (!response.ok) {
-    let detail = 'Request failed';
-    try {
-      const error = (await response.json()) as { detail?: unknown };
-      if (typeof error.detail === 'string') detail = error.detail;
-    } catch {
-      detail = response.statusText || detail;
-    }
-    throw new Error(detail);
+  return headers;
+}
+async function rawRequest(path: string, init?: RequestInit): Promise<Response> {
+  return fetch(API_URL + path, {...init, headers: sessionHeaders(init?.headers)});
+}
+async function responseError(response: Response, fallback = 'Request failed'): Promise<Error> {
+  let detail = fallback;
+  try {
+    const error = (await response.json()) as { detail?: unknown };
+    if (typeof error?.detail === 'string') detail = error.detail;
+  } catch {
+    detail = response.statusText || detail;
   }
+  return new Error(detail);
+}
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await rawRequest(path, init);
+  if (!response.ok) throw await responseError(response);
   return (await response.json()) as T;
 }
 
@@ -308,10 +317,7 @@ export function rasterPreviewUrl(asset: RasterAsset): string {
 
 /** Fetch protected imagery with the session credential; caller revokes blob URL. */
 export async function protectedRasterPreview(asset: RasterAsset): Promise<string> {
-  const key = window.sessionStorage.getItem('geofathom-api-token');
-  const headers = new Headers();
-  if (key) headers.set('X-GeoFathom-API-Key', key);
-  const response = await fetch(rasterPreviewUrl(asset), {headers});
+  const response = await rawRequest(asset.preview_url);
   if (!response.ok) throw new Error('The image preview requires server access.');
   return URL.createObjectURL(await response.blob());
 }
@@ -575,11 +581,8 @@ export async function importVectorFile(projectId:string,file:File,layerId?:strin
 export async function exportVectorFile(
   projectId:string,format:'geojson'|'gpkg'|'kml'|'gpx'|'shapefile',
 ):Promise<void> {
-  const response=await fetch(API_URL+'/projects/'+encodeURIComponent(projectId)+'/vector/export/'+format);
-  if(!response.ok) {
-    const error=await response.json() as {detail?:string};
-    throw new Error(error.detail || 'GIS export failed.');
-  }
+  const response=await rawRequest('/projects/'+encodeURIComponent(projectId)+'/vector/export/'+format);
+  if(!response.ok) throw await responseError(response, 'GIS export failed.');
   const blob=await response.blob();
   const filename=response.headers.get('Content-Disposition')?.match(/filename="([^"]+)"/)?.[1]
     ?? 'geofathom-'+format;
@@ -663,12 +666,9 @@ export function addMapAnnotation(
 
 
 export async function deleteProjectFeature(projectId:string,featureId:string):Promise<void> {
-  const response=await fetch(API_URL+'/projects/'+encodeURIComponent(projectId)+
+  const response=await rawRequest('/projects/'+encodeURIComponent(projectId)+
     '/features/'+encodeURIComponent(featureId),{method:'DELETE'});
-  if(!response.ok){
-    const error=await response.json() as {detail?:string};
-    throw new Error(error.detail||'Could not delete the selected map feature.');
-  }
+  if(!response.ok) throw await responseError(response, 'Could not delete the selected map feature.');
 }
 
 
@@ -719,15 +719,10 @@ export async function downloadMapPDF(projectId:string,settings:{
   show_grid:boolean;show_legend:boolean;
   layer_ids:string[]|null;
 }):Promise<void>{
-  const response=await fetch(API_URL+'/projects/'+encodeURIComponent(projectId)+'/print/pdf',{
+  const response=await rawRequest('/projects/'+encodeURIComponent(projectId)+'/print/pdf',{
     method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(settings),
   });
-  if(!response.ok){
-    let error='Map layout could not be rendered';
-    try{const data=await response.json() as {detail?:string};
-      error=data.detail||error;}catch{ /* Keep generic message. */ }
-    throw new Error(error);
-  }
+  if(!response.ok) throw await responseError(response, 'Map layout could not be rendered');
   const blob=await response.blob();
   const url=URL.createObjectURL(blob);
   try{
@@ -831,7 +826,7 @@ export function registerOGCSource(projectId:string,source:NewOGCSource,
   });
 }
 export async function removeOGCSource(projectId:string,sourceId:string,token:string):Promise<void>{
-  const response=await fetch(API_URL+'/projects/'+encodeURIComponent(projectId)+
+  const response=await rawRequest('/projects/'+encodeURIComponent(projectId)+
     '/ogc/'+encodeURIComponent(sourceId),{
     method:'DELETE',headers:{'X-GeoFathom-Admin-Token':token},
   });
@@ -936,11 +931,8 @@ export function cancelGISJob(projectId:string,id:string):Promise<GISJob>{
     encodeURIComponent(id)+'/cancel',{method:'POST'});
 }
 export async function downloadGISJob(projectId:string,id:string):Promise<void>{
-  const headers = new Headers();
-  const access = window.sessionStorage.getItem('geofathom-api-token');
-  if (access) headers.set('X-GeoFathom-API-Key', access);
-  const response=await fetch(API_URL+'/projects/'+encodeURIComponent(projectId)+
-    '/jobs/'+encodeURIComponent(id)+'/download',{headers});
+  const response=await rawRequest('/projects/'+encodeURIComponent(projectId)+
+    '/jobs/'+encodeURIComponent(id)+'/download');
   if(!response.ok)throw new Error('Completed GeoJSON export job required.');
   const url=URL.createObjectURL(await response.blob());
   try{
