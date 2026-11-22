@@ -370,6 +370,7 @@ export default function App() {
       setError('Add more points before finishing.');
       return;
     }
+    const sequence=++geometrySequence.current;
     setBusy(true); setError('');
     try {
       let result: GeoJSON.Geometry;
@@ -379,6 +380,7 @@ export default function App() {
           .filter(feature=>feature.geometry.type==='LineString'||feature.geometry.type==='MultiLineString')
           .flatMap(feature=>pathsOf(feature.geometry));
         const traced=await traceExisting(vertices[0],vertices[1],paths);
+        if(sequence!==geometrySequence.current)return;
         result=traced.geometry;
         measured=traced.measurement;
         setSelectedFeatureId(null);
@@ -410,12 +412,14 @@ export default function App() {
         result = cut.geometry; measured = cut.measurement;
       } else if (mode === 'split' && geometry) {
         const divided = await editPair('split',geometry,result);
+        if(sequence!==geometrySequence.current)return;
         setSplitParts(divided.features.map(item => item.geometry));
         setDiscovered([]);
         result = divided.features[0].geometry;
         measured = divided.features[0].measurement;
         setSelectedFeatureId(null);
       }
+      if(sequence!==geometrySequence.current)return;
       setGeometry(result);
       lastValid.current = structuredClone(result);
       timeline.current.push(result);
@@ -426,19 +430,22 @@ export default function App() {
         ? 'Polygon divided. Save all pieces from Projects & saved geometry.'
         : 'Drawing completed and measured on the WGS84 ellipsoid.');
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : 'Drawing failed.');
+      if(sequence===geometrySequence.current)
+        setError(failure instanceof Error ? failure.message : 'Drawing failed.');
     } finally { setBusy(false); }
   }
 
   async function numericShape(mode: string, body: {
     vertices: Position[]; radius_m?: number; bearing_deg?: number; length_m?: number;
   }) {
+    const sequence=++geometrySequence.current;
     setBusy(true); setError('');
     try {
       const created = await constructGeometry({
         mode: mode as 'rectangle' | 'circle' | 'bearing',
         ...body,
       });
+      if(sequence!==geometrySequence.current)return;
       setSelectedFeatureId(null);
       setGeometrySource('Numeric geodesic construction');
       setFeatureProperties({ source_type:'numeric', mode });
@@ -451,9 +458,11 @@ export default function App() {
   async function combineWith(mode: 'union' | 'difference' | 'intersection', featureId: string) {
     const other = projectWorkspace?.features.find(item => item.id === featureId);
     if (!geometry || !other) return;
+    const sequence=++geometrySequence.current;
     setBusy(true); setError('');
     try {
       const result = await applyOverlay(mode, geometry, other.geometry);
+      if(sequence!==geometrySequence.current)return;
       if (!result.geometry) throw new Error('Operation produced no geographic area.');
       setSelectedFeatureId(null);
       setGeometrySource('Spatial overlay · ' + mode);

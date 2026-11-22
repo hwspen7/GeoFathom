@@ -10,7 +10,7 @@ import re
 from uuid import uuid4
 
 from geometry.measure import GeometryError, measure_geometry
-from .database import StorageError, _connect, _now, _required_project, _record_feature, list_features
+from .database import StorageError, _connect, _now, _required_project, _record_feature
 
 _HEX = re.compile(r"^#[0-9A-Fa-f]{6}$")
 _DEFAULT = "Measurements"
@@ -74,8 +74,9 @@ def _layer(conn, project_id, layer_id):
 
 def layers(project_id):
     with _connect() as c:
-        _required_project(c, project_id)
         _schema(c)
+        c.execute("BEGIN IMMEDIATE")
+        _required_project(c, project_id)
         _default(c, project_id)
         from .cartography import read_style_in_connection
         return [
@@ -91,8 +92,9 @@ def add_layer(project_id, name, color="#2563eb"):
     if not name.strip() or len(name)>100 or not _HEX.fullmatch(color):
         raise StorageError("Layer name or hex color is invalid.")
     with _connect() as c:
-        _required_project(c,project_id)
         _schema(c)
+        c.execute("BEGIN IMMEDIATE")
+        _required_project(c,project_id)
         _default(c,project_id)
         if c.execute("SELECT COUNT(*) FROM geo_layers WHERE project_id=?", (project_id,)).fetchone()[0]>=100:
             raise StorageError("A project supports at most 100 layers.")
@@ -126,8 +128,9 @@ def edit_layer(project_id, layer_id, changes):
 
 def remove_layer(project_id, layer_id):
     with _connect() as c:
-        _required_project(c,project_id)
         _schema(c)
+        c.execute("BEGIN IMMEDIATE")
+        _required_project(c,project_id)
         layer=_layer(c,project_id,layer_id)
         if c.execute("SELECT COUNT(*) FROM geo_layers WHERE project_id=?", (project_id,)).fetchone()[0]==1:
             raise StorageError("A project must retain at least one layer.")
@@ -158,23 +161,39 @@ def _revision(c,feature_id):
 
 
 def workspace(project_id):
-    # The default layer is lazily created so existing databases remain readable.
-    items=list_features(project_id,limit=200)
-    all_layers=layers(project_id)
+    # Use one coherent transaction for geometry, layer definitions, styling,
+    # counts, and optimistic revision numbers. A concurrent writer cannot
+    # pair an old geometry with a newer revision. Initialize legacy default
+    # layers in the same transaction, then measure outside the write lock.
+    from .cartography import read_style_in_connection
     with _connect() as c:
         _schema(c)
-        assignments={row["feature_id"]:row["layer_id"] for row in c.execute(
-            "SELECT feature_id,layer_id FROM geo_layer_members WHERE project_id=?", (project_id,),
-        )}
-        revisions={row["feature_id"]:row["revision"] for row in c.execute(
-            "SELECT feature_id,MAX(revision) AS revision FROM geo_feature_revisions "
-            "GROUP BY feature_id",
-        )}
-    for item in items["results"]:
-        fallback = next((entry["id"] for entry in all_layers if entry["name"] == _DEFAULT), all_layers[0]["id"])
-        item["layer_id"]=assignments.get(item["id"],fallback)
-        item["revision"]=revisions.get(item["id"],0)
-    return {"layers":all_layers,"features":items["results"],"total":items["total"]}
+        c.execute("BEGIN IMMEDIATE")
+        _required_project(c, project_id)
+        default_id=_default(c,project_id)
+        all_layers=[
+            {**dict(row),**read_style_in_connection(c,row["id"])}
+            for row in c.execute(
+                "SELECT * FROM geo_layers WHERE project_id=? ORDER BY z_index,id",
+                (project_id,)).fetchall()
+        ]
+        total=c.execute("SELECT count(*) FROM features WHERE project_id=?",(project_id,)).fetchone()[0]
+        rows=c.execute("""
+            SELECT f.*,COALESCE(m.layer_id,?) AS layer_id,
+                COALESCE((SELECT MAX(r.revision) FROM geo_feature_revisions r
+                         WHERE r.feature_id=f.id),0) AS revision
+            FROM features f LEFT JOIN geo_layer_members m
+                ON m.feature_id=f.id AND m.project_id=f.project_id
+            WHERE f.project_id=? ORDER BY f.created_at,f.id LIMIT 200
+        """,(default_id,project_id)).fetchall()
+    results=[]
+    for row in rows:
+        item=dict(row)
+        item["geometry"]=json.loads(item["geometry"])
+        item["properties"]=json.loads(item["properties"])
+        item["measurement"]=measure_geometry(item["geometry"])
+        results.append(item)
+    return {"layers":all_layers,"features":results,"total":total}
 
 
 def update_feature(project_id,feature_id,geometry=None,name=None,properties=None,
@@ -226,13 +245,14 @@ def update_feature(project_id,feature_id,geometry=None,name=None,properties=None
         return {"id":feature_id,"project_id":project_id,"name":new_name,
                 "geometry":geom,"properties":props,"measurement":measurement,
                 "source":original["source"],"layer_id":target_layer["id"],
-                "revision":revision}
+                "created_at":original["created_at"],"revision":revision}
 
 
 def feature_history(project_id,feature_id):
     with _connect() as c:
-        _required_project(c,project_id)
         _schema(c)
+        c.execute("BEGIN")
+        _required_project(c,project_id)
         original=_feature(c,project_id,feature_id)
         rows=c.execute(
             "SELECT * FROM geo_feature_revisions WHERE feature_id=? ORDER BY revision DESC LIMIT 100",

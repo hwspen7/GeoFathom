@@ -92,11 +92,18 @@ int main(){
         for(std::size_t i=0;i<count;++i)
             if(!std::isfinite(y[i])||std::abs(x[i]-y[i])>1e-6f)return 24;
         gf_spectral_normalized_difference(newer.data(),b.data(),v.data(),count,new_index.data(),new_mask.data());
-        const int cpu_changed=gf_spectral_change(x.data(),xm.data(),new_index.data(),new_mask.data(),count,.25f,reference.data());
-        const int cuda_changed=gf_cuda_runtime_paired_change(gpu,a.data(),b.data(),v.data(),newer.data(),
+        if(gf_spectral_change(x.data(),xm.data(),new_index.data(),new_mask.data(),count,.25f,reference.data())<0)return 25;
+        // Fused ABI returns jointly valid pixels, not the number of changes.
+        const int cuda_valid=gf_cuda_runtime_paired_change(gpu,a.data(),b.data(),v.data(),newer.data(),
             b.data(),v.data(),count,.25f,cl.data(),both.data());
-        if(cpu_changed!=cuda_changed||!std::equal(reference.begin(),reference.begin()+count,cl.begin()))return 25;
-        for(std::size_t i=0;i<count;++i)if(both[i]!=(xm[i]&&new_mask[i]))return 26;
+        if(cuda_valid<0||!std::equal(reference.begin(),reference.begin()+count,cl.begin()))return 25;
+        int joint_valid=0;
+        for(std::size_t i=0;i<count;++i){
+            const bool valid=xm[i]&&new_mask[i];
+            if(both[i]!=valid)return 26;
+            joint_valid+=valid;
+        }
+        if(cuda_valid!=joint_valid)return 26;
         if(gf_cuda_runtime_stats(gpu,stats)||stats[0]<count||stats[0]>n||stats[2]!=stats[0]*15)return 27;
         if(gf_cuda_runtime_trim(gpu)||gf_cuda_runtime_stats(gpu,stats)||stats[0]||stats[2])return 28;
     }

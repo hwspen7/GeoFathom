@@ -165,3 +165,41 @@ def test_project_scoped_feature_ids_cannot_read_or_mutate_another_project():
     assert client.delete(path).status_code==404
     assert client.get(root+"/workspace").json()["features"][0]==feature
     assert client.get(other+"/workspace").json()["features"][0]["id"]==other_id
+
+
+def test_workspace_reads_keep_geometry_and_revision_in_one_snapshot():
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+    from storage.workspace import workspace,update_feature
+    root,fid=setup()
+    project=root.removeprefix("/projects/")
+    barrier=Barrier(2)
+    def write():
+        barrier.wait(timeout=5)
+        for revision in range(1,21):
+            update_feature(project,fid,geometry=polygon(revision*.001),
+                name=f"r{revision}",expected_revision=revision-1)
+    def read():
+        barrier.wait(timeout=5)
+        for _ in range(40):
+            state=workspace(project)
+            assert state["total"]==1 and len(state["features"])==1
+            feature=state["features"][0]
+            revision=feature["revision"]
+            assert feature["geometry"]["coordinates"][0][0][0]==pytest.approx(revision*.001)
+            assert feature["name"]==("Plot" if revision==0 else f"r{revision}")
+            assert feature["layer_id"] in {layer["id"] for layer in state["layers"]}
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        writer=executor.submit(write);reader=executor.submit(read)
+        writer.result(timeout=30);reader.result(timeout=30)
+    assert workspace(project)["features"][0]["revision"]==20
+
+
+def test_parallel_first_workspace_load_has_one_default_layer():
+    from concurrent.futures import ThreadPoolExecutor
+    from storage.workspace import workspace
+    project=client.post("/projects",json={"name":"Concurrent default"}).json()["id"]
+    with ThreadPoolExecutor(max_workers=4) as workers:
+        snapshots=list(workers.map(workspace,[project]*8))
+    assert all(len(item["layers"])==1 and item["total"]==0 for item in snapshots)
+    assert len({item["layers"][0]["id"] for item in snapshots})==1
