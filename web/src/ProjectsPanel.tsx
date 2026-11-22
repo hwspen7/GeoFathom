@@ -564,7 +564,7 @@ export default function ProjectsPanel({
                 <FolderOpen size={14}/><span>{item.name}</span><small>r{item.revision}</small>
               </button>)}
             {!workspace?.features.length&&!extraFeatures.length &&
-              <p className="project-hint">No saved features yet.</p>}
+              <p className="compact-notice">No saved features yet.</p>}
           </div>
 
           {current&&<details className="feature-inspector">

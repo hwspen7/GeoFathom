@@ -707,6 +707,33 @@ export default function App() {
           {([['Survey','tools-survey'],['GIS','tools-gis'],['Analysis','tools-spatial'],['Terrain','tools-terrain'],['Raster / AI','tools-raster'],['Cartography','tools-style'],['Data','tools-services'],['Assistant','tools-ai']] as const).map(([title,id])=>
             <button key={id} aria-pressed={activeTool===id&&showTools} onClick={()=>revealPanel(id)}>{title}</button>)}
         </nav>
+        <details className="gis-settings">
+          <summary>Settings</summary>
+          <div className="gis-settings-panel">
+            <div className="section-heading">Display</div>
+              <label className="gis-check"><input aria-label="Map dimensions" type="checkbox" checked={showMeasurements} onChange={e=>setShowMeasurements(e.target.checked)}/> Map dimensions</label>
+            <label>Area unit <select aria-label="Default area unit" value={areaUnit} onChange={event=>setAreaUnit(event.target.value as typeof areaUnit)}>
+              <option value="m2">m²</option><option value="ha">ha</option><option value="km2">km²</option><option value="mu">亩</option>
+            </select></label>
+            <div className="section-heading">Imagery sources</div>
+              <details className="custom-basemap">
+                <summary>Connect high-resolution imagery</summary>
+                <form className="professional-form" onSubmit={event=>{
+                  event.preventDefault();setTileError('');
+                  try{setCustom(customBasemap(tileURL,tileCredit,tileZoom));setBasemap('custom');}
+                  catch(failure){setTileError(failure instanceof Error?failure.message:'Invalid tile settings.');}
+                }}>
+                  <input aria-label="Licensed XYZ tile URL" placeholder="https://…/{z}/{x}/{y}.jpg" value={tileURL} onChange={e=>setTileURL(e.target.value)} required/>
+                  <input aria-label="Imagery attribution" placeholder="Provider attribution" value={tileCredit} onChange={e=>setTileCredit(e.target.value)} required/>
+                  <label>Native maximum zoom <input type="number" min="1" max="23" value={tileZoom} onChange={e=>setTileZoom(Number(e.target.value))}/></label>
+                  <button type="submit">Connect imagery</button>
+                  <small className="compact-notice" title="Use a provider you are licensed to access. URLs are session-only; never enter private long-lived credentials.">Licensed source · session only</small>
+                  {tileError&&<p className="discovery-error">{tileError}</p>}
+                </form>
+              </details>
+
+          </div>
+        </details>
         <button className="gis-shortcut-help" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts" onClick={()=>setShortcutHelp(true)}>?</button>
         <button className="gis-inspector-toggle" aria-pressed={showLayers} onClick={()=>setShowLayers(v=>!v)}>Layers</button>
         <button className="gis-inspector-toggle" aria-pressed={showTools} onClick={()=>setShowTools(v=>!v)}>Inspector</button>
@@ -808,25 +835,15 @@ export default function App() {
                 {BASEMAPS.map(item=><option key={item.id} value={item.id} disabled={item.id==='custom'&&!custom}>{item.name}</option>)}
               </select>
               <small role="status" className="basemap-status">{mapStatus}</small>
-              <details className="custom-basemap">
-                <summary>Connect high-resolution imagery</summary>
-                <form className="professional-form" onSubmit={event=>{
-                  event.preventDefault();setTileError('');
-                  try{setCustom(customBasemap(tileURL,tileCredit,tileZoom));setBasemap('custom');}
-                  catch(failure){setTileError(failure instanceof Error?failure.message:'Invalid tile settings.');}
-                }}>
-                  <input aria-label="Licensed XYZ tile URL" placeholder="https://…/{z}/{x}/{y}.jpg" value={tileURL} onChange={e=>setTileURL(e.target.value)} required/>
-                  <input aria-label="Imagery attribution" placeholder="Provider attribution" value={tileCredit} onChange={e=>setTileCredit(e.target.value)} required/>
-                  <label>Native maximum zoom <input type="number" min="1" max="23" value={tileZoom} onChange={e=>setTileZoom(Number(e.target.value))}/></label>
-                  <button type="submit">Connect imagery</button>
-                  <small className="compact-notice" title="Use a provider you are licensed to access. URLs are session-only; never enter private long-lived credentials.">Licensed source · session only</small>
-                  {tileError&&<p className="discovery-error">{tileError}</p>}
-                </form>
-              </details>
               {terrainFeatures.length>0&&<label className="gis-check"><input aria-label="Terrain result layer" type="checkbox" checked={terrainVisible} onChange={e=>setTerrainVisible(e.target.checked)}/> Terrain result · {terrainFeatures.length}</label>}
-              <label className="gis-check"><input aria-label="Map dimensions" type="checkbox" checked={showMeasurements} onChange={e=>setShowMeasurements(e.target.checked)}/> Map dimensions</label>
               {imageLayer&&<><label className="gis-check"><input type="checkbox" checked={rasterVisible} onChange={e=>setRasterVisible(e.target.checked)}/> {imageLayer.name}</label>
-              <label>Raster opacity <input aria-label="Raster opacity" type="range" min="0" max="1" step=".05" value={rasterOpacity} onChange={e=>setRasterOpacity(Number(e.target.value))}/></label></>}
+              <label>Raster opacity <input aria-label="Raster opacity" type="range" min="0" max="1" step=".05" value={rasterOpacity} onChange={e=>setRasterOpacity(Number(e.target.value))}/></label>
+              <button className="raster-remove" title="Remove the active raster from the map; the source file remains in the imagery library" onClick={()=>{
+                if(!window.confirm('Remove raster from map? Unsaved terrain results for this source will be cleared. The library file is retained.'))return;
+                geometrySequence.current++;setBusy(false);setImageLayer(null);setTraceMode(false);setPromptMode(null);
+                setPositivePoints([]);setNegativePoints([]);setBoxPoints([]);setTerrainPicking(false);setTerrainOrigin(null);setTerrainHover(null);
+                setTerrainFeatures([]);setMessage('Raster removed from map. Source retained in library.');
+              }}>Remove raster from map</button></>}
             </section>
           <section className="panel-section">
             <div className="section-heading"><Search size={16} /><span>Find a place</span></div>

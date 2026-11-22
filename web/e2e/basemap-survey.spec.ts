@@ -10,6 +10,7 @@ test('satellite and licensed imagery actually request tiles',async({page})=>{
  await page.getByLabel('Quick basemap tools').getByRole('button',{name:'Satellite',exact:true}).click();
  await loaded;
  await expect(page.getByLabel('Basemap',{exact:true})).toHaveValue('sentinel');
+ await page.getByText('Settings',{exact:true}).click();
  await page.getByText('Connect high-resolution imagery',{exact:true}).click();
  await page.getByLabel('Licensed XYZ tile URL').fill('https://tiles.example.test/{z}/{y}/{x}.png');
  await page.getByLabel('Imagery attribution').fill('Licensed test fixture');
