@@ -67,3 +67,30 @@ def test_viewshed_refraction_input_validation():
     with pytest.raises(RasterError,match="refraction"):
         _visibility(z,np.ones_like(z,bool),(2,2),from_origin(0,50,10,10),
                     1.7,0.,consider_curvature=True,refraction_coeff=1.0)
+
+
+def test_flat_terrain_drains_without_artificial_fill_volume():
+    # A flat DEM needs numerical routing gradients, not fabricated physical
+    # fill material. No source pixel may be modified by the algorithm.
+    original=np.full((9,9),100.0,dtype=np.float64)
+    mask=np.ones_like(original,dtype=bool)
+    working,metrics=condition_dem(original,mask)
+    assert metrics['conditioned_cells']==0
+    assert metrics['maximum_fill_depth_m']==0
+    assert metrics['total_fill_depth_m']==0
+    assert metrics['flat_routing_cells']>0
+    np.testing.assert_array_equal(original,np.full_like(original,100.0))
+    downstream,_,_=d8_flow(working,mask,10,10)
+    assert downstream[4,4]>=0
+
+
+def test_nested_sink_metrics_exclude_flat_routing_epsilon():
+    values=np.full((7,7),15.,dtype=np.float64)
+    values[1:-1,1:-1]=5.
+    values[3,3]=0.
+    routed,metrics=condition_dem(values,np.ones_like(values,bool))
+    assert metrics['conditioned_cells']==25
+    assert metrics['maximum_fill_depth_m']==pytest.approx(15.)
+    assert metrics['total_fill_depth_m']==pytest.approx(25*10+5)
+    assert metrics['flat_routing_cells']>0
+    assert routed[3,3]>=15.
