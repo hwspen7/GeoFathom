@@ -3,6 +3,8 @@
 #include <cuda_runtime.h>
 #include <vector>
 #include <limits>
+#include <random>
+#include <algorithm>
 int main(){
     constexpr std::size_t n=65539;
     std::vector<float>a(n,200),b(n,50),x(n),y(n);
@@ -63,6 +65,41 @@ int main(){
         if(cl[i]!=0||std::abs(confidence[i]-1.f/(2.f+std::exp(-2.f)))>1e-6f)return 22;
     cudaFree(da);cudaFree(db);cudaFree(dx);cudaFree(dy);cudaFree(dv);
     cudaFree(mx);cudaFree(my);cudaFree(dl);
+    // Differential acceptance: seeded adverse values, odd tile sizes,
+    // reusable allocations, exact masks and labels, threshold boundaries.
+    std::mt19937 rng(3567);
+    std::uniform_real_distribution<float> distribution(-1000.f,1000.f);
+    for(const std::size_t count: {std::size_t(1),std::size_t(31),std::size_t(257),
+                                 std::size_t(4099),n}){
+        for(std::size_t i=0;i<count;++i){
+            a[i]=distribution(rng); b[i]=distribution(rng);
+            newer[i]=distribution(rng);
+            v[i]=static_cast<unsigned char>(rng()%5!=0);
+        }
+        a[0]=std::numeric_limits<float>::quiet_NaN();
+        if(count>7){
+            a[1]=std::numeric_limits<float>::infinity();
+            a[2]=b[2]=std::numeric_limits<float>::max();
+            a[3]=1e-10f; b[3]=-1e-10f;
+            a[4]=0.f; b[4]=0.f;
+            a[5]=3.f; b[5]=1.f; newer[5]=1.f;
+            a[6]=-3.f; b[6]=1.f;
+            v[1]=v[2]=v[3]=v[4]=v[5]=v[6]=1;
+        }
+        const int cpu=gf_spectral_normalized_difference(a.data(),b.data(),v.data(),count,x.data(),xm.data());
+        const int cuda=gf_cuda_runtime_index(gpu,a.data(),b.data(),v.data(),count,y.data(),ym.data());
+        if(cpu!=cuda||!std::equal(xm.begin(),xm.begin()+count,ym.begin()))return 23;
+        for(std::size_t i=0;i<count;++i)
+            if(!std::isfinite(y[i])||std::abs(x[i]-y[i])>1e-6f)return 24;
+        gf_spectral_normalized_difference(newer.data(),b.data(),v.data(),count,new_index.data(),new_mask.data());
+        const int cpu_changed=gf_spectral_change(x.data(),xm.data(),new_index.data(),new_mask.data(),count,.25f,reference.data());
+        const int cuda_changed=gf_cuda_runtime_paired_change(gpu,a.data(),b.data(),v.data(),newer.data(),
+            b.data(),v.data(),count,.25f,cl.data(),both.data());
+        if(cpu_changed!=cuda_changed||!std::equal(reference.begin(),reference.begin()+count,cl.begin()))return 25;
+        for(std::size_t i=0;i<count;++i)if(both[i]!=(xm[i]&&new_mask[i]))return 26;
+        if(gf_cuda_runtime_stats(gpu,stats)||stats[0]<count||stats[0]>n||stats[2]!=stats[0]*15)return 27;
+        if(gf_cuda_runtime_trim(gpu)||gf_cuda_runtime_stats(gpu,stats)||stats[0]||stats[2])return 28;
+    }
     gf_cuda_runtime_destroy(gpu);
     return 0;
 }

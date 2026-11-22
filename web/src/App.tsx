@@ -99,9 +99,16 @@ export default function App() {
   const [areaUnit, setAreaUnit] = useState<'m2' | 'ha' | 'km2' | 'mu'>('m2');
   const timeline = useRef(new GeometryTimeline());
   const lastValid = useRef<GeoJSON.Geometry | null>(null);
+  // Geometry responses must belong to the latest editing intent, not
+  // merely the request that happens to finish last.
+  const geometrySequence = useRef(0);
+  const projectIdentity = useRef<string | null>(null);
+  const featureIdentity = useRef<string | null>(null);
   const [historyPulse, setHistoryPulse] = useState(0);
 
-  const selectedSaved = projectWorkspace?.features.find(item => item.id === selectedFeatureId);
+  featureIdentity.current = selectedFeatureId;
+  const selectedSaved = projectWorkspace?.features.find(item => item.id === selectedFeatureId) ??
+    pagedFeatures.find(item => item.id === selectedFeatureId);
   const selectedLocked = Boolean(selectedSaved &&
     projectWorkspace?.layers.find(layer => layer.id === selectedSaved.layer_id)?.locked);
 
@@ -110,11 +117,13 @@ export default function App() {
       setError('Unlock the selected layer before editing geometry.');
       return;
     }
+    const sequence = ++geometrySequence.current;
     try {
       if (linked && selectedFeatureId && activeProjectId && !detached && lastValid.current) {
         const moved=singleMovedVertex(lastValid.current,next);
         if (!moved) throw new Error('Linked mode requires moving exactly one existing vertex.');
         const impact=await previewTopology(activeProjectId,moved.old,moved.next);
+        if (sequence !== geometrySequence.current) return;
         if (!impact.affected.some(item=>item.id===selectedFeatureId)) {
           throw new Error('Selected feature does not contain this shared vertex.');
         }
@@ -125,6 +134,7 @@ export default function App() {
         return;
       }
       const checked = await measureGeometry(next);
+      if (sequence !== geometrySequence.current) return;
       setGeometry(next);
       setMeasurement(checked);
       setPreview(null);
@@ -134,6 +144,7 @@ export default function App() {
       setError('');
       setMessage(details);
     } catch (failure) {
+      if (sequence !== geometrySequence.current) return;
       setError(failure instanceof Error ? failure.message : 'Invalid geometry.');
       setGeometry(lastValid.current);
       setPreview(null);
@@ -141,15 +152,29 @@ export default function App() {
   }
 
   function applyHistory(next: GeoJSON.Geometry | null) {
+    const sequence = ++geometrySequence.current;
+    setPendingShared(null);
     setGeometry(next);
     lastValid.current = next ? structuredClone(next) : null;
     setPreview(null);
     setHistoryPulse(value => value + 1);
-    if (next) void measureGeometry(next).then(setMeasurement).catch(() => setMeasurement(null));
-    else setMeasurement(null);
+    setMeasurement(null);
+    if (next) void measureGeometry(next).then(value => {
+      if (sequence === geometrySequence.current) setMeasurement(value);
+    }).catch(() => {
+      if (sequence === geometrySequence.current) setMeasurement(null);
+    });
   }
 
   function openStoredFeature(feature: WorkspaceFeature) {
+    // A callback from a previous project may finish after navigation.
+    if (feature.project_id !== projectIdentity.current) return;
+    geometrySequence.current++;
+    if (featureIdentity.current !== feature.id) {
+      timeline.current = new GeometryTimeline();
+      setLinked(false);
+    }
+    featureIdentity.current = feature.id;
     setPendingShared(null);
     setGeometry(feature.geometry);
     lastValid.current = structuredClone(feature.geometry);
@@ -200,6 +225,7 @@ export default function App() {
   }, []);
 
   async function selectPlace(place: Place) {
+    const sequence = ++geometrySequence.current;
     setSelectedPlace(place);
     setSelectedFeatureId(null);
     setLinked(false);
@@ -232,9 +258,11 @@ export default function App() {
     if (place.geometry) {
       try {
         const result = await measureGeometry(place.geometry);
+        if (sequence !== geometrySequence.current) return;
         setMeasurement(result);
         setMessage('Mapped boundary loaded. Check that it represents your intended area.');
       } catch (problem) {
+        if (sequence !== geometrySequence.current) return;
         setError(problem instanceof Error ? problem.message : 'Could not measure boundary.');
         setMessage('Place found, but the mapped geometry could not be measured.');
       }
@@ -307,6 +335,7 @@ export default function App() {
       setError('Select a polygon before cutting a hole or splitting it.');
       return;
     }
+    geometrySequence.current++;
     setDrawingMode(next);
     setTraceMode(false);
     if (!operation) {
@@ -437,6 +466,7 @@ export default function App() {
 
 
   function clearWorkspace() {
+    geometrySequence.current++;
     setGeometry(null);
     setPendingAnnotation(null);
     setSelectionBoxMode(false);setSelectionBox(null);
@@ -602,6 +632,7 @@ export default function App() {
                         [item.id,item.revision]));
                       await applyTopology(activeProjectId,pendingShared.old,pendingShared.next,expected);
                       const updated=await getWorkspace(activeProjectId);
+                      if(projectIdentity.current!==activeProjectId)return;
                       setProjectWorkspace(updated);
                       const reopened=updated.features.find(item=>item.id===selectedFeatureId);
                       if(reopened)openStoredFeature(reopened);
@@ -639,6 +670,7 @@ export default function App() {
               viewport={viewport}
             />
             <GeoAIAnalysisPanel
+              key={activeProjectId ?? 'no-project'}
               projectId={activeProjectId}
               image={imageLayer}
               onPreview={setExternalFeatures}
@@ -705,8 +737,26 @@ export default function App() {
               refreshToken={refreshToken}
               extraFeatures={pagedFeatures}
               onWorkspace={(data, id) => {
-                if(activeProjectId!==id){setPagedFeatures([]);setExternalFeatures([]);
-                  setSpatialSelected([]);setQualityIssues([]);}
+                if(projectIdentity.current!==id){
+                  projectIdentity.current=id;
+                  geometrySequence.current++;
+                  // Keep an explicitly unsaved draft when creating a project,
+                  // but never carry a saved feature or its undo stack across
+                  // project identities.
+                  if(featureIdentity.current || pendingShared){
+                    clearWorkspace();
+                    timeline.current=new GeometryTimeline();
+                    featureIdentity.current=null;
+                  }else{
+                    timeline.current=new GeometryTimeline();
+                    if(lastValid.current)timeline.current.push(lastValid.current);
+                    setHistoryPulse(value=>value+1);
+                  }
+                  setPendingAnnotation(null);setPendingShared(null);setLinked(false);
+                  setPagedFeatures([]);setExternalFeatures([]);setExternalTiles([]);
+                  setSpatialSelected([]);setQualityIssues([]);setProjectGrid(null);
+                  setSelectionBox(null);setSelectionBoxMode(false);setLabelMoveMode(false);
+                }
                 setProjectWorkspace(data);
                 setActiveProjectId(id);
               }}
@@ -724,6 +774,7 @@ export default function App() {
           <section className="panel-section">
             <div className="section-heading"><Layers3 size={16}/><span>Professional GIS tools</span></div>
             <ProfessionalPanel
+              key={activeProjectId ?? 'no-project'}
               projectId={activeProjectId}
               workspace={projectWorkspace}
               geometry={geometry}
@@ -768,6 +819,7 @@ export default function App() {
           <section className="panel-section">
             <div className="section-heading"><Layers3 size={16}/><span>Advanced cartography & EPSG</span></div>
             <CartographyProPanel
+              key={activeProjectId ?? 'no-project'}
               projectId={activeProjectId}
               workspace={projectWorkspace}
               viewport={viewport}
@@ -789,6 +841,7 @@ export default function App() {
           <section className="panel-section">
             <div className="section-heading"><Layers3 size={16}/><span>OGC, indexed stores & background jobs</span></div>
             <DataServicesPanel
+              key={activeProjectId ?? 'no-project'}
               projectId={activeProjectId}
               viewport={viewport}
               drawnGeometry={geometry}
@@ -941,10 +994,14 @@ export default function App() {
             onGeometryCommit={(next,movement) => {
               if(!movement){void commitGeometry(next);return;}
               if(selectedLocked){setError('Unlock the feature layer.');return;}
+              const sequence=++geometrySequence.current;
               void moveMeasured(movement.original,movement.bearing_deg,movement.distance_m)
-                .then(result=>commitGeometry(result.geometry,
-                  'Shape translated by geodesic distance and azimuth.'))
+                .then(result=>{
+                  if(sequence===geometrySequence.current)return commitGeometry(result.geometry,
+                    'Shape translated by geodesic distance and azimuth.');
+                })
                 .catch(error=>{
+                  if(sequence!==geometrySequence.current)return;
                   setError(error instanceof Error?error.message:'Geodesic translation failed.');
                   setGeometry(lastValid.current);setPreview(null);
                 });
@@ -984,6 +1041,7 @@ export default function App() {
                   label_offset_x:dx,label_offset_y:dy},
                 expected_revision:current.revision,
               }).then(updated=>{
+                if(projectIdentity.current!==activeProjectId)return;
                 setRefreshToken(value=>value+1);
                 if(selectedFeatureId===id)openStoredFeature(updated);
                 setMessage('Label position stored as a new feature revision.');
@@ -1045,12 +1103,13 @@ export default function App() {
               ...externalFeatures,...splitParts.slice(1)]}
             annotationMode={Boolean(pendingAnnotation)}
             onAnnotationClick={async position=>{
-              if(!pendingAnnotation||busy)return;
+              if(!pendingAnnotation||busy||pendingAnnotation.projectId!==projectIdentity.current)return;
               setBusy(true);setError('');
               try{
                 const {projectId,layerId,text}=pendingAnnotation;
                 const created=await addMapAnnotation(projectId,text,position,layerId);
                 const latest=await getWorkspace(projectId);
+                if(projectIdentity.current!==projectId)return;
                 setProjectWorkspace(latest);
                 setRefreshToken(value=>value+1);
                 const opened=latest.features.find(feature=>feature.id===created.id);

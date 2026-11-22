@@ -130,3 +130,38 @@ def test_existing_feature_layer_is_stable_after_layer_reordering():
     assert client.patch(root+"/layers/"+new["id"],json={"z_index":-100}).status_code==200
     updated=client.get(root+"/workspace").json()["features"][0]
     assert updated["layer_id"]==original
+
+
+def test_concurrent_revision_writers_have_exactly_one_winner():
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+    root,fid=setup()
+    barrier=Barrier(2)
+    def update(name):
+        barrier.wait(timeout=5)
+        return client.patch(root+"/features/"+fid,json={"name":name,"expected_revision":0})
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        outcomes=list(pool.map(update,["first","second"]))
+    assert sorted(x.status_code for x in outcomes)==[200,409]
+    winner=next(x.json() for x in outcomes if x.status_code==200)
+    saved=client.get(root+"/workspace").json()["features"][0]
+    assert saved["name"]==winner["name"] and saved["revision"]==1
+    history=client.get(root+"/features/"+fid+"/history").json()
+    assert [item["revision"] for item in history["versions"]]==[1,0]
+    assert history["versions"][0]["name"]==winner["name"]
+
+
+def test_project_scoped_feature_ids_cannot_read_or_mutate_another_project():
+    root,fid=setup()
+    other,other_id=setup()
+    feature=client.get(root+"/workspace").json()["features"][0]
+    wrong_layer=client.get(other+"/workspace").json()["layers"][0]["id"]
+    assert client.patch(root+"/features/"+fid,json={"layer_id":wrong_layer,"expected_revision":0}).status_code==404
+    path=other+"/features/"+fid
+    assert client.patch(path,json={"name":"corrupt","expected_revision":0}).status_code==404
+    assert client.get(path+"/history").status_code==404
+    assert client.post(path+"/copy").status_code==404
+    assert client.post(path+"/restore/0").status_code==404
+    assert client.delete(path).status_code==404
+    assert client.get(root+"/workspace").json()["features"][0]==feature
+    assert client.get(other+"/workspace").json()["features"][0]["id"]==other_id
