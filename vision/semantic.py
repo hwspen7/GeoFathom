@@ -119,10 +119,20 @@ def _session(path, modified_ns, device):
             raise RuntimeError("ONNX CUDA provider is unavailable.")
         # An arena limit is advisory: weights, kernels and external drivers
         # can allocate memory outside the CUDA execution-provider arena.
+        strict=os.getenv("GEOFATHOM_VISION_STRICT_CUDA","0")=="1"
+        device_id=int(os.getenv("GEOFATHOM_CUDA_DEVICE_ID","0"))
+        if device_id<0:
+            raise ValueError("ONNX CUDA device ID must be nonnegative.")
         providers = [("CUDAExecutionProvider", {
             "gpu_mem_limit": str(gpu_arena_budget_mb() * 1024 * 1024),
-            "device_id": str(int(os.getenv("GEOFATHOM_CUDA_DEVICE_ID","0"))),
-        }), "CPUExecutionProvider"]
+            "device_id": str(device_id),
+        })]
+        if strict:
+            # Strict mode rejects graphs with CPU-only node placement as well
+            # as whole-provider retries; it is opt-in for supported models.
+            options.add_session_config_entry("session.disable_cpu_ep_fallback","1")
+        else:
+            providers.append("CPUExecutionProvider")
     session = ort.InferenceSession(path, sess_options=options,
                                    providers=providers)
     if device == "cuda":
@@ -155,7 +165,8 @@ def _predict_batch(tensor, config, device):
     overhead=(gpu_arena_budget_mb() if device=="cuda" else 128)*1024**2
     device_id=int(os.getenv("GEOFATHOM_CUDA_DEVICE_ID","0")) if device=="cuda" else 0
     gpu_decode=device=="cuda" and os.getenv("GEOFATHOM_VISION_DEVICE_POSTPROCESS","0")=="1"
-    key=(str(path.resolve()),state.st_mtime_ns,state.st_size,device,overhead,device_id)
+    strict=device=="cuda" and os.getenv("GEOFATHOM_VISION_STRICT_CUDA","0")=="1"
+    key=(str(path.resolve()),state.st_mtime_ns,state.st_size,device,overhead,device_id,strict)
     with pool_for(device).lease(key,lambda:_session(str(path),state.st_mtime_ns,device),
             reserved_bytes=state.st_size+overhead,working_bytes=int(expected_bytes)) as session:
         inputs = session.get_inputs()

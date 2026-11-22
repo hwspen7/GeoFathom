@@ -198,3 +198,32 @@ def test_real_gpu_acceptance_requires_operator_installed_model(monkeypatch):
     elapsed=time.perf_counter()-start
     print(f"10 real ONNX CUDA inference passes: {elapsed:.3f}s")
     assert elapsed>0
+
+
+@pytest.mark.parametrize("strict",["0","1"])
+def test_onnx_provider_policy_disables_retry_and_can_reject_cpu_nodes(monkeypatch,strict):
+    from types import SimpleNamespace
+    import sys
+    from core import cuda_environment
+    monkeypatch.setenv("GEOFATHOM_VISION_STRICT_CUDA", strict)
+    monkeypatch.setenv("GEOFATHOM_CUDA_DEVICE_ID", "0")
+    monkeypatch.setattr(cuda_environment,"prepare_onnx_cuda",lambda ort:None)
+    calls={}
+    class Options:
+        def add_session_config_entry(self,name,value):
+            calls[name]=value
+    class Session:
+        def get_providers(self):
+            return ["CUDAExecutionProvider"]
+        def disable_fallback(self):
+            calls["disabled_retry"]=True
+    def create(path,sess_options,providers):
+        calls["providers"]=providers
+        return Session()
+    monkeypatch.setitem(sys.modules,"onnxruntime",SimpleNamespace(
+        SessionOptions=Options,InferenceSession=create,
+        get_available_providers=lambda:["CUDAExecutionProvider","CPUExecutionProvider"]))
+    sem._session("model.onnx",0,"cuda")
+    assert calls["disabled_retry"]
+    assert ("CPUExecutionProvider" in calls["providers"]) == (strict=="0")
+    assert ("session.disable_cpu_ep_fallback" in calls) == (strict=="1")

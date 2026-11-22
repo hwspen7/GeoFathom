@@ -50,6 +50,7 @@ def verify(directory, output):
     os.environ["GEOFATHOM_VISION_MODELS_DIR"] = str(directory)
     os.environ["GEOFATHOM_VISION_DEVICE_POSTPROCESS"] = "1"
     os.environ["GEOFATHOM_VISION_IO_BINDING"] = "1"
+    os.environ["GEOFATHOM_VISION_STRICT_CUDA"] = "1"
     prepare_onnx_cuda(ort)
     config = _manifest("gpu_acceptance")
     options = ort.SessionOptions()

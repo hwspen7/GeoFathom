@@ -79,3 +79,34 @@ def test_classification_rejects_out_of_range_truth():
     prediction=np.array([[0,1]],dtype=np.uint8)
     with pytest.raises(ValueError,match="Class labels"):
         confusion_matrix(truth,prediction,2)
+
+
+def test_confidence_rejection_cannot_hide_errors_from_unfiltered_report(prepared,monkeypatch):
+    scene,labels,mask=prepared
+    predicted=mask.copy()
+    predicted[20:80,20:80]=0
+    confidence=np.ones(mask.shape,np.float32)
+    confidence[20:80,20:80]=.1
+    monkeypatch.setattr(evaluate,"_predict_tile",lambda *args:(predicted,confidence))
+    result=evaluate.evaluate_model(scene,labels,"demo",confidence=.5)
+    assert result["overall_accuracy"]==1
+    assert result["eligible_pixels"]==128*128
+    assert result["confidence_rejected_pixels"]==3600
+    assert result["unfiltered"]["overall_accuracy"]==pytest.approx((128*128-3600)/(128*128))
+    assert result["accepted_fraction"]==pytest.approx((128*128-3600)/(128*128))
+
+
+def test_context_halo_evaluation_scores_every_eligible_pixel_once(prepared,monkeypatch):
+    scene,labels,mask=prepared
+    from vision.semantic import model_directory
+    manifest=model_directory()/"demo.json"
+    info=json.loads(manifest.read_text());info["halo"]=16
+    manifest.write_text(json.dumps(info))
+    # All pixels predicted as background; every truth cell must contribute
+    # exactly once regardless of the overlap and padded border.
+    monkeypatch.setattr(evaluate,"_predict_tile",lambda *args:(
+        np.zeros((128,128),np.uint8),np.ones((128,128),np.float32)))
+    result=evaluate.evaluate_model(scene,labels,"demo")
+    assert result["context_halo"]==16
+    assert result["valid_pixels"]==128*128
+    assert result["confusion_matrix"]==[[128*128-3600,0],[3600,0]]

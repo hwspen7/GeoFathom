@@ -21,6 +21,8 @@ from vision.quality import (confusion_matrix,metrics_from_matrix,
                             sentinel2_clear_mask)
 from vision.semantic import _manifest,_predict_tile
 from vision.tiled import TilePlan,_tile_bands
+from vision.tiles import context_tiles
+from vision.runtime import tensor_budget_mb
 
 
 def evaluate_model(image,ground_truth,model_id,scl=None,
@@ -44,7 +46,14 @@ def evaluate_model(image,ground_truth,model_id,scl=None,
                       max_pixels,memory_mb)
         classes=config["classes"]
         matrix=np.zeros((len(classes),len(classes)),dtype=np.int64)
+        all_matrix=np.zeros_like(matrix)
         ignored=0
+        eligible_pixels=0
+        halo=config.get("halo",0)
+        # Match the deployed tiled workflow, including context and memory gates.
+        bytes_needed=plan.tile_size**2*(len(config["bands"])+4*len(classes)+12)*4
+        if bytes_needed>min(memory_mb,tensor_budget_mb())*1024*1024:
+            raise RasterError("Evaluation model exceeds the per-tile tensor memory allowance.")
         mean=np.asarray(config["mean"],dtype=np.float32)[:,None,None]
         std=np.asarray(config["std"],dtype=np.float32)[:,None,None]
         with WarpedVRT(labels,crs=scene.crs,transform=scene.transform,
@@ -60,31 +69,46 @@ def evaluate_model(image,ground_truth,model_id,scl=None,
                         source,crs=scene.crs,transform=scene.transform,
                         width=scene.width,height=scene.height,
                         resampling=Resampling.nearest))
-                for window in plan.windows():
-                    raw,valid=_tile_bands(scene,config["bands"],window)
-                    truth=aligned.read(1,window=window,masked=True)
-                    rows,cols=int(window.height),int(window.width)
+                for tile in context_tiles(scene.width,scene.height,plan.tile_size,halo):
+                    raw,valid=_tile_bands(scene,config["bands"],tile.read)
+                    truth=aligned.read(1,window=tile.core,masked=True)
+                    rows,cols=int(tile.read.height),int(tile.read.width)
                     normalized=(np.nan_to_num(raw,nan=0,posinf=0,neginf=0) /
                                 config["input_scale"]-mean)/std
                     tensor=np.zeros((1,len(config["bands"]),plan.tile_size,
                                      plan.tile_size),dtype=np.float32)
-                    tensor[0,:,:rows,:cols]=normalized
+                    y,x=tile.input_row,tile.input_col
+                    tensor[0,:,y:y+rows,x:x+cols]=normalized
+                    valid_grid=np.zeros((plan.tile_size,plan.tile_size),bool)
+                    valid_grid[y:y+rows,x:x+cols]=valid
                     predicted,probability=_predict_tile(tensor,config,device)
-                    accepted=(valid & ~np.ma.getmaskarray(truth) &
-                              (probability[:rows,:cols]>=confidence))
+                    predicted=predicted[tile.crop]
+                    probability=probability[tile.crop]
+                    eligible=valid_grid[tile.crop] & ~np.ma.getmaskarray(truth)
                     if scl_aligned is not None:
-                        quality=scl_aligned.read(1,window=window,masked=True)
-                        accepted&=(~np.ma.getmaskarray(quality) &
+                        quality=scl_aligned.read(1,window=tile.core,masked=True)
+                        eligible&=(~np.ma.getmaskarray(quality) &
                                    sentinel2_clear_mask(quality.filled(0)))
+                    accepted=eligible & np.isfinite(probability) & (probability>=confidence)
+                    eligible_pixels+=int(eligible.sum())
                     ignored+=int(accepted.size-accepted.sum())
-                    matrix+=confusion_matrix(np.asarray(truth.data),
-                        predicted[:rows,:cols],len(classes),accepted)
+                    reference=np.asarray(truth.data)
+                    # Score all label-bearing pixels too: selective confidence
+                    # rejection must not hide wrong predictions or bad labels.
+                    all_matrix+=confusion_matrix(reference,predicted,len(classes),eligible)
+                    matrix+=confusion_matrix(reference,predicted,len(classes),accepted)
     result=metrics_from_matrix(matrix,classes)
     result.update({
         "model_id":model_id,"device":device,"confidence_min":confidence,
         "image_sha256":file_sha256(image),
         "labels_sha256":file_sha256(ground_truth),
         "model_sha256":file_sha256(config["model_path"]),
+        "manifest_sha256":file_sha256(config["model_path"].with_suffix(".json")),
+        "eligible_pixels":eligible_pixels,
+        "confidence_rejected_pixels":eligible_pixels-result["valid_pixels"],
+        "accepted_fraction":result["valid_pixels"]/eligible_pixels if eligible_pixels else None,
+        "unfiltered":metrics_from_matrix(all_matrix,classes),
+        "context_halo":halo,
         "scl_sha256":file_sha256(Path(scl)) if scl else None,
         "ignored_pixels":ignored,
         "image_grid":[plan.width,plan.height],
