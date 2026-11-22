@@ -523,10 +523,13 @@ export default function TerrainWorkbench(p:Props){
         }}>×</button>
      </div>)}
    </section>}
+   {resultCacheError&&<small role="alert" className="discovery-error">
+     Result cache: {resultCacheError} Export active results before leaving this page.
+   </small>}
    <details className="terrain-run-provenance" aria-label="Local terrain run history">
      <summary>Local run history · {runHistory.length} metadata versions</summary>
      <small className="compact-notice">Project-scoped run receipts and cached scientific results. Results can be reopened in this browser after reload, but clearing browser data or switching devices removes the local cache. Export GeoTIFF and analysis data for durable archival.</small>
-     {resultCacheError&&<small role="alert" className="discovery-error">Result cache: {resultCacheError} Export active results before leaving this page.</small>}
+
      {historyStorageError&&<small className="discovery-error" role="alert">Browser storage unavailable; export run history now.</small>}
      <div className="survey-action-bar">
        <button disabled={!runHistory.length} onClick={()=>{
