@@ -1,7 +1,9 @@
 import { defineConfig,devices } from '@playwright/test';
 import {resolve} from 'node:path';
 
-const freshServer = !!process.env.CI || process.env.GEOFATHOM_E2E_FRESH === '1';
+// Never silently test against a user's already-running frontend or backend.
+// Reuse is an explicit local debugging option only; CI always starts fresh.
+const reuseExistingServer=process.env.GEOFATHOM_E2E_REUSE_EXISTING==='1'&&!process.env.CI;
 const testDatabase=process.env.GEOFATHOM_E2E_DATABASE_PATH||'data/e2e-geofathom.sqlite';
 const testImagery=resolve('..',testDatabase)+'.imagery';
 
@@ -29,7 +31,7 @@ export default defineConfig({
       // Liveness alone can expose a fresh, uninitialized SQLite database.
       // Readiness initializes and verifies storage before browsers start.
       cwd:'..',url:'http://127.0.0.1:8000/health/ready',
-      timeout:90_000,reuseExistingServer:!freshServer,
+      timeout:90_000,reuseExistingServer,
       stderr:'pipe',
       env:{...process.env,
         GEOFATHOM_DATABASE_PATH:testDatabase,
@@ -40,7 +42,7 @@ export default defineConfig({
     {
       command:'npm run dev -- --host 127.0.0.1',
       cwd:'.',url:'http://localhost:5173',
-      timeout:90_000,reuseExistingServer:!freshServer,
+      timeout:90_000,reuseExistingServer,
     },
   ],
 });
