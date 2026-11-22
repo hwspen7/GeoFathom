@@ -5,6 +5,7 @@ import {ProfilePlot,MetricBars,ElevationDistribution,AspectRose,SectionPlot,Resu
 import {GPUView} from './TerrainMeshView';
 import type {Position} from './editing';
 import {measurementAnchor} from './editing';
+import {terrainFetchBounds,terrainGeometryBounds,terrainFetchBudget,terrainBoundsOverlap,terrainRasterMatchesTarget,describeTerrainBounds,type FetchScope,type TerrainBBox} from './terrainSource';
 
 function MeshView({mesh}:{mesh:TerrainMesh}){
   const canvas=useRef<HTMLCanvasElement>(null);
@@ -87,7 +88,8 @@ interface Props{
  projectId:string|null;geometry:GeoJSON.Geometry|null;raster:RasterAsset|null;imageRaster?:RasterAsset|null;active:boolean;connected:boolean;
  viewport:[number,number,number,number]|null;
  localImport:boolean;refreshToken:number;origin:Position|null;picking:boolean;
- onSelectRaster:(r:RasterAsset)=>void;onDraw:(line:boolean)=>void;onUseExtent:()=>void;onPick:()=>void;
+ onSelectRaster:(r:RasterAsset|null)=>void;onDraw:(line:boolean)=>void;onUseExtent:()=>void;onPick:()=>void;
+ onFetchTarget?:(bbox:TerrainBBox|null)=>void;
  extentMode:boolean;onUseSelection:()=>void;
  onHover:(point:Position|null)=>void;onPreview:(g:GeoJSON.Feature[])=>void;onRasterPreview?:(layers:TerrainRasterLayer[])=>void;onSaved:()=>void;
 }
@@ -97,6 +99,7 @@ export default function TerrainWorkbench(p:Props){
  const [category,setCategory]=useState('Quick');
  const [assets,setAssets]=useState<RasterAsset[]>([]),[token,setToken]=useState('');
  const [resolution,setResolution]=useState<1|3|10|30|90>(30),[fetching,setFetching]=useState(false),[sourceInfo,setSourceInfo]=useState('');
+ const [fetchScope,setFetchScope]=useState<FetchScope>('viewport');
  const [interval,setInterval]=useState('10'),[reference,setReference]=useState('0');
  const [lon,setLon]=useState(''),[lat,setLat]=useState(''),[height,setHeight]=useState('1.7'),[target,setTarget]=useState('0');
  const [endLon,setEndLon]=useState(''),[endLat,setEndLat]=useState('');
@@ -114,6 +117,13 @@ export default function TerrainWorkbench(p:Props){
  const [verticalConfirmed,setVerticalConfirmed]=useState(false);
  const [live,setLive]=useState(false),[busy,setBusy]=useState(false),[importing,setImporting]=useState(false);
  const [error,setError]=useState(''),[info,setInfo]=useState('');
+ const selectedGeometry=terrainGeometryBounds(p.geometry);
+ const fetchArea=terrainFetchBounds(p.viewport,p.geometry,fetchScope);
+ const budget=terrainFetchBudget(fetchArea,resolution);
+ const fetchKey=JSON.stringify([fetchScope,fetchArea,resolution]);
+ const currentFetchKey=useRef(fetchKey);currentFetchKey.current=fetchKey;
+ const sourceMismatch=!!dem&&!!selectedGeometry&&!terrainBoundsOverlap(dem.bbox,selectedGeometry);
+ const mapMismatch=!!dem&&!!p.viewport&&!terrainBoundsOverlap(dem.bbox,p.viewport);
  const sequence=useRef(0),latest=useRef(p);latest.current=p;
  const area=p.geometry?.type==='Polygon'||p.geometry?.type==='MultiPolygon';
  const needsPoint=operation==='watershed'||operation==='visibility'||operation==='least_cost';
@@ -131,10 +141,13 @@ export default function TerrainWorkbench(p:Props){
    (operation!=='hillshade'||validNumber(azimuth,0,360)&&validNumber(altitude,0,90))&&
    (!needsPoint||validNumber(lon,-180,180)&&validNumber(lat,-90,90))&&
    (operation!=='visibility'||validNumber(height,0,1000)&&validNumber(target,0,1000));
- const canRun=operation!==null&&p.connected&&verified&&!!correctShape&&parametersValid;
+ const canRun=operation!==null&&p.connected&&verified&&!!correctShape&&!sourceMismatch&&parametersValid;
  const inputKey=JSON.stringify([dem?.id,p.geometry,operation,interval,reference,lon,lat,height,target,endLon,endLat,maxSlope,minElevation,maxElevation,maxTri,streamCells,azimuth,altitude,sectionSpacing,sectionWidth,drape,drape?p.imageRaster?.id:null]);
  const inputsChanged=!!selected&&selected.inputKey!==inputKey;
  useEffect(()=>{setVerticalConfirmed(false);sourceIntent.current++;},[dem?.id]);
+ // Map extent outline and request coordinates always derive from the same explicit target.
+ useEffect(()=>{latest.current.onFetchTarget?.(p.active?fetchArea:null);},[fetchKey,p.active]);
+ useEffect(()=>()=>{latest.current.onFetchTarget?.(null);},[]);
  // Published result layers are independent from the currently selected input.
  useEffect(()=>{latest.current.onPreview(records.filter(r=>r.visible).flatMap(r=>r.advanced?.features??[]));latest.current.onRasterPreview?.(records.flatMap(r=>r.visible&&r.advanced?.raster?[{id:r.id,title:r.title,raster:r.advanced.raster}]:[]));},[records]);
  useEffect(()=>{
@@ -202,25 +215,28 @@ export default function TerrainWorkbench(p:Props){
  }
  async function fetchDEM(){
    if(!p.connected||fetching||importing)return;
-   let bbox=p.viewport;
-   if(p.geometry){
-     const points=p.geometry.type==='LineString'?p.geometry.coordinates:p.geometry.type==='Polygon'?p.geometry.coordinates.flat():p.geometry.type==='MultiPolygon'?p.geometry.coordinates.flat(2):null;
-     if(points?.length){
-       const lon=points.map(pt=>pt[0]),lat=points.map(pt=>pt[1]);
-       const w=Math.min(...lon),s=Math.min(...lat),e=Math.max(...lon),n=Math.max(...lat);
-       bbox=[w-.0004,s-.0004,e+.0004,n+.0004];
-     }
-   }
-   if(!bbox)return;
+   const bbox=fetchArea,requestKey=currentFetchKey.current;
+   if(!bbox){setError(fetchScope==='selection'?'Select a polygon or line before downloading.':'Map bounds unavailable. Zoom to the target location.');return;}
+   if(budget?.warning){setError(budget.warning);return;}
    const ticket=++sourceIntent.current;
    setFetching(true);setError('');setSourceInfo('');
    try{
      if(!p.localImport&&!token.trim())throw Error('Enter import access token.');
      const data=await fetchPublicDEM(bbox,resolution,token);
      if(!alive.current||ticket!==sourceIntent.current)return;
+     if(currentFetchKey.current!==requestKey){
+       setInfo('Download completed, but the target changed. Old DEM was not selected.');
+       return;
+     }
+     if(!terrainRasterMatchesTarget(data.asset,bbox)){
+       throw Error('Downloaded DEM does not cover the displayed target coordinates. Source rejected.');
+     }
      setAssets(old=>[data.asset,...old.filter(item=>item.id!==data.asset.id)]);
      latest.current.onSelectRaster(data.asset);
-     setSourceInfo((resolution<30?'USGS 3DEP · requested '+resolution+' m grid':'GLO-'+resolution+' · DSM')+' · '+data.valid_cells+'/'+data.total_cells+' cells'+(data.missing_tiles.length?' · partial coverage':''));
+     setSourceInfo((resolution<30?'USGS 3DEP · requested '+resolution+' m grid':'GLO-'+resolution+' · DSM')+
+       ' · '+data.valid_cells+'/'+data.total_cells+' cells'+(data.missing_tiles.length?' · partial coverage':'')+
+       ' · center '+((bbox[0]+bbox[2])/2).toFixed(5)+', '+((bbox[1]+bbox[3])/2).toFixed(5));
+     if(data.warning)setInfo(data.warning);
    }catch(e){if(alive.current&&ticket===sourceIntent.current)setError(e instanceof Error?e.message:String(e));}
    finally{if(alive.current)setFetching(false);}
  }
@@ -238,7 +254,11 @@ export default function TerrainWorkbench(p:Props){
    finally{if(ticket===sequence.current)setBusy(false);}
  }
  function exportResult(){
-   const payload=result?.features.length?{type:'FeatureCollection',features:result.features}:result??slope??profile;
+   // Export scientific metadata without embedding large raster binaries twice.
+   const payload=result?.features.length&&!result.raster&&!result.mesh?
+     {type:'FeatureCollection',features:result.features}:
+     result?{...result,raster:result.raster?{...result.raster,png:undefined,geotiff:undefined,export_hint:'Use GeoTIFF for georeferenced raster data'}:undefined,
+       mesh:result.mesh?{...result.mesh,texture:result.mesh.texture?{...result.mesh.texture,png:undefined}:undefined}:undefined}:slope??profile;
    if(!payload)return;
    const link=document.createElement('a'),url=URL.createObjectURL(new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}));
    link.href=url;link.download='terrain-'+(selected?.operation??operation)+(result?.features.length?'.geojson':'.json');link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
@@ -247,19 +267,34 @@ export default function TerrainWorkbench(p:Props){
    <div className="terrain-source">
      <label>Elevation layer<select aria-label="DEM elevation layer" value={dem?.id??''}
        disabled={fetching||importing}
-       onChange={e=>{const found=assets.find(item=>item.id===e.target.value);if(found){sourceIntent.current++;p.onSelectRaster(found);}}}>
+       onChange={e=>{
+         sourceIntent.current++;
+         if(!e.target.value){p.onSelectRaster(null);setSourceInfo('');return;}
+         const found=assets.find(item=>item.id===e.target.value)??(dem?.id===e.target.value?dem:null);
+         if(found)p.onSelectRaster(found);
+       }}>
        <option value="">Select DEM</option>
        {[...assets,...(dem&&!assets.some(a=>a.id===dem.id)?[dem]:[])].map(asset=><option key={asset.id} value={asset.id}>{asset.name}</option>)}
      </select></label>
      {!p.localImport&&<details className="access-settings"><summary>Import access</summary><input type="password" aria-label="DEM import token" value={token} onChange={e=>setToken(e.target.value)}/></details>}
      <label className="raster-upload" title="Single-band DEM GeoTIFF, projected in meters, with meter elevations"><Mountain size={14}/> {importing?'Importing…':'Import DEM'}
        <input type="file" aria-label="Import DEM" accept=".tif,.tiff" disabled={importing||fetching||!p.connected} onChange={e=>void importDEM(e)}/></label>
+     <label>Download area <select aria-label="DEM fetch area" value={fetchScope} onChange={e=>{setFetchScope(e.target.value as FetchScope);setInfo('');}}>
+       <option value="viewport">Current map view</option><option value="selection" disabled={!selectedGeometry}>Selected geometry</option>
+     </select></label>
+     <small className="compact-notice" aria-label="DEM download target">
+       {fetchArea?(fetchScope==='viewport'?'Current map · ':'Selected geometry · ')+describeTerrainBounds(fetchArea):'No valid download area'}
+       {budget?' · ~'+budget.approximateCells.toLocaleString()+' grid cells':''}
+     </small>
+     {budget?.warning&&<small role="alert" className="discovery-error">{budget.warning}</small>}
      <div className="area-fields">
        <select aria-label="Public DEM resolution" value={resolution} onChange={e=>setResolution(Number(e.target.value) as 1|3|10|30|90)}><option value={30}>GLO-30 · 30 m</option><option value={90}>GLO-90 · 90 m</option><option value={10}>USGS 3DEP · 10 m grid</option><option value={3}>USGS 3DEP · 3 m grid</option><option value={1}>USGS 3DEP · 1 m grid</option></select>
-       <button disabled={!p.connected||!p.viewport||fetching||importing} title="Download a real elevation grid for the selected area" onClick={()=>void fetchDEM()}>{fetching?'Fetching…':'Fetch DEM'}</button>
+       <button disabled={!p.connected||!fetchArea||!!budget?.warning||fetching||importing} title="Download the explicitly displayed area, not a previous selection" onClick={()=>void fetchDEM()}>{fetching?'Fetching…':'Fetch DEM'}</button>
      </div>
      {sourceInfo&&<small className="compact-notice" title="Copernicus is DSM; 3DEP is bare-earth DEM. Requested grid size is not native resolution.">{sourceInfo}</small>}
-     {dem&&<small className="compact-notice" title={dem.provenance}>{dem.width} × {dem.height} · {dem.crs} · elevation m</small>}
+     {dem&&<small className="compact-notice" title={dem.provenance}>{dem.width} × {dem.height} · {dem.crs} · elevation m · {describeTerrainBounds(dem.bbox)}</small>}
+     {mapMismatch&&<small className="discovery-error" role="status">Selected DEM is outside the current map. Choose a local source or use Fit explicitly.</small>}
+     {sourceMismatch&&<small className="discovery-error" role="status">Selected analysis shape is outside this DEM. Select matching data.</small>}
      {dem&&!/Copernicus DEM GLO-|USGS 3DEP Bare Earth DEM/.test(dem.provenance)&&<label className="gis-check"><input aria-label="Confirm DEM meter elevations" type="checkbox" checked={verticalConfirmed} onChange={e=>setVerticalConfirmed(e.target.checked)}/> Confirm single-band meter elevations</label>}
    </div>
    <label className="terrain-category">Tool group <select aria-label="Terrain tool group" value={category} onChange={e=>{setCategory(e.target.value);setOperation(null);setLive(false);setPickEnd(false);}}>{Object.keys(categories).map(name=><option key={name}>{name}</option>)}</select></label>
@@ -300,6 +335,7 @@ export default function TerrainWorkbench(p:Props){
        <label><input aria-label="Live terrain updates" type="checkbox" checked={live} onChange={e=>setLive(e.target.checked)}/> Live</label></div>
      {!p.connected&&<small className="compact-notice">API offline</small>}
      {!dem&&<small className="compact-notice">DEM required</small>}
+     {sourceMismatch&&<small className="discovery-error">Analysis area does not intersect selected DEM</small>}
      {dem&&!verified&&<small className="compact-notice">Confirm elevation units before analysis</small>}
      {!parametersValid&&<small className="discovery-error">Check numeric parameters</small>}
    </div>}
