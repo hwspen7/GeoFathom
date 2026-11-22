@@ -1,11 +1,12 @@
 import {test,expect} from './coverage-fixture';
 import {execFileSync} from 'node:child_process';
 import {resolve} from 'node:path';
+import {readFileSync} from 'node:fs';
 const API='http://127.0.0.1:8000';
 const tile=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/ZecAAAAASUVORK5CYII=','base64');
 
 test('real DEM is imported, analyzed, visualized and saved through workbench',async({page})=>{
- test.setTimeout(90000);
+ test.setTimeout(120000);
  const fixture=JSON.parse(execFileSync('python',['-c',`
 import json,tempfile
 from pathlib import Path
@@ -55,6 +56,11 @@ with tempfile.TemporaryDirectory() as directory:
  await expect(dialogue).toBeVisible();
  const svgDownload=page.waitForEvent('download');await dialogue.getByRole('button',{name:'SVG',exact:true}).click();
  expect((await svgDownload).suggestedFilename()).toBe('terrain-chart.svg');
+ for(const [format,header] of [['PNG','89504e470d0a1a0a'],['PDF','255044462d312e34']] as const){
+   const event=page.waitForEvent('download');await dialogue.getByRole('button',{name:format,exact:true}).click();
+   const file=await event;expect(file.suggestedFilename()).toBe('terrain-chart.'+format.toLowerCase());
+   expect(readFileSync((await file.path())!).subarray(0,8).toString('hex')).toBe(header);
+ }
  await dialogue.getByRole('button',{name:'Close expanded',exact:true}).click();
  await page.getByLabel('Terrain tool group').selectOption('Surface');
  await tools.getByRole('button',{name:'Slope map',exact:true}).click();
@@ -78,7 +84,18 @@ with tempfile.TemporaryDirectory() as directory:
  await expect(page.getByRole('img',{name:'Earthwork volume (m³)'})).toBeVisible();
  await tools.getByRole('button',{name:'3D terrain',exact:true}).click();
  await page.getByRole('button',{name:'Run terrain operation'}).click();
- await expect(page.getByLabel('Interactive 3D terrain preview')).toBeVisible();
+ const meshCanvas=page.getByLabel('Interactive 3D terrain preview');
+ await expect(meshCanvas).toBeVisible();
+ // Require the WebGL2 path under the CI SwiftShader renderer, not the CPU fallback.
+ await expect(meshCanvas).toHaveAttribute('data-renderer','webgl2');
+ await expect.poll(async()=>meshCanvas.evaluate(node=>{
+   const canvas=node as HTMLCanvasElement,gl=canvas.getContext('webgl2');if(!gl)return false;
+   const data=new Uint8Array(canvas.width*canvas.height*4);gl.readPixels(0,0,canvas.width,canvas.height,gl.RGBA,gl.UNSIGNED_BYTE,data);
+   for(let i=0;i<data.length;i+=4)if(data[i+3]>0&&data[i+1]>data[i]+10&&data[i+1]>data[i+2]+10)return true;
+   return false;
+ })).toBe(true);
+ const objEvent=page.waitForEvent('download');await page.getByRole('button',{name:'OBJ',exact:true}).click();
+ const obj=await objEvent;expect(readFileSync((await obj.path())!,'utf8')).toMatch(/\nf \d+ \d+ \d+/);
  await tools.getByRole('button',{name:'Viewshed',exact:true}).click();
  await page.getByRole('button',{name:'Pick observer',exact:true}).click();
  const bounds=(await map.boundingBox())!;

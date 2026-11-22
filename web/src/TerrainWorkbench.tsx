@@ -155,7 +155,7 @@ export default function TerrainWorkbench(p:Props){
    }
    // A live run replaces only the previous run with identical input, never
    // hidden or historical results from different source geometry.
-   analysisRequest.current?.abort();
+   // The request guard above excludes concurrent calculations.
    const controller=new AbortController();analysisRequest.current=controller;
    const ticket=++sequence.current;setBusy(true);setError('');setInfo('');
    const record:TerrainRecord={id:crypto.randomUUID(),title:modes.find(m=>m.id===operation)!.title,
