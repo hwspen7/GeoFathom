@@ -2,6 +2,9 @@ import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import {coveragePlugin,coverageEnabled} from './scripts/instrument.mjs';
 
+// This TS project intentionally omits @types/node; Vite executes this config in Node.
+declare const process:{env:Record<string,string|undefined>};
+
 // Local-only development proxy; the production deployment must route /api
 // to its own API service. Bind the dev server to loopback.
 const proxy={'/api':{target:'http://127.0.0.1:8000',changeOrigin:true,
