@@ -259,6 +259,7 @@ type Drag = {
   last: GeoJSON.Geometry;
   path: GeometryPath | null;
   kind: 'vertex' | 'feature' | 'edge';
+  inserted?:boolean;
 };
 
 export default function MapCanvas({
@@ -442,6 +443,7 @@ export default function MapCanvas({
           JSON.stringify([event.point.x,event.point.y]));
       }
       let first = state.selected;
+      let inserted=false;
       let path: GeometryPath | null = null;
       let kind: Drag['kind'] | null = null;
       if(state.moving&&(handle||fallback||features.some(f=>f.properties?.role==='selected'))){
@@ -454,6 +456,7 @@ export default function MapCanvas({
           kind='edge';
         }else{
           if(midpoint){
+            inserted=true;
             first=addVertex(first,path,coordinates(event));
             path={...path,vertex:path.vertex+1};
             state.onGeometryPreview(first);
@@ -469,7 +472,7 @@ export default function MapCanvas({
       if(kind==='vertex'&&path)state.onSelectBoundaryNode?.(path);
       if(import.meta.env.DEV&&container.current)
         container.current.setAttribute('data-dev-drag-began',kind);
-      drag.current = { original: first, last: first, path, kind,
+      drag.current = { original: first, last: first, path, kind,inserted,
         start: coordinates(event),end:coordinates(event) };
       map.dragPan.disable();
       map.getCanvas().style.cursor = 'grabbing';
@@ -600,7 +603,10 @@ export default function MapCanvas({
           });
         }
       }else{
-        eventRef.current.onGeometryCommit(current.last);
+        // Inspecting an existing vertex must never create a new local feature.
+        // An explicitly inserted midpoint is a real edit even without drag.
+        if(current.inserted||JSON.stringify(current.last)!==JSON.stringify(current.original))
+          eventRef.current.onGeometryCommit(current.last);
       }
     }
     function click(event: MapMouseEvent) {
