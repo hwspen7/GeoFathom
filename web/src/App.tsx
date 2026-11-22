@@ -164,8 +164,10 @@ export default function App() {
   const [pendingAnnotation,setPendingAnnotation] = useState<{
     projectId:string;layerId:string;text:string;
   }|null>(null);
-  // Keep the map unobstructed by default; legends remain available on demand.
-  const [showLegend,setShowLegend] = useState(false);
+  // The legend is visible in ordinary map and survey workflows.
+  // Geometry editing temporarily hides it so top-right vertex handles
+  // cannot be intercepted by the floating overlay.
+  const [showLegend,setShowLegend] = useState(true);
   const [selectionBoxMode,setSelectionBoxMode]=useState(false);
   const [selectionBox,setSelectionBox]=useState<[number,number,number,number]|null>(null);
   const [spatialSelected,setSpatialSelected]=useState<string[]>([]);
