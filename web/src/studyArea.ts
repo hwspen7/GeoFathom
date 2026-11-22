@@ -12,7 +12,7 @@ function ringArea(ring:GeoJSON.Position[]):number{
  let twice=0;
  for(let i=0;i<ring.length-1;i++){
   const [ax,ay]=ring[i],[bx,by]=ring[i+1];
-  twice+=(ax*bx-ay*by)*mx*my;
+  twice+=(ax*by-ay*bx)*mx*my;
  }
  return Math.abs(twice)/2;
 }
