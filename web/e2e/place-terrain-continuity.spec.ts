@@ -166,6 +166,12 @@ test('OSU disconnected mapped properties default to campus, with inspectable edi
   return raw?JSON.parse(raw).length:0;
  },{timeout:18000}).toBeGreaterThan(3);
  await expect(page.getByLabel('Boundary longitude')).toHaveValue('-83.0450000');
+ // Click a real rendered map vertex. Selecting it must not mutate the shape.
+ const pixels=JSON.parse((await map.getAttribute('data-edit-handle-pixels'))||'[]') as number[][];
+ const rect=(await map.boundingBox())!;
+ await page.mouse.click(rect.x+pixels[2][0],rect.y+pixels[2][1]);
+ await expect(page.getByLabel('Boundary node')).toHaveValue('2');
+ await expect(page.getByLabel('Pinned places').getByRole('button',{name:'Select pinned The Ohio State University'})).toBeVisible();
  await page.getByLabel('Boundary node').selectOption('1');
  await expect(page.getByLabel('Boundary longitude')).toHaveValue('-83.0100000');
  await page.getByLabel('Boundary longitude').fill('-83.0105');

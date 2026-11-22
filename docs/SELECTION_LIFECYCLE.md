@@ -39,3 +39,12 @@
 A searched place that provides only coordinates is not a surveyed polygon. The map may focus on the point and download a DEM in the visible viewport; area analysis still requires a real polygon or the DEM extent.
 
 Persistent reference pins are a browser-local project workspace feature. Moving to a different browser or clearing site storage does not transfer these pins; server project features should be saved to the project for portable persistence.
+
+## Search-derived campus boundaries and coordinates (2026-11-22)
+
+- Search results can contain disconnected OSM MultiPolygon parcels (e.g., a main university campus plus distant land). Treat each outer polygon as a separately selectable study parcel; keep original source intact in Pinned places.
+- For a multipolygon, default to the connected parcel containing or nearest the geocoder's reference coordinate. Explicit **Study area parcel** dropdown allows selecting the full OSM geometry or any individual parcel.
+- DEM target bounds, orange preview rectangle and area analysis derive from the **currently chosen study parcel**, not the entire multipolygon once a component is chosen. Remote detached parcels must no longer inflate main-campus download budgets.
+- All selected boundary vertices appear as compact green point markers. The current node appears orange. **Edit boundary nodes** opens the real drag handles and midpoint insertion; the Inspector supports exact WGS84 longitude and latitude edits and validates them with the existing GIS measurement API.
+- Clicking a vertex to read its coordinates is non-mutating. The original OSM source remains unchanged; successful modifications are saved as separate, editable, local scratch features. A user must explicitly remove a pinned original or local copy.
+- Both unit and browser tests cover far-north campus outliers, actual geometry nodes and source-retention invariants. Live OSM data and provider acquisition still require on-machine verification.
