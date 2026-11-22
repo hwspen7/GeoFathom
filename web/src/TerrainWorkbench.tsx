@@ -142,10 +142,12 @@ export default function TerrainWorkbench(p:Props){
    (operation!=='hillshade'||validNumber(azimuth,0,360)&&validNumber(altitude,0,90))&&
    (!needsPoint||validNumber(lon,-180,180)&&validNumber(lat,-90,90))&&
    (operation!=='visibility'||validNumber(height,0,1000)&&validNumber(target,0,1000));
- const canRun=operation!==null&&p.connected&&verified&&!!correctShape&&!sourceMismatch&&parametersValid;
+ const canRun=operation!==null&&p.connected&&verified&&!!correctShape&&!sourceMismatch&&!mapMismatch&&parametersValid;
  const inputKey=JSON.stringify([dem?.id,p.geometry,operation,interval,reference,lon,lat,height,target,endLon,endLat,maxSlope,minElevation,maxElevation,maxTri,streamCells,azimuth,altitude,sectionSpacing,sectionWidth,drape,drape?p.imageRaster?.id:null]);
  const inputsChanged=!!selected&&selected.inputKey!==inputKey;
  useEffect(()=>{setVerticalConfirmed(false);sourceIntent.current++;},[dem?.id]);
+ // A map move to an unrelated location must not publish a stale analysis result.
+ useEffect(()=>{if(mapMismatch&&analysisRequest.current)cancelAnalysis();},[mapMismatch]);
  // Map extent outline and request coordinates always derive from the same explicit target.
  useEffect(()=>{latest.current.onFetchTarget?.(p.active?fetchArea:null);},[fetchKey,p.active]);
  // Changing the download target aborts the old request rather than selecting stale data.
@@ -296,7 +298,7 @@ export default function TerrainWorkbench(p:Props){
      <div className="area-fields">
        <select aria-label="Public DEM resolution" value={resolution} onChange={e=>setResolution(Number(e.target.value) as 1|3|10|30|90)}><option value={30}>GLO-30 · 30 m</option><option value={90}>GLO-90 · 90 m</option><option value={10}>USGS 3DEP · 10 m grid</option><option value={3}>USGS 3DEP · 3 m grid</option><option value={1}>USGS 3DEP · 1 m grid</option></select>
        <button disabled={!p.connected||!fetchArea||!!budget?.warning||fetching||importing} title="Download the explicitly displayed area, not a previous selection" onClick={()=>void fetchDEM()}>{fetching?'Fetching…':'Fetch DEM'}</button>
-       {fetching&&<button aria-label="Cancel DEM download" onClick={()=>{sourceIntent.current++;fetchAbort.current?.abort();setFetching(false);setInfo('Download cancelled.');}}>Cancel</button>}
+       {fetching&&<button aria-label="Cancel DEM download" onClick={()=>{sourceIntent.current++;fetchAbort.current?.abort();setInfo('Cancelling the previous download…');}}>Cancel</button>}
      </div>
      {sourceInfo&&<small className="compact-notice" title="Copernicus is DSM; 3DEP is bare-earth DEM. Requested grid size is not native resolution.">{sourceInfo}</small>}
      {dem&&<small className="compact-notice" title={dem.provenance}>{dem.width} × {dem.height} · {dem.crs} · elevation m · {describeTerrainBounds(dem.bbox)}</small>}
@@ -343,6 +345,7 @@ export default function TerrainWorkbench(p:Props){
      {!p.connected&&<small className="compact-notice">API offline</small>}
      {!dem&&<small className="compact-notice">DEM required</small>}
      {sourceMismatch&&<small className="discovery-error">Analysis area does not intersect selected DEM</small>}
+     {mapMismatch&&<small className="discovery-error">Run blocked: the selected DEM is outside the visible map. Use the raster Fit control or fetch new data.</small>}
      {dem&&!verified&&<small className="compact-notice">Confirm elevation units before analysis</small>}
      {!parametersValid&&<small className="discovery-error">Check numeric parameters</small>}
    </div>}
