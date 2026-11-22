@@ -13,7 +13,8 @@ import MapCanvas, { type FocusPoint } from './MapCanvas';
 import {loadDisplay,saveDisplay,areaText,distanceText,type AreaUnit} from './displaySettings';
 import {BASEMAPS,customBasemap,defaultCustom,preferredSatellite,mapTilerImagery,type BasemapId,type CustomBasemap} from './basemaps';
 import {ScratchHistory} from './scratchHistory';
-import {addRaster,changeRaster,type RasterLayerView} from './rasterLayers';
+import {addRaster,changeRaster,selectDEM,hideDEMs,type RasterLayerView} from './rasterLayers';
+import {terrainContainsCenter} from './terrainSource';
 import {localMeasurement,localShape,readScratch,writeScratch,SCRATCH_LIMIT,OFFLINE_METHOD,type ScratchFeature} from './scratch';
 import SurveyTools from './SurveyTools';
 import ProfessionalPanel from './ProfessionalPanel';
@@ -317,6 +318,10 @@ export default function App() {
   async function selectPlace(place: Place) {
     const sequence = ++geometrySequence.current;
     setSelectedPlace(place);setScratchId(null);setPreview(null);setPendingShared(null);
+    // A new place outside the old DEM must not silently inherit an unrelated source.
+    if(demLayer&&!terrainContainsCenter(demLayer.bbox,[place.longitude,place.latitude,place.longitude,place.latitude])){
+      setDemLayer(null);setRasterLayers(old=>hideDEMs(old));setExtentMode(false);setExtentGeometry(null);
+    }
     timeline.current=new GeometryTimeline();lastValid.current=null;setHistoryPulse(v=>v+1);
     setTerrainPicking(false);setPromptMode(null);setPendingAnnotation(null);setSelectionBoxMode(false);setLabelMoveMode(false);
     setSelectedFeatureId(null);
@@ -1493,10 +1498,12 @@ export default function App() {
               refreshToken={refreshToken+connectionRetry} origin={terrainOrigin} picking={terrainPicking}
               onSelectRaster={asset=>{
                 if(!projectCurrent())return;
-                setDemLayer(asset);setRasterLayers(old=>addRaster(old,asset,'dem'));setTerrainOrigin(null);setExtentMode(false);setExtentGeometry(null);
-                const [west,south,east,north]=asset.bbox;
-                setFocus({longitude:(west+east)/2,latitude:(south+north)/2,bbox:asset.bbox,key:Date.now()});
-                setMessage('DEM selected: '+asset.name);
+                setDemLayer(asset);setRasterLayers(old=>asset?selectDEM(old,asset):hideDEMs(old));
+                setTerrainOrigin(null);setTerrainPicking(false);setTerrainHover(null);
+                setExtentMode(false);setExtentGeometry(null);
+                // Selecting a stored DEM must NEVER reposition the current map.
+                // Users can explicitly choose Fit in the raster layer panel.
+                setMessage(asset?'DEM selected: '+asset.name+' · current map position retained.':'Elevation source cleared; downloaded files are retained.');
               }}
               onDraw={line=>{setExtentMode(false);setExtentGeometry(null);startDrawing(line?'line':'polygon');}}
               extentMode={extentMode} onUseSelection={()=>setExtentMode(false)}
