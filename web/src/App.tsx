@@ -63,7 +63,15 @@ export default function App() {
   }
   function removePinnedPlace(id:string){
     setPins(old=>({...old,places:unpinPlace(old.places,id)}));
-    if(selectedPlace?.id===id)deselect();
+    if(selectedPlace?.id===id){
+      // Removing the selected reference must not delete an independently drawn
+      // profile line or any other local/saved project feature.
+      geometrySequence.current++;
+      setSelectedPlace(null);setGeometry(null);setMeasurement(null);
+      lastValid.current=null;timeline.current=new GeometryTimeline();
+      setHistoryPulse(v=>v+1);
+      setError('');setMessage('Retained location removed. Other drawings are unchanged.');
+    }
   }
   const [scratchDocument,setScratchDocument]=useState(()=>({scope:null as string|null,features:readScratch()}));
   const scratch=scratchDocument.features;
@@ -591,11 +599,11 @@ export default function App() {
       if(mode!=='hole'&&mode!=='split'){
         setSelectedFeatureId(null);featureIdentity.current=null;setSelectedPlace(null);
         setGeometrySource(mode==='trace-along'?'Vector network tracing':'User drawn');
-        setFeatureProperties({source_type:mode==='trace-along'?'vector_trace':'user_drawn'});
+        setFeatureProperties(mode==='trace-along'?{source_type:'vector_trace',method:'shortest connected path'}:{source_type:'user_drawn'});
       }
       if(mode!=='split'&&(!selectedFeatureId||mode!=='hole'))storeScratch(result,measured,mode==='hole'?scratchId:null,
         mode==='hole'?undefined:{source:mode==='trace-along'?'Vector network tracing':'User drawn',
-          properties:{source_type:mode==='trace-along'?'vector_trace':'user_drawn'}});
+          properties:mode==='trace-along'?{source_type:'vector_trace',method:'shortest connected path'}:{source_type:'user_drawn'}});
       setGeometry(result);
       lastValid.current = structuredClone(result);
       timeline.current.push(result);
@@ -744,7 +752,8 @@ export default function App() {
   }
   function deselect(){
     geometrySequence.current++;setBusy(false);setGeometry(null);setMeasurement(null);
-    setTerrainProfileLine(null);setTerrainLineDrawing(false);
+    // Deselect does not delete the independent profile line or retained map references.
+    setTerrainLineDrawing(false);
     setScratchId(null);setSelectedFeatureId(null);featureIdentity.current=null;setSelectedPlace(null);
     setDrawingMode(null);setVertices([]);setEditing(false);setMoving(false);setEdgeMoving(false);setLinked(false);
     setPreview(null);setPendingShared(null);setPromptMode(null);setTraceMode(false);setPendingAnnotation(null);
