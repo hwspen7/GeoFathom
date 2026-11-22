@@ -300,7 +300,8 @@ def main():
             for command in (["npm.cmd", "ci", "--no-audit", "--no-fund"],
                             ["npm.cmd", "run", "build"], ["npm.cmd", "run", "test:coverage"],
                             ["npx.cmd", "playwright", "install", "chromium"],
-                            ["npm.cmd", "run", "test:e2e"]):
+                            ["npm.cmd", "run", "test:e2e:coverage"],
+                            ["npm.cmd", "run", "coverage:merge"]):
                 run(command, web_env, ROOT / "web")
             from quality_report import frontend_coverage
             shutil.copytree(ROOT / "web" / "coverage", out / "web-coverage")

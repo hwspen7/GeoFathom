@@ -70,7 +70,8 @@ def main():
     py, native, web = python_coverage(args.python), native_coverage(args.native), frontend_coverage(args.web)
     checks = {"python_statements_95": py["statements"] >= 95,
               "python_branches_90": py["branches"] >= 90,
-              "native_lines_90": native["lines"] >= 90,
+              "native_lines_95": native["lines"] >= 95,
+              "native_branches_85": native["branches"] >= 85,
               "web_statements_90": web["statements"] >= 90,
               "web_branches_85": web["branches"] >= 85}
     result = {"passed": all(checks.values()), "python": py, "native_cpu": native, "web": web, "gates": checks}

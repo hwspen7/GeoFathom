@@ -106,13 +106,7 @@ jobs:
       - name: Unit test precision editor and survey geometry
         working-directory: web
         run: npm test
-      - name: Resolve component and shared instrumentation dependencies
-        working-directory: web
-        run: |
-          npm install --package-lock-only --ignore-scripts --save-dev --save-exact istanbul-lib-instrument@6.0.3 jsdom@26.1.0 @testing-library/react@16.3.0 @testing-library/dom@10.4.1 @testing-library/user-event@14.6.1 istanbul-lib-coverage@3.2.2 istanbul-lib-report@3.0.1 istanbul-reports@3.2.0
-          node -e 'const fs=require("fs"),cp=require("child_process");const old=JSON.parse(cp.execSync("git show HEAD:web/package-lock.json",{encoding:"utf8"}));const next=JSON.parse(fs.readFileSync("package-lock.json","utf8"));console.log("WEB_COMPONENT_LOCK_PATCH="+JSON.stringify({added:Object.fromEntries(Object.entries(next.packages).filter(([k,v])=>JSON.stringify(old.packages[k])!==JSON.stringify(v))),removed:Object.keys(old.packages).filter(k=>!(k in next.packages))}));'
-          npm ci --no-audit --no-fund
-      - name: Collect frontend coverage using locked provider
+      - name: Collect source-instrumented frontend unit coverage
         working-directory: web
         run: npm run test:coverage
       - uses: actions/upload-artifact@v4
@@ -149,7 +143,12 @@ jobs:
         env:
           GEOFATHOM_E2E_WORKERS: '4'
           GEOFATHOM_E2E_DATABASE_PATH: data/e2e-geofathom-parallel.sqlite
-        run: npm run test:e2e
+        run: npm run test:e2e:coverage
+      - uses: actions/upload-artifact@v4
+        with:
+          name: geofathom-browser-coverage
+          path: web/coverage/raw/browser/
+          if-no-files-found: error
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
@@ -232,7 +231,7 @@ jobs:
 
 
   quality-measurement:
-    needs: [python, windows, postgis, native-coverage, web]
+    needs: [python, windows, postgis, native-coverage, web, browser]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -249,9 +248,20 @@ jobs:
           python -m coverage combine --keep reports/geofathom-python-coverage/coverage-data.bin reports/geofathom-windows-coverage/coverage-data.bin reports/geofathom-postgis-coverage/coverage-data.bin
           python -m coverage json -o combined-coverage.json
           python -m coverage xml -o combined-coverage.xml
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Merge unit and browser execution with the same source maps
+        working-directory: web
+        run: |
+          npm ci --no-audit --no-fund
+          mkdir -p coverage/raw
+          cp -R ../reports/geofathom-web-coverage/raw/unit coverage/raw/unit
+          cp -R ../reports/geofathom-browser-coverage coverage/raw/browser
+          npm run coverage:merge
       - name: Record quality targets without falsely qualifying the release
         run: |
-          python scripts/quality_report.py --python combined-coverage.json --native reports/geofathom-native-coverage/native-coverage.xml --web reports/geofathom-web-coverage/coverage-summary.json --output quality.json --report-only
+          python scripts/quality_report.py --python combined-coverage.json --native reports/geofathom-native-coverage/native-coverage.xml --web web/coverage/coverage-summary.json --output quality.json --report-only
           cat quality.json >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         with:
@@ -260,3 +270,5 @@ jobs:
             combined-coverage.json
             combined-coverage.xml
             quality.json
+            web/coverage/coverage-summary.json
+            web/coverage/coverage-final.json

@@ -263,3 +263,17 @@ Python coverage data, not percentages. It publishes the combined XML/JSON and
 the measured target verdicts. The report-only flag does not qualify a release;
 the standalone strict quality gate (without that flag) exits nonzero if any
 target is unmet.
+
+
+### Current quality policy
+
+Normal development host acceptance retains a 60-second CPU/CUDA soak;
+the final extended local qualification uses `--soak-seconds 600` for each
+device. A 24-hour run is optional, not a required gate. Combined frontend
+coverage uses identical Istanbul instrumentation of original application
+source in Vitest and real Chromium. All production TS/TSX files remain in
+the denominator, including those never loaded. Unit and browser summaries
+are emitted separately and the combined report is calculated from counters,
+not from adding percentages. Native CPU line and branch goals are 95% and
+85%; Python targets remain 95% statements and 90% branches, frontend targets
+90% statements and 85% branches.
