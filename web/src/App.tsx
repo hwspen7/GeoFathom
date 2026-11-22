@@ -818,9 +818,9 @@ export default function App() {
   }
   function editMode(mode:'vertices'|'edge'|'move'){
     if(!geometry||selectedLocked||busy||drawingMode)return;
-    // Do not let a floating legend obscure selectable boundary handles.
-    // Preserve access to the same legend after the edit session ends.
-    setShowLegend(false);
+    // The legend is temporarily hidden by the editing state in the map
+    // render. Preserve the user's expanded/collapsed preference when editing
+    // ends, instead of permanently changing it during an edit transition.
     if(preview||pendingShared){setGeometry(lastValid.current);setPreview(null);setPendingShared(null);}
     geometrySequence.current++;
     setEditing(true);setMoving(mode==='move');setEdgeMoving(mode==='edge');
