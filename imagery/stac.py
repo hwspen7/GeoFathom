@@ -56,16 +56,26 @@ async def search_stac(
         )
         response.raise_for_status()
         data = response.json()
-    if data.get("type") != "FeatureCollection" or not isinstance(data.get("features"), list):
+    if (not isinstance(data, dict) or data.get("type") != "FeatureCollection"
+            or not isinstance(data.get("features"), list)):
         raise ValueError("Catalog returned an invalid STAC feature collection.")
     items = []
     for feature in data["features"][:limit]:
         if not isinstance(feature, dict):
             continue
-        properties = feature.get("properties") or {}
+        # A provider may return malformed optional metadata. Do not turn
+        # that into an unhandled 500 or expose non-HTTPS catalog URLs.
+        properties = feature.get("properties")
+        if not isinstance(properties, dict):
+            properties = {}
+        links = feature.get("links")
+        if not isinstance(links, list):
+            links = []
         href = next(
-            (link.get("href") for link in feature.get("links", [])
-             if link.get("rel") == "self" and str(link.get("href", "")).startswith("https://")),
+            (link["href"] for link in links
+             if isinstance(link, dict) and link.get("rel") == "self"
+             and isinstance(link.get("href"), str)
+             and link["href"].startswith("https://")),
             None,
         )
         items.append({

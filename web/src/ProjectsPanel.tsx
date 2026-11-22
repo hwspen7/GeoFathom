@@ -49,12 +49,16 @@ export default function ProjectsPanel({
   notify.current = onWorkspace;
   const selection = useRef('');
   const requestSequence = useRef(0);
+  const historySequence = useRef(0);
+  const featureIdentity = useRef(selectedFeatureId);
+  featureIdentity.current = selectedFeatureId;
 
   const chooseProject = useCallback((id: string) => {
     if (selection.current === id) return;
     // Invalidate outstanding reads synchronously, before React commits the switch.
     selection.current = id;
     requestSequence.current++;
+    historySequence.current++;
     rememberProject(id);
     setSelected(id);
     setWorkspace(null);
@@ -105,18 +109,29 @@ export default function ProjectsPanel({
     notify.current(workspace, workspace ? selected : null);
   }, [workspace, selected]);
 
-  useEffect(() => {
-    let cancelled = false;
-    setHistory(null);
-    if (selected && selectedFeatureId) {
-      getFeatureHistory(selected, selectedFeatureId).then(result => {
-        if (!cancelled && selection.current === selected) setHistory(result);
-      }).catch(() => {
-        if (!cancelled) setHistory(null);
-      });
+  const loadHistory = useCallback(async (projectId: string, featureId: string, reportError = false) => {
+    const sequence = ++historySequence.current;
+    const isCurrent = () => sequence === historySequence.current &&
+      selection.current === projectId && featureIdentity.current === featureId;
+    try {
+      const result = await getFeatureHistory(projectId, featureId);
+      if (isCurrent()) {
+        if (result.feature_id !== featureId) throw new Error('Feature history identity mismatch.');
+        setHistory(result);
+      }
+    } catch (cause) {
+      if (isCurrent()) {
+        setHistory(null);
+        if (reportError) setError(cause instanceof Error ? cause.message : 'Could not load versions.');
+      }
     }
-    return () => { cancelled = true; };
-  }, [selected, selectedFeatureId, refreshToken]);
+  }, []);
+
+  useEffect(() => {
+    setHistory(null);
+    if (selected && selectedFeatureId) void loadHistory(selected, selectedFeatureId);
+    return () => { historySequence.current++; };
+  }, [selected, selectedFeatureId, refreshToken, loadHistory]);
 
   useEffect(()=>{
     const feature=workspace?.features.find(item=>item.id===selectedFeatureId) ??
@@ -153,7 +168,7 @@ export default function ProjectsPanel({
   }
 
   async function save() {
-    if (!selected || !geometry) return;
+    if (!selected || !workspace || !geometry || busy || locked) return;
     await run(async () => {
       if (current) {
         const saved = await updateProjectFeature(selected, current.id, {
@@ -216,7 +231,7 @@ export default function ProjectsPanel({
   async function changeLayer(layer: GeoLayer, update: Partial<{
     name: string; color: string; visible: boolean; locked: boolean; z_index: number;
   }>) {
-    if (!selected) return;
+    if (!selected || !workspace || busy) return;
     await run(async () => { await patchLayer(selected, layer.id, update); });
   }
 
@@ -324,21 +339,21 @@ export default function ProjectsPanel({
           {workspace?.layers.map(layer => (
             <div key={layer.id} className="layer-row">
               <button aria-label={layer.visible ? 'Hide layer' : 'Show layer'}
-                title={layer.visible ? 'Hide layer' : 'Show layer'}
+                title={layer.visible ? 'Hide layer' : 'Show layer'} disabled={busy}
                 onClick={() => void changeLayer(layer, { visible: !layer.visible })}>
                 {layer.visible ? <Eye size={14} /> : <EyeOff size={14} />}
               </button>
-              <input aria-label={'Color of ' + layer.name} type="color" value={layer.color}
+              <input aria-label={'Color of ' + layer.name} type="color" value={layer.color} disabled={busy}
                 onChange={event => void changeLayer(layer, { color: event.target.value })} />
               <button className={layerId === layer.id ? 'layer-name active' : 'layer-name'}
                 onClick={() => setLayerId(layer.id)}>{layer.name}</button>
-              <button aria-label={layer.locked ? 'Unlock layer' : 'Lock layer'}
+              <button aria-label={layer.locked ? 'Unlock layer' : 'Lock layer'} disabled={busy}
                 onClick={() => void changeLayer(layer, { locked: !layer.locked })}>
                 {layer.locked ? <Lock size={14} /> : <LockOpen size={14} />}
               </button>
-              <button aria-label="Move layer higher"
+              <button aria-label="Move layer higher" disabled={busy}
                 onClick={() => void changeLayer(layer, { z_index: layer.z_index + 2 })}>↑</button>
-              <button aria-label="Move layer lower"
+              <button aria-label="Move layer lower" disabled={busy}
                 onClick={() => void changeLayer(layer, { z_index: layer.z_index - 2 })}>↓</button>
             </div>
           ))}
@@ -505,17 +520,17 @@ export default function ProjectsPanel({
               maxLength={120} value={noteText}
               onChange={event=>setNoteText(event.target.value)}/>
             <button aria-label="Place map note" type="submit"
-              disabled={busy||!noteText.trim()||!selected||Boolean(activeLayer?.locked)}>
+              disabled={busy||!noteText.trim()||!selected||!activeLayer||Boolean(activeLayer.locked)}>
               <MapPin size={14}/>
             </button>
           </form>
           <form className="project-create" onSubmit={addNewLayer}>
             <input aria-label="New layer name" placeholder="Add map layer" value={layerName}
               onChange={event => setLayerName(event.target.value)} maxLength={100}/>
-            <button type="submit" disabled={busy || !layerName.trim()}><Plus size={14}/></button>
+            <button type="submit" disabled={busy || !workspace || !layerName.trim()}><Plus size={14}/></button>
           </form>
           <div className="project-actions">
-            <button onClick={() => void save()} disabled={busy || !geometry || locked || Boolean(!current && activeLayer?.locked)}>
+            <button onClick={() => void save()} disabled={busy || !workspace || !geometry || locked || Boolean(!current && activeLayer?.locked)}>
               <Save size={14}/> {current ? 'Update feature' : 'Save selected'}
             </button>
             <button onClick={() => void exportJson()} disabled={busy}>
@@ -523,7 +538,7 @@ export default function ProjectsPanel({
             </button>
           </div>
           {splitParts.length > 1 && (
-            <button className="project-split-save" disabled={busy || Boolean(activeLayer?.locked)}
+            <button className="project-split-save" disabled={busy || !workspace || Boolean(activeLayer?.locked)}
               onClick={() => void saveSplit()}>Save all {splitParts.length} split pieces</button>
           )}
 
@@ -595,8 +610,10 @@ export default function ProjectsPanel({
                   <Copy size={13}/> Duplicate
                 </button>
                 <button onClick={() => {
-                  if (history) setHistory(null);
-                  else if (selected) void getFeatureHistory(selected, current.id).then(setHistory);
+                  if (history) {
+                    historySequence.current++;
+                    setHistory(null);
+                  } else if (selected) void loadHistory(selected, current.id, true);
                 }}><History size={13}/> Versions</button>
                 <button aria-label="Delete selected map feature"
                   onClick={()=>void deleteSelected()} disabled={busy||locked}>Delete</button>
