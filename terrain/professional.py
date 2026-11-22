@@ -250,10 +250,18 @@ def surface(z,valid,affine,crs,operation,reference,point,end_point,max_slope,
         else:values=d[operation]
     if not np.isfinite(values).any():raise RasterError("No valid cells for this terrain product.")
     product=raster_product(values,operation,affine,crs,cancel)
-    metrics.update({"product_valid_cells":product["valid_cells"],
-                    "product_min":float(np.nanmin(values)),"product_max":float(np.nanmax(values)),
-                    "product_mean":float(np.nanmean(values))})
-    if operation=="aspect_map":
+    if operation in {"flow_direction","streams","suitability","least_cost"}:
+        metrics["product_valid_cells"]=product["valid_cells"]
+    elif operation=="aspect_map":
         angles=values[np.isfinite(values)&(values>=0)]
-        metrics={"flat_cells":int((values==-1).sum()),"directional_cells":int(angles.size),"product_valid_cells":product["valid_cells"]}
+        metrics.update({"flat_cells":int((values==-1).sum()),
+                        "directional_cells":int(angles.size),"product_valid_cells":product["valid_cells"]})
+        if angles.size:
+            radians=np.deg2rad(angles)
+            metrics["circular_mean_aspect_deg"]=float(np.rad2deg(np.arctan2(np.sin(radians).mean(),
+                np.cos(radians).mean()))%360)
+    else:
+        metrics.update({"product_valid_cells":product["valid_cells"],
+                        "product_min":float(np.nanmin(values)),"product_max":float(np.nanmax(values)),
+                        "product_mean":float(np.nanmean(values))})
     return product,metrics,features

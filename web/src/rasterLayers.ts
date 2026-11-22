@@ -10,7 +10,8 @@ export function changeRaster(layers:RasterLayerView[],id:string,update:Partial<P
 
 /** Make exactly one imported elevation surface visible without deleting prior source files. */
 export function selectDEM(layers:RasterLayerView[],asset:RasterAsset){
- return addRaster(layers.map(l=>l.kind==='dem'?{...l,visible:false}:l),asset,'dem');
+ return addRaster(layers.map(l=>l.kind==='dem'?{...l,visible:false}:l),asset,'dem').map(l=>
+   l.asset.id===asset.id?{...l,kind:'dem' as const,opacity:l.kind==='dem'?l.opacity:.55,visible:true}:l);
 }
 export function hideDEMs(layers:RasterLayerView[]){
  return layers.map(l=>l.kind==='dem'?{...l,visible:false}:l);

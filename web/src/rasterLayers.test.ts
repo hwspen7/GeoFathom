@@ -16,4 +16,7 @@ it('selects only one DEM at a time while retaining imported imagery',async()=>{
  expect(second.find(l=>l.asset.id==='dem-a')?.visible).toBe(false);
  expect(second.find(l=>l.asset.id==='dem-b')?.visible).toBe(true);
  expect(hideDEMs(second).every(l=>!l.visible)).toBe(true);
+ const existing=[{asset:a,kind:'image' as const,visible:true,opacity:1}];
+ const converted=selectDEM(existing,a);
+ expect(converted[0]).toMatchObject({kind:'dem',visible:true,opacity:.55});
 });
