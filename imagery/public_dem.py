@@ -19,6 +19,7 @@ from rasterio.transform import from_origin
 from rasterio.warp import transform_bounds, reproject, Resampling
 from .raster import RasterError
 from .store import imagery_dir, store_upload
+from terrain.cancellation import checkpoint
 
 _FETCH_SLOT=BoundedSemaphore(1)
 _NODATA=-9999.0
@@ -58,7 +59,7 @@ def _tile_indices(bounds):
     if len(tiles)>4:raise RasterError("DEM area spans too many source tiles.")
     return tiles
 
-def _read_tiles(bbox,resolution):
+def _read_tiles(bbox,resolution,cancel=None):
     crs,affine,width,height=_grid(bbox,resolution)
     expanded=transform_bounds(crs,"EPSG:4326",*rasterio.transform.array_bounds(height,width,affine),densify_pts=21)
     destination=np.full((height,width),_NODATA,dtype=np.float32)
@@ -68,6 +69,7 @@ def _read_tiles(bbox,resolution):
                       GDAL_HTTP_CONNECTTIMEOUT="5",GDAL_HTTP_MAX_RETRY="0",
                       CPL_VSIL_CURL_ALLOWED_EXTENSIONS=".tif"):
         for y,x in _tile_indices(expanded):
+            checkpoint(cancel)
             url=tile_url(y,x,resolution)
             try:
                 with rasterio.open(url) as source:
@@ -88,7 +90,7 @@ def _read_tiles(bbox,resolution):
 
 USGS_EXPORT="https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer/exportImage"
 
-def _read_usgs(bbox,resolution):
+def _read_usgs(bbox,resolution,cancel=None):
     w,s,e,n=bbox
     if not (-180<=w<e<=-60 and 17<=s<n<=72):
         raise RasterError("USGS 3DEP request is outside the supported US service area.")
@@ -103,6 +105,7 @@ def _read_usgs(bbox,resolution):
         with httpx.stream("GET",USGS_EXPORT,params=params,timeout=httpx.Timeout(30.,connect=8.),follow_redirects=False) as response:
             response.raise_for_status()
             for chunk in response.iter_bytes():
+                checkpoint(cancel)
                 content.extend(chunk)
                 if len(content)>32*1024*1024:raise RasterError("USGS DEM response exceeded 32 MiB.")
         with MemoryFile(bytes(content)) as memory:
@@ -119,14 +122,16 @@ def _read_usgs(bbox,resolution):
     if not valid.any():raise RasterError("No valid USGS 3DEP elevations returned.")
     return destination,crs,affine,int(valid.sum()),[]
 
-def fetch_dem_subset(bbox,resolution):
+def fetch_dem_subset(bbox,resolution,cancel=None):
+    checkpoint(cancel)
     _grid(bbox,resolution)
     if not _FETCH_SLOT.acquire(blocking=False):
         raise RasterError("Another elevation download is active.")
     temporary=None
     try:
         usgs=resolution in (1,3,10)
-        array,crs,affine,count,missing=(_read_usgs if usgs else _read_tiles)(bbox,resolution)
+        array,crs,affine,count,missing=(_read_usgs if usgs else _read_tiles)(bbox,resolution,cancel)
+        checkpoint(cancel)
         root=imagery_dir();root.mkdir(parents=True,exist_ok=True)
         with tempfile.NamedTemporaryFile(prefix=".dem-",suffix=".tif",dir=root,delete=False) as f:
             temporary=Path(f.name)
@@ -141,6 +146,7 @@ def fetch_dem_subset(bbox,resolution):
             output.write(array,1)
             output.update_tags(SOURCE=provenance,VERTICAL_UNIT="meter")
         label=f"USGS 3DEP {resolution} m grid" if usgs else f"Copernicus GLO-{resolution}"
+        checkpoint(cancel)
         asset=store_upload(temporary,f"{label} {bbox[0]:.6f},{bbox[1]:.6f}.tif",provenance)
         return {"asset":asset,"resolution_m":resolution,"valid_cells":count,"total_cells":int(array.size),
                 "missing_tiles":missing,"requested_bbox":list(bbox),"valid_coverage_pct":100*count/int(array.size),

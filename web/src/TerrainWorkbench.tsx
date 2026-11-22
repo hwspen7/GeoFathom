@@ -114,6 +114,7 @@ export default function TerrainWorkbench(p:Props){
  const analysisRequest=useRef<AbortController|null>(null);
  const alive=useRef(true);
  const sourceIntent=useRef(0);
+ const fetchAbort=useRef<AbortController|null>(null);
  const [verticalConfirmed,setVerticalConfirmed]=useState(false);
  const [live,setLive]=useState(false),[busy,setBusy]=useState(false),[importing,setImporting]=useState(false);
  const [error,setError]=useState(''),[info,setInfo]=useState('');
@@ -147,6 +148,8 @@ export default function TerrainWorkbench(p:Props){
  useEffect(()=>{setVerticalConfirmed(false);sourceIntent.current++;},[dem?.id]);
  // Map extent outline and request coordinates always derive from the same explicit target.
  useEffect(()=>{latest.current.onFetchTarget?.(p.active?fetchArea:null);},[fetchKey,p.active]);
+ // Changing the download target aborts the old request rather than selecting stale data.
+ useEffect(()=>()=>{fetchAbort.current?.abort();},[fetchKey]);
  useEffect(()=>()=>{latest.current.onFetchTarget?.(null);},[]);
  // Published result layers are independent from the currently selected input.
  useEffect(()=>{latest.current.onPreview(records.filter(r=>r.visible).flatMap(r=>r.advanced?.features??[]));latest.current.onRasterPreview?.(records.flatMap(r=>r.visible&&r.advanced?.raster?[{id:r.id,title:r.title,raster:r.advanced.raster}]:[]));},[records]);
@@ -199,7 +202,7 @@ export default function TerrainWorkbench(p:Props){
  },[inputKey,live,p.connected,p.active,verified]);
  useEffect(()=>{
    alive.current=true;
-   return()=>{alive.current=false;sequence.current++;sourceIntent.current++;analysisRequest.current?.abort();};
+   return()=>{alive.current=false;sequence.current++;sourceIntent.current++;analysisRequest.current?.abort();fetchAbort.current?.abort();};
  },[]);
  async function importDEM(e:ChangeEvent<HTMLInputElement>){
    const file=e.target.files?.[0];e.target.value='';if(!file)return;
@@ -221,10 +224,11 @@ export default function TerrainWorkbench(p:Props){
    if(!bbox){setError(fetchScope==='selection'?'Select a polygon or line before downloading.':'Map bounds unavailable. Zoom to the target location.');return;}
    if(budget?.warning){setError(budget.warning);return;}
    const ticket=++sourceIntent.current;
+   const controller=new AbortController();fetchAbort.current=controller;
    setFetching(true);setError('');setSourceInfo('');
    try{
      if(!p.localImport&&!token.trim())throw Error('Enter import access token.');
-     const data=await fetchPublicDEM(bbox,resolution,token);
+     const data=await fetchPublicDEM(bbox,resolution,token,controller.signal);
      if(!alive.current||ticket!==sourceIntent.current)return;
      if(currentFetchKey.current!==requestKey){
        setInfo('Download completed, but the target changed. Old DEM was not selected.');
@@ -239,8 +243,8 @@ export default function TerrainWorkbench(p:Props){
        ' · '+data.valid_cells+'/'+data.total_cells+' cells'+(data.missing_tiles.length?' · partial coverage':'')+
        ' · '+data.valid_coverage_pct.toFixed(1)+'% valid · center '+((bbox[0]+bbox[2])/2).toFixed(5)+', '+((bbox[1]+bbox[3])/2).toFixed(5));
      if(data.warning)setInfo(data.warning);
-   }catch(e){if(alive.current&&ticket===sourceIntent.current)setError(e instanceof Error?e.message:String(e));}
-   finally{if(alive.current)setFetching(false);}
+   }catch(e){if(alive.current&&ticket===sourceIntent.current&&!controller.signal.aborted)setError(e instanceof Error?e.message:String(e));}
+   finally{if(fetchAbort.current===controller)fetchAbort.current=null;if(alive.current)setFetching(false);}
  }
  async function save(){
    if(!p.projectId||!selected||selected.saved||busy||!result||result.features.length>512)return;
@@ -292,6 +296,7 @@ export default function TerrainWorkbench(p:Props){
      <div className="area-fields">
        <select aria-label="Public DEM resolution" value={resolution} onChange={e=>setResolution(Number(e.target.value) as 1|3|10|30|90)}><option value={30}>GLO-30 · 30 m</option><option value={90}>GLO-90 · 90 m</option><option value={10}>USGS 3DEP · 10 m grid</option><option value={3}>USGS 3DEP · 3 m grid</option><option value={1}>USGS 3DEP · 1 m grid</option></select>
        <button disabled={!p.connected||!fetchArea||!!budget?.warning||fetching||importing} title="Download the explicitly displayed area, not a previous selection" onClick={()=>void fetchDEM()}>{fetching?'Fetching…':'Fetch DEM'}</button>
+       {fetching&&<button aria-label="Cancel DEM download" onClick={()=>{sourceIntent.current++;fetchAbort.current?.abort();setFetching(false);setInfo('Download cancelled.');}}>Cancel</button>}
      </div>
      {sourceInfo&&<small className="compact-notice" title="Copernicus is DSM; 3DEP is bare-earth DEM. Requested grid size is not native resolution.">{sourceInfo}</small>}
      {dem&&<small className="compact-notice" title={dem.provenance}>{dem.width} × {dem.height} · {dem.crs} · elevation m · {describeTerrainBounds(dem.bbox)}</small>}

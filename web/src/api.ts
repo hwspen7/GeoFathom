@@ -993,12 +993,12 @@ export function compareAreas(left:GeoJSON.Geometry,right:GeoJSON.Geometry):Promi
     body:JSON.stringify({left,right})});
 }
 
-export function fetchPublicDEM(bbox:[number,number,number,number],resolution_m:1|3|10|30|90,token:string):Promise<{
+export function fetchPublicDEM(bbox:[number,number,number,number],resolution_m:1|3|10|30|90,token:string,signal?:AbortSignal):Promise<{
  asset:RasterAsset;resolution_m:number;valid_cells:number;total_cells:number;missing_tiles:string[];warning:string;requested_bbox:[number,number,number,number];valid_coverage_pct:number
 }>{
  const headers:Record<string,string>={'Content-Type':'application/json'};
  if(token)headers['X-GeoFathom-Admin-Token']=token;else headers['X-GeoFathom-Local-Import']='1';
- return request('/imagery/dem/fetch',{method:'POST',headers,body:JSON.stringify({bbox,resolution_m})});
+ return request('/imagery/dem/fetch',{signal,method:'POST',headers,body:JSON.stringify({bbox,resolution_m})});
 }
 
 export interface TrashedFeature{feature_id:string;layer_id:string;name:string;deleted_at:string}

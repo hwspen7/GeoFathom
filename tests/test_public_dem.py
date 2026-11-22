@@ -50,7 +50,7 @@ def test_usgs_grid_and_provenance(tmp_path,monkeypatch):
     bbox=(-83.001,39.999,-83.,40.)
     crs,affine,w,h=_grid(bbox,1)
     assert affine.a==1 and w<1024 and h<1024
-    def fake(bounds,resolution):
+    def fake(bounds,resolution,cancel=None):
         return np.full((h,w),220,np.float32),crs,affine,w*h,[]
     monkeypatch.setattr(public_dem,"_read_usgs",fake)
     monkeypatch.setenv("GEOFATHOM_IMAGERY_DIR",str(tmp_path/"library"))
@@ -99,3 +99,12 @@ def test_usgs_remote_export_contract_and_error(monkeypatch):
     monkeypatch.setattr(public_dem.httpx,"stream",failure)
     with pytest.raises(RasterError,match="unavailable"):public_dem._read_usgs(bbox,3)
     with pytest.raises(RasterError,match="outside"):public_dem._read_usgs((120,30,120.001,30.001),3)
+
+def test_pre_cancelled_dem_never_reaches_provider(tmp_path,monkeypatch):
+    from threading import Event
+    from terrain.cancellation import TerrainCancelled
+    from imagery import public_dem
+    cancel=Event();cancel.set()
+    monkeypatch.setattr(public_dem,"_read_usgs",lambda *args,**kwargs:pytest.fail("Provider must not run"))
+    with pytest.raises(TerrainCancelled):
+        fetch_dem_subset((-83.001,39.999,-83.,40.),3,cancel=cancel)
