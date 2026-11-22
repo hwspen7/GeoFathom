@@ -2,11 +2,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {spawnSync} from 'node:child_process';
-import {createCoverageMap} from 'istanbul-lib-coverage';
-import {createContext} from 'istanbul-lib-report';
+import coverageLib from 'istanbul-lib-coverage';
+import reportLib from 'istanbul-lib-report';
 import reports from 'istanbul-reports';
 import {instrument,sourceName,root} from './instrument.mjs';
 
+const {createCoverageMap}=coverageLib;
+const {createContext}=reportLib;
 const mode=process.argv[2];
 const directory=path.join(root,'coverage');
 const raw=path.join(directory,'raw');

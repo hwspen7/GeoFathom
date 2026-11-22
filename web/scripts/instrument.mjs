@@ -2,7 +2,8 @@
  * Instrument raw application source, before JSX/esbuild transformation.
  * Nonexecuted files are retained in the denominator by the report generator.
  */
-import {createInstrumenter} from 'istanbul-lib-instrument';
+import instrumentLib from 'istanbul-lib-instrument';
+const {createInstrumenter}=instrumentLib;
 import {relative,resolve,sep} from 'node:path';
 
 export const root=resolve(import.meta.dirname,'..');
