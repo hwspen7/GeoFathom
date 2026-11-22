@@ -483,23 +483,16 @@ export default function App() {
       setHistoryPulse(value=>value+1);
       setLinked(false);
       setPendingShared(null);
-      setGeometrySource('User drawn');
-      setFeatureProperties({ source_type: 'user_drawn' });
+      // Do not overwrite the selected area's metadata while an independent
+      // sketch is still being drawn. The new geometry takes focus at Finish.
     } else {
       setFeatureProperties(current => ({ ...current, last_operation: next }));
     }
     setVertices([]);
-    if (!operation) {
-      setGeometry(null);
-      setSelectedFeatureId(null);
-      setMeasurement(null);
-      setSplitParts([]);
-    }
+    // Existing selection and search candidates are stable through drawing.
+    // Only a successful Finish may select the new independent feature.
     setEditing(false);setEdgeMoving(false);
     setMoving(false);
-    setSelectedPlace(null);
-    setCandidates([]);
-    setDiscovered([]);
     setError('');
     setMessage(next==='point'?'Click a location, then Finish.':
       ['polygon','hole'].includes(next)?'Click corners, then Finish.':'Click start and end, then Finish.');
@@ -595,7 +588,14 @@ export default function App() {
         setSelectedFeatureId(null);featureIdentity.current=null;
       }
       if(sequence!==geometrySequence.current)return;
-      if(mode!=='split'&&(!selectedFeatureId||mode!=='hole'))storeScratch(result,measured,mode==='hole'?scratchId:null);
+      if(mode!=='hole'&&mode!=='split'){
+        setSelectedFeatureId(null);featureIdentity.current=null;setSelectedPlace(null);
+        setGeometrySource(mode==='trace-along'?'Vector network tracing':'User drawn');
+        setFeatureProperties({source_type:mode==='trace-along'?'vector_trace':'user_drawn'});
+      }
+      if(mode!=='split'&&(!selectedFeatureId||mode!=='hole'))storeScratch(result,measured,mode==='hole'?scratchId:null,
+        mode==='hole'?undefined:{source:mode==='trace-along'?'Vector network tracing':'User drawn',
+          properties:{source_type:mode==='trace-along'?'vector_trace':'user_drawn'}});
       setGeometry(result);
       lastValid.current = structuredClone(result);
       timeline.current.push(result);
@@ -611,7 +611,9 @@ export default function App() {
         try{
           const local=localShape(mode,points);
           if(local){
-            storeScratch(local.geometry,local.measurement,null);
+            storeScratch(local.geometry,local.measurement,null,{source:'User drawn',properties:{source_type:'user_drawn'}});
+            setSelectedFeatureId(null);featureIdentity.current=null;setSelectedPlace(null);
+            setGeometrySource('User drawn');setFeatureProperties({source_type:'user_drawn'});
             setGeometry(local.geometry);setMeasurement(local.measurement);
             lastValid.current=structuredClone(local.geometry);timeline.current.push(local.geometry);
             setHistoryPulse(v=>v+1);setDrawingMode(null);setVertices([]);setPreview(null);
