@@ -100,3 +100,31 @@ def test_dem_difference_uses_zero_centered_diverging_legend():
     assert np.all(positive>3) and np.all(negative<3)
     zero,_,_=classification(np.array([[0.,0.,np.nan]]),'dem_difference')
     assert zero.tolist()==[[3,3,-1]]
+
+
+def test_least_cost_does_not_cut_through_either_nodata_corner():
+    # Both side-neighbours are required for any diagonal move. The first
+    # fixture would previously take an illegal diagonal shortcut.
+    z=np.zeros((3,3),dtype=np.float64)
+    valid=np.zeros_like(z,dtype=bool)
+    valid[1,1]=valid[2,1]=valid[2,2]=True
+    path,cost=least_cost(z,valid,(1,1),(2,2),1,1,45)
+    assert path==[(1,1),(2,1),(2,2)]
+    assert cost==pytest.approx(2)
+    # Mirror the blocked side, and then block both orthogonal neighbours.
+    valid=np.zeros_like(z,dtype=bool)
+    valid[1,1]=valid[1,2]=valid[2,2]=True
+    mirrored,cost=least_cost(z,valid,(1,1),(2,2),1,1,45)
+    assert mirrored==[(1,1),(1,2),(2,2)]
+    assert cost==pytest.approx(2)
+    valid[1,2]=False
+    with pytest.raises(RasterError,match="No valid terrain route"):
+        least_cost(z,valid,(1,1),(2,2),1,1,45)
+
+
+def test_least_cost_rejects_steep_diagonal_slope_even_if_flat_side_is_free():
+    z=np.zeros((3,3))
+    z[2,2]=100
+    valid=np.ones_like(z,bool)
+    with pytest.raises(RasterError,match="No valid terrain route"):
+        least_cost(z,valid,(0,0),(2,2),1,1,10)
