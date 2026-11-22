@@ -6,6 +6,8 @@ No Python packages, GPU drivers or system tooling are silently installed.
 import argparse
 import json
 import os
+import platform
+import importlib.metadata
 import secrets
 import shutil
 import subprocess
@@ -40,7 +42,7 @@ def require(name, override=None):
 
 
 def build_native(directory, env, cuda=False):
-    settings = ["-DBUILD_TESTING=ON", f"-DGEOFATHOM_NATIVE_CUDA={'ON' if cuda else 'OFF'}"]
+    settings = ["-A", "x64", "-DBUILD_TESTING=ON", f"-DGEOFATHOM_NATIVE_CUDA={'ON' if cuda else 'OFF'}"]
     if cuda:
         settings.append("-DCMAKE_CUDA_ARCHITECTURES=89")
     run(["cmake", "-S", ROOT, "-B", directory, *settings], env)
@@ -48,6 +50,9 @@ def build_native(directory, env, cuda=False):
     for config in configs:
         run(["cmake", "--build", directory, "--config", config, "--parallel"], env)
         run(["ctest", "--test-dir", directory, "-C", config, "--output-on-failure", "--no-tests=error"], env)
+        if config == "Debug":
+            run(["ctest", "--test-dir", directory, "-C", config, "--output-on-failure",
+                 "--no-tests=error", "--repeat", "until-fail:20"], env)
     dll = directory / "Release" / "geofathom_native.dll"
     if not dll.is_file():
         raise RuntimeError("Expected x64 Release native DLL missing.")
@@ -99,10 +104,14 @@ def main():
     parser.add_argument("--reuse-test-postgis", action="store_true",
                         help="Use the explicitly configured disposable GEOFATHOM_TEST_POSTGIS_DSN")
     parser.add_argument("--skip-web", action="store_true")
+    parser.add_argument("--baseline", type=Path, help="Previous host acceptance report directory")
+    parser.add_argument("--max-regression-percent", type=float, default=15)
     args = parser.parse_args()
+    if not 0 <= args.max_regression_percent <= 50:
+        parser.error("Performance regression tolerance must be 0–50 percent.")
     if sys.platform != "win32" or not 5 <= args.soak_seconds <= 86400:
         parser.error("Windows acceptance requires 5–86400 soak seconds.")
-    for name in ("cmake", "ctest", "nvcc", "nvidia-smi"):
+    for name in ("git", "cmake", "ctest", "nvidia-smi"):
         require(name)
     if not args.skip_web:
         require("node")
@@ -132,6 +141,29 @@ def main():
     state = {"container_started": False}
     python = sys.executable
     try:
+        # External CTest executables also require the CUDA runtime on PATH.
+        toolkit_bin = run([python, "-c",
+            "from core.cuda_environment import cuda_bin_directory; print(cuda_bin_directory() or '')"],
+            env, capture=True).stdout.strip()
+        if not toolkit_bin:
+            raise RuntimeError("CUDA toolkit runtime was not found; configure CUDA_PATH.")
+        env["PATH"] = toolkit_bin + os.pathsep + env["PATH"]
+        env["GEOFATHOM_CUDA_BIN"] = toolkit_bin
+        if not shutil.which("nvcc", path=env["PATH"]):
+            raise RuntimeError("CUDA compiler nvcc is not available on the configured PATH.")
+        report["git_commit"] = run(["git", "rev-parse", "HEAD"], env, capture=True).stdout.strip()
+        report["tracked_tree_dirty"] = bool(run(["git", "status", "--porcelain", "--untracked-files=no"],
+            env, capture=True).stdout.strip())
+        report["platform"] = platform.platform()
+        report["cpu"] = platform.processor()
+        report["logical_cpu_count"] = os.cpu_count()
+        report["python_version"] = platform.python_version()
+        report["package_versions"] = {}
+        for package in ("numpy", "rasterio", "onnx", "onnxruntime-gpu", "psycopg", "pytest", "coverage"):
+            try:
+                report["package_versions"][package] = importlib.metadata.version(package)
+            except importlib.metadata.PackageNotFoundError:
+                report["package_versions"][package] = None
         for module in ("pytest", "pytest_cov", "onnx", "onnxruntime", "psycopg"):
             run([python, "-c", f"import {module}"], env)
         gpu = run(["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"], env, capture=True).stdout
@@ -152,10 +184,17 @@ def main():
                          "GEOFATHOM_VISION_IO_BINDING": "1"}
         result = run([python, "benchmarks/gpu_acceptance.py", "--model", "gpu_acceptance",
                       "--runs", "100"], benchmark_env, capture=True)
-        (out / "gpu-inference.json").write_text(result.stdout, encoding="utf-8")
+        benchmark = json.loads(result.stdout)
+        (out / "gpu-inference.json").write_text(json.dumps(benchmark, indent=2), encoding="utf-8")
         if result.stderr:
             print(result.stderr, file=sys.stderr)
         report["stages"].append("Strict synthetic ONNX GPU inference")
+        if args.baseline:
+            from quality_report import compare_performance
+            report["performance_comparison"] = compare_performance(
+                args.baseline, out, report, args.max_regression_percent)
+            if not report["performance_comparison"]["passed"]:
+                raise RuntimeError("Hardware performance regressed beyond the configured tolerance.")
         dsn = original.get("GEOFATHOM_TEST_POSTGIS_DSN") if args.reuse_test_postgis else start_postgis(docker, name, env, state)
         if not dsn:
             raise RuntimeError("A disposable test DSN must be explicitly configured.")
@@ -163,14 +202,15 @@ def main():
         env.update(GEOFATHOM_TEST_POSTGIS_DSN=dsn, GEOFATHOM_STRESS_8K="1",
                    GEOFATHOM_STRESS_16K="1", GEOFATHOM_STRESS_MILLION_SEGMENTS="1",
                    GEOFATHOM_REQUIRE_REAL_ONNX="1", GEOFATHOM_GPU_ACCEPTANCE_MODEL="gpu_acceptance")
-        coverage = ["geometry", "storage", "terrain", "vision", "jobs", "core", "imagery",
-                    "analysis", "services", "places", "intelligence", "cartography"]
         junit = out / "pytest.xml"
-        run([python, "scripts/run_acceptance.py", "-q", "-rs", "--tb=short", "--cov-branch",
-             *[f"--cov={package}" for package in coverage],
+        env["COVERAGE_FILE"] = str(out / ".coverage")
+        run([python, "scripts/run_acceptance.py", "-q", "-rs", "--tb=short", "--cov", "--cov-branch",
              f"--cov-report=html:{out / 'coverage'}", f"--cov-report=xml:{out / 'coverage.xml'}",
+             f"--cov-report=json:{out / 'coverage.json'}",
              "--cov-report=term-missing", f"--junitxml={junit}"], env)
         report["pytest"] = check_junit(junit)
+        from quality_report import python_coverage
+        report["python_coverage"] = python_coverage(out / "coverage.json")
         report["stages"].append("All Python tests with live PostGIS")
         if not args.skip_web:
             # Do not reuse a running application or enable CI retries on the host.
@@ -185,6 +225,9 @@ def main():
                 run(command, web_env, ROOT / "web")
             report["stages"].append("Web build, unit and browser E2E")
         report["passed"] = True
+        report["scope"] = "backend-and-hardware" if args.skip_web else "backend-hardware-and-web"
+        # Synthetic model and single-host tests are not full production qualification.
+        report["production_qualified"] = False
     except Exception as error:
         # Keep a durable report on failure without exposing database credentials.
         report["failure_type"] = type(error).__name__

@@ -23,6 +23,7 @@ from vision.semantic import _manifest,_predict_tile
 
 def gpu_stats():
     result=subprocess.run(["nvidia-smi",
+        "-i",os.getenv("GEOFATHOM_GPU_MONITOR_INDEX","0"),
         "--query-gpu=name,memory.total,memory.used",
         "--format=csv,noheader,nounits"],
         capture_output=True,text=True,timeout=8,check=True)
@@ -61,6 +62,7 @@ def acceptance(model_id,runs=50,warmup=5):
     thread.start()
     times=[]
     rss=[]
+    wall_start=time.perf_counter()
     proc=psutil.Process()
     try:
         for _ in range(runs):
@@ -71,6 +73,7 @@ def acceptance(model_id,runs=50,warmup=5):
             if labels.shape!=(size,size) or not np.isfinite(conf).all():
                 raise RuntimeError("GPU inference produced an invalid tensor.")
     finally:
+        wall_elapsed=time.perf_counter()-wall_start
         stop.set()
         thread.join(2)
     end=gpu_stats()
@@ -84,8 +87,8 @@ def acceptance(model_id,runs=50,warmup=5):
         "runs":runs,"warmup":warmup,
         "median_latency_ms":round(statistics.median(times),3),
         "p95_latency_ms":round(float(np.percentile(times,95)),3),
-        "throughput_tiles_per_second":round(
-            1000/statistics.median(times),2),
+        "throughput_tiles_per_second":round(runs/wall_elapsed,2),
+        "reciprocal_median_tiles_per_second":round(1000/statistics.median(times),2),
         "io_binding_enabled":os.getenv("GEOFATHOM_VISION_IO_BINDING")=="1",
         "note":"Measured on the local GPU with actual ONNX weights. "
                "Device memory includes unrelated GPU processes; sampling "
