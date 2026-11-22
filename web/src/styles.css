@@ -527,3 +527,30 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .desktop-gis .access-settings summary{cursor:pointer;padding:3px 0}
 .desktop-gis .results-summary .analysis-card{border:none;background:transparent;padding:0}
 .desktop-gis .analysis-footnote{font-size:10px;margin:3px 0}
+
+.terrain-source{display:flex;flex-direction:column;gap:5px;margin-bottom:7px}
+.terrain-source label{font-size:11px}
+.terrain-source select{display:block;width:100%;padding:5px 6px;border:1px solid #becbd4;background:#fff;color:#263340}
+.terrain-command-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px;margin-bottom:7px}
+.terrain-command-grid button{padding:6px 4px;border:1px solid #c5cfd6;background:#fff;color:#314b5f;font-size:11px;min-height:29px}
+.terrain-command-grid button[aria-pressed=true]{background:#d5e6f2;border-color:#6a99b9;font-weight:650}
+.terrain-run-row{display:flex;align-items:center;gap:8px}
+.terrain-run-row button{flex:1}
+.terrain-run-row label{display:flex;align-items:center;gap:4px;white-space:nowrap}
+.terrain-run-row .primary-tool:not(:disabled){background:#236b99;color:#fff;border-color:#236b99}
+.terrain-output{border-top:1px solid #c8d2da;margin-top:8px;padding-top:7px}
+.terrain-output .section-heading{display:flex;justify-content:space-between}
+.terrain-output .section-heading button{font-size:10px;background:white;border:1px solid #c9d2da;padding:3px 5px}
+.terrain-output .terrain-metrics{display:flex;flex-direction:column;gap:0}
+.terrain-output .terrain-metrics>div{display:flex;justify-content:space-between;align-items:center;padding:5px 4px;border-bottom:1px solid #e0e5e9;font-size:11px}
+.terrain-output .terrain-metrics strong{font-variant-numeric:tabular-nums;font-size:12px}
+.terrain-profile-chart svg{display:block;width:100%;height:auto;cursor:crosshair}
+.profile-readout{background:#e7eef4;padding:4px 6px;font-size:11px;font-variant-numeric:tabular-nums}
+.terrain-profile-chart input[type=range]{width:100%}
+.terrain-bars{margin:8px 0;padding:5px;background:#f2f5f7}
+.terrain-bars>div{display:grid;grid-template-columns:62px 1fr 62px;align-items:center;gap:4px;font-size:10px;margin-top:4px}
+.terrain-bars strong{text-align:right;font-variant-numeric:tabular-nums}
+.terrain-bar-track{height:10px;background:#dce3e7;overflow:hidden}
+.terrain-bar-track span{display:block;height:100%}
+.terrain-map-marker{width:13px;height:13px;border:2px solid white;border-radius:50%;background:#e69226;box-shadow:0 0 0 1px #a76110;pointer-events:none}
+.visually-hidden{position:absolute;width:1px;height:1px;clip-path:inset(50%);overflow:hidden;white-space:nowrap}

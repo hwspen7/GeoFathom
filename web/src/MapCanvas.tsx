@@ -49,6 +49,9 @@ interface Props {
   rasterOpacity:number;
   onMapClick: (position: Position) => void;
   onFinishDrawing:()=>void;
+  terrainPicking:boolean;
+  terrainMarker:Position|null;
+  onTerrainPick:(point:Position)=>void;
   onViewportChange: (bbox: [number, number, number, number]) => void;
   discovered: GeoJSON.Geometry[];
   imageLayer: RasterAsset | null;
@@ -226,6 +229,7 @@ type Drag = {
 
 export default function MapCanvas({
   selected,drawingMode,vertices,focus,basemap,customBasemap,onBasemapStatus,measurement,showMeasurements,selectedFeatureId,rasterOpacity,onMapClick,onFinishDrawing,
+  terrainPicking,terrainMarker,onTerrainPick,
   onViewportChange, discovered, imageLayer, traceMode, onTraceClick,
   editing, moving,edgeMoving, snapping, selectedLocked, layerFeatures,
   promptPositive,promptNegative,promptBox,annotationMode,onAnnotationClick,
@@ -241,7 +245,7 @@ export default function MapCanvas({
   const mapRef = useRef<maplibregl.Map | null>(null);
   const eventRef = useRef({
     selected,selectedFeatureId,drawingMode, traceMode, annotationMode,selectionBoxMode,labelMoveMode,editing, moving,edgeMoving, snapping, selectedLocked,
-    layerFeatures, onMapClick,onFinishDrawing, onTraceClick,onAnnotationClick,onSelectionBox,onLabelMove,onViewportChange,
+    layerFeatures, onMapClick,onFinishDrawing,terrainPicking,onTerrainPick, onTraceClick,onAnnotationClick,onSelectionBox,onLabelMove,onViewportChange,
     onGeometryPreview, onGeometryCommit, onSelectSavedFeature,
   });
   const renderRef = useRef({
@@ -261,7 +265,7 @@ export default function MapCanvas({
   const [ready, setReady] = useState(false);
   eventRef.current = {
     selected,selectedFeatureId,drawingMode, traceMode, annotationMode,selectionBoxMode,labelMoveMode,editing, moving,edgeMoving, snapping, selectedLocked,
-    layerFeatures, onMapClick,onFinishDrawing, onTraceClick,onAnnotationClick,onSelectionBox,onLabelMove,onViewportChange,
+    layerFeatures, onMapClick,onFinishDrawing,terrainPicking,onTerrainPick, onTraceClick,onAnnotationClick,onSelectionBox,onLabelMove,onViewportChange,
     onGeometryPreview, onGeometryCommit, onSelectSavedFeature,
   };
 
@@ -326,6 +330,7 @@ export default function MapCanvas({
     }
     function beginDrag(event: MapMouseEvent) {
       spatialSnap.current=null;
+      if(eventRef.current.terrainPicking)return;
       if(eventRef.current.labelMoveMode){
         const state=eventRef.current;
         const found=hits(event).find(item=>
@@ -557,6 +562,7 @@ export default function MapCanvas({
     function click(event: MapMouseEvent) {
       const state = eventRef.current;
       if (drag.current) return;
+      if(state.terrainPicking){state.onTerrainPick(coordinates(event));return;}
       if (state.selectionBoxMode||state.labelMoveMode) return;
       if (state.annotationMode) state.onAnnotationClick(coordinates(event));
       else if (state.traceMode) state.onTraceClick(coordinates(event));
@@ -919,6 +925,14 @@ export default function MapCanvas({
     map.doubleClickZoom[editing||drawingMode ? 'disable' : 'enable']();
     map.getCanvas().style.cursor = drawingMode || traceMode || editing || annotationMode || selectionBoxMode || labelMoveMode ? 'crosshair' : '';
   }, [editing, drawingMode, traceMode, annotationMode, selectionBoxMode,labelMoveMode,ready]);
+
+  useEffect(()=>{
+    const map=mapRef.current;if(!ready||!map||!terrainMarker)return;
+    const node=document.createElement('div');node.className='terrain-map-marker';node.setAttribute('aria-label','Terrain sample location');
+    const marker=new maplibregl.Marker({element:node}).setLngLat(terrainMarker).addTo(map);
+    return()=>{marker.remove();};
+  },[terrainMarker,ready]);
+  useEffect(()=>{const map=mapRef.current;if(ready&&map&&terrainPicking)map.getCanvas().style.cursor='crosshair';},[terrainPicking,ready]);
 
   // HTML dimension labels do not depend on a remote glyph server.
   // Reproject on every map movement; never intercept editing gestures.

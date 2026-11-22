@@ -143,8 +143,8 @@ def elevation_profile(path,geometry,samples=80):
             value=sample[0]
             heights.append(None if np.ma.is_masked(value) or not np.isfinite(value)
                            else float(value))
-        return {"samples":[{"distance_m":float(d),"elevation_m":h}
-                           for d,h in zip(distances,heights)],
+        return {"samples":[{"distance_m":float(d),"elevation_m":h,"coordinate":p}
+                           for d,h,p in zip(distances,heights,interpolated)],
                 "length_m":float(distance[-1]),"source_crs":str(src.crs),
                 "vertical_unit":"meter","warning":"Profile is sampled along the mapped line. "
                  "DEM must be verified as elevations in meters."}

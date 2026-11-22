@@ -76,6 +76,9 @@ export default function App() {
   const [showTools,setShowTools]=useState(true);
   const [activeTool,setActiveTool]=useState('tools-survey');
   const [terrainFeatures,setTerrainFeatures]=useState<GeoJSON.Geometry[]>([]);
+  const [terrainPicking,setTerrainPicking]=useState(false);
+  const [terrainOrigin,setTerrainOrigin]=useState<Position|null>(null);
+  const [terrainHover,setTerrainHover]=useState<Position|null>(null);
   const [showMeasurements,setShowMeasurements]=useState(true);
   const [rasterVisible,setRasterVisible]=useState(true);
   const [rasterOpacity,setRasterOpacity]=useState(.88);
@@ -282,7 +285,7 @@ export default function App() {
 
 
   function revealPanel(id:string){
-    setShowTools(true);setActiveTool(id);
+    setShowTools(true);setActiveTool(id);if(id!=='tools-terrain'){setTerrainPicking(false);setTerrainHover(null);}
     requestAnimationFrame(()=>document.getElementById(id)?.scrollIntoView({block:'nearest'}));
   }
 
@@ -414,7 +417,7 @@ export default function App() {
       return;
     }
     geometrySequence.current++;
-    setDrawingMode(next);setEdgeMoving(false);
+    setDrawingMode(next);setEdgeMoving(false);setTerrainPicking(false);setTerrainHover(null);
     setTraceMode(false);
     setPromptMode(null);setPendingAnnotation(null);setSelectionBoxMode(false);setLabelMoveMode(false);
     if (!operation) {
@@ -575,7 +578,7 @@ export default function App() {
 
   function clearWorkspace() {
     geometrySequence.current++;
-    setGeometry(null);setScratchId(null);setBusy(false);
+    setGeometry(null);setScratchId(null);setBusy(false);setTerrainPicking(false);setTerrainOrigin(null);setTerrainHover(null);
     setPendingAnnotation(null);
     setSelectionBoxMode(false);setSelectionBox(null);
     setSpatialSelected([]);setQualityIssues([]);setProjectGrid(null);
@@ -633,7 +636,7 @@ export default function App() {
       if(event.target instanceof HTMLInputElement||event.target instanceof HTMLTextAreaElement||
         event.target instanceof HTMLSelectElement||event.ctrlKey||event.metaKey)return;
       if(event.key==='Escape'){
-        event.preventDefault();geometrySequence.current++;setBusy(false);setDrawingMode(null);setVertices([]);
+        event.preventDefault();geometrySequence.current++;setBusy(false);setDrawingMode(null);setVertices([]);setTerrainPicking(false);
         setEditing(false);setEdgeMoving(false);setMoving(false);setTraceMode(false);setPromptMode(null);
         setSelectionBoxMode(false);setLabelMoveMode(false);setPendingAnnotation(null);
         if(preview||pendingShared){setGeometry(lastValid.current);setPreview(null);setPendingShared(null);}
@@ -651,7 +654,7 @@ export default function App() {
       <header className="gis-header">
         <div className="gis-brand"><Globe2 size={19}/> <strong>GeoFathom</strong></div>
         <nav aria-label="Workspace tools" className="gis-menu">
-          {([['Survey','tools-survey'],['GIS','tools-gis'],['Analysis','tools-spatial'],['Raster / AI','tools-raster'],['Cartography','tools-style'],['Data','tools-services'],['Assistant','tools-ai']] as const).map(([title,id])=>
+          {([['Survey','tools-survey'],['GIS','tools-gis'],['Analysis','tools-spatial'],['Terrain','tools-terrain'],['Raster / AI','tools-raster'],['Cartography','tools-style'],['Data','tools-services'],['Assistant','tools-ai']] as const).map(([title,id])=>
             <button key={id} aria-pressed={activeTool===id&&showTools} onClick={()=>revealPanel(id)}>{title}</button>)}
         </nav>
         <button className="gis-inspector-toggle" aria-pressed={showTools} onClick={()=>setShowTools(v=>!v)}>Inspector</button>
@@ -660,7 +663,7 @@ export default function App() {
       <div className="gis-toolbar" aria-label="Survey toolbar">
         <div className="gis-navigation-tools">
           <button aria-label="Pan and select" title="Pan and select · Esc" onClick={()=>{
-            geometrySequence.current++;setBusy(false);setDrawingMode(null);setVertices([]);setEditing(false);setEdgeMoving(false);
+            geometrySequence.current++;setBusy(false);setDrawingMode(null);setVertices([]);setEditing(false);setEdgeMoving(false);setTerrainPicking(false);
             setMoving(false);setTraceMode(false);setPromptMode(null);setSelectionBoxMode(false);setLabelMoveMode(false);
             setPendingAnnotation(null);if(preview||pendingShared){setGeometry(lastValid.current);setPreview(null);setPendingShared(null);}
           }}>Pan</button>
@@ -833,6 +836,8 @@ export default function App() {
         <div className="map-wrap">
           <MapCanvas
             selected={geometry} drawingMode={drawingMode} vertices={vertices}
+            terrainPicking={terrainPicking} terrainMarker={terrainHover??terrainOrigin}
+            onTerrainPick={position=>{setTerrainOrigin(position);setTerrainPicking(false);setMessage('Terrain point selected.');}}
             editing={editing} moving={moving} edgeMoving={edgeMoving} snapping={snapping}
             selectedLocked={selectedLocked}
             layerFeatures={[...scratch.map(item=>({id:item.id,layer_id:'scratch',geometry:item.geometry,name:item.name,source:'Local scratch',
@@ -1292,8 +1297,38 @@ export default function App() {
                 if(feature)openStoredFeature(feature);
               }}
             />
-            <TerrainWorkbench key={'terrain-'+(activeProjectId??'no-project')} projectId={activeProjectId} geometry={geometry}
-              raster={imageLayer} onPreview={value=>{if(projectCurrent())setTerrainFeatures(value);}}
+
+          </section>
+
+          <section id="tools-terrain" hidden={activeTool!=='tools-terrain'} className="panel-section">
+            <div className="section-heading"><Layers3 size={16}/><span>Terrain analysis</span></div>
+            <TerrainWorkbench key={'terrain-'+(activeProjectId??'no-project')} projectId={activeProjectId}
+              active={activeTool==='tools-terrain'&&showTools}
+              geometry={preview||drawingMode?null:geometry} raster={imageLayer}
+              connected={Boolean(capabilities)} localImport={capabilities?.local_raster_import===true}
+              refreshToken={refreshToken+connectionRetry} origin={terrainOrigin} picking={terrainPicking}
+              onSelectRaster={asset=>{
+                setImageLayer(asset);setRasterVisible(true);setTerrainOrigin(null);
+                const [west,south,east,north]=asset.bbox;
+                setFocus({longitude:(west+east)/2,latitude:(south+north)/2,bbox:asset.bbox,key:Date.now()});
+                setMessage('DEM selected: '+asset.name);
+              }}
+              onDraw={line=>startDrawing(line?'line':'polygon')}
+              onUseExtent={()=>{
+                if(!imageLayer)return;
+                const [w,s,e,n]=imageLayer.bbox;
+                const next:GeoJSON.Polygon={type:'Polygon',coordinates:[[[w,s],[e,s],[e,n],[w,n],[w,s]]]};
+                setSelectedFeatureId(null);setScratchId(null);setLinked(false);
+                setGeometrySource('DEM extent');setFeatureProperties({source_type:'dem_extent'});
+                void commitGeometry(next,'DEM extent selected.',true);
+              }}
+              onPick={()=>{
+                setTerrainPicking(value=>!value);setDrawingMode(null);setVertices([]);
+                setEditing(false);setEdgeMoving(false);setMoving(false);setTraceMode(false);setPromptMode(null);
+                setSelectionBoxMode(false);setLabelMoveMode(false);setPendingAnnotation(null);
+              }}
+              onHover={setTerrainHover}
+              onPreview={value=>{if(projectCurrent())setTerrainFeatures(value);}}
               onSaved={()=>{if(projectCurrent())setRefreshToken(v=>v+1);}}/>
           </section>
 

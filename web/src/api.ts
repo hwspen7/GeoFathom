@@ -588,7 +588,7 @@ export function analyzeTerrain(imageId:string,geometry:GeoJSON.Geometry):Promise
   });
 }
 export function terrainProfile(imageId:string,geometry:GeoJSON.Geometry):Promise<{
-  samples:Array<{distance_m:number;elevation_m:number|null}>;length_m:number;warning:string;
+  samples:Array<{distance_m:number;elevation_m:number|null;coordinate?:[number,number]}>;length_m:number;warning:string;
 }> {
   return request('/terrain/profile',{
     method:'POST',headers:{'Content-Type':'application/json'},
