@@ -31,6 +31,28 @@ int main() {
         expected.data(),n,.1f,change.data())!=0)return 5;
     if(gf_cpu_runtime_index(pool,a.data(),b.data(),valid.data(),0,
         out.data(),mask.data())!=-1)return 6;
+    if(gf_cpu_runtime_create(9))return 7;
+    if(gf_cpu_runtime_index(nullptr,a.data(),b.data(),valid.data(),n,out.data(),mask.data())!=-1||
+       gf_cpu_runtime_index(pool,nullptr,b.data(),valid.data(),n,out.data(),mask.data())!=-1||
+       gf_cpu_runtime_index(pool,a.data(),nullptr,valid.data(),n,out.data(),mask.data())!=-1||
+       gf_cpu_runtime_index(pool,a.data(),b.data(),nullptr,n,out.data(),mask.data())!=-1||
+       gf_cpu_runtime_index(pool,a.data(),b.data(),valid.data(),n,nullptr,mask.data())!=-1||
+       gf_cpu_runtime_index(pool,a.data(),b.data(),valid.data(),n,out.data(),nullptr)!=-1||
+       gf_cpu_runtime_index(pool,a.data(),b.data(),valid.data(),16777217,out.data(),mask.data())!=-1)return 8;
+    if(gf_cpu_runtime_change(pool,nullptr,mask.data(),reference.data(),expected.data(),n,.1f,change.data())!=-1||
+       gf_cpu_runtime_change(pool,out.data(),nullptr,reference.data(),expected.data(),n,.1f,change.data())!=-1||
+       gf_cpu_runtime_change(pool,out.data(),mask.data(),nullptr,expected.data(),n,.1f,change.data())!=-1||
+       gf_cpu_runtime_change(pool,out.data(),mask.data(),reference.data(),nullptr,n,.1f,change.data())!=-1||
+       gf_cpu_runtime_change(pool,out.data(),mask.data(),reference.data(),expected.data(),0,.1f,change.data())!=-1||
+       gf_cpu_runtime_change(pool,out.data(),mask.data(),reference.data(),expected.data(),n,.1f,nullptr)!=-1||
+       gf_cpu_runtime_change(pool,out.data(),mask.data(),reference.data(),expected.data(),n,-.1f,change.data())!=-1)return 9;
     gf_cpu_runtime_destroy(pool);
+    // Explicitly cover the scalar scheduling path with one worker and a small tile.
+    pool=gf_cpu_runtime_create(1);
+    if(!pool)return 10;
+    if(gf_cpu_runtime_index(pool,a.data(),b.data(),valid.data(),1,out.data(),mask.data())!=0)return 11;
+    if(gf_cpu_runtime_index(pool,a.data(),b.data(),valid.data(),n,out.data(),mask.data())!=count)return 12;
+    gf_cpu_runtime_destroy(pool);
+    gf_cpu_runtime_destroy(nullptr);
     return 0;
 }
