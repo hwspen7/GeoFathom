@@ -93,6 +93,8 @@ interface Props {
   preservePlaceSelection?:boolean;
   pinnedPlaces?:Array<{id:string;geometry:GeoJSON.Geometry}>;
   onSelectPinnedPlace?:(id:string)=>void;
+  selectedBoundaryNode?:GeometryPath|null;
+  onSelectBoundaryNode?:(path:GeometryPath)=>void;
 }
 
 function mapStyle():StyleSpecification{
@@ -123,6 +125,7 @@ function featureCollection(
   cursor:Position|null=null,
   selectedFeatureId:string|null=null,
   pinnedPlaces:Array<{id:string;geometry:GeoJSON.Geometry}>=[],
+  selectedBoundaryNode:GeometryPath|null=null,
 ): GeoJSON.FeatureCollection {
   const features: GeoJSON.Feature[] = [];
   // Retained reference locations cannot be implicitly removed by tool switches.
@@ -219,6 +222,19 @@ function featureCollection(
       geometry:{type:'Polygon',coordinates:[[[west,south],[east,south],
         [east,north],[west,north],[west,south]]]}});
   }
+  // Compact real coordinate nodes are visible even before entering edit mode.
+  if(selected&&['Polygon','MultiPolygon','LineString','MultiLineString'].includes(selected.type)){
+    for(const node of verticesOf(selected)){
+      if(node.midpoint)continue;
+      const highlighted=!!selectedBoundaryNode&&selectedBoundaryNode.polygon===node.path.polygon&&
+        selectedBoundaryNode.ring===node.path.ring&&selectedBoundaryNode.vertex===node.path.vertex;
+      features.push({type:'Feature',properties:{
+        role:highlighted?'boundary-node-selected':'boundary-node',
+        polygon:node.path.polygon,ring:node.path.ring,vertex:node.path.vertex,
+        longitude:node.point[0],latitude:node.point[1],
+      },geometry:{type:'Point',coordinates:node.point}});
+    }
+  }
   if (editing && selected) {
     for (const node of verticesOf(selected)) {
       features.push({
@@ -254,7 +270,7 @@ export default function MapCanvas({
   selectionBoxMode,onSelectionBox,selectedIds,qualityIssues,projectGrid,externalTiles,
   labelMoveMode,onLabelMove,
   onGeometryPreview, onGeometryCommit, onSelectSavedFeature,onDeselect,preservePlaceSelection=false,
-  pinnedPlaces=[],onSelectPinnedPlace,
+  pinnedPlaces=[],onSelectPinnedPlace,selectedBoundaryNode=null,onSelectBoundaryNode,
 }: Props) {
   const container = useRef<HTMLDivElement>(null);
   const coordinateRef = useRef<HTMLDivElement>(null);
@@ -265,15 +281,17 @@ export default function MapCanvas({
   const eventRef = useRef({
     selected,selectedFeatureId,drawingMode, traceMode, annotationMode,selectionBoxMode,labelMoveMode,editing, moving,edgeMoving, snapping, selectedLocked,
     layerFeatures, onMapClick,onFinishDrawing,terrainPicking,onTerrainPick,onContextMenu,onEditingError, onTraceClick,onAnnotationClick,onSelectionBox,onLabelMove,onViewportChange,
-    onGeometryPreview, onGeometryCommit, onSelectSavedFeature,onDeselect,preservePlaceSelection,onSelectPinnedPlace,
+    onGeometryPreview, onGeometryCommit, onSelectSavedFeature,onDeselect,preservePlaceSelection,onSelectPinnedPlace,onSelectBoundaryNode,
   });
   const renderRef = useRef({
     selected,vertices,drawingMode,discovered,layerFeatures,editing,
     promptPositive,promptNegative,promptBox,selectedIds,qualityIssues,cursor,selectedFeatureId,
+    pinnedPlaces,selectedBoundaryNode,
   });
   renderRef.current={
     selected,vertices,drawingMode,discovered,layerFeatures,editing,
     promptPositive,promptNegative,promptBox,selectedIds,qualityIssues,cursor,selectedFeatureId,
+    pinnedPlaces,selectedBoundaryNode,
   };
   const drag = useRef<Drag | null>(null);
   const selectionDrag=useRef<{start:Position;end:Position}|null>(null);
@@ -285,7 +303,7 @@ export default function MapCanvas({
   eventRef.current = {
     selected,selectedFeatureId,drawingMode, traceMode, annotationMode,selectionBoxMode,labelMoveMode,editing, moving,edgeMoving, snapping, selectedLocked,
     layerFeatures, onMapClick,onFinishDrawing,terrainPicking,onTerrainPick,onContextMenu,onEditingError, onTraceClick,onAnnotationClick,onSelectionBox,onLabelMove,onViewportChange,
-    onGeometryPreview, onGeometryCommit, onSelectSavedFeature,onDeselect,preservePlaceSelection,onSelectPinnedPlace,
+    onGeometryPreview, onGeometryCommit, onSelectSavedFeature,onDeselect,preservePlaceSelection,onSelectPinnedPlace,onSelectBoundaryNode,
   };
 
   useEffect(() => {
@@ -309,7 +327,7 @@ export default function MapCanvas({
           const p=map.project(point as maplibregl.LngLatLike);
           const shifted=map.unproject([p.x+dx,p.y+dy]);
           return [shifted.lng,shifted.lat];
-        },view.cursor,view.selectedFeatureId,
+        },view.cursor,view.selectedFeatureId,view.pinnedPlaces,view.selectedBoundaryNode,
       ));
     };
     map.on('zoomend',refreshZoomLabels);
@@ -448,6 +466,7 @@ export default function MapCanvas({
         kind = 'feature';
       }
       if (!kind) return;
+      if(kind==='vertex'&&path)state.onSelectBoundaryNode?.(path);
       if(import.meta.env.DEV&&container.current)
         container.current.setAttribute('data-dev-drag-began',kind);
       drag.current = { original: first, last: first, path, kind,
@@ -594,6 +613,20 @@ export default function MapCanvas({
       else if (state.drawingMode) state.onMapClick(snapAt(coordinates(event), null));
       else if (!state.editing) {
         const features=hits(event);
+        const boundary=features.find(f=>f.properties?.role==='boundary-node'||f.properties?.role==='boundary-node-selected');
+        if(boundary){state.onSelectBoundaryNode?.(nodePath(boundary.properties));return;}
+        // Some MapLibre GeoJSON worker frames have not yet indexed new handles.
+        if(state.selected){
+          let nearest=7;
+          let found:GeometryPath|null=null;
+          for(const node of verticesOf(state.selected)){
+            if(node.midpoint)continue;
+            const xy=map.project(node.point as maplibregl.LngLatLike);
+            const distance=Math.hypot(event.point.x-xy.x,event.point.y-xy.y);
+            if(distance<nearest){nearest=distance;found=node.path;}
+          }
+          if(found){state.onSelectBoundaryNode?.(found);return;}
+        }
         const saved=features.find(f=>f.properties?.role==='saved');
         const retained=features.find(f=>f.properties?.role==='pinned-place');
         if(saved?.properties?.id)state.onSelectSavedFeature(String(saved.properties.id));
@@ -788,10 +821,14 @@ export default function MapCanvas({
             'match',['get','role'],
             'prompt-positive','#39b779','prompt-negative','#ed4a4a',
             'prompt-box-corner','#f2a138','edit-midpoint','#c9e5ff',
+            'boundary-node','#168047','boundary-node-selected','#ef7d23',
             'saved',['coalesce',['get','color'],'#2563eb'],'#ffffff',
           ],
           'circle-radius': [
-            'case',['==',['get','role'],'edit-midpoint'],4,
+            'case',
+            ['==',['get','role'],'edit-midpoint'],4,
+            ['==',['get','role'],'boundary-node'],3,
+            ['==',['get','role'],'boundary-node-selected'],6,
             ['coalesce',['get','pointRadius'],6],
           ],
           'circle-stroke-color': ['coalesce',['get','strokeColor'],'#2563eb'],
@@ -866,7 +903,7 @@ export default function MapCanvas({
         const p=map.project(point as maplibregl.LngLatLike);
         const shifted=map.unproject([p.x+dx,p.y+dy]);
         return [shifted.lng,shifted.lat];
-      },cursor,selectedFeatureId,pinnedPlaces);
+      },cursor,selectedFeatureId,pinnedPlaces,selectedBoundaryNode);
     (map.getSource('workspace') as GeoJSONSource).setData(collection);
     if(container.current && import.meta.env.DEV){
       container.current.setAttribute('data-label-feature-count',
@@ -879,7 +916,7 @@ export default function MapCanvas({
     }
     if (!drag.current) spatialSnap.current=null;
   }, [selected, vertices, drawingMode, discovered, layerFeatures, editing,
-      promptPositive,promptNegative,promptBox,selectedIds,qualityIssues,ready,cursor,selectedFeatureId,pinnedPlaces]);
+      promptPositive,promptNegative,promptBox,selectedIds,qualityIssues,ready,cursor,selectedFeatureId,pinnedPlaces,selectedBoundaryNode]);
 
   useEffect(()=>{
     const map=mapRef.current;
