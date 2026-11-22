@@ -731,6 +731,15 @@ export default function MapCanvas({
       container.current.setAttribute('data-rendered-handle-pixels',JSON.stringify(pixels));
     }
     map.on('idle',inspectRenderedHandles);
+    // GeoJSON source updates finish on a worker after React calls setData.
+    // An idle callback alone can miss a newly-loaded geometry if an unrelated
+    // tile keeps the map active. Refresh handle inspection after the workspace
+    // source has loaded AND MapLibre has actually rendered the new frame.
+    const inspectWorkspaceSource=(event:{sourceId?:string;isSourceLoaded?:boolean})=>{
+      if(event.sourceId==='workspace'&&event.isSourceLoaded)
+        map.once('render',inspectRenderedHandles);
+    };
+    map.on('sourcedata',inspectWorkspaceSource);
     map.on('moveend', bounds);
     const onEscape=(event:KeyboardEvent)=>{
       if(event.key==='Escape'){
@@ -904,6 +913,7 @@ export default function MapCanvas({
       resize.disconnect();
       map.off('zoomend',refreshZoomLabels);
       map.off('idle',inspectRenderedHandles);
+      map.off('sourcedata',inspectWorkspaceSource);
       map.off('mousemove', dragging);
       map.off('mousemove',displayCoordinates);
       map.off('mousemove',profileCursor);
