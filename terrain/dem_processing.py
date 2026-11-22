@@ -75,9 +75,19 @@ def prepare_dem(paths, mode, geometry=None, resolution_m=None, sampling='bilinea
                 east=min(east,clip_bounds[2]);north=min(north,clip_bounds[3])
             if not (east>west and north>south):
                 raise RasterError('Selected region does not overlap the source DEM.')
-            x0=floor(west/res)*res;y0=floor(south/res)*res
-            x1=ceil(east/res)*res;y1=ceil(north/res)*res
-            width=int(round((x1-x0)/res));height=int(round((y1-y0)/res))
+            # Register the output grid to the first DEM's pixel origin,
+            # not an arbitrary global multiple of the output resolution.
+            # Otherwise even same-resolution operations shift cell centres
+            # and unnecessarily interpolate every source elevation.
+            anchor_x=float(sources[0].transform.c)
+            anchor_y=float(sources[0].transform.f)
+            c0=floor((west-anchor_x)/res)
+            c1=ceil((east-anchor_x)/res)
+            r0=floor((anchor_y-north)/res)
+            r1=ceil((anchor_y-south)/res)
+            x0=anchor_x+c0*res
+            y1=anchor_y-r0*res
+            width=int(c1-c0);height=int(r1-r0)
             if width<1 or height<1 or width>_MAX_SIDE or height>_MAX_SIDE or width*height>_MAX_PIXELS:
                 raise RasterError('DEM processing exceeds 8 million pixels or 4096 per side; choose coarser output.')
             affine=from_origin(x0,y1,res,res)

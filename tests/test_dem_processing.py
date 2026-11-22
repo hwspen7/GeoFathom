@@ -83,3 +83,28 @@ def test_dem_resample_reports_declared_datum_quality(source_dems):
     result=dem_processing.prepare_dem([paths[0]],'resample',resolution_m=10)
     assert result['valid_cells']==24
     assert 'labels match' in result['warning']
+
+
+
+def test_resample_preserves_exact_source_grid_origin(tmp_path,monkeypatch):
+    # The source starts at an intentionally non-rounded UTM easting/northing.
+    # Same-grid processing must NOT introduce a 3–7 m interpolation shift.
+    affine=from_origin(500003,4500007,10,10)
+    values=np.arange(25,dtype=np.float32).reshape(5,5)+100
+    source=tmp_path/'offset-grid.tif'
+    with rasterio.open(source,'w',driver='GTiff',width=5,height=5,count=1,
+                       crs='EPSG:32617',transform=affine,dtype='float32',
+                       nodata=-9999) as ds:
+        ds.write(values,1)
+    captured={}
+    def capture(path,name,provenance):
+        with rasterio.open(path) as ds:
+            captured['heights']=ds.read(1)
+            captured['grid']=ds.transform
+            return {'name':name}
+    monkeypatch.setattr(dem_processing,'imagery_dir',lambda:tmp_path)
+    monkeypatch.setattr(dem_processing,'store_upload',capture)
+    result=dem_processing.prepare_dem([source],'resample',resolution_m=10)
+    assert result['valid_cells']==25
+    assert captured['grid']==affine
+    np.testing.assert_array_equal(captured['heights'],values)
