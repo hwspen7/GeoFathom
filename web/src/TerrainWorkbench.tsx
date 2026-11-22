@@ -60,6 +60,7 @@ function MeshView({mesh}:{mesh:TerrainMesh}){
 }
 
 type Operation=TerrainOperation|'slope'|'profile';
+type ProfileResult=Awaited<ReturnType<typeof terrainProfile>>;
 type TerrainRecord=PersistedTerrainResult;
 const modes:Array<{id:Operation;title:string}>=[
  {id:'slope',title:'Slope / aspect'},{id:'profile',title:'Elevation profile'},{id:'contours',title:'Contours'},{id:'dem_difference',title:'DEM difference'},
