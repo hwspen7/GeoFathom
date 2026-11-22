@@ -381,10 +381,15 @@ export default function App() {
     setHistoryPulse(value => value + 1);
     setGeometrySource(place.source);
     setFeatureProperties({ source_type:mapped?'mapped_openstreetmap':'geocoded_location', osm_id: place.osm_id, osm_type: place.osm_type });
+    // Geocoding result bboxes can cover unrelated institutional facilities.
+    // Center the visible map on the actual selected polygon, not a broad
+    // provider-defined search envelope or a distant representative point.
+    const realBounds=terrainGeometryBounds(target);
+    const focusBounds=realBounds??place.bbox;
     setFocus({
-      latitude: place.latitude,
-      longitude: place.longitude,
-      bbox: place.bbox,
+      latitude: focusBounds?(focusBounds[1]+focusBounds[3])/2:place.latitude,
+      longitude: focusBounds?(focusBounds[0]+focusBounds[2])/2:place.longitude,
+      bbox: focusBounds,
       key: Date.now(),
     });
     if (mapped) {
