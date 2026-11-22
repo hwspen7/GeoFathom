@@ -103,7 +103,7 @@ def _origin(point,crs,affine,valid):
         xx,yy=transform("EPSG:4326",crs,[point[0]],[point[1]])
         if not (math.isfinite(xx[0]) and math.isfinite(yy[0])):
             raise ValueError("Non-finite projected coordinate")
-    except (rasterio.errors.RasterioError, ValueError, RuntimeError) as error:
+    except Exception as error:
         raise RasterError("Observer/outlet must fall in a valid selected DEM cell.") from error
     c,r=(~affine)*(xx[0],yy[0])
     r,c=math.floor(r),math.floor(c)

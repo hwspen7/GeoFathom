@@ -10,11 +10,12 @@ import {
   type Capabilities, type Measurement, type Place,
 } from './api';
 import MapCanvas, { type FocusPoint } from './MapCanvas';
-import {BASEMAPS,type BasemapId} from './basemaps';
+import {BASEMAPS,customBasemap,defaultCustom,type BasemapId,type CustomBasemap} from './basemaps';
 import {localMeasurement,localShape,readScratch,writeScratch,SCRATCH_LIMIT,OFFLINE_METHOD,type ScratchFeature} from './scratch';
 import SurveyTools from './SurveyTools';
 import ProfessionalPanel from './ProfessionalPanel';
 import TerrainWorkbench from './TerrainWorkbench';
+import GeometryAnalysis from './GeometryAnalysis';
 import SpatialToolsPanel from './SpatialToolsPanel';
 import CartographyProPanel from './CartographyProPanel';
 import DataServicesPanel, {type ExternalTile} from './DataServicesPanel';
@@ -67,6 +68,10 @@ export default function App() {
   const [modelUsed, setModelUsed] = useState<boolean | null>(null);
   const [toolSteps, setToolSteps] = useState<string[]>([]);
   const [basemap,setBasemap]=useState<BasemapId>('street');
+  const [custom,setCustom]=useState<CustomBasemap|null>(defaultCustom);
+  const [tileURL,setTileURL]=useState(''),[tileCredit,setTileCredit]=useState(''),[tileZoom,setTileZoom]=useState(20);
+  const [tileError,setTileError]=useState('');
+  const [mapStatus,setMapStatus]=useState('Loading map');
   const [toolbarTarget,setToolbarTarget]=useState<HTMLDivElement|null>(null);
   const [showTools,setShowTools]=useState(true);
   const [activeTool,setActiveTool]=useState('tools-survey');
@@ -666,6 +671,11 @@ export default function App() {
           }}>Fit selection</button>
         </div>
         <div className="gis-survey-commands" ref={setToolbarTarget}/>
+        <div className="gis-quick-basemap" aria-label="Quick basemap tools">
+          <button aria-pressed={basemap==='street'} onClick={()=>setBasemap('street')}>Street</button>
+          <button aria-pressed={basemap==='sentinel'||basemap==='custom'} onClick={()=>setBasemap(custom?'custom':'sentinel')}>Satellite</button>
+          <button aria-pressed={basemap==='topo'||basemap==='relief'} onClick={()=>setBasemap('topo')}>Terrain (US)</button>
+        </div>
       </div>
       <div className="gis-body">
         <aside className="sidebar gis-layers">
@@ -748,8 +758,24 @@ export default function App() {
             <section className="panel-section gis-basemaps">
               <div className="section-heading"><Globe2 size={15}/><span>Basemap</span></div>
               <select aria-label="Basemap" value={basemap} onChange={event=>setBasemap(event.target.value as BasemapId)}>
-                {BASEMAPS.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}
+                {BASEMAPS.map(item=><option key={item.id} value={item.id} disabled={item.id==='custom'&&!custom}>{item.name}</option>)}
               </select>
+              <small role="status" className="basemap-status">{mapStatus}</small>
+              <details className="custom-basemap">
+                <summary>Connect high-resolution imagery</summary>
+                <form className="professional-form" onSubmit={event=>{
+                  event.preventDefault();setTileError('');
+                  try{setCustom(customBasemap(tileURL,tileCredit,tileZoom));setBasemap('custom');}
+                  catch(failure){setTileError(failure instanceof Error?failure.message:'Invalid tile settings.');}
+                }}>
+                  <input aria-label="Licensed XYZ tile URL" placeholder="https://…/{z}/{x}/{y}.jpg" value={tileURL} onChange={e=>setTileURL(e.target.value)} required/>
+                  <input aria-label="Imagery attribution" placeholder="Provider attribution" value={tileCredit} onChange={e=>setTileCredit(e.target.value)} required/>
+                  <label>Native maximum zoom <input type="number" min="1" max="23" value={tileZoom} onChange={e=>setTileZoom(Number(e.target.value))}/></label>
+                  <button type="submit">Connect imagery</button>
+                  <small>Use a provider you are licensed to access. URLs are session-only; do not enter private long-lived credentials.</small>
+                  {tileError&&<p className="discovery-error">{tileError}</p>}
+                </form>
+              </details>
               <label className="gis-check"><input aria-label="Map dimensions" type="checkbox" checked={showMeasurements} onChange={e=>setShowMeasurements(e.target.checked)}/> Map dimensions</label>
               {imageLayer&&<><label className="gis-check"><input type="checkbox" checked={rasterVisible} onChange={e=>setRasterVisible(e.target.checked)}/> {imageLayer.name}</label>
               <label>Raster opacity <input aria-label="Raster opacity" type="range" min="0" max="1" step=".05" value={rasterOpacity} onChange={e=>setRasterOpacity(Number(e.target.value))}/></label></>}
@@ -857,7 +883,7 @@ export default function App() {
                 pagedFeatures.find(item=>item.id===id);
               if (feature) openStoredFeature(feature);
             }}
-            focus={focus} basemap={basemap}
+            focus={focus} basemap={basemap} customBasemap={custom} onBasemapStatus={setMapStatus}
             measurement={preview?null:measurement} showMeasurements={showMeasurements}
             selectedFeatureId={selectedFeatureId??scratchId}
             onFinishDrawing={()=>{void finishDrawing();}}
@@ -1272,6 +1298,16 @@ export default function App() {
           </section>
 
           <section id="tools-spatial" hidden={activeTool!=='tools-spatial'} className="panel-section">
+            <div className="section-heading"><Layers3 size={16}/><span>Geometry processing</span></div>
+            <GeometryAnalysis geometry={preview||drawingMode?null:geometry} selectedId={selectedFeatureId??scratchId}
+              features={[...scratch,...(projectWorkspace?.features??[])]} connected={Boolean(capabilities)}
+              onResult={(g,measured,name)=>{
+                if(!projectCurrent())return;
+                geometrySequence.current++;setSelectedFeatureId(null);setScratchId(null);setLinked(false);
+                storeScratch(g,measured,null);setGeometry(g);setMeasurement(measured);setPreview(null);
+                lastValid.current=structuredClone(g);timeline.current=new GeometryTimeline();timeline.current.push(g);setHistoryPulse(v=>v+1);
+                setGeometrySource('GIS geometry analysis');setFeatureProperties({source_type:'spatial_operation',operation:name});setMessage(name+' created as a new local feature.');
+              }}/>
             <div className="section-heading"><Layers3 size={16}/><span>GIS selection, QA & print layout</span></div>
             <SpatialToolsPanel
               key={activeProjectId ?? 'no-project'}

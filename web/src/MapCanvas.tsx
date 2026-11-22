@@ -3,7 +3,7 @@ import maplibregl, { type GeoJSONSource, type MapMouseEvent, type StyleSpecifica
 
 import { rasterPreviewUrl, protectedRasterPreview, type RasterAsset } from './api';
 import { PixelSnapIndex } from './spatialIndex';
-import {BASEMAPS,type BasemapId} from './basemaps';
+import {BASEMAPS,type BasemapId,type CustomBasemap} from './basemaps';
 import {OFFLINE_METHOD} from './scratch';
 import {drawingPreview,measurementAnchor,approximateMeasurement,geodesicDrag as edgeDistance} from './editing';
 import { featureLabel } from './labels';
@@ -41,6 +41,8 @@ interface Props {
   vertices: Position[];
   focus: FocusPoint | null;
   basemap: BasemapId;
+  customBasemap:CustomBasemap|null;
+  onBasemapStatus:(status:string)=>void;
   measurement:Measurement|null;
   showMeasurements:boolean;
   selectedFeatureId:string|null;
@@ -223,7 +225,7 @@ type Drag = {
 };
 
 export default function MapCanvas({
-  selected,drawingMode,vertices,focus,basemap,measurement,showMeasurements,selectedFeatureId,rasterOpacity,onMapClick,onFinishDrawing,
+  selected,drawingMode,vertices,focus,basemap,customBasemap,onBasemapStatus,measurement,showMeasurements,selectedFeatureId,rasterOpacity,onMapClick,onFinishDrawing,
   onViewportChange, discovered, imageLayer, traceMode, onTraceClick,
   editing, moving,edgeMoving, snapping, selectedLocked, layerFeatures,
   promptPositive,promptNegative,promptBox,annotationMode,onAnnotationClick,
@@ -847,9 +849,32 @@ export default function MapCanvas({
 
   useEffect(() => {
     const map = mapRef.current;
-    if(ready&&map)for(const layer of BASEMAPS)if(layer.url&&map.getLayer(layer.id))
+    if(!ready||!map)return;
+    if(map.getLayer('custom'))map.removeLayer('custom');
+    if(map.getSource('custom'))map.removeSource('custom');
+    if(customBasemap){
+      const attribution=customBasemap.attribution.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;');
+      map.addSource('custom',{type:'raster',tiles:[customBasemap.url],tileSize:256,maxzoom:customBasemap.maxzoom,attribution});
+      map.addLayer({id:'custom',type:'raster',source:'custom',layout:{visibility:'none'}},'street');
+    }
+  },[customBasemap,ready]);
+  useEffect(()=>{
+    const map=mapRef.current;if(!ready||!map)return;
+    const title=BASEMAPS.find(item=>item.id===basemap)?.name??basemap;
+    const error=(event:unknown)=>{
+      const id=(event as {sourceId?:string}).sourceId;
+      if(id===basemap)onBasemapStatus('Imagery unavailable: '+title+'. Check network or provider coverage.');
+    };
+    const data=(event:unknown)=>{
+      const value=event as {sourceId?:string;tile?:{state?:string}};
+      if(value.sourceId===basemap&&value.tile?.state==='loaded')onBasemapStatus(title+' · tile loaded');
+    };
+    map.on('error',error);map.on('sourcedata',data);
+    onBasemapStatus(basemap==='blank'?'Blank canvas':'Loading '+title+'…');
+    for(const layer of BASEMAPS)if(map.getLayer(layer.id)&&layer.id!=='blank')
       map.setLayoutProperty(layer.id,'visibility',layer.id===basemap?'visible':'none');
-  },[basemap,ready]);
+    return()=>{map.off('error',error);map.off('sourcedata',data);};
+  },[basemap,customBasemap,ready,onBasemapStatus]);
 
   useEffect(() => {
     const map = mapRef.current;

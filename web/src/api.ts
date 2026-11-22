@@ -976,3 +976,14 @@ export function advancedTerrain(body:{image_id:string;geometry:GeoJSON.Geometry;
   interval:number;reference:number;point:[number,number]|null;observer_height:number;target_height:number}):Promise<AdvancedTerrainResult>{
   return request('/terrain/advanced',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
 }
+
+export function bufferGeometry(geometry:GeoJSON.Geometry,distance_m:number):Promise<EditResponse&{warning:string}>{
+  return request('/analysis/buffer',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({geometry,distance_m,resolution:16})});
+}
+export function compareAreas(left:GeoJSON.Geometry,right:GeoJSON.Geometry):Promise<{
+  left_area_m2:number;right_area_m2:number;difference_m2:number;ratio:number|null;method:string
+}>{
+  return request('/analysis/compare',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({left,right})});
+}

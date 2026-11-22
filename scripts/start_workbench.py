@@ -38,7 +38,8 @@ def main():
         api=subprocess.Popen([sys.executable,"-m","uvicorn","core.main:app","--host","127.0.0.1","--port","8000"],cwd=ROOT)
         children.append(api)
         wait(api,"http://127.0.0.1:8000/health/ready")
-        front=subprocess.Popen([npm,"run","dev","--","--host","127.0.0.1"],cwd=ROOT/"web")
+        front=subprocess.Popen([npm,"run","dev","--","--host","127.0.0.1"],cwd=ROOT/"web",
+            env={**os.environ,"VITE_API_URL":"/api"})
         children.append(front)
         wait(front,"http://127.0.0.1:5173/api/health/ready")
         print("GeoFathom ready: http://127.0.0.1:5173",flush=True)

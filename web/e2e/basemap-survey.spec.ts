@@ -1,0 +1,20 @@
+import {test,expect} from './coverage-fixture';
+const tile=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/ZecAAAAASUVORK5CYII=','base64');
+test('satellite and licensed imagery actually request tiles',async({page})=>{
+ await page.route('**/tile.openstreetmap.org/**',r=>r.fulfill({contentType:'image/png',body:tile}));
+ await page.route('**/tiles.maps.eox.at/**',r=>r.fulfill({contentType:'image/png',body:tile}));
+ await page.route('https://tiles.example.test/**',r=>r.fulfill({contentType:'image/png',body:tile}));
+ await page.goto('/');
+ await expect(page.getByLabel('Interactive geospatial map')).toHaveAttribute('data-label-layer-ready','true',{timeout:25000});
+ const loaded=page.waitForResponse(r=>r.url().includes('tiles.maps.eox.at')&&r.ok());
+ await page.getByLabel('Quick basemap tools').getByRole('button',{name:'Satellite',exact:true}).click();
+ await loaded;
+ await expect(page.getByLabel('Basemap',{exact:true})).toHaveValue('sentinel');
+ await page.getByText('Connect high-resolution imagery',{exact:true}).click();
+ await page.getByLabel('Licensed XYZ tile URL').fill('https://tiles.example.test/{z}/{y}/{x}.png');
+ await page.getByLabel('Imagery attribution').fill('Licensed test fixture');
+ const custom=page.waitForResponse(r=>r.url().startsWith('https://tiles.example.test/')&&r.ok());
+ await page.getByRole('button',{name:'Connect imagery',exact:true}).click();
+ await custom;
+ await expect(page.getByLabel('Basemap',{exact:true})).toHaveValue('custom');
+});

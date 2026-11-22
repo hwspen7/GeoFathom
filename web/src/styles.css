@@ -505,3 +505,9 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .scratch-layer>input{width:100%;margin:4px 0;padding:6px;border:1px solid #cbd5dd}
 .scratch-layer>button{border:1px solid #cbd5dd;background:white;color:#304656;padding:6px;font-size:11px;width:100%}
 .gis-toolbar .finish-button{color:#fff!important;background:#187e4a!important}
+
+.gis-quick-basemap{display:flex;gap:3px;flex-wrap:wrap;align-items:center;padding-left:5px;border-left:1px solid #c2ccd4}
+.gis-quick-basemap button{background:#fff;border:1px solid #cdd5dc;padding:6px;min-height:30px;color:#304656;font-size:11px}
+.gis-quick-basemap button[aria-pressed=true]{background:#d8e8f5;border-color:#7197b9;color:#153d60}
+.basemap-status{display:block;color:#526270;line-height:1.35;padding:5px 0;font-size:11px}
+.custom-basemap summary{cursor:pointer;font-size:11px;padding:5px 0;color:#304656}
