@@ -399,9 +399,11 @@ export default function App() {
       const found = await searchPlaces(query);
       if(sequence!==geometrySequence.current)return;
       setCandidates(found);
-      if (found.length) {
+      if (found.length===1) {
         await selectPlace(found[0]);
-        if (found.length > 1) setMessage('Multiple candidates found. Confirm the correct place below.');
+      } else if(found.length>1){
+        // A first search hit is not necessarily the requested airport.
+        setMessage('Multiple candidates found. Select the intended location from search results.');
       } else {
         setMessage('No place found. Try a different spelling or draw directly on the map.');
       }
@@ -431,7 +433,7 @@ export default function App() {
         setDiscovered(answer.results);
       } else {
         setDiscovered([]);
-        if (answer.results.length) await selectPlace(answer.results[0]);
+        if (answer.results.length===1) await selectPlace(answer.results[0]);
         if (answer.results.length > 1) setMessage(answer.message + ' Select the correct candidate.');
       }
     } catch (problem) {
@@ -717,7 +719,7 @@ export default function App() {
   }
 
   function stopInteraction(){
-    geometrySequence.current++;setBusy(false);setDrawingMode(null);setVertices([]);setTerrainPicking(false);
+    geometrySequence.current++;setBusy(false);setTerrainLineDrawing(false);setDrawingMode(null);setVertices([]);setTerrainPicking(false);
     setEditing(false);setEdgeMoving(false);setMoving(false);setTraceMode(false);setPromptMode(null);
     setSelectionBoxMode(false);setLabelMoveMode(false);setPendingAnnotation(null);setContextMenu(null);
     if(preview||pendingShared){setGeometry(lastValid.current);setPreview(null);setPendingShared(null);}
@@ -1392,7 +1394,7 @@ export default function App() {
               saved={activeProjectId ? projectWorkspace?.features ?? [] : []}
               onStart={startDrawing}
               onFinish={() => { if(!busy)void finishDrawing(); }}
-              onCancel={() => { geometrySequence.current++;setBusy(false);setError('');setDrawingMode(null); setVertices([]);setMessage('Drawing cancelled.'); }}
+              onCancel={() => { geometrySequence.current++;setBusy(false);setError('');setTerrainLineDrawing(false);setDrawingMode(null);setVertices([]);setMessage('Drawing cancelled. Retained locations are unchanged.'); }}
               onUndoPoint={() => setVertices(value => value.slice(0,-1))}
               onUndo={()=>historyStep()}
               onRedo={()=>historyStep(true)}
