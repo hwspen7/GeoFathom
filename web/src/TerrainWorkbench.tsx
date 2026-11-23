@@ -139,11 +139,13 @@ export default function TerrainWorkbench(p:Props){
  const [runHistory,setRunHistory]=useState(()=>readTerrainRuns(p.projectId));
  const [researchRun,setResearchRun]=useState<TerrainResearchResult|null>(null);
  const [researchTab,setResearchTab]=useState<'overview'|'figures'|'data'>('overview');
+ const [researchSensitivityPage,setResearchSensitivityPage]=useState(0);
  const researchStudyKey=useMemo(
    ()=>JSON.stringify({demId:p.raster?.id??null,geometry:p.geometry,projectId:p.projectId}),
    [p.raster?.id,p.geometry,p.projectId],
  );
  useEffect(()=>setResearchRun(null),[researchStudyKey]);
+ useEffect(()=>setResearchSensitivityPage(0),[researchRun?.archive_sha256]);
  const [historyStorageError,setHistoryStorageError]=useState(false);
  useEffect(()=>{setHistoryStorageError(!writeTerrainRuns(p.projectId,runHistory));},[runHistory,p.projectId]);
  useEffect(()=>{
@@ -584,6 +586,8 @@ export default function TerrainWorkbench(p:Props){
    {busy&&<button onClick={()=>{setLive(false);cancelAnalysis();setInfo('Analysis request cancelled.');}}>Cancel</button>}
    <label><input aria-label="Live terrain updates" type="checkbox" checked={live} onChange={e=>setLive(e.target.checked)}/> Live</label>
  </div>:null;
+ const sensitivityRange=Math.max(1e-8,...(researchRun?.sensitivity??[]).map(x=>Math.abs(x.mean_score_delta)));
+ const researchPageSize=5;
  const monitor=<div className={'terrain-monitor-content'+(leftTab==='research'&&researchRun?' research-active':'')}>
    {researchRun&&leftTab==='research'&&<section className="terrain-research-remote" aria-label="Research result monitor">
      <nav className="terrain-result-tabs terrain-research-result-tabs" role="tablist" aria-label="Research views">
@@ -605,11 +609,27 @@ export default function TerrainWorkbench(p:Props){
        <figcaption>Suitability score, 0–1. NoData is transparent.</figcaption>
      </figure>}
      {researchTab==='data'&&<div className="terrain-research-remote-table">
-       <div className="section-heading">Weight sensitivity</div>
-       {researchRun.sensitivity.map((scenario,i)=><div key={i} className="terrain-research-remote-row">
-         <span>{scenario.criterion} · {scenario.direction}</span>
-         <strong>{scenario.mean_score_delta>=0?'+':''}{scenario.mean_score_delta.toFixed(4)}</strong>
-       </div>)}
+       <div className="section-heading">Weight sensitivity · mean score Δ</div>
+       {researchRun.sensitivity.slice(researchSensitivityPage*researchPageSize,(researchSensitivityPage+1)*researchPageSize)
+         .map((scenario,i)=>{
+           const value=scenario.mean_score_delta;
+           const scale=Math.abs(value)/sensitivityRange*50;
+           return <div key={scenario.criterion+scenario.direction+i} className="terrain-research-remote-row">
+             <span>{scenario.criterion} · {scenario.direction}</span>
+             <div className="terrain-research-change-track" aria-hidden="true">
+               <div className={value>=0?'terrain-research-change-positive':'terrain-research-change-negative'}
+                 style={{left:(value<0?50-scale:50)+'%',width:scale+'%'}}/>
+             </div>
+             <strong>{value>=0?'+':''}{value.toFixed(4)}</strong>
+           </div>;
+         })}
+       {researchRun.sensitivity.length>researchPageSize&&<div className="gis-record-pager">
+         <button type="button" disabled={researchSensitivityPage===0}
+           onClick={()=>setResearchSensitivityPage(v=>Math.max(0,v-1))}>Previous</button>
+         <span>{researchSensitivityPage+1} / {Math.ceil(researchRun.sensitivity.length/researchPageSize)}</span>
+         <button type="button" disabled={(researchSensitivityPage+1)*researchPageSize>=researchRun.sensitivity.length}
+           onClick={()=>setResearchSensitivityPage(v=>v+1)}>Next</button>
+       </div>}
      </div>}
    </section>}
    {!!records.length&&<section className="terrain-run-list" aria-label="Analysis result layers">
