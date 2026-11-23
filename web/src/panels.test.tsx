@@ -109,10 +109,12 @@ describe('survey controls',()=>{
     click('Cut hole');click('Split line');click('Finish');
     fireEvent.click(screen.getByRole('button',{name:'Undo last sketch point'}));
     fireEvent.click(screen.getByTitle('Cancel'));
-    click('Vertices');click('Move');click('Snap ON');click('Undo');click('Redo');
+    expect((screen.getByRole('button',{name:'Vertices'}) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button',{name:'Move'}) as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByRole('button',{name:'Copy'}) as HTMLButtonElement).disabled).toBe(true);
+    click('Snap ON');click('Undo');click('Redo');
     rerender(<SurveyTools {...p} geometry={polygon} mode={null}/>);
-    click('Copy');
+    click('Vertices');click('Move');click('Copy');
     fireEvent.click(screen.getByLabelText(/Linked\/shared vertices/));
     expect(p.onFinish).toHaveBeenCalledOnce();expect(p.onCancel).toHaveBeenCalledOnce();
     expect(p.onUndoPoint).toHaveBeenCalledOnce();expect(p.onEdit).toHaveBeenCalledWith(true,true);
