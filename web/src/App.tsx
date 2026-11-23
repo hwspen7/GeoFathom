@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import {createPortal} from 'react-dom';
 import {
-  ArrowRight, Compass, Download, Globe2, Layers3, MapPin, Maximize2, Minimize2,
+  ArrowRight, Compass, Globe2, Layers3, MapPin, Maximize2, Minimize2,
   Pencil, RotateCcw, Search, Send, Sparkles,
   Wifi, WifiOff,
 } from 'lucide-react';
