@@ -110,6 +110,8 @@ export default function TerrainWorkbench(p:Props){
  // Opening Terrain never preselects a calculation.
  const [operation,setOperation]=useState<Operation|null>(null);
  const [category,setCategory]=useState('Quick');
+ // One non-scrolling page at a time; form values remain mounted in their panels.
+ const [leftTab,setLeftTab]=useState<'source'|'tools'|'setup'|'process'>('source');
  const [assets,setAssets]=useState<RasterAsset[]>([]),[token,setToken]=useState('');
  const [resolution,setResolution]=useState<1|3|10|30|90>(30),[fetching,setFetching]=useState(false),[sourceInfo,setSourceInfo]=useState('');
  // The displayed fetch choice tracks a genuine selected area automatically.
@@ -759,8 +761,16 @@ export default function TerrainWorkbench(p:Props){
  </div>;
  return <>
  <div className="terrain-workbench professional-panel">
-   <section className="terrain-source terrain-step" aria-label="DEM input">
-     <header className="terrain-step-heading"><span>01</span><strong>Elevation source</strong></header>
+   <nav className="terrain-workflow-tabs" role="tablist" aria-label="Terrain controls">
+     {([
+       ['source','Source'],['tools','Tools'],['setup','Parameters'],['process','Process'],
+     ] as const).map(([key,title])=><button type="button" key={key} role="tab"
+       aria-selected={leftTab===key} aria-controls={'terrain-panel-'+key}
+       disabled={key==='setup'&&!operation||key==='process'&&!dem}
+       onClick={()=>setLeftTab(key)}>{title}</button>)}
+   </nav>
+   <section id="terrain-panel-source" className="terrain-source terrain-step terrain-control-page"
+     role="tabpanel" aria-label="Source settings" hidden={leftTab!=='source'}>
      <label>Elevation layer<select aria-label="DEM elevation layer" value={dem?.id??''}
        disabled={fetching||importing}
        onChange={e=>{
@@ -816,33 +826,27 @@ export default function TerrainWorkbench(p:Props){
        {!supportsUSGS&&fetchArea&&<small className="compact-notice">Global coverage: Copernicus. Regional DEMs may offer finer native resolution.</small>}
        {dem&&<small className="compact-notice" title={dem.provenance}>{dem.width} × {dem.height} · {dem.crs} · elevation m · {describeTerrainBounds(dem.bbox)}</small>}
      </details>}
-     {dem&&<details className="terrain-dem-tools"><summary>DEM processing · Clip / Resample / Mosaic</summary>
-       <div className="professional-form">
-         <label>Operation<select aria-label="DEM processing operation" value={demProcessMode} onChange={e=>setDemProcessMode(e.target.value as DEMProcessMode)}>
-           <option value="clip">Clip selected polygon</option><option value="resample">Resample source</option><option value="mosaic">Mosaic two DEMs</option>
-         </select></label>
-         {demProcessMode==='mosaic'&&<label>Second DEM<select aria-label="DEM mosaic second source" value={processSecond} onChange={e=>setProcessSecond(e.target.value)}>
-           <option value="">Choose second DEM</option>{assets.filter(a=>a.bands===1&&a.id!==dem.id).map(a=><option key={a.id} value={a.id}>{a.name}</option>)}
-         </select></label>}
-         <label>Output grid (m)<input aria-label="DEM processing resolution" type="number" min="1" max="1000" step="any" value={processResolution} onChange={e=>setProcessResolution(e.target.value)}/></label>
-         <label>Sampling<select aria-label="DEM processing sampling" value={processSampling} onChange={e=>setProcessSampling(e.target.value as 'nearest'|'bilinear'|'average')}>
-           <option value="bilinear">Bilinear</option><option value="nearest">Nearest</option><option value="average">Area-weighted average (coarsen)</option>
-         </select></label>
-         <button disabled={!p.connected||fetching||importing||demProcessMode==='clip'&&!['Polygon','MultiPolygon'].includes(p.geometry?.type??'')||demProcessMode==='mosaic'&&(!processSecond||processSecond===dem.id)}
-           onClick={()=>void processDEM()}>{importing?'Processing…':'Create processed DEM'}</button>
-         <small className="compact-notice">Processing changes the output grid, not the native input resolution or vertical datum.</small>
-       </div>
-     </details>}
      {mapMismatch&&<small className="discovery-error" role="status">Selected DEM is outside the current map. Choose a local source or use Fit explicitly.</small>}
      {sourceMismatch&&<small className="discovery-error" role="status">Selected analysis shape is not completely covered by this DEM. Select a matching source.</small>}
      {dem&&!/Copernicus DEM GLO-|USGS 3DEP Bare Earth DEM/.test(dem.provenance)&&<label className="gis-check"><input aria-label="Confirm DEM meter elevations" type="checkbox" checked={verticalConfirmed} onChange={e=>setVerticalConfirmed(e.target.checked)}/> Confirm single-band meter elevations</label>}
    </section>
-   <section className="terrain-step terrain-analysis-step" aria-label="Terrain analysis tools">
-     <header className="terrain-step-heading"><span>02</span><strong>Analysis</strong></header>
+   <section id="terrain-panel-tools" className="terrain-step terrain-analysis-step terrain-control-page"
+     role="tabpanel" aria-label="Terrain tools page" hidden={leftTab!=='tools'}>
    <WorkspaceToolShelf category={category} categories={categories} tools={modes}
     selected={operation} onCategory={name=>{
       setCategory(name);setOperation(null);setLive(false);setPickEnd(false);
-    }} onSelect={value=>{setOperation(value);if(value===null)setLive(false);}}/>
+    }} onSelect={value=>{
+      setOperation(value);
+      if(value)setLeftTab('setup');
+      else setLive(false);
+    }}/>
+   </section>
+   <section id="terrain-panel-setup" className="terrain-step terrain-setup-page terrain-control-page"
+     role="tabpanel" aria-label="Terrain parameters page" hidden={leftTab!=='setup'}>
+     <div className="terrain-setup-heading">
+       <strong>{modes.find(m=>m.id===operation)?.title??'Parameters'}</strong>
+       <button type="button" onClick={()=>setLeftTab('tools')}>Change tool</button>
+     </div>
    {operation&&<div className="professional-form">
      <div className="survey-action-bar">
        <button onClick={()=>p.onDraw(lineOperation)}>{lineOperation?'Draw profile line':'Draw study area'}</button>
@@ -912,6 +916,29 @@ export default function TerrainWorkbench(p:Props){
      {dem&&!verified&&<small className="compact-notice">Confirm elevation units before analysis</small>}
      {!parametersValid&&<small className="discovery-error">Check numeric parameters</small>}
    </div>}
+   </section>
+   <section id="terrain-panel-process" className="terrain-step terrain-process-page terrain-control-page"
+     role="tabpanel" aria-label="DEM processing page" hidden={leftTab!=='process'}>
+     {dem?<><div className="terrain-setup-heading"><strong>DEM processing</strong></div>
+     {dem&&<div className="terrain-dem-process-form">
+       <div className="professional-form">
+         <label>Operation<select aria-label="DEM processing operation" value={demProcessMode} onChange={e=>setDemProcessMode(e.target.value as DEMProcessMode)}>
+           <option value="clip">Clip selected polygon</option><option value="resample">Resample source</option><option value="mosaic">Mosaic two DEMs</option>
+         </select></label>
+         {demProcessMode==='mosaic'&&<label>Second DEM<select aria-label="DEM mosaic second source" value={processSecond} onChange={e=>setProcessSecond(e.target.value)}>
+           <option value="">Choose second DEM</option>{assets.filter(a=>a.bands===1&&a.id!==dem.id).map(a=><option key={a.id} value={a.id}>{a.name}</option>)}
+         </select></label>}
+         <label>Output grid (m)<input aria-label="DEM processing resolution" type="number" min="1" max="1000" step="any" value={processResolution} onChange={e=>setProcessResolution(e.target.value)}/></label>
+         <label>Sampling<select aria-label="DEM processing sampling" value={processSampling} onChange={e=>setProcessSampling(e.target.value as 'nearest'|'bilinear'|'average')}>
+           <option value="bilinear">Bilinear</option><option value="nearest">Nearest</option><option value="average">Area-weighted average (coarsen)</option>
+         </select></label>
+         <button disabled={!p.connected||fetching||importing||demProcessMode==='clip'&&!['Polygon','MultiPolygon'].includes(p.geometry?.type??'')||demProcessMode==='mosaic'&&(!processSecond||processSecond===dem.id)}
+           onClick={()=>void processDEM()}>{importing?'Processing…':'Create processed DEM'}</button>
+         <small className="compact-notice">Processing changes the output grid, not the native input resolution or vertical datum.</small>
+       </div>
+     </div>}
+
+     </>:<span>No DEM selected</span>}
    </section>
    {info&&<p className="project-info">{info}</p>}{error&&<p className="discovery-error" role="alert">{error}</p>}
  </div>
