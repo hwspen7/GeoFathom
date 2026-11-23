@@ -1,6 +1,6 @@
 import {useEffect,useRef,useState,type ChangeEvent} from 'react';
 import {
- runTerrainResearch,checkTerrainCheckpointAccuracy,verifyTerrainResearchArchive,
+ runTerrainResearch,checkTerrainCheckpointAccuracy,verifyTerrainResearchArchive,replayTerrainResearchArchive,
  type RasterAsset,type TerrainResearchCriterion,type TerrainResearchResult,
  type CheckpointReport,type ElevationCheckpoint,
 } from './api';
@@ -127,6 +127,17 @@ export default function TerrainResearchWorkbench({
   }catch(error){if(mounted.current)setMessage(String(error));}
   finally{if(mounted.current)setValidating(false);}
  }
+ async function replay(){
+  if(!result)return;
+  setValidating(true);setMessage('');
+  try{
+   const reply=await replayTerrainResearchArchive(result.archive_base64);
+   if(mounted.current)setMessage(reply.reproducible?
+    'Numerical replay matched '+Object.keys(reply.outputs).length+' archived raster products.' :
+    'Numerical replay failed.');
+  }catch(error){if(mounted.current)setMessage(error instanceof Error?error.message:String(error));}
+  finally{if(mounted.current)setValidating(false);}
+ }
  async function importCheckpoints(event:ChangeEvent<HTMLInputElement>){
   const file=event.currentTarget.files?.[0];
   if(!file||!dem)return;
@@ -232,6 +243,7 @@ export default function TerrainResearchWorkbench({
      <div className="terrain-research-row">
        {!onResult&&<button type="button" onClick={exportArchive}>Research ZIP</button>}
        <button type="button" disabled={validating} onClick={()=>void verify()}>Verify</button>
+       <button type="button" disabled={validating} onClick={()=>void replay()}>Recompute</button>
      </div>
    </section>}
    {message&&<small role="status" className="terrain-research-status">{message}</small>}
