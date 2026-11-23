@@ -18,6 +18,7 @@ interface Props{
   onPreview:(geometry:GeoJSON.Geometry[])=>void;
   onPage:(features:WorkspaceFeature[])=>void;
   onRefresh:()=>void;
+  view?:'sources'|'database'|'jobs';
 }
 export default function DataServicesPanel(p:Props){
   const [sources,setSources]=useState<OGCSource[]>([]);
@@ -141,7 +142,7 @@ export default function DataServicesPanel(p:Props){
   }
 
   return <div className="professional-panel">
-    <details>
+    <details open={p.view==='sources'?true:undefined} hidden={Boolean(p.view&&p.view!=='sources')}>
       <summary><Globe2 size={14}/> OGC map & feature services</summary>
       <div className="professional-form">
         <p className="project-hint">Connect WMS/WMTS imagery tiles and
@@ -207,7 +208,7 @@ export default function DataServicesPanel(p:Props){
         </button>}
       </div>
     </details>
-    <details>
+    <details open={p.view==='database'?true:undefined} hidden={Boolean(p.view&&p.view!=='database')}>
       <summary><Database size={14}/> Spatial database & indexed viewport</summary>
       <div className="professional-form">
         <p className="project-hint">SQLite R-tree is available without extra
@@ -235,7 +236,7 @@ export default function DataServicesPanel(p:Props){
         </button>
       </div>
     </details>
-    <details>
+    <details open={p.view==='jobs'?true:undefined} hidden={Boolean(p.view&&p.view!=='jobs')}>
       <summary><Layers3 size={14}/> Persistent background GIS jobs</summary>
       <div className="professional-form">
         <select aria-label="Background GIS job type" value={jobKind}
