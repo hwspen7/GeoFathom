@@ -1,6 +1,6 @@
 import {useEffect,useRef,useState,type ReactNode} from 'react';
 import {fetchTerrainMeshTile,type TerrainMesh,type StreamedTerrainTile} from './api';
-import {terrainTileRequests,streamedTileMeshGeometry} from './terrainCameraTiles';
+import {loadTerrainTileBatch,terrainAdaptiveTileLevel,terrainTileRequests,streamedTileMeshGeometry} from './terrainCameraTiles';
 
 export function meshData(mesh:TerrainMesh){
  let lo=Infinity,hi=-Infinity;
@@ -134,7 +134,12 @@ function renderer(gl:WebGL2RenderingContext,mesh:TerrainMesh,redraw:()=>void){
   }
  }
  function hasTile(level:number,row:number,col:number){
-  return streamingTiles.has(streamKey(level,row,col));
+  const key=streamKey(level,row,col),entry=streamingTiles.get(key);
+  if(!entry)return false;
+  // Access-ordered GPU LRU: navigating across regions must not evict the
+  // currently visible tiles while keeping long-abandoned tiles resident.
+  streamingTiles.delete(key);streamingTiles.set(key,entry);
+  return true;
  }
  function uploadTile(tile:StreamedTerrainTile){
   if(disposed||gl.isContextLost())return;
@@ -176,7 +181,7 @@ function renderer(gl:WebGL2RenderingContext,mesh:TerrainMesh,redraw:()=>void){
    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,active?(camera.wire?active.wire:active.surface):(camera.wire?wireIndex:index));
    gl.drawElements(camera.wire?gl.LINES:gl.TRIANGLES,
     active?(camera.wire?active.wireCount:active.faceCount):(camera.wire?data.edges.length:data.triangles.length),gl.UNSIGNED_INT,0);
-   const sourceLevel=camera.zoom>=2.4?1:camera.zoom>=1.2?2:4;
+   const sourceLevel=terrainAdaptiveTileLevel(mesh,camera,gl.drawingBufferHeight);
    if((mesh.source_sampling_step??1)>sourceLevel){
     gl.enable(gl.POLYGON_OFFSET_FILL);gl.polygonOffset(-1,-1);
     for(const tile of streamingTiles.values()){
@@ -216,30 +221,28 @@ export function GPUView({mesh,fallback,tileSource}:{mesh:TerrainMesh;fallback:Re
  useEffect(()=>{
   const source=tileSource;
   if(!available||!source||(mesh.source_sampling_step??1)<=1||!mesh.source_grid_rows)return;
-  const targets=terrainTileRequests(mesh,camera,24);
+  const targets=terrainTileRequests(mesh,camera,24,768/480);
   const controller=new AbortController();
   let mounted=true;
   const timer=window.setTimeout(()=>{
-   async function loadVisibleTiles(){
-    let fetched=0;
-    for(const item of targets){
-     if(!mounted||controller.signal.aborted)break;
-     if(render.current?.hasTile(item.level,item.tile_row,item.tile_col))continue;
-     const tile=await fetchTerrainMeshTile({image_id:source.image_id,
-      geometry:source.geometry,level:item.level,tile_row:item.tile_row,tile_col:item.tile_col},
-      controller.signal);
-     if(!mounted||controller.signal.aborted)break;
-     render.current?.uploadTile(tile);
-     render.current?.draw(latest.current);
-     fetched++;
-    }
-    if(mounted&&fetched>0)setTileStatus(
-      'Source-resolution DEM tiles streamed: '+fetched+' for current camera');
-   }
-   void loadVisibleTiles().catch(error=>{
-    if(mounted&&!controller.signal.aborted)setTileStatus(
-      error instanceof Error?'Tile loading: '+error.message:'DEM tile request failed.');
-   });
+   void loadTerrainTileBatch(targets,
+     item=>render.current?.hasTile(item.level,item.tile_row,item.tile_col)??false,
+     (item,signal)=>fetchTerrainMeshTile({image_id:source.image_id,
+       geometry:source.geometry,level:item.level,tile_row:item.tile_row,tile_col:item.tile_col},signal),
+     tile=>{
+      if(!mounted||controller.signal.aborted)return;
+      render.current?.uploadTile(tile);
+      render.current?.draw(latest.current);
+     },controller.signal,3).then(result=>{
+      if(!mounted||controller.signal.aborted)return;
+      if(result.loaded||result.failed)setTileStatus(
+       result.loaded+' terrain tiles loaded'+(result.failed?'; '+result.failed+' failed':'')+
+       (result.maximumErrorM!==null?'; measured LOD max residual '+
+        result.maximumErrorM.toFixed(3)+' m':''));
+     }).catch(error=>{
+      if(mounted&&!controller.signal.aborted)setTileStatus(
+       error instanceof Error?'Tile loading: '+error.message:'DEM tile request failed.');
+     });
   },180);
   return()=>{mounted=false;window.clearTimeout(timer);controller.abort();};
  },[mesh,available,tileSource?.image_id,tileSource?.geometry,

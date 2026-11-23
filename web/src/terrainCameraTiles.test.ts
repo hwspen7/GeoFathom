@@ -1,5 +1,5 @@
 import {describe,it,expect} from 'vitest';
-import {streamedTileMeshGeometry,terrainTileRequests} from './terrainCameraTiles';
+import {loadTerrainTileBatch,streamedTileMeshGeometry,terrainAdaptiveTileLevel,terrainTileRequests} from './terrainCameraTiles';
 import type {TerrainMesh,StreamedTerrainTile} from './api';
 
 const mesh:TerrainMesh={
@@ -60,5 +60,57 @@ describe('Camera-driven streaming tile orchestration',()=>{
  it('rejects source CRS mismatches before GPU upload',()=>{
   const wrong={...tile(),source_crs:'EPSG:3857'};
   expect(()=>streamedTileMeshGeometry(mesh,wrong,1,1,9)).toThrow('Inconsistent');
+ });
+});
+
+
+describe('Research-grade terrain streaming quality',()=>{
+ it('increases LOD in rugged terrain without changing flat-terrain behavior',()=>{
+  const flat=terrainAdaptiveTileLevel(mesh,{...camera,zoom:.7});
+  expect(flat).toBe(4);
+  const rugged:TerrainMesh={...mesh,heights:Array(65*65).fill(0)};
+  rugged.heights[32*65+32]=2000;
+  const detailed=terrainAdaptiveTileLevel(rugged,{...camera,zoom:1.6,exaggeration:5});
+  expect(detailed).toBe(1);
+  expect(terrainTileRequests(rugged,{...camera,zoom:1.6,exaggeration:5})
+    .every(t=>t.level===1)).toBe(true);
+ });
+ it('rejects a tile with scrambled or incomplete source indices',()=>{
+  const wrong=tile();wrong.col_indices=[0,4,2];
+  expect(()=>streamedTileMeshGeometry(mesh,wrong,5120,1,9)).toThrow('Inconsistent');
+  const missing=tile();missing.row_indices=[0,2];
+  expect(()=>streamedTileMeshGeometry(mesh,missing,5120,1,9)).toThrow('Inconsistent');
+ });
+ it('loads with limited parallelism and reports measured LOD error',async()=>{
+  const requests=Array.from({length:9},(_,n)=>({level:2 as const,tile_row:0,tile_col:n,priority:n}));
+  let active=0,peak=0,installed=0;
+  const result=await loadTerrainTileBatch(
+    requests,request=>request.tile_col===0,
+    async request=>{
+      active++;peak=Math.max(peak,active);
+      await new Promise(resolve=>setTimeout(resolve,1));
+      active--;
+      return {...tile(),geometric_error_max_m:request.tile_col*.25};
+    },
+    ()=>{installed++;},undefined,3);
+  expect(peak).toBeGreaterThan(1);
+  expect(peak).toBeLessThanOrEqual(3);
+  expect(result).toEqual({loaded:8,failed:0,maximumErrorM:2});
+  expect(installed).toBe(8);
+ });
+ it('isolates failed tile reads and never installs stale requests',async()=>{
+  const requests=Array.from({length:5},(_,n)=>({level:2 as const,tile_row:0,tile_col:n,priority:n}));
+  const result=await loadTerrainTileBatch(requests,()=>false,
+    async req=>{if(req.tile_col===2)throw Error('Transient DEM tile failure');return tile();},
+    ()=>{},undefined,2);
+  expect(result.loaded).toBe(4);
+  expect(result.failed).toBe(1);
+  const controller=new AbortController();let installed=0;
+  const cancelled=loadTerrainTileBatch(requests,()=>false,
+    async()=>{await new Promise(resolve=>setTimeout(resolve,1));return tile();},
+    ()=>{installed++;},controller.signal,2);
+  controller.abort();
+  expect((await cancelled).loaded).toBe(0);
+  expect(installed).toBe(0);
  });
 });

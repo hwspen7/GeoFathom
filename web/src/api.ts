@@ -986,6 +986,8 @@ export interface StreamedTerrainTile {
   grid_origin_xy:[number,number];level:number;tile_row:number;tile_col:number;
   row_indices:number[];col_indices:number[];rows:number;cols:number;
   heights:Array<number|null>;valid_quads:boolean[];nodata_policy:string;source_elevation_unit:string;
+  geometric_error_max_m?:number|null;geometric_error_rmse_m?:number|null;
+  geometric_error_samples?:number;valid_quad_count?:number;
 }
 export function fetchTerrainMeshTile(body:{
   image_id:string;geometry:GeoJSON.Geometry;level:1|2|4|8|16|32|64;

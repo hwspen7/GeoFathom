@@ -13,7 +13,7 @@ not a survey, field accuracy, or full professional certification.** See also
 | Curvature | 3×3–9×9 centered least-squares quadratic fit with normalized coordinates, analytic second derivatives, explicit NoData gaps and undefined directional curvature on flat terrain | No independently published external curvature tolerance suite; physically biased data need vertical error analysis |
 | Viewshed | Co-registered DSM blocker elevation alongside bare-earth observer/target heights, unknown-ray masks, refraction/curvature, **exhaustive maximum-coverage selection** of up to four sites from 12 candidates, with a checkable finite-search audit | Exactness applies only to supplied candidates, not all geographic positions; ray count remains bounded at 100 million and 10 km; no verified DSM inventory |
 | Engineering | Grade-constrained quadratic design surface (including optional east/north/cross curvature) and cut/fill, conservative whole-grid maximum grade, conditional Gaussian independent-cell cut/fill intervals and exact correlated normal datum-offset quantiles; weighted suitability utility from slope, TRI and middle-of-band elevation with hard exclusions, normalized weights, continuous GeoTIFF score | Not a fully unconstrained CAD-designed surface, geotechnical model, surveyed volumetric computation, calibrated stochastic uncertainty distribution or GIS MCDA validation. Scores are **not probabilities** |
-| 3D | Seam-aligned 16/32/64-cell tile kernel, on-demand 32-cell source DEM windows over the network, camera-based priority selection, bounded GPU tile cache, NoData-safe WebGL2 mesh and OBJ preview export | Browser requests a bounded nearest set of visible tiles; not a complete global out-of-core service or seam-morphed terrain quadtree. OBJ exports the preview, not full high-resolution streaming geometry. The 3D viewport does not automatically drape every scientific result on the mesh |
+| 3D | Seam-aligned 32-cell source windows, camera-prioritized and relief-aware LOD, source-pixel NoData testing, **measured maximum and RMSE vertical TIN approximation errors** (metres) per tile, bounded parallel cancellable requests, access-ordered GPU cache, WebGL2 mesh and preview OBJ export | Visual LOD curvature is only a heuristic; returned tile error is measured. Not a seam-morphed global quadtree; OBJ exports the preview, and research rasters are not automatically draped. |
 
 ## Semantics and reproducibility
 
@@ -41,7 +41,10 @@ not a survey, field accuracy, or full professional certification.** See also
   Fully correlated normal datum-offset quantiles are reported separately.
   No model is a field-calibrated confidence interval without measured sigma.
 - Camera-dependent source-resolution tile requests read only each DEM
-  window and upload to a bounded GPU cache, with abortable requests. The
+  window; reported TIN vertical residuals compare source pixels in
+  complete quads to the actual two WebGL triangles. Invalid quads never
+  contribute false zero errors. The request queue is cancellable and
+  concurrency-bounded with an access-ordered GPU cache. The
   initial preview mesh stays fully resident so streaming refines it rather
   than removing all base geometry from GPU memory.
 

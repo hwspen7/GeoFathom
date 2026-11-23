@@ -6,7 +6,7 @@ const mesh=(rows:number,cols:number):TerrainMesh=>({
  rows,cols,dx_m:1,dy_m:1,heights:Array.from({length:rows*cols},(_,i)=>i)
 });
 
-describe('P1 camera-adaptive 3D LOD',()=>{
+describe('Camera-adaptive 3D mesh detail',()=>{
  it('coarsens geometry by power-of-two step and retains boundary vertices',()=>{
   const input=mesh(9,9);
   expect(meshLODIndices(input,1).triangles.length).toBe(8*8*6);

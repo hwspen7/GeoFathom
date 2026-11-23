@@ -90,3 +90,35 @@ def test_tile_reader_rejects_foreign_geography(terrain_tile_dem):
     ]]}
     with pytest.raises(RasterError):
         stream_mesh_tile(path,other,1,0,0)
+
+
+def test_streaming_tile_reports_exact_vertical_residuals(terrain_tile_dem):
+    """LOD error is measured against source samples, never inferred from zoom."""
+    path,polygon,_=terrain_tile_dem
+    fine=stream_mesh_tile(path,polygon,1,0,0)
+    coarse=stream_mesh_tile(path,polygon,4,0,0)
+    assert fine["geometric_error_max_m"]==0
+    assert fine["geometric_error_rmse_m"]==0
+    assert fine["geometric_error_samples"]>0
+    assert coarse["geometric_error_max_m"] is not None
+    assert coarse["geometric_error_max_m"]<1e-4
+    assert coarse["geometric_error_rmse_m"]<1e-4
+    assert coarse["valid_quad_count"]==sum(coarse["valid_quads"])
+    assert coarse["geometric_error_samples"]>0
+    assert coarse["geometric_error_max_m"]>=coarse["geometric_error_rmse_m"]
+
+
+def test_curved_terrain_has_measurable_lod_error(terrain_tile_dem):
+    path,polygon,_=terrain_tile_dem
+    with rasterio.open(path,"r+") as ds:
+        heights=ds.read(1)
+        yy,xx=np.indices(heights.shape)
+        curved=heights+np.float32(0.05)*(xx*xx+yy*yy)
+        curved[1,1]=ds.nodata
+        ds.write(curved.astype("float32"),1)
+    detailed=stream_mesh_tile(path,polygon,1,0,0)
+    coarse=stream_mesh_tile(path,polygon,4,0,0)
+    assert detailed["geometric_error_max_m"]==0
+    assert coarse["geometric_error_max_m"]>0.1
+    assert 0<coarse["geometric_error_rmse_m"]<=coarse["geometric_error_max_m"]
+    assert coarse["valid_quad_count"]<len(coarse["valid_quads"])

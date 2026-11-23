@@ -20,7 +20,7 @@ from .cancellation import checkpoint
 
 
 def stream_mesh_tile(path,geometry,level,tile_row,tile_col,tile_cells=32,cancel=None):
-    """Return source-exact sampled vertices + conservative quad validity mask.
+    """Return sampled vertices, measured TIN error and conservative quad mask.
 
     Tiles are addressed by globally aligned source raster cell indices within
     the chosen study-window. Every coarse quad touching NoData at *any* source
@@ -80,11 +80,57 @@ def stream_mesh_tile(path,geometry,level,tile_row,tile_col,tile_cells=32,cancel=
         bad=(~valid).astype(np.int32)
         prefix=np.pad(bad,((1,0),(1,0))).cumsum(axis=0).cumsum(axis=1)
         cell_valid=[]
+        maximum_error=0.0
+        squared_error=0.0
+        residual_samples=0
+        valid_quad_count=0
+        # Measure the actual vertical departure of the full-resolution DEM
+        # from the triangulated surface displayed by WebGL.
+        # Unknown quads contribute neither faces nor misleading zero errors.
+        # Each valid source pixel is counted once in RMSE (the outermost
+        # bottom/right boundaries are included at their owning edge cell).
         for r0,r1 in zip(local_rows,local_rows[1:]):
             for c0,c1 in zip(local_cols,local_cols[1:]):
                 invalid=int(prefix[r1+1,c1+1]-prefix[r0,c1+1]-
                             prefix[r1+1,c0]+prefix[r0,c0])
-                cell_valid.append(invalid==0)
+                complete=(invalid==0)
+                cell_valid.append(complete)
+                if not complete:
+                    continue
+                valid_quad_count+=1
+                if level==1:
+                    # A native-resolution cell has no interior source
+                    # samples; it introduces zero sampling error.
+                    residual_samples+=int((r1-r0)*(c1-c0))
+                    continue
+                weights_r=(np.arange(r0,r1+1,dtype=np.float64)-r0)/(r1-r0)
+                weights_c=(np.arange(c0,c1+1,dtype=np.float64)-c0)/(c1-c0)
+                # The WebGL index buffer draws triangles (NW,SW,NE)
+                # and (NE,SW,SE). Compare to that *piecewise-linear TIN*,
+                # not a bilinear surface that the GPU never renders.
+                north_west,north_east=raw[r0,c0],raw[r0,c1]
+                south_west,south_east=raw[r1,c0],raw[r1,c1]
+                u,v=weights_c[None,:],weights_r[:,None]
+                upper=north_west+v*(south_west-north_west)+u*(north_east-north_west)
+                lower=south_east+(1-u)*(south_west-south_east)+(1-v)*(north_east-south_east)
+                interpolated=np.where(u+v<=1,upper,lower)
+                residual=raw[r0:r1+1,c0:c1+1]-interpolated
+                maximum_error=max(maximum_error,float(np.max(np.abs(residual))))
+                # Avoid counting shared seam samples twice in the RMSE.
+                block=residual[:r1-r0,:c1-c0]
+                squared_error+=float(np.sum(block*block))
+                residual_samples+=block.size
+                if r1==samples.shape[0]-1:
+                    edge=residual[-1,:-1]
+                    squared_error+=float(np.dot(edge,edge))
+                    residual_samples+=edge.size
+                if c1==samples.shape[1]-1:
+                    edge=residual[:-1,-1]
+                    squared_error+=float(np.dot(edge,edge))
+                    residual_samples+=edge.size
+                if r1==samples.shape[0]-1 and c1==samples.shape[1]-1:
+                    squared_error+=float(residual[-1,-1]**2)
+                    residual_samples+=1
         checkpoint(cancel)
         base=src.window_transform(window)
         x0,y0=base*(.5,.5)
@@ -98,6 +144,11 @@ def stream_mesh_tile(path,geometry,level,tile_row,tile_col,tile_cells=32,cancel=
             "rows":len(local_rows),"cols":len(local_cols),
             "heights":[float(x) if ok else None for x,ok in zip(chosen.flat,chosen_valid.flat)],
             "valid_quads":cell_valid,
+            "geometric_error_max_m":maximum_error if valid_quad_count else None,
+            "geometric_error_rmse_m":(math.sqrt(squared_error/residual_samples)
+                                      if residual_samples else None),
+            "geometric_error_samples":residual_samples,
+            "valid_quad_count":valid_quad_count,
             "nodata_policy":"unknown_cells_and_intervening_pixels_remove_faces",
             "source_elevation_unit":"m",
         }
