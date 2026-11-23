@@ -208,6 +208,10 @@ def verify_research_bundle(data):
             return {"valid": True, "files": len(entries),
                     "source_sha256": [entry["sha256"] for entry in metadata["sources"]],
                     "model": metadata["model"]}
+    except RasterError:
+        # Preserve the precise scientific-integrity diagnostic (including
+        # checksum mismatch); do not hide it behind a generic ZIP error.
+        raise
     except (BadZipFile, KeyError, ValueError, TypeError, OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise RasterError("Invalid research archive.") from exc
 
