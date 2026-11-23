@@ -17,7 +17,7 @@ GROUPS = {
     "3D": ("mesh",),
 }
 CONTROL_GROUPS = {
-    "gradient": {"slope_map","aspect_map","hillshade","plan_curvature",
+    "gradient": {"slope","slope_map","aspect_map","hillshade","plan_curvature",
                  "profile_curvature","suitability"},
     "classification": {"slope_map"},
     "neighborhood_radius": {"tri","tpi"},
