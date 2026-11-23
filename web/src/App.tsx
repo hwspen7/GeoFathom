@@ -44,7 +44,6 @@ import ProjectsPanel from './ProjectsPanel';
 import ModelControls from './ModelControls';
 import RasterPanel, { type TraceSettings } from './RasterPanel';
 import GeoAIAnalysisPanel from './GeoAIAnalysisPanel';
-import ApiAccessPanel from './ApiAccessPanel';
 import {
   addMapAnnotation, applyOverlay, applyTopology, constructGeometry, editPair, getWorkspace, moveMeasured,
   previewTopology, refineRaster, traceExisting, traceImagery,
@@ -2113,7 +2112,6 @@ export default function App() {
           </section>
 
 
-            <div hidden={activeTool!=='tools-services'}><ApiAccessPanel/></div>
           </div>
           <div className="workspace-fixed-footer" ref={setOperationsFooterTarget}/>
         </aside>
