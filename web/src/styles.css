@@ -738,3 +738,49 @@ button:disabled { opacity: .45; cursor: not-allowed; }
  .desktop-gis .gis-results-monitor{width:min(295px,47vw)!important;min-width:165px;max-width:47vw}
  .desktop-gis .gis-body>.main{min-width:0}
 }
+
+
+/* Compact desktop result monitor. All scientific details remain accessible
+   through explicit expanders, not permanent stacked blocks. */
+.desktop-gis .gis-results-monitor .terrain-run-list{margin:0;padding:5px 0;border-top:0}
+.desktop-gis .terrain-run-selector label{display:flex;align-items:center;gap:7px;font-size:11px;font-weight:600;color:#365065}
+.desktop-gis .terrain-run-selector select{flex:1;min-width:0;width:100%;padding:7px 5px;border:1px solid #c9d4dc;background:white}
+.desktop-gis .terrain-layer-manager{margin-top:5px;border:0}
+.desktop-gis .terrain-layer-manager>summary{font-size:11px;cursor:pointer;color:#526e83;padding:6px 2px}
+.desktop-gis .terrain-result-layer-list{max-height:156px;overflow:auto;border-top:1px solid #e0e6eb}
+.desktop-gis .terrain-result-layer-list .scratch-row{display:flex;align-items:center;gap:5px;min-height:27px;padding:2px 0;border-bottom:1px solid #e8edf0}
+.desktop-gis .terrain-result-layer-list .scratch-row>button[title]{flex:1;min-width:0;text-overflow:ellipsis;overflow:hidden;white-space:nowrap;text-align:left}
+.desktop-gis .terrain-result-layer-list .scratch-row>button[aria-label^="Remove"]{flex:none;width:25px}
+.desktop-gis .terrain-history{margin:0;border-top:1px solid #e1e7eb!important}
+.desktop-gis .terrain-history-actions{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:5px;padding:5px 0}
+.desktop-gis .terrain-history-actions select{grid-column:1/-1;width:100%;min-width:0}
+.desktop-gis .terrain-history-actions button{min-height:27px;font-size:11px}
+.desktop-gis .terrain-key-metrics{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin:5px 0 8px}
+.desktop-gis .terrain-key-metrics>div{display:flex;flex-direction:column;align-items:flex-start;gap:3px;min-width:0;border:1px solid #e3e9ee;background:#fff;padding:9px 8px}
+.desktop-gis .terrain-key-metrics span{font-size:10px;color:#687e90}
+.desktop-gis .terrain-key-metrics strong{font-size:16px;line-height:1.15;font-weight:700;color:#1f496b;overflow-wrap:anywhere}
+.desktop-gis .terrain-metric-details{border-top:1px solid #e0e5e9;margin:5px 0}
+.desktop-gis .terrain-metric-details>summary,.desktop-gis .terrain-run-comparison>summary{cursor:pointer;padding:7px 2px;font-size:11px;color:#43637a}
+.desktop-gis .terrain-metric-details .terrain-metrics>div{padding:4px 3px}
+.desktop-gis .terrain-run-comparison{border-top:1px solid #e0e6eb}
+.desktop-gis .terrain-run-comparison label{margin-top:6px}
+.desktop-gis .terrain-output>.section-heading{display:flex;align-items:center;justify-content:space-between;gap:5px;padding-top:7px;margin-bottom:5px}
+.desktop-gis .terrain-output>.section-heading span{display:flex;gap:4px}
+.desktop-gis .terrain-output>.section-heading button{padding:4px 6px;font-size:10px}
+.desktop-gis .gis-results-monitor .terrain-profile-chart img{max-height:118px}
+.desktop-gis .gis-results-monitor .terrain-bars{padding:3px 4px;margin:5px 0}
+.desktop-gis .gis-results-monitor .terrain-bars>div{margin-top:2px}
+.desktop-gis .gis-results-monitor .terrain-result-quality{padding-top:3px;margin:3px 0}
+.desktop-gis .gis-results-monitor .terrain-output>.terrain-run-provenance{margin:1px 0;padding:2px 0}
+.desktop-gis .gis-results-monitor .metric{padding:5px 0}
+.desktop-gis .gis-results-monitor .metric strong{font-size:18px}
+.desktop-gis .gis-results-monitor .metric.secondary strong{font-size:13px}
+.desktop-gis .gis-results-monitor .analysis-measurement-method{display:block;font-size:10px;color:#687c89;max-width:100%;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.desktop-gis .geometry-edit-controls{margin:9px 0;border-top:1px solid #d5dfe6}
+.desktop-gis .geometry-edit-controls>summary{padding:6px 2px;font-size:11px;color:#45647d;cursor:pointer}
+.desktop-gis .gis-operations .terrain-source>.compact-notice:not([aria-label]){display:none}
+.desktop-gis .gis-operations .terrain-source .professional-form>.compact-notice{display:none}
+.desktop-gis .gis-operations .terrain-observer-grid{max-height:230px;overflow:auto}
+@media(max-width:880px){
+ .desktop-gis .gis-results-monitor .terrain-key-metrics{grid-template-columns:1fr}
+}
