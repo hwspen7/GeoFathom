@@ -8,7 +8,7 @@ const cmh={id:'cmh-acceptance',name:'CMH Acceptance Airport',display_name:'John 
  [-82.915,39.985],[-82.87,39.985],[-82.87,40.008],[-82.915,40.008],[-82.915,39.985]
  ]]},boundary_status:'mapped',source:'Acceptance fixture',osm_type:'way',osm_id:12345};
 async function search(page:import('@playwright/test').Page,place:typeof cmh){
- await openProjectDrawer(page);
+ await openProjectDrawer(page,'search');
  await page.route('**/search?q=*',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({results:[place]})}));
  await page.getByLabel('Search for a place').fill('John Glenn Columbus Airport');
  await page.getByRole('button',{name:'Search',exact:true}).click();
@@ -41,7 +41,7 @@ test('CMH Find a place remains selected across map clicks and Terrain activation
  await expect(page.getByLabel('DEM fetch area')).toHaveValue('selection');
  await page.getByRole('button',{name:'Deselect',exact:true}).click();
  await expect(page.locator('.results .result.active')).toHaveCount(0);
- await openProjectDrawer(page);
+ await openProjectDrawer(page,'search');
  await expect(page.getByLabel('Pinned places').getByRole('button',{name:'Select pinned CMH Acceptance Airport'})).toBeVisible();
  await closeProjectDrawer(page);
 });
@@ -71,7 +71,7 @@ test('Draw profile line keeps CMH selected before and after Finish, until explic
  await page.getByLabel('Terrain tools').getByRole('button',{name:'Elevation profile',exact:true}).click();
  await page.getByRole('button',{name:'Draw profile line',exact:true}).click();
  await expect(page.locator('.results .result.active')).toHaveCount(1);
- await openProjectDrawer(page);
+ await openProjectDrawer(page,'search');
  await expect(page.getByLabel('Pinned places').getByRole('button',{name:'Select pinned CMH Acceptance Airport'})).toBeVisible();
  await closeProjectDrawer(page);
  const rect=(await map.boundingBox())!;
@@ -84,10 +84,10 @@ test('Draw profile line keeps CMH selected before and after Finish, until explic
  await expect(page.locator('.results .result.active')).toHaveCount(1);
  await expect(page.getByRole('button',{name:'Remove profile line'})).toBeVisible();
  await page.reload();
- await openProjectDrawer(page);
+ await openProjectDrawer(page,'search');
  await expect(page.getByLabel('Pinned places').getByRole('button',{name:'Select pinned CMH Acceptance Airport'})).toBeVisible();
  await closeProjectDrawer(page);
- await openProjectDrawer(page);
+ await openProjectDrawer(page,'search');
   await page.getByLabel('Pinned places').getByRole('button',{name:'Remove pinned CMH Acceptance Airport'}).click();
  await expect(page.getByLabel('Pinned places')).toHaveCount(0);
 });
@@ -127,7 +127,7 @@ test('Cancel stops an independent profile drawing without discarding CMH',async(
  await page.getByLabel('Survey toolbar').getByRole('button',{name:'Cancel drawing',exact:true}).click();
  await expect(page.getByText('Drawing cancelled. Retained locations are unchanged.')).toBeVisible();
  await expect(page.locator('.results .result.active')).toHaveCount(1);
- await openProjectDrawer(page);
+ await openProjectDrawer(page,'search');
  await expect(page.getByLabel('Pinned places').getByRole('button',{name:'Select pinned CMH Acceptance Airport'})).toBeVisible();
  await closeProjectDrawer(page);
 });
@@ -165,7 +165,7 @@ test('OSU disconnected mapped properties default to campus, with inspectable edi
   ]}} as unknown as typeof cmh;
  await search(page,osu);
  await expect(page.getByLabel('Study area parcel')).toHaveValue('0');
- await openProjectDrawer(page);
+ await openProjectDrawer(page,'search');
  await expect(page.getByLabel('Pinned places').getByRole('button',{name:'Select pinned The Ohio State University'})).toBeVisible();
  await closeProjectDrawer(page);
  await page.getByRole('navigation',{name:'Workspace tools'}).getByRole('button',{name:'Terrain',exact:true}).click();
@@ -217,7 +217,7 @@ test('OSU disconnected mapped properties default to campus, with inspectable edi
  // Selecting (without dragging) must not silently create an edited local copy
  // or discard the original geocoded campus parcel.
  await expect(page.getByLabel('Study area parcel')).toHaveValue('0');
- await openProjectDrawer(page);
+ await openProjectDrawer(page,'search');
  await expect(page.getByLabel('Pinned places').getByRole('button',{name:'Select pinned The Ohio State University'})).toBeVisible();
  await closeProjectDrawer(page);
  await page.getByLabel('Boundary node',{exact:true}).selectOption('1');
@@ -226,7 +226,7 @@ test('OSU disconnected mapped properties default to campus, with inspectable edi
  await page.getByRole('button',{name:'Apply coordinates'}).click();
  await expect.poll(async()=>await page.getByLabel('Boundary longitude').inputValue(),
   {timeout:18000}).toBe('-83.0105000');
- await openProjectDrawer(page);
+ await openProjectDrawer(page,'search');
  await expect(page.getByLabel('Pinned places').getByRole('button',{name:'Select pinned The Ohio State University'})).toBeVisible();
  await closeProjectDrawer(page);
  await expect(page.getByLabel('DEM download target')).toContainText('N 40.01240°');
@@ -258,7 +258,7 @@ test('Hong Kong airport area uses global DEM provider and stays within enlarged 
  await expect(page.getByRole('button',{name:'Auto-fit DEM resolution'})).toContainText('30 m');
  await expect(page.getByText('USGS 3DEP is not a global data source.',{exact:false})).toBeVisible();
  await expect(page.getByText(/8-million-cell.*budget/)).toHaveCount(0);
- await openProjectDrawer(page);
+ await openProjectDrawer(page,'search');
  await expect(page.getByLabel('Pinned places').getByRole('button',{name:'Select pinned Hong Kong airport study area'})).toBeVisible();
  await closeProjectDrawer(page);
 });
@@ -282,7 +282,7 @@ test('large US university footprint automatically finds usable 3 m grid without 
  await expect(page.getByLabel('Public DEM resolution')).toHaveValue('3');
  await expect(page.getByRole('button',{name:'Fetch DEM'})).toBeEnabled();
  await expect(page.getByLabel('DEM download target')).toContainText('Selected geometry');
- await openProjectDrawer(page);
+ await openProjectDrawer(page,'search');
  await expect(page.getByLabel('Pinned places').getByRole('button',{name:'Select pinned Large Campus Acceptance'})).toBeVisible();
  await closeProjectDrawer(page);
 });
