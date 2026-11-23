@@ -39,6 +39,7 @@ interface Props {
   busy?:boolean;
   locked?:boolean;
   onLinked: (enabled:boolean) => void;
+  sketchError?:string|null;
 }
 
 const buttonModes: Array<{ mode: Exclude<ShapeMode, null>; title: string }> = [
@@ -56,7 +57,7 @@ export default function SurveyTools({
   mode, geometry, points, editing, moving, snapping, canUndo, canRedo, saved,
   onStart, onFinish, onCancel, onUndoPoint, onUndo, onRedo, onEdit,
   onSnapping, onAddPoint, onNumeric, onOverlay, onDuplicate, linked, onLinked,
-  toolbarTarget,busy=false,locked=false,edgeMoving=false,onEdgeMove,
+  toolbarTarget,busy=false,locked=false,edgeMoving=false,onEdgeMove,sketchError,
 }: Props) {
   const [longitude, setLongitude] = useState('');
   const [latitude, setLatitude] = useState('');
@@ -120,6 +121,7 @@ export default function SurveyTools({
             onClick={onFinish}><Check size={14}/> Finish</button>
         </div>
       )}
+      {mode&&sketchError&&<div className="survey-sketch-alert" role="alert">{sketchError}</div>}
       <div className="survey-action-bar">
         <button title="Edit vertices (E)" disabled={!geometry||locked||busy} className={editing && !moving && !edgeMoving ? 'active' : ''}
           onClick={() => onEdit(!editing || moving || edgeMoving, false)}><Pencil size={14}/> Vertices</button>
