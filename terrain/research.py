@@ -134,6 +134,39 @@ def _weighted(utilities, weights, valid):
     return np.where(valid, score, np.nan)
 
 
+def _ensemble(aligned, valid, parsed, weights, threshold, trials, seed, cancel=None):
+    """Seeded bounded ensemble with online Welford variance and exceedance counts."""
+    rng = np.random.default_rng(seed)
+    average = np.zeros(valid.shape, dtype=np.float64)
+    squared = np.zeros_like(average)
+    passed = np.zeros(valid.shape, dtype=np.uint16)
+    for k in range(trials):
+        checkpoint(cancel)
+        trial_weights = np.array([
+            max(1.e-9, weight * (1 + rng.normal(0, config["weight_sigma"])))
+            for weight, config in zip(weights, parsed)])
+        trial_weights /= trial_weights.sum()
+        realization = np.zeros(valid.shape, dtype=np.float64)
+        for values, config, weight in zip(aligned, parsed, trial_weights):
+            sample = (values.astype(np.float64) +
+                      rng.normal(0, config["sigma"], size=values.shape)
+                      if config["sigma"] else values.astype(np.float64))
+            realization += weight * np.where(valid, _utility(sample, config), 0.)
+        delta = realization - average
+        average += delta / (k + 1)
+        squared += delta * (realization - average)
+        passed += ((realization >= threshold) & valid).astype(np.uint16)
+    sd = np.sqrt(squared / max(1, trials - 1))
+    outputs = {
+        "ensemble_mean": np.where(valid, average, np.nan),
+        "ensemble_sd": np.where(valid, sd, np.nan),
+        "ensemble_frequency": np.where(valid, passed.astype(float) / trials, np.nan),
+    }
+    summary = {"above_threshold_frequency_mean": float(np.mean(passed[valid] / trials)),
+               "score_sd_mean": float(np.mean(sd[valid]))}
+    return outputs, summary
+
+
 def _geotiff(data, affine, crs, operation, unit):
     finite = np.asarray(data, dtype=np.float32)
     with MemoryFile() as mem:
@@ -320,29 +353,10 @@ def analyze_research(primary_path, geometry, criteria, options=None, cancel=None
     uncertainty = {"trials": trials, "seed": seed,
                    "assumption": "Independent cellwise Gaussian criterion errors; independent Gaussian relative weight perturbations truncated at zero. Hard constraints fixed at nominal values. Ensemble frequencies are not calibrated probabilities or confidence intervals."}
     if trials:
-        rng = np.random.default_rng(seed)
-        average = np.zeros(score.shape, dtype=np.float64)
-        squared = np.zeros_like(average)
-        passed = np.zeros(score.shape, dtype=np.uint16)
-        for k in range(trials):
-            checkpoint(cancel)
-            trial_weights = np.array([max(1.e-9, w * (1 + rng.normal(0, c["weight_sigma"])))
-                                      for w, c in zip(weights, parsed)])
-            trial_weights /= trial_weights.sum()
-            realization = np.zeros(score.shape, dtype=np.float64)
-            for values, config, w in zip(aligned, parsed, trial_weights):
-                sample = (values.astype(np.float64) + rng.normal(0, config["sigma"], size=values.shape)
-                          if config["sigma"] else values.astype(np.float64))
-                realization += w * np.where(valid, _utility(sample, config), 0.)
-            delta = realization - average
-            average += delta / (k + 1)
-            squared += delta * (realization - average)
-            passed += ((realization >= threshold) & valid).astype(np.uint16)
-        outputs.update({"ensemble_mean": np.where(valid, average, np.nan),
-                        "ensemble_sd": np.where(valid, np.sqrt(squared / max(1, trials - 1)), np.nan),
-                        "ensemble_frequency": np.where(valid, passed.astype(float) / trials, np.nan)})
-        uncertainty["above_threshold_frequency_mean"] = float(np.mean(passed[valid] / trials))
-        uncertainty["score_sd_mean"] = float(np.mean(np.sqrt(squared[valid] / max(1, trials - 1))))
+        ensemble_outputs, ensemble_summary = _ensemble(
+            aligned, valid, parsed, weights, threshold, trials, seed, cancel)
+        outputs.update(ensemble_outputs)
+        uncertainty.update(ensemble_summary)
     checkpoint(cancel)
     metrics = {
         "eligible_cells": count, "study_cells": int(inside.sum()),
@@ -369,6 +383,7 @@ def analyze_research(primary_path, geometry, criteria, options=None, cancel=None
         files[f"outputs/{name}.tif"] = _geotiff(values, affine, crs, name,
                                               "fraction" if name == "ensemble_frequency" else "score")
     metadata = {"schema": SCHEMA, "algorithm": "deterministic_wlc_mcda_v1",
+                "study_geometry_wgs84": geometry,
                 "source_dem_sha256": file_sha256(primary_path),
                 "sources": source_details, "model": model, "metrics": metrics,
                 "sensitivity": sensitivity_results,
@@ -436,3 +451,67 @@ def checkpoint_accuracy(path, points, declared_datum=None, cancel=None):
             "minimum_error_m": float(errors.min()), "maximum_error_m": float(errors.max()),
             "datum_verified": bool(declared_datum and datum),
             "warning": "Checkpoint independence, land cover, measurement epoch and stated vertical datum require external verification; these descriptive errors are not certified accuracy."}
+
+
+def replay_research_bundle(data, cancel=None):
+    """Recompute archived score and seeded stochastic outputs from archived inputs.
+
+    The aligned study rasters are replayable without access to acquisition
+    servers. Original resampling and source acquisition remain independently
+    auditable via source hashes, not reconstructable without original files.
+    """
+    integrity = verify_research_bundle(data)
+    with ZipFile(BytesIO(data), "r") as bundle:
+        metadata = json.loads(bundle.read("analysis.json"))
+        model = metadata["model"]
+        criteria = model["criteria"]
+        grid = metadata["grid"]
+        affine = rasterio.Affine(*grid["transform"])
+        crs = grid["crs"]
+        aligned = []
+        for i, criterion in enumerate(criteria):
+            checkpoint(cancel)
+            with MemoryFile(bundle.read(f"inputs/criterion-{i + 1}.tif")) as mem:
+                with mem.open() as source:
+                    if (source.width != grid["width"] or source.height != grid["height"]
+                        or str(source.crs) != crs or not np.allclose(
+                            tuple(source.transform)[:6], grid["transform"], rtol=0, atol=1e-9)):
+                        raise RasterError("Archived criterion raster grid differs from manifest.")
+                    aligned.append(source.read(1))
+        with MemoryFile(bundle.read("inputs/eligible.tif")) as mem:
+            with mem.open() as source:
+                valid = source.read(1) == 1
+        if not valid.any():
+            raise RasterError("Archived valid-pixel mask is empty.")
+        weights = np.asarray(model["weights"], dtype=float)
+        if len(weights) != len(criteria) or np.any(weights <= 0) or not np.isclose(weights.sum(), 1.):
+            raise RasterError("Archived weights do not satisfy the analysis contract.")
+        utilities = [np.where(valid, _utility(values.astype(np.float64), config), 0.)
+                     for values, config in zip(aligned, criteria)]
+        replayed = {"suitability": _weighted(utilities, weights, valid)}
+        settings = model["uncertainty"]
+        if settings["trials"]:
+            products, _ = _ensemble(
+                aligned, valid, criteria, weights, model["threshold"],
+                settings["trials"], settings["seed"], cancel)
+            replayed.update(products)
+        discrepancies = {}
+        for name, expected in replayed.items():
+            checkpoint(cancel)
+            with MemoryFile(bundle.read(f"outputs/{name}.tif")) as mem:
+                with mem.open() as source:
+                    archived = source.read(1)
+                    if source.shape != expected.shape or str(source.crs) != crs:
+                        raise RasterError("Archived output raster grid differs from manifest.")
+                    if not np.array_equal(np.isfinite(archived), np.isfinite(expected)):
+                        raise RasterError("Scientific replay NoData mask differs: " + name)
+                    discrepancy = float(np.max(np.abs(
+                        archived[valid] - expected[valid])))
+                    # GeoTIFF output is float32; internal computation is
+                    # float64. Tolerance matches float32 quantization.
+                    if discrepancy > 2e-6:
+                        raise RasterError("Scientific replay values differ: " + name)
+                    discrepancies[name] = discrepancy
+    return {"reproducible": True, "schema": SCHEMA,
+            "outputs": discrepancies, "verified_files": integrity["files"],
+            "warning": "Replay verifies exact aligned inputs and seeded numerical computations, not remote source acquisition or independent field accuracy."}
