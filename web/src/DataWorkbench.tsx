@@ -13,7 +13,7 @@ interface Props{
  onStoreAreas:(faces:NetworkFace[])=>void;onRefresh:()=>void;
  onTiles:(tiles:ExternalTile[])=>void;onPreview:(features:GeoJSON.Geometry[])=>void;
  onPage:(features:GeoWorkspace['features'])=>void;
- onRasterAdded:(asset:RasterAsset)=>void;
+ onRasterAdded:(asset:RasterAsset,kind:'dem'|'image')=>void;
  onOpenLayers:()=>void;
 }
 const fmt=(v:number)=>v.toLocaleString('en-US',{maximumFractionDigits:2});
@@ -21,6 +21,7 @@ export default function DataWorkbench(p:Props){
  const [page,setPage]=useState<DataPage>('areas');
  const [file,setFile]=useState<File|null>(null);
  const [kind,setKind]=useState<'vector'|'raster'>('vector');
+ const [rasterKind,setRasterKind]=useState<'dem'|'image'>('dem');
  const [layer,setLayer]=useState('');
  const [token,setToken]=useState('');
  const [tolerance,setTolerance]=useState('1');
@@ -53,7 +54,7 @@ export default function DataWorkbench(p:Props){
   }else{
    const asset=await uploadImagery(source,token);
    if(latest.current!==scope)return;
-   p.onRasterAdded(asset);setStatus('Imported georeferenced raster: '+asset.name);
+   p.onRasterAdded(asset,rasterKind);setStatus('Imported georeferenced raster: '+asset.name);
   }
   setFile(null);
  }
@@ -89,6 +90,12 @@ export default function DataWorkbench(p:Props){
     accept={kind==='vector'?'.geojson,.gpkg,.kml,.gpx,.zip':
       '.tif,.tiff,image/tiff'}/>
    {file&&<small>{file.name} · {fmt(file.size/1024/1024)} MB</small>}
+   {kind==='raster'&&<label>Raster type
+    <select aria-label="Imported raster kind" value={rasterKind}
+     onChange={e=>setRasterKind(e.target.value as typeof rasterKind)}>
+     <option value="dem">Elevation / DEM</option><option value="image">Imagery / other bands</option>
+    </select>
+   </label>}
    {kind==='vector'?<label>Target layer
     <select aria-label="Data import layer" value={layer} onChange={e=>setLayer(e.target.value)}>
      <option value="">Project default</option>
