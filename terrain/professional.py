@@ -442,7 +442,7 @@ def surface(z,valid,affine,crs,operation,reference,point,end_point,max_slope,
             source_datum=None,gradient_method="horn",slope_classes="standard",mfd_exponent=1.1,neighborhood_radius=1,route_model="surface",stream_order_scheme="strahler",hillshade_mode="single",
             flow_routing_method="d8",curvature_method="finite_difference",curvature_radius=2,
             design_east_grade=0.,design_north_grade=0.,design_max_grade=.3,elevation_sigma_m=0.,
-            suitability_model="binary",suitability_weights=(.5,.25,.25)):
+            suitability_model="binary",suitability_weights=(.5,.25,.25),external_inflow=None):
     """Return the exact source-grid derivative and product-specific statistics."""
     dx,dy=abs(affine.a),abs(affine.e);cell=dx*dy
     features=[];metrics={}
@@ -464,8 +464,9 @@ def surface(z,valid,affine,crs,operation,reference,point,end_point,max_slope,
         metrics["suitable_area_m2"]*=cell
     elif operation=="flow_accumulation" and flow_routing_method=="dinf":
         from .p1_science import dinfinity_accumulation
-        values,angles=dinfinity_accumulation(z,valid,dx,dy,cancel=cancel)
-        metrics={"dinf_direction_valid_cells":int(np.isfinite(angles).sum())}
+        values,angles=dinfinity_accumulation(z,valid,dx,dy,external_inflow=external_inflow,cancel=cancel)
+        metrics={"dinf_direction_valid_cells":int(np.isfinite(angles).sum()),
+                 "external_inflow_total_cell_equivalents":float(np.sum(external_inflow)) if external_inflow is not None else 0.}
     elif operation=="flow_accumulation_mfd":
         from .multiflow import mfd_accumulation
         values=mfd_accumulation(z,valid,dx,dy,exponent=mfd_exponent,cancel=cancel)
