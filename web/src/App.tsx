@@ -1481,6 +1481,25 @@ export default function App() {
           <details className="workspace-objects" open>
             <summary>Objects</summary>
             <div ref={setObjectTreeTarget}/>
+            {geometry&&<details className="geometry-edit-controls">
+              <summary>Geometry / vertices</summary>
+              <BoundaryEditor geometry={geometry} sourcePlace={selectedPlace} selectedParcel={selectedParcel}
+                onChooseParcel={value=>void chooseSelectedParcel(value)}
+                editing={editing&&!moving&&!edgeMoving} busy={busy} selectedNode={selectedBoundaryNode}
+                onSelectNode={setSelectedBoundaryNode}
+                onToggleEditing={()=>{if(editing){setEditing(false);setMoving(false);setEdgeMoving(false);}
+                  else editMode('vertices');}}
+                onMoveNode={(path,coordinate)=>{
+                  if(!geometry||selectedLocked)return;
+                  void commitGeometry(moveVertex(geometry,path,coordinate),'Boundary node coordinates validated.');
+                }}
+                onRemoveNode={path=>{
+                  if(!geometry||selectedLocked)return;
+                  try{void commitGeometry(removeVertex(geometry,path),'Boundary node removed and validated.');}
+                  catch(e){setError(e instanceof Error?e.message:String(e));}
+                }}/>
+            </details>}
+
           </details>
           {resultsTarget&&(geometry||measurement||preview)&&createPortal(<section className="panel-section results-summary">
             <div className="section-heading"><Compass size={16} /><span>Selection</span></div>
@@ -1582,25 +1601,6 @@ export default function App() {
                 }
               }}
             />
-            {geometry&&<details className="geometry-edit-controls">
-              <summary>Geometry / vertices</summary>
-              <BoundaryEditor geometry={geometry} sourcePlace={selectedPlace} selectedParcel={selectedParcel}
-                onChooseParcel={value=>void chooseSelectedParcel(value)}
-                editing={editing&&!moving&&!edgeMoving} busy={busy} selectedNode={selectedBoundaryNode}
-                onSelectNode={setSelectedBoundaryNode}
-                onToggleEditing={()=>{if(editing){setEditing(false);setMoving(false);setEdgeMoving(false);}
-                  else editMode('vertices');}}
-                onMoveNode={(path,coordinate)=>{
-                  if(!geometry||selectedLocked)return;
-                  void commitGeometry(moveVertex(geometry,path,coordinate),'Boundary node coordinates validated.');
-                }}
-                onRemoveNode={path=>{
-                  if(!geometry||selectedLocked)return;
-                  try{void commitGeometry(removeVertex(geometry,path),'Boundary node removed and validated.');}
-                  catch(e){setError(e instanceof Error?e.message:String(e));}
-                }}/>
-            </details>}
-
             {pendingShared && <div className="linked-preview">
               <strong>Shared boundary preview · {pendingShared.preview.count} features</strong>
               {pendingShared.preview.affected.map(item=><div key={item.id}>
