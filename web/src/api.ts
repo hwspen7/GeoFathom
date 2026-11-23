@@ -982,10 +982,11 @@ export interface TerrainMesh {rows:number;cols:number;dx_m:number;dy_m:number;he
 export interface AdvancedTerrainResult {
   operation:TerrainOperation;source_crs:string;source_vertical_datum?:string|null;valid_cells:number;missing_cells:number;
   cell_area_m2:number;metrics:Record<string,number>;warning:string;
+  algorithm_options?:{gradient_method:string;slope_classes:string};
   features:Array<GeoJSON.Feature<GeoJSON.Geometry,Record<string,unknown>>>;mesh?:TerrainMesh;distribution?:TerrainDistributionBin[];raster?:TerrainRaster;sections?:{station_m:number;length_m:number;samples:{distance_m:number;offset_m:number;elevation_m:number|null;coordinate:[number,number]}[]}[];
 }
 export function advancedTerrain(body:{image_id:string;geometry:GeoJSON.Geometry;operation:TerrainOperation;
-  interval:number;reference:number;point:[number,number]|null;observer_height:number;target_height:number;end_point?:[number,number]|null;max_slope?:number;min_elevation?:number;max_elevation?:number;max_tri?:number;stream_cells?:number;azimuth?:number;altitude?:number;section_spacing?:number;section_width?:number;texture_image_id?:string|null;fill_sinks?:boolean;consider_curvature?:boolean;refraction_coeff?:number;comparison_image_id?:string|null;observer_points?:[number,number][]|null},signal?:AbortSignal):Promise<AdvancedTerrainResult>{
+  interval:number;reference:number;point:[number,number]|null;observer_height:number;target_height:number;end_point?:[number,number]|null;max_slope?:number;min_elevation?:number;max_elevation?:number;max_tri?:number;stream_cells?:number;azimuth?:number;altitude?:number;section_spacing?:number;section_width?:number;texture_image_id?:string|null;fill_sinks?:boolean;consider_curvature?:boolean;refraction_coeff?:number;comparison_image_id?:string|null;observer_points?:[number,number][]|null;gradient_method?:'horn'|'zevenbergen_thorne';slope_classes?:'standard'|'detailed'|'broad'},signal?:AbortSignal):Promise<AdvancedTerrainResult>{
   return request('/terrain/advanced',{signal,method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
 }
 
