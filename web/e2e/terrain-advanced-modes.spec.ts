@@ -252,9 +252,11 @@ test('shared Onshape-style command search and newly exposed Terrain tools',async
  const fixture=await setup(page);
  const filter=page.getByRole('searchbox',{name:'Filter project features'});
  await filter.fill('not-the-fixture');
- await expect(page.getByRole('button',{name:/Advanced terrain study area/})).toHaveCount(0);
+ await expect(page.getByLabel('Project feature tree')
+   .getByRole('button',{name:/Advanced terrain study area/})).toHaveCount(0);
  await filter.fill('Advanced terrain');
- await expect(page.getByRole('button',{name:/Advanced terrain study area/})).toBeVisible();
+ await expect(page.getByLabel('Project feature tree')
+   .getByRole('button',{name:/Advanced terrain study area/})).toBeVisible();
   await page.keyboard.press('Control+k');
  const dialog=page.getByRole('dialog',{name:'Workspace commands'});
  await expect(dialog).toBeVisible();
