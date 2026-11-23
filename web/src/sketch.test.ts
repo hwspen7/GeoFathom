@@ -22,9 +22,11 @@ describe('professional polygon drawing contract',()=>{
   expect(sketchSegmentsIntersect([0,0],[1,0],[2,0],[3,0])).toBe(false);
   expect(sketchSegmentsIntersect([0,0],[2,0],[1,0],[3,0])).toBe(true);
  });
- it('rejects an otherwise valid open path whose closing segment intersects another edge',()=>{
-  const path:Position[]=[[0,0],[4,0],[4,4],[3,4],[3,-1]];
-  expect(sketchFinishError('polygon',path)).toMatch(/edge|crosses/);
+ it('rejects only-at-closure crossings in an otherwise valid open polyline',()=>{
+  const path:Position[]=[[3,2],[0,4],[-1,2],[3,-2],[1,-1]];
+  for(let i=0;i<path.length;i++)
+    expect(sketchAddError('polygon',path.slice(0,i),path[i])).toBeNull();
+  expect(sketchFinishError('polygon',path)).toMatch(/Closing edge intersects/);
   expect(canPreviewClosedSketch('polygon',path)).toBe(false);
   expect(drawingPreview('polygon',path)?.type).toBe('LineString');
  });
@@ -35,6 +37,7 @@ describe('professional polygon drawing contract',()=>{
   expect(sketchAddError('polygon',[a,b],[200,0])).toMatch(/WGS84/);
   expect(sketchAddError('polygon',[a,b],[2,0])).toMatch(/Duplicate/);
   expect(sketchFinishError('rectangle',[a,a])).toMatch(/Duplicate/);
+  expect(sketchAddError('polygon',[a,[2,0]],[1,0])).toMatch(/retraces/);
  });
  it('draws only valid open line previews when cursor would cross prior edges',()=>{
   const points:Position[]=[[0,0],[3,0],[3,3],[0,3]];
