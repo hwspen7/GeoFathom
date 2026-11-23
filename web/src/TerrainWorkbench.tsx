@@ -912,7 +912,23 @@ export default function TerrainWorkbench(p:Props){
      {(operation==='volume'||operation==='cutfill_map')&&<label>Reference elevation (m)<input aria-label="Reference elevation" type="number" step="any" value={reference} onChange={e=>setReference(e.target.value)}/></label>}
      {operation==='cross_sections'&&<div className="area-fields"><label>Station spacing (m)<input type="number" value={sectionSpacing} onChange={e=>setSectionSpacing(e.target.value)}/></label><label>Half-width (m)<input type="number" value={sectionWidth} onChange={e=>setSectionWidth(e.target.value)}/></label></div>}
      {operation==='mesh'&&p.imageRaster&&p.imageRaster.bands>=3&&<label className="gis-check"><input type="checkbox" checked={drape} onChange={e=>setDrape(e.target.checked)}/> Drape selected RGB imagery</label>}
-     {operation==='hillshade'&&<div className="area-fields"><label>Sun azimuth (°)<input type="number" value={azimuth} onChange={e=>setAzimuth(e.target.value)}/></label><label>Sun altitude (°)<input type="number" value={altitude} onChange={e=>setAltitude(e.target.value)}/></label></div>}
+     {['slope_map','aspect_map','hillshade','suitability','curvature','plan_curvature','profile_curvature'].includes(operation)&&
+        <label>Gradient algorithm
+          <select aria-label="Terrain gradient algorithm" value={gradientMethod}
+            onChange={e=>setGradientMethod(e.target.value as 'horn'|'zevenbergen_thorne')}>
+            <option value="horn">Horn · weighted 3×3</option>
+            <option value="zevenbergen_thorne">Zevenbergen–Thorne · cardinal neighbors</option>
+          </select>
+        </label>}
+      {operation==='slope_map'&&<label>Slope classification
+        <select aria-label="Slope classification preset" value={slopeClasses}
+          onChange={e=>setSlopeClasses(e.target.value as 'standard'|'detailed'|'broad')}>
+          <option value="standard">Standard · 6 classes</option>
+          <option value="detailed">Detailed · 8 classes</option>
+          <option value="broad">Broad · 4 classes</option>
+        </select>
+      </label>}
+      {operation==='hillshade'&&<div className="area-fields"><label>Sun azimuth (°)<input type="number" value={azimuth} onChange={e=>setAzimuth(e.target.value)}/></label><label>Sun altitude (°)<input type="number" value={altitude} onChange={e=>setAltitude(e.target.value)}/></label></div>}
      {(operation==='streams'||operation==='stream_order')&&<label>Minimum upstream cells<input type="number" min="1" step="1" value={streamCells} onChange={e=>setStreamCells(e.target.value)}/></label>}
      {['flow_direction','flow_accumulation','flow_accumulation_mfd','streams','stream_order','watershed'].includes(operation)&&<label className="gis-check"><input aria-label="Condition drainage DEM" type="checkbox" checked={fillSinks} onChange={e=>setFillSinks(e.target.checked)}/> Fill depressions and route flat cells</label>}
      {(operation==='visibility'||operation==='viewshed_multi')&&<><label className="gis-check"><input aria-label="Consider Earth curvature" type="checkbox" checked={considerCurvature} onChange={e=>setConsiderCurvature(e.target.checked)}/> Earth curvature and atmospheric refraction</label>{considerCurvature&&<label>Refraction coefficient<input aria-label="Terrain refraction coefficient" type="number" min="0" max="0.5" step="0.01" value={refractionCoeff} onChange={e=>setRefractionCoeff(e.target.value)}/></label>}</>}
