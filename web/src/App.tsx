@@ -103,6 +103,7 @@ export default function App() {
   // MapLibre may dispatch click/dblclick before React paints the previous
   // vertex. Keep an immediately updated authoritative sketch for Finish.
   const drawingVerticesRef=useRef<Position[]>(vertices);
+  const drawingCommit=useRef<number|null>(null);
   drawingVerticesRef.current=vertices;
   function setSketchVertices(next:Position[]){
     drawingVerticesRef.current=next;
@@ -697,6 +698,7 @@ export default function App() {
   }
 
   function startDrawing(next: Exclude<ShapeMode, null>) {
+    if(drawingMode===next){stopInteraction();return;}
     if(busy)return;
     if(drawingMode&&vertices.length){setError('Finish or cancel the existing sketch before starting another.');return;}
     if(!['hole','split'].includes(next)&&scratch.length>=SCRATCH_LIMIT){setError('Local drawing limit reached. Save or export drawings and remove unused ones.');return;}
@@ -717,15 +719,10 @@ export default function App() {
     setTraceMode(false);
     setPromptMode(null);setPendingAnnotation(null);setSelectionBoxMode(false);setLabelMoveMode(false);
     if (!operation) {
-      setScratchId(null);
-      timeline.current=new GeometryTimeline();lastValid.current=null;
-      setHistoryPulse(value=>value+1);
       setLinked(false);
       setPendingShared(null);
       // Do not overwrite the selected area's metadata while an independent
       // sketch is still being drawn. The new geometry takes focus at Finish.
-    } else {
-      setFeatureProperties(current => ({ ...current, last_operation: next }));
     }
     setVertices([]);setVertexRedo([]);
     // Existing selection and search candidates are stable through drawing.
@@ -741,7 +738,7 @@ export default function App() {
   }
 
   async function finishDrawing(points:Position[]=drawingVerticesRef.current) {
-    if (!drawingMode||busy) return;
+    if (!drawingMode||busy||drawingCommit.current===geometrySequence.current) return;
     const mode = drawingMode;
     // Reject self-crossings, degenerate rings and repeated non-closing nodes
     // before calling GIS APIs or creating approximate offline geometry.
@@ -750,7 +747,7 @@ export default function App() {
     if(terrainLineDrawing){
       if(mode!=='line'||points.length<2){setError('Place at least two profile line points.');return;}
       const line:GeoJSON.LineString={type:'LineString',coordinates:points};
-      const ticket=++geometrySequence.current;setBusy(true);setError('');
+      const ticket=++geometrySequence.current;drawingCommit.current=ticket;setBusy(true);setError('');
       try{
         // This measurement validates the path without replacing the original selection.
         await measureGeometry(line);
@@ -764,7 +761,7 @@ export default function App() {
           setTerrainProfileLine(line);setTerrainLineDrawing(false);setDrawingMode(null);setVertices([]);
           setMessage('Profile line saved locally; connect the API before running terrain analysis.');
         }else setError(failure instanceof Error?failure.message:'Invalid profile line.');
-      }finally{if(ticket===geometrySequence.current)setBusy(false);}
+      }finally{if(drawingCommit.current===ticket)drawingCommit.current=null;if(ticket===geometrySequence.current)setBusy(false);}
       return;
     }
     const required = mode==='point'?1:['polygon','hole'].includes(mode) ? 3 : 2;
@@ -773,6 +770,7 @@ export default function App() {
       return;
     }
     const sequence=++geometrySequence.current;
+    drawingCommit.current=sequence;
     setBusy(true); setError('');
     try {
       let result: GeoJSON.Geometry;
@@ -837,6 +835,7 @@ export default function App() {
       }
       if(sequence!==geometrySequence.current)return;
       if(mode!=='hole'&&mode!=='split'){
+        timeline.current=new GeometryTimeline();
         setSelectedFeatureId(null);featureIdentity.current=null;setSelectedPlace(null);
         setGeometrySource(mode==='trace-along'?'Vector network tracing':'User drawn');
         setFeatureProperties(mode==='trace-along'?{source_type:'vector_trace',method:'shortest connected path'}:{source_type:'user_drawn'});
@@ -871,7 +870,7 @@ export default function App() {
         }catch(error){setError(error instanceof Error?error.message:String(error));return;}
       }
       setError(failure instanceof Error ? failure.message : 'Drawing failed.');
-    } finally { if(sequence===geometrySequence.current)setBusy(false); }
+    } finally { if(drawingCommit.current===sequence)drawingCommit.current=null;if(sequence===geometrySequence.current)setBusy(false); }
   }
 
   async function numericShape(mode: string, body: {
@@ -971,7 +970,7 @@ export default function App() {
   }
 
   function stopInteraction(){
-    geometrySequence.current++;setBusy(false);setTerrainLineDrawing(false);setDrawingMode(null);setVertices([]);setVertexRedo([]);setTerrainPicking(false);
+    geometrySequence.current++;setBusy(false);setTerrainLineDrawing(false);setDrawingMode(null);setSketchVertices([]);setVertexRedo([]);setTerrainPicking(false);
     setEditing(false);setEdgeMoving(false);setMoving(false);setTraceMode(false);setPromptMode(null);
     setSelectionBoxMode(false);setLabelMoveMode(false);setPendingAnnotation(null);setContextMenu(null);
     if(preview||pendingShared){setGeometry(lastValid.current);setPreview(null);setPendingShared(null);}
@@ -1067,7 +1066,12 @@ export default function App() {
       }
       if(event.altKey||event.repeat)return;
       if(drawingMode&&!busy&&(event.key==='Enter'||event.key==='F2')){
-        event.preventDefault();void finishDrawing();return;
+        event.preventDefault();
+        if(!drawingVerticesRef.current.length)stopInteraction();else void finishDrawing();
+        return;
+      }
+      if(editing&&(event.key==='Enter'||event.key==='F2')){
+        event.preventDefault();stopInteraction();return;
       }
       if(drawingMode&&!busy&&event.key==='Backspace'){
         event.preventDefault();undoSketchPoint();return;
@@ -1226,6 +1230,13 @@ export default function App() {
             <div className="section-heading"><Layers3 size={16} /><span>Projects</span></div>
             {!capabilities&&connectionError&&<div className="discovery-error" role="alert">{connectionError} <button onClick={()=>setConnectionRetry(v=>v+1)}>Reconnect</button></div>}
             <ProjectsPanel toolbarTarget={projectToolbarTarget} toolbarActionsTarget={projectActionsTarget} treeTarget={objectTreeTarget}
+              interactionBusy={busy||Boolean(drawingMode)}
+              objectGroups={[{id:'local-drawings',name:'Local drawings',items:scratch,
+                selectedId:scratchId,onOpen:id=>{const item=scratch.find(f=>f.id===id);if(item){
+                  setScratch(old=>old.map(f=>f.id===id?{...f,visible:true}:f));selectScratch({...item,visible:true});
+                }},
+                onRename:async(id,name)=>{setScratch(old=>old.map(item=>item.id===id?{...item,name}:item));setMessage('Local drawing renamed · Ctrl Z to undo.');},
+                onDelete:async id=>removeLocal(id)}]}
               geometry={busy || preview || pendingShared || drawingMode ? null : geometry}
               featureName={scratch.find(f=>f.id===scratchId)?.name||selectedPlace?.name||'Custom boundary'}
               featureSource={geometrySource || selectedPlace?.source || 'User drawn'}
@@ -1785,7 +1796,7 @@ export default function App() {
               saved={activeProjectId ? projectWorkspace?.features ?? [] : []}
               onStart={startDrawing}
               onFinish={() => { if(!busy)void finishDrawing(); }}
-              onCancel={() => { geometrySequence.current++;setBusy(false);setError('');setTerrainLineDrawing(false);setDrawingMode(null);setVertices([]);setVertexRedo([]);setMessage('Drawing cancelled. Retained locations are unchanged.'); }}
+              onCancel={stopInteraction}
               onUndoPoint={undoSketchPoint}
               onUndo={()=>drawingMode?undoSketchPoint():historyStep()}
               onRedo={()=>drawingMode?redoSketchPoint():historyStep(true)}

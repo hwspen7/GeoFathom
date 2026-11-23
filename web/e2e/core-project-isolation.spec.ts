@@ -79,6 +79,7 @@ test('delayed authoritative geometry validation cannot publish after project swi
     await route.fulfill({response});
   });
   try{
+    await page.getByText('Exact coordinates and construction',{exact:true}).click();
     await page.getByLabel('Numeric construction mode').selectOption('rectangle');
     await page.getByLabel('Longitude',{exact:true}).fill('10');
     await page.getByLabel('Latitude',{exact:true}).fill('20');

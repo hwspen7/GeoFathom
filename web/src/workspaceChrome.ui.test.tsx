@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import {describe,it,expect,vi,afterEach} from 'vitest';
-import {render,fireEvent,screen,cleanup} from '@testing-library/react';
+import {render,fireEvent,screen,cleanup,within,waitFor} from '@testing-library/react';
 afterEach(cleanup);
 import {WorkspaceCommandPalette,WorkspaceFeatureTree,type WorkspaceCommand} from './WorkspaceChrome';
 describe('shared research workbench chrome',()=>{
@@ -38,5 +38,35 @@ describe('shared research workbench chrome',()=>{
   expect(screen.queryByRole('button',{name:/Campus boundary/})).toBeNull();
   fireEvent.click(screen.getByRole('button',{name:/North parcel/}));
   expect(open).toHaveBeenCalledWith(features[1]);
+ });
+ it('renames a neighbouring object without selecting it and keeps a failed name editable',async()=>{
+  const open=vi.fn(),rename=vi.fn().mockRejectedValueOnce(Error('Revision changed. Refresh and retry.')).mockResolvedValueOnce(undefined);
+  const remove=vi.fn().mockResolvedValue(undefined);
+  const features=[{id:'a',name:'厦门岛',layer_id:'study'},{id:'b',name:'Polygon 1',layer_id:'study'}];
+  render(<WorkspaceFeatureTree layers={[{id:'study',name:'Measurements',visible:true}]}
+    features={features} selectedId="a" onOpen={open} onRename={rename} onDelete={remove}/>);
+  const row=within(screen.getByRole('group',{name:'Object Polygon 1'}));
+  fireEvent.click(row.getByRole('button',{name:'Rename object'}));
+  fireEvent.change(row.getByRole('textbox',{name:'Object name'}),{target:{value:'  Study buffer  '}});
+  fireEvent.click(row.getByRole('button',{name:'Save name'}));
+  expect(await row.findByRole('alert')).toHaveProperty('textContent','Revision changed. Refresh and retry.');
+  expect(open).not.toHaveBeenCalled();
+  fireEvent.click(row.getByRole('button',{name:'Save name'}));
+  await waitFor(()=>expect(row.queryByRole('textbox')).toBeNull());
+  expect(rename).toHaveBeenLastCalledWith(features[1],'Study buffer');
+  fireEvent.click(row.getByRole('button',{name:'Delete object'}));
+  await waitFor(()=>expect(remove).toHaveBeenCalledWith(features[1]));
+  expect(open).not.toHaveBeenCalled();
+  expect(screen.getByRole('button',{name:'厦门岛'}).getAttribute('aria-pressed')).toBe('true');
+ });
+ it('locks mutations and pages objects without hiding the selected object',()=>{
+  const features=Array.from({length:8},(_,i)=>({id:String(i),name:'Parcel '+i,layer_id:'study'}));
+  render(<WorkspaceFeatureTree layers={[{id:'study',name:'Study',visible:true,locked:true}]}
+    features={features} selectedId="7" onOpen={vi.fn()} onRename={vi.fn()} onDelete={vi.fn()}/>);
+  expect(screen.getByRole('button',{name:'Parcel 7'}).getAttribute('aria-pressed')).toBe('true');
+  expect(screen.getAllByRole('button',{name:'Delete object'}).every(button=>button.hasAttribute('disabled'))).toBe(true);
+  fireEvent.click(screen.getByRole('button',{name:'Previous objects in Study'}));
+  expect(screen.getByRole('button',{name:'Parcel 0'})).toBeDefined();
+  expect(screen.queryByRole('button',{name:'Parcel 7'})).toBeNull();
  });
 });

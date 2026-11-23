@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react';
 import {createPortal} from 'react-dom';
 import {
   Check, Circle, Copy, CornerDownRight, Eraser, GitMerge, MousePointer2,
-  Pencil, Redo2, RotateCcw, Ruler, Scissors, Undo2,
+  Pencil, Redo2, Ruler, Scissors, Undo2, X,
 } from 'lucide-react';
 
 import type { ShapeMode, Position } from './editing';
@@ -88,8 +88,9 @@ export default function SurveyTools({
 
   const traceReady=saved.some(feature=>
     feature.geometry?.type==='LineString'||feature.geometry?.type==='MultiLineString');
-  const toolbar=<div className="survey-command-bar">
-      <div className="survey-mode-grid">
+  const modeName=buttonModes.find(item=>item.mode===mode)?.title;
+  const toolbar=<div className={'survey-command-bar'+(mode?' is-drawing':'')}>
+      <div className="survey-mode-grid" role="group" aria-label="Draw and reshape tools">
         {buttonModes.map(item => (
           <button key={item.mode} className={mode === item.mode ? 'active' : ''}
             title={item.mode==='trace-along'&&!traceReady?
@@ -98,8 +99,8 @@ export default function SurveyTools({
                 'Select an editable polygon first.':
                 'Draw '+item.title.toLowerCase()+
                 (({point:' (P)',polygon:' (G)',line:' (L)',rectangle:' (R)',circle:' (C)'} as Partial<Record<Exclude<ShapeMode,null>,string>>)[item.mode]??'')}
-            aria-pressed={mode===item.mode} onClick={() => onStart(item.mode)}
-            disabled={busy||(item.mode==='trace-along'&&!traceReady)||
+            aria-pressed={mode===item.mode} onClick={() => mode===item.mode?onCancel():onStart(item.mode)}
+            disabled={(busy&&mode!==item.mode)||(item.mode==='trace-along'&&!traceReady)||
               (['hole','split'].includes(item.mode)&&
                 (locked||(geometry?.type!=='Polygon'&&geometry?.type!=='MultiPolygon')))}>
             {item.mode === 'circle' ? <Circle size={15}/> :
@@ -111,18 +112,26 @@ export default function SurveyTools({
         ))}
       </div>
       {mode && (
-        <div className="survey-action-bar">
-          <span><MousePointer2 size={13}/> {points.length} pts</span>
+        <div className="survey-action-bar survey-sketch-session" role="group" aria-label="Active drawing">
+          <strong>{modeName}</strong><span>{points.length} pts</span>
           <button title="Undo last sketch point (Backspace)" aria-label="Undo last sketch point"
-            disabled={!points.length||busy} onClick={onUndoPoint}><Undo2 size={14}/></button>
-          <button title="Cancel" aria-label="Cancel drawing" onClick={onCancel}><RotateCcw size={14}/></button>
-          <button className="finish-button" title="Finish (Enter / F2; double-click, right-click, or click the first polygon vertex)"
+            disabled={!points.length||busy} onClick={onUndoPoint}><Undo2 size={14}/> Undo point</button>
+          <button title="Cancel" aria-label="Cancel drawing" className="survey-cancel-button" onClick={onCancel}><X size={14}/> Cancel <kbd>Esc</kbd></button>
+          <button className="finish-button" aria-label="Finish" title="Finish (Enter / F2; double-click, right-click, or click the first polygon vertex)"
             disabled={busy||points.length<(mode==='point'?1:['polygon','hole'].includes(mode)?3:2)}
-            onClick={onFinish}><Check size={14}/> Finish</button>
+            onClick={onFinish}><Check size={14}/> Finish <kbd>Enter</kbd></button>
         </div>
       )}
-      {mode&&sketchError&&<div className="survey-sketch-alert" role="alert">{sketchError}</div>}
-      <div className="survey-action-bar">
+      {mode&&<div className={'survey-sketch-feedback'+(sketchError?' has-error':'')} role={sketchError?'alert':'status'}>
+        {sketchError??(busy?'Validating geometry… Cancel remains available.':
+          mode==='hole'?'Draw a closed ring inside the selected polygon. Enter finishes · Esc cancels.':
+          mode==='split'?'Draw across the selected polygon. Enter finishes · Esc cancels.':
+          'Enter finishes · Esc cancels · click the active tool again to exit.')}
+      </div>}
+      {!mode&&<div className="survey-idle-actions">
+      <div className="survey-action-bar" role="group" aria-label="Edit selected object">
+        {editing&&<button className="finish-button" aria-label="Finish geometry editing"
+          title="Finish geometry editing (Enter / Esc)" onClick={()=>onEdit(false,false)}><Check size={14}/> Done editing</button>}
         <button title="Edit vertices (E)" disabled={!geometry||locked||busy||Boolean(mode)} className={editing && !moving && !edgeMoving ? 'active' : ''}
           onClick={() => onEdit(!editing || moving || edgeMoving, false)}><Pencil size={14}/> Vertices</button>
         <button title="Move whole shape (M)" disabled={!geometry||locked||busy||Boolean(mode)} className={moving ? 'active' : ''}
@@ -137,17 +146,24 @@ export default function SurveyTools({
         <button disabled={!canRedo||busy} onClick={onRedo}><Redo2 size={14}/> Redo</button>
         <button disabled={!geometry||busy||Boolean(mode)} onClick={onDuplicate}><Copy size={14}/> Copy</button>
       </div>
+      </div>}
     </div>;
   return (
     <div className="survey-tools">
       {toolbarTarget?createPortal(toolbar,toolbarTarget):toolbar}
+      <p className="survey-workflow-hint">Choose a drawing tool above, or select an object to edit it. Finish with Enter; cancel with Esc.</p>
+      <details className="survey-options">
+      <summary>Vertex editing options</summary>
       <label className="linked-vertex-toggle">
         <input type="checkbox" checked={linked} onChange={e=>onLinked(e.target.checked)} />
         Linked/shared vertices (preview neighboring feature edits)
       </label>
       <p className="project-hint">Drag white corner handles to reshape. Drag blue midpoints to insert. Right-click a corner to remove it. Use Move to drag the whole feature.</p>
+      </details>
+      <details className="survey-options">
+      <summary>Exact coordinates and construction</summary>
       <form className="survey-numeric" onSubmit={numeric}>
-        <div className="section-heading"><CornerDownRight size={14}/> Exact coordinates and construction</div>
+        <div className="section-heading"><CornerDownRight size={14}/> Construct geometry</div>
         <select aria-label="Numeric construction mode" value={numericMode} onChange={event => setNumericMode(event.target.value)}>
           <option value="point">Add precise longitude / latitude point</option>
           <option value="rectangle">Rectangle between two coordinates</option>
@@ -178,8 +194,11 @@ export default function SurveyTools({
           {mode&&numericMode==='point'?'Add precise vertex':'Apply exact geometry'}
         </button>
       </form>
+      </details>
+      <details className="survey-options">
+      <summary>Combine with saved feature</summary>
       <div className="survey-overlay">
-        <div className="section-heading"><GitMerge size={14}/> Combine with saved feature</div>
+        <div className="section-heading"><GitMerge size={14}/> Boolean operations</div>
         <select aria-label="Boolean operation target" value={reference}
           onChange={event => setReference(event.target.value)}>
           <option value="">Choose another feature…</option>
@@ -192,6 +211,7 @@ export default function SurveyTools({
           <button disabled={!geometry || !reference||Boolean(mode)||busy} onClick={() => onOverlay('intersection',reference)}>Intersect</button>
         </div>
       </div>
+      </details>
     </div>
   );
 }

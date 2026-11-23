@@ -150,6 +150,13 @@ jobs:
           path: web/coverage/raw/browser/
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: geofathom-workspace-ui-screenshots
+          path: web/test-results/**/attachments/*.png
+          if-no-files-found: warn
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
         if: failure()
         with:
           name: geofathom-browser-failure-traces

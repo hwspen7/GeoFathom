@@ -13,7 +13,7 @@ import {
 } from './api';
 
 import {rememberProject,restoreProject,storedProject} from './projectSelection';
-import {WorkspaceFeatureTree} from './WorkspaceChrome';
+import {WorkspaceFeatureTree,type WorkspaceObjectGroup} from './WorkspaceChrome';
 
 interface Props {
   geometry: GeoJSON.Geometry | null;
@@ -33,12 +33,14 @@ interface Props {
   toolbarTarget?:HTMLElement|null;
   toolbarActionsTarget?:HTMLElement|null;
   treeTarget?:HTMLElement|null;
+  objectGroups?:WorkspaceObjectGroup[];
+  interactionBusy?:boolean;
 }
 
 export default function ProjectsPanel({
   geometry, featureName, featureSource, featureProperties, selectedFeatureId,
   splitParts, refreshToken, onOpen, onWorkspace, onPlaceAnnotation, onFeatureDeleted,
-  extraFeatures,onSavedDraft,onProjectSwitch,toolbarTarget,toolbarActionsTarget,treeTarget,
+  extraFeatures,onSavedDraft,onProjectSwitch,toolbarTarget,toolbarActionsTarget,treeTarget,objectGroups,interactionBusy=false,
 }: Props) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [listRetry,setListRetry]=useState(0);
@@ -64,6 +66,7 @@ export default function ProjectsPanel({
   const initializedSelection=useRef(false);
   const requestSequence = useRef(0);
   const styleWriting=useRef(false);
+  const objectWriting=useRef(false);
   type LayerStyleUpdate={labels?:Partial<GeoLayer['style']['labels']>;symbol?:Partial<GeoLayer['style']['symbol']>};
   const queuedStyleWrites=useRef<Array<{projectId:string;layerId:string;changes:LayerStyleUpdate}>>([]);
   const historySequence = useRef(0);
@@ -355,6 +358,33 @@ export default function ProjectsPanel({
     });
   }
 
+  async function changeObject(feature:WorkspaceFeature,name?:string){
+    if(!selected||busy||interactionBusy||objectWriting.current)return;
+    if(workspace?.layers.find(layer=>layer.id===feature.layer_id)?.locked)
+      throw Error('Unlock this layer before changing its objects.');
+    const projectId=selected;
+    objectWriting.current=true;setBusy(true);setError('');
+    try{
+      if(name!==undefined){
+        await updateProjectFeature(projectId,feature.id,{name,expected_revision:feature.revision});
+      }else{
+        await deleteProjectFeature(projectId,feature.id,feature.revision);
+        if(selection.current===projectId){
+          if(featureIdentity.current===feature.id)onFeatureDeleted();
+          setTrashPulse(value=>value+1);
+        }
+      }
+      if(selection.current===projectId){
+        await reload(projectId);
+        setInfo(name!==undefined?'Object renamed.':'Object moved to project trash.');
+      }
+    }catch(cause){
+      // Refresh a stale revision without ever publishing into another project.
+      if(selection.current===projectId)await reload(projectId).catch(()=>{});
+      throw cause;
+    }finally{objectWriting.current=false;setBusy(false);}
+  }
+
   async function duplicate() {
     if (!selected || !current || locked) return;
     await run(async () => {
@@ -392,8 +422,16 @@ export default function ProjectsPanel({
             {projects.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}
     </select>
   );
+  const featureTree=<WorkspaceFeatureTree
+    layers={workspace?.layers??[]}
+    features={[...(workspace?.features??[]),
+      ...extraFeatures.filter(f=>!(workspace?.features??[]).some(x=>x.id===f.id)).slice(0,60)]}
+    selectedId={selectedFeatureId} onOpen={onOpen} busy={busy||interactionBusy}
+    additionalGroups={objectGroups} onRename={(feature,name)=>changeObject(feature,name)}
+    onDelete={feature=>changeObject(feature)}/>;
   return (
     <div className="project-panel">
+      {treeTarget?createPortal(featureTree,treeTarget):featureTree}
       {toolbarTarget&&createPortal(projectSelector,toolbarTarget)}
       <form onSubmit={create} className="project-create">
         <input aria-label="New project name" placeholder="New project name" maxLength={150}
@@ -613,19 +651,7 @@ export default function ProjectsPanel({
               onClick={() => void saveSplit()}>Save all {splitParts.length} split pieces</button>
           )}
 
-          {treeTarget?createPortal(<> 
-          <WorkspaceFeatureTree
-            layers={workspace?.layers??[]}
-            features={[...(workspace?.features??[]),
-              ...extraFeatures.filter(f=>!(workspace?.features??[]).some(x=>x.id===f.id)).slice(0,60)]}
-            selectedId={selectedFeatureId} onOpen={onOpen}/>
-          </>,treeTarget):<>
-          <WorkspaceFeatureTree
-            layers={workspace?.layers??[]}
-            features={[...(workspace?.features??[]),
-              ...extraFeatures.filter(f=>!(workspace?.features??[]).some(x=>x.id===f.id)).slice(0,60)]}
-            selectedId={selectedFeatureId} onOpen={onOpen}/>
-          </>}
+
 
           {current&&<details className="feature-inspector">
             <summary>Identify feature · properties & measurement</summary>
