@@ -221,14 +221,17 @@ export function GPUView({mesh,fallback,tileSource}:{mesh:TerrainMesh;fallback:Re
  useEffect(()=>{
   const source=tileSource;
   if(!available||!source||(mesh.source_sampling_step??1)<=1||!mesh.source_grid_rows)return;
+  // Stable aliases preserve TypeScript's non-null narrowing inside the
+  // delayed request workers, including under strictNullChecks.
+  const imageId=source.image_id,studyGeometry=source.geometry;
   const targets=terrainTileRequests(mesh,camera,24,768/480);
   const controller=new AbortController();
   let mounted=true;
   const timer=window.setTimeout(()=>{
    void loadTerrainTileBatch(targets,
      item=>render.current?.hasTile(item.level,item.tile_row,item.tile_col)??false,
-     (item,signal)=>fetchTerrainMeshTile({image_id:source.image_id,
-       geometry:source.geometry,level:item.level,tile_row:item.tile_row,tile_col:item.tile_col},signal),
+     (item,signal)=>fetchTerrainMeshTile({image_id:imageId,
+       geometry:studyGeometry,level:item.level,tile_row:item.tile_row,tile_col:item.tile_col},signal),
      tile=>{
       if(!mounted||controller.signal.aborted)return;
       render.current?.uploadTile(tile);
