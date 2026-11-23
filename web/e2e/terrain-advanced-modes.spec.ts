@@ -143,7 +143,7 @@ test('advanced surface families retain distinct real results and scientific expo
  await execute('Least-cost route');
  await expect(page.getByLabel('Terrain results')).toContainText(/route length/i);
  const exportEvent=page.waitForEvent('download');
- await page.getByRole('button',{name:'Export',exact:true}).click();
+ await page.getByLabel('Terrain results').getByRole('button',{name:'Export',exact:true}).click();
  const exported=await exportEvent;
  expect(exported.suggestedFilename()).toMatch(/terrain-least_cost.*geojson/);
 });
