@@ -21,8 +21,14 @@ async function setup(page:Page){
  await page.getByRole('button',{name:'厦门岛',exact:true}).click();
  const map=page.getByLabel('Interactive geospatial map');
  await expect(map).toHaveAttribute('data-label-layer-ready','true',{timeout:25000});
+ const toolbar=page.getByLabel('Survey toolbar');
+ // Handle diagnostics certify the fitted camera only while vertex editing
+ // is active. Follow that real UI transition instead of waiting in pan mode.
+ await toolbar.getByRole('button',{name:'Vertices',exact:true}).click();
  await expect(map).toHaveAttribute('data-map-camera-stable','true');
- return {project,ids,map,toolbar:page.getByLabel('Survey toolbar')};
+ await page.keyboard.press('Enter');
+ await expect(toolbar.getByRole('button',{name:'Vertices',exact:true})).not.toHaveClass(/active/);
+ return {project,ids,map,toolbar};
 }
 async function points(page:Page){
  const bounds=(await page.getByLabel('Interactive geospatial map').boundingBox())!;
