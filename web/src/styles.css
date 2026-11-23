@@ -1368,3 +1368,16 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 }
 .desktop-gis .gis-results-monitor .terrain-result-tabs button{font-size:11px;min-height:36px}
 .desktop-gis .gis-results-monitor .terrain-outputs-list{margin:3px 0 0}
+
+
+/* An invalid polygon keeps its sketch available for Undo/Cancel, with a
+   compact error immediately below the fixed toolbar rather than off-screen. */
+.desktop-gis .gis-toolbar .survey-command-bar{position:relative}
+.desktop-gis .gis-toolbar .survey-sketch-alert{
+  position:absolute;top:calc(100% + 6px);right:0;z-index:8;
+  max-width:min(440px,85vw);padding:8px 11px;
+  border:1px solid #e7b8b5;border-radius:6px;
+  background:rgba(255,250,249,.96);color:#9b3133;
+  font-size:11px;line-height:1.4;box-shadow:0 2px 8px #1e354114;
+  pointer-events:none;
+}
