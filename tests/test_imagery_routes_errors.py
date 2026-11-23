@@ -62,7 +62,7 @@ def test_pyramid_and_tile_serve_bounded_private_cached_responses(monkeypatch):
     monkeypatch.setattr(pyramid,"pyramid_info",
         lambda path:{"levels":[{"z":0,"width":1,"height":1}]})
     monkeypatch.setattr(pyramid,"cached_tile",
-        lambda *args:b"\\x89PNG\\r\\n\\x1a\\nplaceholder")
+        lambda *args:b"\x89PNG\r\n\x1a\nplaceholder")
     info=client.get("/imagery/test-id/pyramid")
     assert info.status_code==200
     assert info.json()["levels"][0]["width"]==1
@@ -89,7 +89,6 @@ def test_import_rejects_non_dem_empty_and_excess_bytes(
 
 
 def test_import_invalid_raster_cleans_temporary_file(monkeypatch):
-    monkeypatch=monkeypatch
     def invalid(*args,**kwargs):raise RasterError("invalid raster format")
     monkeypatch.setattr(routes,"store_upload",invalid)
     response=client.post("/imagery/upload",files={
@@ -121,3 +120,19 @@ def test_dem_fetch_translates_scientific_validation_to_422(monkeypatch):
         "bbox":[-83.1,39.9,-83.,40.],"resolution_m":30},headers=TOKEN)
     assert response.status_code==422,response.text
     assert "unsupported DEM grid" in response.text
+
+
+def test_loopback_local_import_requires_header_and_safe_origin(monkeypatch):
+    monkeypatch.delenv("GEOFATHOM_MODEL_ADMIN_TOKEN",raising=False)
+    monkeypatch.setenv("GEOFATHOM_AUTH_MODE","local")
+    monkeypatch.setattr(routes,"_loopback",lambda host:True)
+    monkeypatch.setattr(routes,"store_upload",lambda path,name:{"name":name})
+    allowed=client.post("/imagery/upload",files={
+        "file":("local.tif",b"synthetic","image/tiff")},
+        headers={"X-GeoFathom-Local-Import":"1"})
+    assert allowed.status_code==201,allowed.text
+    assert allowed.json()["name"]=="local.tif"
+    forbidden=client.post("/imagery/upload",files={
+        "file":("local.tif",b"synthetic","image/tiff")},
+        headers={"X-GeoFathom-Local-Import":"1","Origin":"https://unapproved.example"})
+    assert forbidden.status_code==403
