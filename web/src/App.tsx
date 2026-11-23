@@ -2069,6 +2069,11 @@ export default function App() {
               geometry={geometry} viewport={viewport} connected={Boolean(capabilities)}
               network={networkAreas} networkNotice={networkNotice}
               sourceCount={networkSources.length}
+              vectorSources={[
+                ...scratch.map(item=>({id:item.id,name:item.name,geometry:item.geometry})),
+                ...(projectWorkspace?.features??[]).map(item=>({id:item.id,name:item.name,geometry:item.geometry})),
+              ]}
+              onDerived={(next,_measured,name)=>{void commitGeometry(next,'Data · '+name,true);}}
               onRebuild={rebuildNetwork} onStoreAreas={keepNetworkAreas}
               onOpenLayers={()=>{setDrawerTab('layers');setShowLayers(true);}}
               onTiles={value=>{if(projectCurrent())setExternalTiles(value);}}
