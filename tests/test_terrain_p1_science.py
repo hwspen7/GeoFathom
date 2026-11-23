@@ -14,7 +14,7 @@ from terrain.advanced import run_terrain
 from terrain.cancellation import TerrainCancelled
 from terrain.p1_science import (
     dinfinity_accumulation, quadratic_curvature, design_surface,
-    greedy_coverage, mesh_lod_tiles, breach_depressions,
+    greedy_coverage, mesh_lod_tiles, breach_depressions, weighted_suitability,
 )
 
 
@@ -195,3 +195,46 @@ def test_real_dsm_obstructions_and_greedy_multi_site_selection(real_dem,tmp_path
     assert len(chosen["selection"]["selected_candidate_indices"])==2
     assert chosen["metrics"]["visible_cells"]>0
     assert "greedy_coverage_not_global_optimum" in chosen["quality"]["flags"]
+
+
+
+def test_weighted_suitability_is_quantitative_and_respects_hard_constraints():
+    z=np.array([[100.,125.],[150.,175.]])
+    slope=np.array([[0.,10.],[0.,0.]])
+    tri=np.array([[0.,0.],[0.,0.]])
+    valid=np.ones((2,2),bool)
+    score,metrics=weighted_suitability(z,valid,slope,tri,20,100,150,10,(2,1,1),sigma_z=1)
+    assert score[0,0]==pytest.approx(.75)
+    assert score[0,1]==pytest.approx(.75)
+    assert score[1,0]==pytest.approx(.75)
+    assert score[1,1]==0 # hard elevation bound
+    assert metrics["suitable_pct"]==pytest.approx(75)
+    assert metrics["score_weight_slope"]==pytest.approx(.5)
+    assert 0<metrics["weighted_score_uncertainty_bound"]<1
+    with pytest.raises(RasterError,match="weights"):
+        weighted_suitability(z,valid,slope,tri,20,100,150,10,(0,0,0))
+
+
+def test_weighted_suitability_real_tiff_preserves_utility_not_binary(real_dem):
+    path,polygon,_,_,_=real_dem
+    result=run_terrain(path,polygon,"suitability",
+        max_slope=30,min_elevation=100,max_elevation=145,max_tri=50,
+        suitability_model="weighted",suitability_weights=(2,1,1))
+    assert result["raster"]["unit"]=="score_0_to_1"
+    assert result["metrics"]["suitability_model_weighted"]==1
+    with MemoryFile(base64.b64decode(result["raster"]["geotiff"])) as memory:
+        with memory.open() as src:
+            scores=src.read(1)
+            assert src.tags()["TERRAIN_UNIT"]=="score_0_to_1"
+            finite=scores[np.isfinite(scores)]
+            assert len(np.unique(finite))>2
+            assert np.min(finite)>=0 and np.max(finite)<=1
+    assert result["algorithm_options"]["suitability_weights"]==[2,1,1]
+
+
+def test_weighted_suitability_legacy_binary_classification_unchanged(real_dem):
+    path,polygon,_,_,_=real_dem
+    binary=run_terrain(path,polygon,"suitability",
+        max_slope=30,min_elevation=100,max_elevation=145,max_tri=50)
+    assert binary["raster"]["unit"]=="binary"
+    assert len(binary["raster"]["legend"])==2
