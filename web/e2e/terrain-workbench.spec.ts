@@ -73,6 +73,11 @@ with tempfile.TemporaryDirectory() as directory:
  const map=page.getByLabel('Interactive geospatial map');
  await tools.getByRole('button',{name:'Slope / aspect',exact:true}).click();
  await page.getByRole('button',{name:'Run terrain operation'}).click();
+ await expect(page.getByRole('tab',{name:'Overview',exact:true})).toHaveAttribute('aria-selected','true');
+ await page.getByRole('tab',{name:'Overview',exact:true}).focus();
+ await page.keyboard.press('ArrowRight');
+ await expect(page.getByRole('tab',{name:'Visual',exact:true})).toHaveAttribute('aria-selected','true');
+ await expect(page.getByRole('tab',{name:'Visual',exact:true})).toBeFocused();
  await visual();
  await expect(page.getByRole('img',{name:'Slope (degrees)'})).toBeVisible();
  await expect(page.getByLabel('Results monitor').getByLabel('Terrain results')).toBeVisible();
