@@ -78,8 +78,8 @@ test('advanced surface families retain distinct real results and scientific expo
  const tools=page.getByLabel('Terrain tools');
  const run=page.getByRole('button',{name:'Run terrain operation'});
  const select=async(group:string,title:string,expectEnabled=true)=>{
-  await page.getByRole('tab',{name:'Tools',exact:true}).click();
-  await page.getByRole('tab',{name:'Tools',exact:true}).click();
+  await page.getByRole('button',{name:'Browse terrain tools',exact:true}).click();
+  await page.getByRole('button',{name:'Browse terrain tools',exact:true}).click();
  await page.getByLabel('Terrain tool group').selectOption(group);
   await tools.getByRole('button',{name:title,exact:true}).click();
   // Tools needing additional inputs must stay disabled until their prerequisites are valid.
@@ -96,7 +96,7 @@ test('advanced surface families retain distinct real results and scientific expo
   // The title button carries source provenance. The separate "Remove
   // result ..." button also has the operation name in its accessible label,
   // and must not make the selection ambiguous.
-  await page.getByRole('tab',{name:'Outputs',exact:true}).click();
+  await page.getByRole('tab',{name:'Data',exact:true}).click();
   const manager=page.getByLabel('Terrain output layers').locator('.terrain-layer-manager');
   if(await manager.getAttribute('open')===null)await manager.locator('summary').click();
   await expect(page.getByLabel('Analysis result layers')
@@ -108,7 +108,7 @@ test('advanced surface families retain distinct real results and scientific expo
  ]){
   await select('Surface',name);
   await execute(name);
-  await page.getByRole('tab',{name:'Visual',exact:true}).click();
+  await page.getByRole('tab',{name:'Figures',exact:true}).click();
   await expect(page.getByAltText('Derived terrain raster')).toBeVisible();
  }
  await select('Surface','DEM difference',false);
@@ -116,7 +116,7 @@ test('advanced surface families retain distinct real results and scientific expo
  await page.getByLabel('Reference comparison DEM').selectOption(fixture.ids[1]);
  await expect(run).toBeEnabled();
  await execute('DEM difference');
- await page.getByRole('tab',{name:'Details',exact:true}).click();
+ await page.getByRole('tab',{name:'Data',exact:true}).click();
  await page.getByLabel('Terrain run provenance').locator('summary').click();
  await expect(page.getByLabel('Terrain run provenance')).toContainText('Reference DEM:');
  await page.getByRole('tab',{name:'Overview',exact:true}).click();
@@ -178,24 +178,24 @@ test('invalid terrain inputs are blocked and DEM resampling uses real configured
  const fixture=await setup(page);
  const tool=page.getByLabel('Terrain tools');
  const run=page.getByRole('button',{name:'Run terrain operation'});
- await page.getByRole('tab',{name:'Tools',exact:true}).click();
+ await page.getByRole('button',{name:'Browse terrain tools',exact:true}).click();
  await tool.getByRole('button',{name:'Contours',exact:true}).click();
  await page.getByLabel('Contour interval').fill('-1');
  await expect(run).toBeDisabled();
  await page.getByLabel('Contour interval').fill('5');
  await expect(run).toBeEnabled();
- await page.getByRole('tab',{name:'Tools',exact:true}).click();
+ await page.getByRole('button',{name:'Browse terrain tools',exact:true}).click();
  await page.getByLabel('Terrain tool group').selectOption('Surface');
- await page.getByRole('tab',{name:'Tools',exact:true}).click();
+ await page.getByRole('button',{name:'Browse terrain tools',exact:true}).click();
  await tool.getByRole('button',{name:'Hillshade',exact:true}).click();
  const azimuth=page.getByLabel('Sun azimuth (°)');
  await azimuth.fill('361');
  await expect(run).toBeDisabled();
  await azimuth.fill('315');
  await expect(run).toBeEnabled();
- await page.getByRole('tab',{name:'Tools',exact:true}).click();
+ await page.getByRole('button',{name:'Browse terrain tools',exact:true}).click();
  await page.getByLabel('Terrain tool group').selectOption('Quick');
- await page.getByRole('tab',{name:'Tools',exact:true}).click();
+ await page.getByRole('button',{name:'Browse terrain tools',exact:true}).click();
  await tool.getByRole('button',{name:'Viewshed',exact:true}).click();
  await page.getByRole('button',{name:'Area center',exact:true}).click();
  const refraction=page.getByLabel('Terrain refraction coefficient');
@@ -207,7 +207,7 @@ test('invalid terrain inputs are blocked and DEM resampling uses real configured
  await expect(page.getByLabel('Terrain refraction coefficient')).toHaveCount(0);
  await expect(run).toBeEnabled();
 
- await page.getByRole('tab',{name:'Process',exact:true}).click();
+ await page.getByRole('button',{name:'Process DEM',exact:true}).click();
  await page.getByLabel('DEM processing operation').selectOption('mosaic');
  await expect(page.getByRole('button',{name:'Create processed DEM'})).toBeDisabled();
  await page.getByLabel('DEM mosaic second source').selectOption(fixture.ids[1]);
@@ -221,7 +221,7 @@ test('invalid terrain inputs are blocked and DEM resampling uses real configured
  await page.getByRole('button',{name:'Create processed DEM'}).click();
  // The output raster is the durable outcome. Status messages can be
  // replaced by the parent selection notification during this transition.
- await page.getByRole('tab',{name:'Source',exact:true}).click();
+ await page.getByRole('button',{name:'Get DEM',exact:true}).click();
  await expect(page.getByLabel('DEM elevation layer')).not.toHaveValue(fixture.ids[0],{timeout:25000});
  await page.getByText('Source info',{exact:true}).click();
  await expect(page.locator('.terrain-source-metadata .compact-notice[title]')).toContainText('12 × 12');
@@ -244,7 +244,7 @@ test('3D DEM remains inspectable using the CPU preview if WebGL2 is unavailable'
   });
  });
  await setup(page);
- await page.getByRole('tab',{name:'Tools',exact:true}).click();
+ await page.getByRole('button',{name:'Browse terrain tools',exact:true}).click();
  await page.getByLabel('Terrain tools').getByRole('button',{name:'3D terrain',exact:true}).click();
  await page.getByRole('button',{name:'Run terrain operation'}).click();
  await expect(page.getByText('WebGL2 unavailable · CPU preview')).toBeVisible();
@@ -285,24 +285,24 @@ test('shared Onshape-style command search and newly exposed Terrain tools',async
  await expect(dialog).toHaveCount(0);
  const shelf=page.getByLabel('Terrain tools');
  const run=page.getByRole('button',{name:'Run terrain operation'});
- await page.getByRole('tab',{name:'Tools',exact:true}).click();
+ await page.getByRole('button',{name:'Browse terrain tools',exact:true}).click();
  await page.getByLabel('Find terrain tool').fill('MFD');
- await page.getByRole('tab',{name:'Tools',exact:true}).click();
+ await page.getByRole('button',{name:'Browse terrain tools',exact:true}).click();
  await shelf.getByRole('button',{name:'MFD accumulation',exact:true}).click();
  await expect(run).toBeEnabled();
  await run.click();
  await expect(page.getByLabel('Terrain results')).toContainText('MFD slope exponent',{timeout:25000});
- await page.getByRole('tab',{name:'Tools',exact:true}).click();
+ await page.getByRole('button',{name:'Browse terrain tools',exact:true}).click();
  await page.getByLabel('Find terrain tool').fill('Strahler');
- await page.getByRole('tab',{name:'Tools',exact:true}).click();
+ await page.getByRole('button',{name:'Browse terrain tools',exact:true}).click();
  await shelf.getByRole('button',{name:'Stream order (Strahler)',exact:true}).click();
  await page.getByLabel('Minimum upstream cells').fill('2');
  await expect(run).toBeEnabled();
  await run.click();
  await expect(page.getByLabel('Terrain results')).toContainText('Maximum Strahler order',{timeout:25000});
- await page.getByRole('tab',{name:'Tools',exact:true}).click();
+ await page.getByRole('button',{name:'Browse terrain tools',exact:true}).click();
  await page.getByLabel('Find terrain tool').fill('Multi-observer');
- await page.getByRole('tab',{name:'Tools',exact:true}).click();
+ await page.getByRole('button',{name:'Browse terrain tools',exact:true}).click();
  await shelf.getByRole('button',{name:'Multi-observer viewshed',exact:true}).click();
  await expect(run).toBeDisabled();
  await page.getByLabel('Observer 1 longitude').fill(String(fixture.start[0]));
