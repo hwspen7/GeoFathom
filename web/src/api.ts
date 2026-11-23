@@ -992,7 +992,8 @@ export interface AdvancedTerrainResult {
     curvature_method?:string|null;curvature_radius_cells?:number|null;
     design_east_grade?:number|null;design_north_grade?:number|null;
     design_max_grade?:number|null;elevation_sigma_m?:number|null;
-    optimize_observers?:number|null;dsm_source?:boolean|null;mesh_lod?:boolean|null};
+    optimize_observers?:number|null;dsm_source?:boolean|null;mesh_lod?:boolean|null;
+    suitability_model?:string|null;suitability_weights?:number[]|null};
   selection?:{selected_candidate_indices:number[];marginal_visible_cells:number[];total_candidate_sites:number};
   quality?:{status:string;reference_validation:string;uncertainty:string;
     source_overlap_pct:number;valid_study_cell_pct:number;
@@ -1007,7 +1008,8 @@ export function advancedTerrain(body:{image_id:string;geometry:GeoJSON.Geometry;
   flow_routing_method?:'d8'|'dinf';depression_method?:'fill'|'breach';
   curvature_method?:'finite_difference'|'quadratic';curvature_radius?:number;
   design_east_grade?:number;design_north_grade?:number;design_max_grade?:number;elevation_sigma_m?:number;
-  optimize_observers?:number;dsm_image_id?:string|null;mesh_lod?:boolean},signal?:AbortSignal):Promise<AdvancedTerrainResult>{
+  optimize_observers?:number;dsm_image_id?:string|null;mesh_lod?:boolean;
+  suitability_model?:'binary'|'weighted';suitability_weights?:[number,number,number]},signal?:AbortSignal):Promise<AdvancedTerrainResult>{
   return request('/terrain/advanced',{signal,method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
 }
 
