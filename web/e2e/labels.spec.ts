@@ -1,5 +1,5 @@
 import {expect,test} from './coverage-fixture';
-import {openProjectDrawer} from './workspace-ui';
+import {openProjectDrawer,closeProjectDrawer} from './workspace-ui';
 
 const tile='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/ZecAAAAASUVORK5CYII=';
 test.beforeEach(async({page})=>{
@@ -194,8 +194,9 @@ test('categorized attribute colors produce visible legend classes and identify a
   const legend=page.getByLabel('Map legend',{exact:true});
   await expect(legend).toContainText('hospital');
   await expect(legend).toContainText('school');
+  await closeProjectDrawer(page);
+  await page.getByLabel('Project feature tree').getByRole('button',{name:'Facility A',exact:true}).click();
   await openProjectDrawer(page);
-  await page.locator('.project-features button').filter({hasText:'Facility A'}).click();
   await page.locator('.feature-inspector summary').click();
   await expect(page.locator('.feature-inspector-body')).toContainText('Surveyor');
   await expect(page.getByText(/height:/)).toBeVisible();

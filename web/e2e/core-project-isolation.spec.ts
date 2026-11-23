@@ -56,7 +56,7 @@ test('delayed authoritative geometry validation cannot publish after project swi
   const select=page.getByLabel('Active project');
   await expect(select.locator('option[value="'+first+'"]')).toHaveCount(1);
   await select.selectOption(first);
-  await expect(page.getByRole('button',{name:'Measurements',exact:true})).toBeVisible();
+  await expect(page.getByRole('navigation',{name:'Workspace tools'}).getByRole('button',{name:'Survey',exact:true})).toBeVisible();
   let release!:()=>void;
   const gate=new Promise<void>(resolve=>{release=resolve;});
   let requested!:()=>void;

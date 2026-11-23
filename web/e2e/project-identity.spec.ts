@@ -1,3 +1,4 @@
+import {openProjectDrawer} from './workspace-ui';
 import {expect,test} from './coverage-fixture';
 
 const API='http://127.0.0.1:8000';
@@ -41,6 +42,7 @@ test('a late workspace response cannot replace the selected project or its layer
     await selection.selectOption(first);
     await requested;
     await selection.selectOption(second);
+    await openProjectDrawer(page);
     await expect(page.getByRole('button',{name:'Current project layer',exact:true})).toBeVisible();
     const oldResponse=page.waitForResponse(response=>response.url().endsWith('/projects/'+first+'/workspace'));
     release();
@@ -51,6 +53,7 @@ test('a late workspace response cannot replace the selected project or its layer
     await expect(page.getByRole('button',{name:'Current project layer',exact:true})).toBeVisible();
     await expect(page.getByRole('button',{name:'Delayed project layer',exact:true})).toHaveCount(0);
     await page.reload();
+    await openProjectDrawer(page);
     await expect(page.getByLabel('Active project')).toHaveValue(second);
     await expect(page.getByRole('button',{name:'Current project layer',exact:true})).toBeVisible();
   }finally{release();}

@@ -85,16 +85,17 @@ test('advanced surface families retain distinct real results and scientific expo
   else await expect(run).toBeDisabled();
  };
  const execute=async(title:string)=>{
-  const oldCount=await page.getByLabel('Analysis result layers').locator('.scratch-row').count();
+  const choices=page.getByLabel('Choose terrain result').locator('option');
+  const oldCount=await choices.count();
   await run.click();
-  await expect(page.getByLabel('Analysis result layers').locator('.scratch-row'))
-   .toHaveCount(oldCount+1,{timeout:15000});
+  await expect(choices).toHaveCount(oldCount+1,{timeout:15000});
   await expect(page.getByLabel('Terrain results')).toBeVisible();
   // Match literal operation titles without treating punctuation as regex.
   // The title button carries source provenance. The separate "Remove
   // result ..." button also has the operation name in its accessible label,
   // and must not make the selection ambiguous.
-  const manager=page.getByLabel('Analysis result layers').locator('.terrain-layer-manager');
+  await page.getByRole('tab',{name:'Outputs',exact:true}).click();
+  const manager=page.getByLabel('Terrain output layers').locator('.terrain-layer-manager');
   if(await manager.getAttribute('open')===null)await manager.locator('summary').click();
   await expect(page.getByLabel('Analysis result layers')
     .locator('.scratch-row > button[title]').filter({hasText:title})).toBeVisible();
@@ -105,6 +106,7 @@ test('advanced surface families retain distinct real results and scientific expo
  ]){
   await select('Surface',name);
   await execute(name);
+  await page.getByRole('tab',{name:'Visual',exact:true}).click();
   await expect(page.getByAltText('Derived terrain raster')).toBeVisible();
  }
  await select('Surface','DEM difference',false);
@@ -112,8 +114,10 @@ test('advanced surface families retain distinct real results and scientific expo
  await page.getByLabel('Reference comparison DEM').selectOption(fixture.ids[1]);
  await expect(run).toBeEnabled();
  await execute('DEM difference');
+ await page.getByRole('tab',{name:'Details',exact:true}).click();
  await page.getByLabel('Terrain run provenance').locator('summary').click();
  await expect(page.getByLabel('Terrain run provenance')).toContainText('Reference DEM:');
+ await page.getByRole('tab',{name:'Overview',exact:true}).click();
  await expect(page.getByLabel('Terrain results')).toContainText('Mean elevation difference');
  for(const name of ['Flow direction','Flow accumulation']){
   await select('Hydrology',name);
@@ -149,6 +153,7 @@ test('advanced surface families retain distinct real results and scientific expo
  await page.getByLabel('Route end latitude').fill(String(fixture.end[1]));
  await expect(run).toBeEnabled();
  await execute('Least-cost route');
+ await page.getByRole('tab',{name:'Overview',exact:true}).click();
  await expect(page.getByLabel('Terrain results')).toContainText(/route length/i);
  const exportEvent=page.waitForEvent('download');
  await page.getByLabel('Terrain results').getByRole('button',{name:'Export',exact:true}).click();

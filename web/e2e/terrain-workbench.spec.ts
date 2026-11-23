@@ -45,17 +45,23 @@ with tempfile.TemporaryDirectory() as directory:
  await expect(page.getByLabel('DEM download target')).toContainText('Selected geometry');
  const terrainTab=page.getByRole('navigation',{name:'Workspace tools'}).getByRole('button',{name:'Terrain',exact:true});
  await expect(terrainTab).toHaveAttribute('aria-pressed','true');
- await expect(page.getByLabel('Operations')).toBeVisible();
+ await expect(page.getByRole('complementary',{name:'Operations'})).toBeVisible();
  await expect(page.getByLabel('Results monitor')).toBeVisible();
  await expect(page.getByRole('button',{name:'Toggle project and layers'})).toHaveAttribute('aria-expanded','false');
  // Real browser desktop contract: two docks flank a full-height map.
- const left=await page.getByLabel('Operations').boundingBox();
+ const left=await page.getByRole('complementary',{name:'Operations'}).boundingBox();
  const center=await page.getByLabel('Interactive geospatial map').boundingBox();
  const right=await page.getByLabel('Results monitor').boundingBox();
  expect(left&&center&&right).toBeTruthy();
  expect(left!.x+left!.width).toBeLessThan(center!.x+10);
  expect(center!.x+center!.width).toBeLessThan(right!.x+10);
  expect(center!.height).toBeGreaterThan(400);
+ expect(Math.round(left!.width)).toBe(318);
+ expect(Math.round(right!.width)).toBe(364);
+ await expect(page.getByRole('separator',{name:/Resize (operations|results)/})).toHaveCount(0);
+ const visual=()=>page.getByRole('tab',{name:'Visual',exact:true}).click();
+ const outputs=()=>page.getByRole('tab',{name:'Outputs',exact:true}).click();
+ const details=()=>page.getByRole('tab',{name:'Details',exact:true}).click();
  // Survey commands must not remain in the global toolbar while Terrain runs.
  await expect(page.getByLabel('Survey toolbar').getByRole('button',{name:'Polygon',exact:true})).toHaveCount(0);
  await terrainTab.click();
@@ -67,10 +73,12 @@ with tempfile.TemporaryDirectory() as directory:
  const map=page.getByLabel('Interactive geospatial map');
  await tools.getByRole('button',{name:'Slope / aspect',exact:true}).click();
  await page.getByRole('button',{name:'Run terrain operation'}).click();
+ await visual();
  await expect(page.getByRole('img',{name:'Slope (degrees)'})).toBeVisible();
  await expect(page.getByLabel('Results monitor').getByLabel('Terrain results')).toBeVisible();
  await tools.getByRole('button',{name:'Elevation distribution',exact:true}).click();
  await page.getByRole('button',{name:'Run terrain operation'}).click();
+ await visual();
  await expect(page.getByRole('img',{name:'Elevation distribution and cumulative area'})).toBeVisible();
  await expect(page.getByLabel('Elevation distribution bin')).toBeVisible();
  await page.getByRole('button',{name:'Expand',exact:true}).click();
@@ -87,12 +95,16 @@ with tempfile.TemporaryDirectory() as directory:
  await page.getByLabel('Terrain tool group').selectOption('Surface');
  await tools.getByRole('button',{name:'Slope map',exact:true}).click();
  await page.getByRole('button',{name:'Run terrain operation'}).click();
+ await visual();
  await expect(page.getByAltText('Derived terrain raster')).toBeVisible();
  await expect(map).toHaveAttribute('data-terrain-raster-count','1');
+ await details();
+ await page.getByLabel('Additional terrain metrics').locator('summary').click();
  const countMetric=page.locator('.terrain-metrics > div').filter({hasText:'Calculated raster cells'}).first();
  await expect(countMetric.locator('strong')).not.toBeEmpty();
  await expect(countMetric.locator('strong')).not.toContainText('°');
  await expect(page.getByLabel('Slope edge cells explanation')).toContainText('boundary cells excluded');
+ await visual();
  const opacity=page.getByLabel('Terrain raster opacity');
  await expect(opacity).toHaveValue('50');
  await expect(page.getByLabel('Terrain raster resampling')).toHaveValue('linear');
@@ -101,13 +113,17 @@ with tempfile.TemporaryDirectory() as directory:
  await expect(map).toHaveAttribute('data-terrain-raster-resampling','nearest');
  await opacity.fill('25');
  await expect(map).toHaveAttribute('data-terrain-raster-opacity','0.25');
+ await outputs();
  const download=page.waitForEvent('download');await page.getByRole('button',{name:'GeoTIFF',exact:true}).click();
  expect((await download).suggestedFilename()).toBe('slope_map.tif');
  // Two related raster analyses remain independently addressable.
  await tools.getByRole('button',{name:'Hillshade',exact:true}).click();
  await page.getByRole('button',{name:'Run terrain operation'}).click();
  await expect(map).toHaveAttribute('data-terrain-raster-count','1');
+ await visual();
  await expect(page.getByLabel('Terrain raster resampling')).toHaveValue('linear');
+ await outputs();
+ await page.getByLabel('Terrain output layers').locator('summary').click();
  const previousSlope=page.getByRole('checkbox',{name:/Show Slope map /}).first();
  await previousSlope.check();
  await expect(map).toHaveAttribute('data-terrain-raster-count','2');
@@ -139,9 +155,11 @@ with tempfile.TemporaryDirectory() as directory:
  await page.getByLabel('Reference elevation',{exact:true}).fill('110');
  await page.getByRole('button',{name:'Run terrain operation'}).click();
  await expect(page.getByLabel('Terrain results').getByText('Cut',{exact:true}).first()).toBeVisible();
+ await visual();
  await expect(page.getByRole('img',{name:'Earthwork volume (m³)'})).toBeVisible();
  await tools.getByRole('button',{name:'3D terrain',exact:true}).click();
  await page.getByRole('button',{name:'Run terrain operation'}).click();
+ await visual();
  const meshCanvas=page.getByLabel('Interactive 3D terrain preview');
  await expect(meshCanvas).toBeVisible();
  // Require the WebGL2 path under the CI SwiftShader renderer, not the CPU fallback.
@@ -160,10 +178,12 @@ with tempfile.TemporaryDirectory() as directory:
  await page.mouse.click(bounds.x+bounds.width/2,bounds.y+bounds.height/2);
  await expect(page.getByLabel('Terrain sample location')).toHaveCount(1);
  await page.getByRole('button',{name:'Run terrain operation'}).click();
+ await visual();
  await expect(page.getByRole('img',{name:'Visibility (cells)'})).toBeVisible();
  await tools.getByRole('button',{name:'Watershed (D8)',exact:true}).click();
  await page.getByRole('button',{name:'Area center',exact:true}).click();
  await page.getByRole('button',{name:'Run terrain operation'}).click();
+ await visual();
  await expect(page.getByRole('img',{name:'Catchment (cells)'})).toBeVisible();
  const ring=fixture.geometry.coordinates[0];
  const path={type:'LineString',coordinates:[ring[0],ring[2]]};
@@ -177,10 +197,13 @@ with tempfile.TemporaryDirectory() as directory:
  await page.getByRole('button',{name:/DEM profile line/}).click();
  await page.getByLabel('Terrain tools').getByRole('button',{name:'Elevation profile',exact:true}).click();
  await page.getByRole('button',{name:'Run terrain operation'}).click();
+ await visual();
  const chart=page.getByRole('img',{name:'Interactive elevation profile'});
  await expect(chart).toBeVisible();await chart.hover();
  await expect(page.getByLabel('Terrain sample location')).toHaveCount(1);
+ await details();
  await expect(page.getByLabel('Terrain run provenance')).toBeVisible();
+ await visual();
  // Reverse interaction: actual map-projected profile point → chart cursor.
  await chart.locator('..').hover({position:{x:1,y:1}});
  // Return from the inspector to the map before using absolute mouse
@@ -200,6 +223,7 @@ with tempfile.TemporaryDirectory() as directory:
  await page.getByLabel('Terrain tool group').selectOption('Engineering');
  await page.getByLabel('Terrain tools').getByRole('button',{name:'Cross sections',exact:true}).click();
  await page.getByRole('button',{name:'Run terrain operation'}).click();
+ await visual();
  await expect(page.getByRole('button',{name:'All sections CSV'})).toBeVisible();
  await page.getByLabel('DEM elevation layer').selectOption('');
  await expect(page.getByLabel('DEM elevation layer')).toHaveValue('');
@@ -209,22 +233,29 @@ with tempfile.TemporaryDirectory() as directory:
  await page.reload();
  await page.getByRole('navigation',{name:'Workspace tools'}).getByRole('button',{name:'Terrain',exact:true}).click();
  const restored=page.getByLabel('Analysis result layers');
- await restored.locator('.terrain-layer-manager summary').click();
- await expect(restored.getByRole('button',{name:/Cross sections ·/})).toBeVisible();
- await expect(restored.getByRole('button',{name:/Slope map ·/})).toBeVisible();
+ const resultSelect=page.getByLabel('Choose terrain result');
+ await expect(resultSelect.locator('option').filter({hasText:'Cross sections'})).toHaveCount(1);
+ await expect(resultSelect.locator('option').filter({hasText:'Slope map'})).toHaveCount(1);
  await expect(map).toHaveAttribute('data-terrain-raster-count','0');
- await restored.getByRole('button',{name:/Cross sections ·/}).click();
+ const crossId=await resultSelect.locator('option').filter({hasText:'Cross sections'}).getAttribute('value');
+ await resultSelect.selectOption(crossId!);
+ await visual();
  await expect(page.getByRole('button',{name:'All sections CSV'})).toBeVisible();
- await restored.getByRole('button',{name:/Slope map ·/}).click();
+ const slopeId=await resultSelect.locator('option').filter({hasText:'Slope map'}).getAttribute('value');
+ await resultSelect.selectOption(slopeId!);
+ await visual();
  await expect(page.getByAltText('Derived terrain raster')).toBeVisible();
+ await outputs();
  const cachedRaster=page.waitForEvent('download');
  await page.getByRole('button',{name:'GeoTIFF',exact:true}).click();
  expect((await cachedRaster).suggestedFilename()).toBe('slope_map.tif');
+ await page.getByLabel('Terrain output layers').locator('summary').click();
  // Removing a result removes it from IndexedDB as well as React memory.
  await restored.getByRole('button',{name:'Remove result Slope map'}).click();
  await expect(restored.getByRole('button',{name:/Slope map ·/})).toHaveCount(0);
  await page.reload();
  await page.getByRole('navigation',{name:'Workspace tools'}).getByRole('button',{name:'Terrain',exact:true}).click();
+ await outputs();
  await expect(page.getByLabel('Analysis result layers').getByRole('button',{name:/Slope map ·/})).toHaveCount(0);
  // Results from one project must never be visible in a different project.
  const another=await page.request.post(API+'/projects',{data:{name:'Independent terrain project '+Date.now()}});
