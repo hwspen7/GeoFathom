@@ -201,3 +201,22 @@ def test_slope_product_handles_over_one_million_pixels_end_to_end(tmp_path):
     assert result["raster"]["valid_cells"]>1_000_000
     assert result["metrics"]["product_max"]==pytest.approx(0,abs=1e-6)
     assert result["raster"]["width"]>=1024
+
+
+def test_surface_output_datum_is_declared_not_assumed(dem):
+    import base64
+    from rasterio.io import MemoryFile
+    path,polygon=dem
+    first=run_terrain(path,polygon,"elevation")
+    assert first["source_vertical_datum"] is None
+    with MemoryFile(base64.b64decode(first["raster"]["geotiff"])) as mem:
+        with mem.open() as product:
+            assert product.tags()["TERRAIN_SOURCE_VERTICAL_DATUM"]=="not_declared"
+    with rasterio.open(path,"r+") as source:
+        source.update_tags(VERTICAL_DATUM="NAVD 88")
+    second=run_terrain(path,polygon,"slope_map")
+    assert second["source_vertical_datum"]=="NAVD88"
+    with MemoryFile(base64.b64decode(second["raster"]["geotiff"])) as mem:
+        with mem.open() as product:
+            assert product.tags()["TERRAIN_UNIT"]=="degree"
+            assert product.tags()["TERRAIN_SOURCE_VERTICAL_DATUM"]=="NAVD88"

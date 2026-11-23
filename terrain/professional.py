@@ -208,7 +208,8 @@ def classification(values,operation):
     classes[finite]=np.digitize(values[finite],edges[1:-1])
     return classes,labels,(("#222222","#555555","#888888","#aaaaaa","#dddddd","#ffffff") if operation=="hillshade" else SLOPE_COLORS if operation=="slope_map" else COLORS)[:len(labels)]
 
-def raster_product(values,operation,affine,crs,cancel=None):
+def raster_product(values,operation,affine,crs,cancel=None,
+                   source_datum=None,reference_datum=None):
     """Export exact source-grid GeoTIFF and a Web Mercator map preview with alpha nodata."""
     checkpoint(cancel)
     classes,labels,colors=classification(values,operation)
@@ -220,10 +221,19 @@ def raster_product(values,operation,affine,crs,cancel=None):
         with memory.open(driver="GTiff",height=height,width=width,count=1,dtype="float32",
                          crs=crs,transform=affine,nodata=float("nan"),compress="deflate") as dst:
             dst.write(values.astype(np.float32),1)
+            # Labels are declared provenance, not an assertion of survey
+            # control or absolute vertical accuracy.
+            datum_tags={
+                "TERRAIN_SOURCE_VERTICAL_DATUM":source_datum or "not_declared",
+            }
+            if operation=="dem_difference":
+                datum_tags["TERRAIN_REFERENCE_VERTICAL_DATUM"]=(
+                    reference_datum or "not_declared")
             dst.update_tags(TERRAIN_OPERATION=operation,
                             TERRAIN_UNIT=RASTER_UNITS[operation],
                             TERRAIN_NODATA_POLICY="NaN",
-                            TERRAIN_GRID_BASIS="projected_cell_centers")
+                            TERRAIN_GRID_BASIS="projected_cell_centers",
+                            **datum_tags)
         tif=base64.b64encode(memory.read()).decode("ascii")
     bounds=array_bounds(height,width,affine)
     target,tw,th=calculate_default_transform(crs,"EPSG:3857",width,height,*bounds)
@@ -320,7 +330,8 @@ def _derived_surface_tiled(z,valid,dx,dy,operation,max_slope=30.,
 
 
 def surface(z,valid,affine,crs,operation,reference,point,end_point,max_slope,
-            min_elevation,max_elevation,max_tri,stream_cells,azimuth,altitude,feature,origin,cancel=None):
+            min_elevation,max_elevation,max_tri,stream_cells,azimuth,altitude,feature,origin,cancel=None,
+            source_datum=None):
     """Return the exact source-grid derivative and product-specific statistics."""
     dx,dy=abs(affine.a),abs(affine.e);cell=dx*dy
     features=[];metrics={}
@@ -388,7 +399,7 @@ def surface(z,valid,affine,crs,operation,reference,point,end_point,max_slope,
                 values=np.where(np.isfinite(d["slope_map"])&~np.isfinite(d["aspect_map"]),-1,d["aspect_map"])
             else:values=d[operation]
     if not np.isfinite(values).any():raise RasterError("No valid cells for this terrain product.")
-    product=raster_product(values,operation,affine,crs,cancel)
+    product=raster_product(values,operation,affine,crs,cancel,source_datum=source_datum)
     if operation in {"flow_direction","streams","suitability","least_cost"}:
         metrics["product_valid_cells"]=product["valid_cells"]
     elif operation=="aspect_map":

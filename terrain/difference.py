@@ -73,4 +73,6 @@ def compare_dem(primary, valid, affine, crs, reference_path, cancel=None, primar
         "lowered_volume_m3": float(math.fsum(negatives) * area),
         "net_elevation_volume_m3": float(math.fsum(diff) * area),
     }
-    return raster_product(delta, "dem_difference", affine, crs, cancel), metrics
+    return raster_product(delta, "dem_difference", affine, crs, cancel,
+                          source_datum=primary_datum,
+                          reference_datum=reference_datum), metrics

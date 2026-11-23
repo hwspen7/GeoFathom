@@ -12,6 +12,7 @@ from geometry.measure import measure_geometry
 from imagery.raster import RasterError
 from .engine import _check_dem
 from .cancellation import checkpoint
+from .vertical import vertical_datum
 from .professional import SURFACES, surface, d8_directions, D8
 from .hydrology import condition_dem
 
@@ -269,6 +270,10 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
     maximum=4096 if extended else 512 if operation=="visibility" else 1024
     max_cells=8_000_000 if extended else 262_144 if operation=="visibility" else 1_000_000
     z,valid,covered,affine,crs,boundary,coverage=_window(path,geometry,maximum,max_cells)
+    # Read declared vertical datum metadata independently of numerical
+    # heights. Missing metadata remains unknown; never invent NAVD88/EGM96.
+    with rasterio.open(path) as source:
+        source_datum=vertical_datum(source)
     checkpoint(cancel)
     hydro_ops={"flow_direction","flow_accumulation","streams","watershed"}
     # Drainage may use a conditioned working grid; other surface products
@@ -277,10 +282,12 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
                         else (z,None))
     cell=abs(affine.a*affine.e)
     result={"operation":operation,"source_crs":str(crs),"valid_cells":int(valid.sum()),
-        "missing_cells":int((covered&~valid).sum()),"cell_area_m2":cell,"metrics":{},"features":[]}
+        "missing_cells":int((covered&~valid).sum()),"cell_area_m2":cell,
+        "source_vertical_datum":source_datum,"metrics":{},"features":[]}
     if operation in SURFACES:
         result["raster"],result["metrics"],result["features"]=surface(flow_z,valid,affine,crs,operation,reference,point,end_point,
-            max_slope,min_elevation,max_elevation,max_tri,stream_cells,azimuth,altitude,_feature,_origin,cancel)
+            max_slope,min_elevation,max_elevation,max_tri,stream_cells,azimuth,altitude,
+            _feature,_origin,cancel,source_datum=source_datum)
         result["warning"]="Projected source-grid product; nodata and incomplete neighborhoods excluded. Unconditioned D8 terminates at sinks/flats; suitability and path costs are screening estimates, not engineering certification."
         if operation=="streams" and result["metrics"]["drainage_edges"]>result["metrics"]["vector_edges"]:
             result["warning"]+=" Vector edge budget exceeded; full drainage raster remains available."

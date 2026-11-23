@@ -106,3 +106,22 @@ def test_dem_difference_warning_exposes_partial_reference_coverage(tmp_path):
     assert coverage==pytest.approx(50.,abs=1)
     assert f"{coverage:.1f}%" in result["warning"]
     assert "exclude uncovered cells" in result["warning"]
+
+
+def test_exported_difference_raster_distinguishes_declared_datums(tmp_path):
+    affine=from_origin(500000,4500000,10,10)
+    primary=tmp_path/"primary.tif"
+    reference=tmp_path/"reference.tif"
+    make_dem(primary,np.full((5,5),102.),affine)
+    make_dem(reference,np.full((5,5),100.),affine)
+    for path in (primary,reference):
+        with rasterio.open(path,"r+") as source:
+            source.update_tags(VERTICAL_DATUM="NAVD88")
+    product,metrics=compare_dem(np.full((5,5),102.),np.ones((5,5),bool),
+                                affine,"EPSG:32617",reference,primary_path=primary)
+    assert metrics["datum_labels_match"]==1
+    with MemoryFile(base64.b64decode(product["geotiff"])) as memory:
+        with memory.open() as raster:
+            assert raster.tags()["TERRAIN_SOURCE_VERTICAL_DATUM"]=="NAVD88"
+            assert raster.tags()["TERRAIN_REFERENCE_VERTICAL_DATUM"]=="NAVD88"
+            assert raster.tags()["TERRAIN_UNIT"]=="m"
