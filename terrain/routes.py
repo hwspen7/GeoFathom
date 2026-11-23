@@ -152,6 +152,9 @@ class AdvancedTerrainInput(BaseModel):
     suitability_model:Literal['binary','weighted']='binary'
     suitability_weights:tuple[float,float,float]=(0.5,0.25,0.25)
     external_inflow_image_id:str|None=None
+    design_curvature_east:float=Field(default=0,ge=-1,le=1)
+    design_curvature_cross:float=Field(default=0,ge=-1,le=1)
+    design_curvature_north:float=Field(default=0,ge=-1,le=1)
 
     @model_validator(mode="after")
     def check_p1_candidate_bounds(self):
@@ -180,6 +183,7 @@ async def advanced(request:Request,body:AdvancedTerrainInput):
             body.optimize_observers,
             raster(body.dsm_image_id) if body.dsm_image_id and body.operation in {"visibility","viewshed_multi"} else None,
             body.mesh_lod,body.suitability_model,body.suitability_weights,
-            raster(body.external_inflow_image_id) if body.external_inflow_image_id else None)
+            raster(body.external_inflow_image_id) if body.external_inflow_image_id else None,
+            body.design_curvature_east,body.design_curvature_cross,body.design_curvature_north)
     except (GeometryError,RasterError,ValueError,OverflowError) as error:
         raise HTTPException(status_code=422,detail=str(error)) from error
