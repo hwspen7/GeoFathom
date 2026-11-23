@@ -62,3 +62,24 @@ def test_conflicting_vertical_datum_tags_fail_before_any_terrain_analysis(tmp_pa
         ds.update_tags(VERTICAL_REFERENCE="NAVD 88")
     with rasterio.open(path) as src:
         _check_dem(src)
+
+
+@pytest.mark.parametrize("derived_operation",["slope_map","aspect_map",
+                                               "flow_accumulation","cutfill_map",
+                                               "dem_difference"])
+def test_derived_analytical_raster_cannot_be_reused_as_absolute_dem(derived_operation):
+    import base64
+    from rasterio.io import MemoryFile
+    from terrain.professional import raster_product
+    array=np.full((7,7),25.,dtype=np.float64)
+    product=raster_product(array,derived_operation,
+                           from_origin(500000,4500000,10,10),"EPSG:32617")
+    with MemoryFile(base64.b64decode(product["geotiff"])) as memory:
+        with memory.open() as source:
+            with pytest.raises(RasterError,match="not source DEM elevations"):
+                _check_dem(source)
+    absolute=raster_product(array,"elevation",
+                            from_origin(500000,4500000,10,10),"EPSG:32617")
+    with MemoryFile(base64.b64decode(absolute["geotiff"])) as memory:
+        with memory.open() as source:
+            _check_dem(source)

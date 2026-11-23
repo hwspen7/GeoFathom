@@ -26,6 +26,15 @@ def _check_dem(src):
     if not src.crs or not src.crs.is_projected or src.crs.linear_units.lower() not in {"metre","meter","metres","meters"}:
         raise RasterError("DEM terrain analysis requires projected horizontal coordinates in meters.")
     if src.count!=1:raise RasterError("DEM needs exactly one elevation band.")
+    # A slope/aspect/flow raster is a valid GeoTIFF, but not an absolute
+    # elevation surface. Do not silently interpret its float32 pixels as DEM.
+    # Only an exported absolute elevation grid may be reused as terrain input.
+    operation=src.tags().get("TERRAIN_OPERATION")
+    if operation and operation!="elevation":
+        raise RasterError("Derived terrain products are not source DEM elevations; select an elevation raster.")
+    derived_unit=src.tags().get("TERRAIN_UNIT")
+    if derived_unit and derived_unit!="m":
+        raise RasterError("Source DEM elevations must have meter-valued raster cells.")
     # Rasterio reads raw sample values, not scaled physical heights. Reject
     # non-identity band transforms to avoid silent errors in slope and volume.
     if not math.isclose(float(src.scales[0]),1.,rel_tol=0,abs_tol=1e-12) or not math.isclose(float(src.offsets[0]),0.,rel_tol=0,abs_tol=1e-12):
