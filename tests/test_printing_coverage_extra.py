@@ -20,7 +20,7 @@ def isolated(monkeypatch,tmp_path):
     monkeypatch.setenv("GEOFATHOM_DATABASE_PATH",str(tmp_path/"print-extra.sqlite"))
 
 
-@pytest.mark.parametrize("value",["invalid","",None,123,"#fg00gg"])
+@pytest.mark.parametrize("value",["invalid","",None,"#fg00gg"])
 def test_invalid_cartographic_color_falls_back_to_visible_default(value):
     assert isinstance(printing._rgb(value),Color)
     assert printing._rgb(value)==printing._rgb("#2563eb")
@@ -31,6 +31,12 @@ def test_invalid_cartographic_color_falls_back_to_visible_default(value):
 ])
 def test_scale_bar_uses_clean_human_measurements(value,expected):
     assert printing._nice_distance(value)==expected
+
+
+def test_integer_hex_color_is_valid_and_deterministic():
+    # ReportLab accepts integer RGB hex values. Treating them as invalid
+    # would incorrectly constrain a legitimate renderer input.
+    assert printing._rgb(123)==printing._rgb(0x00007b)
 
 
 def test_map_label_sanitizes_control_characters_and_truncates_long_strings():
