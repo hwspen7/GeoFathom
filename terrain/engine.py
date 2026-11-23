@@ -30,9 +30,15 @@ def _check_dem(src):
     # non-identity band transforms to avoid silent errors in slope and volume.
     if not math.isclose(float(src.scales[0]),1.,rel_tol=0,abs_tol=1e-12) or not math.isclose(float(src.offsets[0]),0.,rel_tol=0,abs_tol=1e-12):
         raise RasterError("Scaled DEM bands are unsupported: convert band scale/offset to physical meter elevations before analysis.")
-    unit=(src.units[0] or src.tags().get("VERTICAL_UNIT","")).strip().lower()
-    if unit and unit not in {"m","metre","meter","metres","meters"}:
-        raise RasterError("DEM vertical units must be meters.")
+    # Band-unit and dataset-tag metadata are independent assertions. A
+    # declared meter band must not silently override a conflicting foot tag.
+    for unit in (src.units[0],src.tags().get("VERTICAL_UNIT","")):
+        if unit and unit.strip().lower() not in {"m","metre","meter","metres","meters"}:
+            raise RasterError("DEM vertical units must be meters.")
+    # The presence of two incompatible declared vertical datums must also
+    # fail closed, including for simple slope/profile operations.
+    from .vertical import vertical_datum
+    vertical_datum(src)
     if abs(src.transform.b)>1e-9 or abs(src.transform.d)>1e-9:
         raise RasterError("DEM must be north-up; rectify rotated imagery before analysis.")
     if src.transform.a<=0 or src.transform.e>=0:

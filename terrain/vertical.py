@@ -11,10 +11,13 @@ def vertical_datum(source):
     """Normalize a declared vertical datum label or return None."""
     tags={str(key).strip().upper().replace("-","_"):str(value).strip()
           for key,value in source.tags().items()}
-    label=tags.get("VERTICAL_DATUM") or tags.get("VERTICAL_REFERENCE")
-    if not label:
-        return None
-    return re.sub(r"[^A-Z0-9]+","",label.upper()) or None
+    labels={re.sub(r"[^A-Z0-9]+","",value.upper())
+            for key,value in tags.items()
+            if key in {"VERTICAL_DATUM","VERTICAL_REFERENCE"} and value}
+    labels.discard("")
+    if len(labels)>1:
+        raise RasterError("Conflicting declared DEM vertical datum labels.")
+    return next(iter(labels),None)
 
 
 def check_vertical_compatibility(datums):
