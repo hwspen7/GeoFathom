@@ -15,6 +15,9 @@ vi.mock('./api',()=>api);
 vi.mock('./DataServicesPanel',()=>({
  default:({view}:{view:string})=><div data-testid="data-source-panel">{view}</div>,
 }));
+vi.mock('./ApiAccessPanel',()=>({
+ default:()=><div data-testid="data-api-access">API access</div>,
+}));
 
 const geometry:GeoJSON.Polygon={type:'Polygon',
  coordinates:[[[0,0],[.01,0],[.01,.01],[0,.01],[0,0]]]};
