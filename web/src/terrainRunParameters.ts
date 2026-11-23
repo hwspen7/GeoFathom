@@ -24,6 +24,7 @@ export interface TerrainParameterForm {
  optimizeObservers?:string;dsmImageId?:string;meshLod?:boolean;
  suitabilityModel?:'binary'|'weighted';suitabilitySlopeWeight?:string;suitabilityTriWeight?:string;suitabilityElevationWeight?:string;
  externalInflowImageId?:string;
+ designCurvatureEast?:string;designCurvatureCross?:string;designCurvatureNorth?:string;
 }
 
 export function terrainParametersForOperation(
@@ -146,6 +147,9 @@ export function terrainParametersForOperation(
   if(form.designNorthGrade&&Number(form.designNorthGrade)!==0)params.design_north_grade=Number(form.designNorthGrade);
   if(form.designMaxGrade&&Number(form.designMaxGrade)!==.3)params.design_max_grade=Number(form.designMaxGrade);
   if(form.elevationSigma&&Number(form.elevationSigma)!==0)params.elevation_sigma_m=Number(form.elevationSigma);
+  if(form.designCurvatureEast&&Number(form.designCurvatureEast)!==0)params.design_curvature_east=Number(form.designCurvatureEast);
+  if(form.designCurvatureCross&&Number(form.designCurvatureCross)!==0)params.design_curvature_cross=Number(form.designCurvatureCross);
+  if(form.designCurvatureNorth&&Number(form.designCurvatureNorth)!==0)params.design_curvature_north=Number(form.designCurvatureNorth);
  }
  if(['visibility','viewshed_multi'].includes(operation)&&form.dsmImageId)
   params.dsm_image_id=form.dsmImageId;
