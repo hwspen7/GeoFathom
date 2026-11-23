@@ -2,7 +2,7 @@ import {useEffect,useMemo,useRef,useState,type ChangeEvent} from 'react';
 import {createPortal} from 'react-dom';
 import {Mountain} from 'lucide-react';
 import {advancedTerrain,saveFeatureBatch,analyzeTerrain,terrainProfile,listImagery,uploadImagery,fetchPublicDEM,prepareDEM,type DEMProcessMode,type TerrainMesh,type TerrainOperation,type RasterAsset,type TerrainRasterLayer} from './api';
-import {ProfilePlot,MetricBars,ElevationDistribution,AspectRose,SectionPlot,ResultPane} from './TerrainCharts';
+import {ProfilePlot,MetricBars,ElevationDistribution,AspectRose,SectionPlot,ResultPane,HypsometricPlot,ProfileGradePlot,TerrainClassShare} from './TerrainCharts';
 import {GPUView} from './TerrainMeshView';
 import type {Position} from './editing';
 import {measurementAnchor} from './editing';
@@ -97,6 +97,7 @@ interface Props{
  resultsTarget?:HTMLElement|null;
  operationsFooterTarget?:HTMLElement|null;
  resultsFooterTarget?:HTMLElement|null;
+ exportTarget?:HTMLElement|null;
  viewport:[number,number,number,number]|null;
  localImport:boolean;refreshToken:number;origin:Position|null;picking:boolean;
  onSelectRaster:(r:RasterAsset|null)=>void;onDraw:(line:boolean)=>void;onClearProfile?:()=>void;onUseExtent:()=>void;onPick:()=>void;
@@ -154,7 +155,8 @@ export default function TerrainWorkbench(p:Props){
  },[p.projectId]);
  const [selectedRecord,setSelectedRecord]=useState<string|null>(null);
  const [resultTab,setResultTab]=useState<'overview'|'visual'|'outputs'|'details'>('overview');
- useEffect(()=>{setResultTab('overview');setExpanded(false);},[selectedRecord]);
+ const [figureView,setFigureView]=useState('analysis');
+ useEffect(()=>{setResultTab('overview');setFigureView('analysis');setExpanded(false);},[selectedRecord]);
  const [historyFocus,setHistoryFocus]=useState('');
  const [layerPage,setLayerPage]=useState(0);
  const layerPageSize=5;
@@ -163,6 +165,15 @@ export default function TerrainWorkbench(p:Props){
  const [compareRecordId,setCompareRecordId]=useState('');
  const selected=records.find(r=>r.id===selectedRecord);
  const result=selected?.advanced??null,slope=selected?.slope??null,profile=selected?.profile??null;
+ const researchFigures=[
+   ...(result?.distribution?.length?[{id:'hypsometry',label:'Hypsometry',
+     plot:<HypsometricPlot bins={result.distribution}/>}] : []),
+   ...(profile?.samples?.length?[{id:'gradient',label:'Gradient',
+     plot:<ProfileGradePlot samples={profile.samples}/>}] : []),
+   ...(result?.raster?.legend?.length?[{id:'composition',label:'Composition',
+     plot:<TerrainClassShare bins={result.raster.legend}/>}] : []),
+ ];
+ const activeResearch=researchFigures.find(item=>item.id===figureView);
  // Show operation-critical metrics first; keep all scientific fields in More.
  const metricEntries=Object.entries(result?.metrics??{});
  const preferredMetricKeys:Record<string,string[]>={
@@ -535,8 +546,16 @@ export default function TerrainWorkbench(p:Props){
      onClick={()=>void save()}>{selected.saved?'Saved to project':'Save terrain features'}</button>:null}
    {result&&(result.raster||result.features.length>0)&&<button onClick={()=>setRecords(old=>old.map(r=>r.id===selectedRecord?{...r,visible:!r.visible}:r))}>
      {selected.visible?'Hide':'Show on map'}</button>}
-   <button className="terrain-action-primary" onClick={exportResult}>Export</button>
  </div>:null;
+ const terrainFileActions=<div className="terrain-file-actions">
+   {selected&&(result||slope||profile)&&<button type="button" onClick={exportResult}>Terrain result JSON</button>}
+   {runHistory.length>0&&<button type="button" onClick={()=>{
+     const url=URL.createObjectURL(new Blob([JSON.stringify(runHistory,null,2)],{type:'application/json'}));
+     const a=document.createElement('a');a.href=url;a.download='terrain-run-history.json';
+     document.body.appendChild(a);a.click();a.remove();
+     window.setTimeout(()=>URL.revokeObjectURL(url),1000);
+   }}>Terrain history JSON</button>}
+ </div>;
  const runActions=operation?<div className="terrain-run-row">
    <button className="primary-tool" disabled={!canRun||busy} onClick={()=>void run()}>{busy?'Calculating…':'Run terrain operation'}</button>
    {busy&&<button onClick={()=>{setLive(false);cancelAnalysis();setInfo('Analysis request cancelled.');}}>Cancel</button>}
@@ -610,7 +629,13 @@ export default function TerrainWorkbench(p:Props){
    </section>}
    {(result||slope||profile)&&<ResultPane expanded={expanded} onClose={()=>setExpanded(false)}>
      <div id="terrain-result-content" role="tabpanel" aria-label={resultTab[0].toUpperCase()+resultTab.slice(1)+' terrain result'} className="terrain-tab-content">
-     <div className="section-heading">{selected?.title} <span><button onClick={()=>{if(expanded)setExpanded(false);else{setResultTab('visual');setExpanded(true);}}}>{expanded?'Close expanded':'Expand'}</button> <button onClick={exportResult} title="Export result data">Export</button></span></div>
+     <div className="section-heading">{selected?.title} <span><button onClick={()=>{if(expanded)setExpanded(false);else{setResultTab('visual');setExpanded(true);}}}>{expanded?'Close expanded':'Expand'}</button></span></div>
+     {resultTab==='visual'&&researchFigures.length>0&&<nav className="terrain-figure-tabs" aria-label="Research figures">
+       <button type="button" aria-pressed={figureView==='analysis'} onClick={()=>setFigureView('analysis')}>Analysis</button>
+       {researchFigures.map(item=><button type="button" key={item.id} aria-pressed={figureView===item.id}
+         onClick={()=>setFigureView(item.id)}>{item.label}</button>)}
+     </nav>}
+     {resultTab==='visual'&&activeResearch&&<div className="terrain-figure-stage">{activeResearch.plot}</div>}
      {inputsChanged&&<small role="status" className="discovery-error">Inputs changed since this run</small>}
      {resultTab==='details'&&<>
      {selected&&<details className="terrain-run-provenance" aria-label="Terrain run provenance">
@@ -669,10 +694,10 @@ export default function TerrainWorkbench(p:Props){
        <div><span>Mean slope</span><strong>{fmt(slope.mean_slope_deg)}°</strong></div>
        <div><span>Aspect</span><strong>{slope.mean_aspect_deg===null?'Flat':fmt(slope.mean_aspect_deg)+'°'}</strong></div>
      </div>}
-       {resultTab==='visual'&&<MetricBars label="Slope (degrees)" max={90} values={[{name:'Mean',value:slope.mean_slope_deg,color:'#3977aa'},{name:'Maximum',value:slope.maximum_slope_deg,color:'#d18b31'}]}/>}
+       {resultTab==='visual'&&figureView==='analysis'&&<MetricBars label="Slope (degrees)" max={90} values={[{name:'Mean',value:slope.mean_slope_deg,color:'#3977aa'},{name:'Maximum',value:slope.maximum_slope_deg,color:'#d18b31'}]}/>}
        {resultTab==='details'&&<small className="compact-notice" title={slope.warning}>{slope.valid_pixels} valid cells · {slope.engine}</small>}
      </>}
-     {resultTab==='visual'&&profile&&<ProfilePlot samples={profile.samples} length={profile.length_m} onHover={p.onHover} mapIndex={p.profileMapIndex??null}/>}
+     {resultTab==='visual'&&figureView==='analysis'&&profile&&<ProfilePlot samples={profile.samples} length={profile.length_m} onHover={p.onHover} mapIndex={p.profileMapIndex??null}/>}
      {resultTab==='overview'&&selected&&<div className="terrain-overview-context">
        <span>{selected.source.name}</span>
        <span>{new Date(selected.createdAt).toLocaleString()}</span>
@@ -695,12 +720,12 @@ export default function TerrainWorkbench(p:Props){
           result.operation==='flow_accumulation'?'cells':
            ['curvature','plan_curvature','profile_curvature'].includes(result.operation)?'m⁻¹':''):'')}</strong></div>)}</div>
        </details>}
-       {resultTab==='visual'&&result.operation==='volume'&&<MetricBars label="Earthwork volume (m³)" values={[{name:'Cut',value:result.metrics.cut_m3,color:'#b87848'},{name:'Fill',value:result.metrics.fill_m3,color:'#3b82ab'}]}/>}
-       {resultTab==='visual'&&(result.operation==='visibility'||result.operation==='viewshed_multi')&&<MetricBars label="Visibility (cells)" values={[{name:'Visible',value:result.metrics.visible_cells,color:'#34885c'},{name:'Unknown',value:result.metrics.unknown_cells,color:'#9099a2'},{name:'Hidden',value:Math.max(0,result.valid_cells-result.metrics.visible_cells-result.metrics.unknown_cells),color:'#c17d55'}]}/>}
-       {resultTab==='visual'&&result.operation==='watershed'&&<MetricBars label="Catchment (cells)" values={[{name:'Upstream',value:result.metrics.upstream_cells,color:'#3687b9'},{name:'Other',value:Math.max(0,result.valid_cells-result.metrics.upstream_cells),color:'#9ba7ad'}]}/>}
-       {resultTab==='visual'&&result.distribution&&<ElevationDistribution bins={result.distribution}/>}
+       {resultTab==='visual'&&figureView==='analysis'&&result.operation==='volume'&&<MetricBars label="Earthwork volume (m³)" values={[{name:'Cut',value:result.metrics.cut_m3,color:'#b87848'},{name:'Fill',value:result.metrics.fill_m3,color:'#3b82ab'}]}/>}
+       {resultTab==='visual'&&figureView==='analysis'&&(result.operation==='visibility'||result.operation==='viewshed_multi')&&<MetricBars label="Visibility (cells)" values={[{name:'Visible',value:result.metrics.visible_cells,color:'#34885c'},{name:'Unknown',value:result.metrics.unknown_cells,color:'#9099a2'},{name:'Hidden',value:Math.max(0,result.valid_cells-result.metrics.visible_cells-result.metrics.unknown_cells),color:'#c17d55'}]}/>}
+       {resultTab==='visual'&&figureView==='analysis'&&result.operation==='watershed'&&<MetricBars label="Catchment (cells)" values={[{name:'Upstream',value:result.metrics.upstream_cells,color:'#3687b9'},{name:'Other',value:Math.max(0,result.valid_cells-result.metrics.upstream_cells),color:'#9ba7ad'}]}/>}
+       {resultTab==='visual'&&figureView==='analysis'&&result.distribution&&<ElevationDistribution bins={result.distribution}/>}
        {resultTab==='overview'&&result.raster&&<img className="terrain-overview-preview" src={result.raster.png} alt="Terrain overview preview"/>}
-       {resultTab==='visual'&&result.raster&&<div className="terrain-profile-chart">
+       {resultTab==='visual'&&figureView==='analysis'&&result.raster&&<div className="terrain-profile-chart">
          <label className="terrain-opacity-control">Result opacity · {Math.round((selected?.opacity??.5)*100)}%
            <input aria-label="Terrain raster opacity" type="range" min="0" max="100" step="5"
              value={Math.round((selected?.opacity??.5)*100)}
@@ -718,9 +743,9 @@ export default function TerrainWorkbench(p:Props){
          <img src={result.raster.png} alt="Derived terrain raster" style={{width:'100%',maxHeight:180,objectFit:'contain'}}/>
          <MetricBars label="Terrain class distribution (cells)" values={result.raster.legend.map(b=>({name:b.label,value:b.cells,color:b.color}))}/>
 </div>}
-       {resultTab==='visual'&&result.operation==='aspect_map'&&result.raster&&<AspectRose bins={result.raster.legend}/>}
-       {resultTab==='visual'&&result.sections&&<SectionPlot sections={result.sections} onHover={p.onHover}/>}
-       {resultTab==='visual'&&result.mesh&&<GPUView mesh={result.mesh} fallback={<MeshView mesh={result.mesh}/>}/>}
+       {resultTab==='visual'&&figureView==='analysis'&&result.operation==='aspect_map'&&result.raster&&<AspectRose bins={result.raster.legend}/>}
+       {resultTab==='visual'&&figureView==='analysis'&&result.sections&&<SectionPlot sections={result.sections} onHover={p.onHover}/>}
+       {resultTab==='visual'&&figureView==='analysis'&&result.mesh&&<GPUView mesh={result.mesh} fallback={<MeshView mesh={result.mesh}/>}/>}
        {resultTab==='details'&&result.operation==='slope_map'&&result.raster&&result.valid_cells>result.raster.valid_cells&&
          <small className="compact-notice" aria-label="Slope edge cells explanation">
            {fmt(result.valid_cells-result.raster.valid_cells)} boundary cells excluded by the 3 × 3 slope calculation.
@@ -738,7 +763,6 @@ export default function TerrainWorkbench(p:Props){
            · Declared vertical datum: {selected?.source.vertical_datum??'Unknown'}</small>
        </details>}
        {resultTab==='outputs'&&<div className="terrain-output-downloads">
-         <button onClick={exportResult}>Export analysis data</button>
          {result.raster&&<button onClick={()=>{const a=document.createElement('a');const data=Uint8Array.from(atob(result.raster!.geotiff),c=>c.charCodeAt(0));const url=URL.createObjectURL(new Blob([data],{type:'image/tiff'}));a.href=url;a.download=result.operation+'.tif';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}}>GeoTIFF</button>}
          {result.features.length>0&&<small>{result.features.length} vector features</small>}
        </div>}
@@ -759,12 +783,7 @@ export default function TerrainWorkbench(p:Props){
          title="Remove metadata receipt only" onClick={()=>{
            setRunHistory(old=>old.filter(item=>item.id!==historyFocus));setHistoryFocus('');
          }}>Remove</button>
-       <button aria-label="Export terrain run history" onClick={()=>{
-         const url=URL.createObjectURL(new Blob([JSON.stringify(runHistory,null,2)],{type:'application/json'}));
-         const a=document.createElement('a');a.href=url;a.download='terrain-run-history.json';
-         document.body.appendChild(a);a.click();a.remove();
-         window.setTimeout(()=>URL.revokeObjectURL(url),1000);
-       }}>Export history</button>
+
      </div>
    </details>}
 </div>}
@@ -956,5 +975,6 @@ export default function TerrainWorkbench(p:Props){
  {p.resultsTarget?(p.active?createPortal(monitor,p.resultsTarget):null):monitor}
  {p.operationsFooterTarget?(p.active&&runActions?createPortal(runActions,p.operationsFooterTarget):null):null}
  {p.resultsFooterTarget?(p.active&&resultActions?createPortal(resultActions,p.resultsFooterTarget):null):resultActions}
+ {p.exportTarget?(p.active?createPortal(terrainFileActions,p.exportTarget):null):null}
  </>;
 }
