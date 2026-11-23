@@ -17,12 +17,27 @@ from .professional import SURFACES, surface, d8_directions, D8, raster_product
 from .catalog import ADVANCED_OPERATIONS
 from .hydrology import condition_dem
 
-def _window(path, geometry, maximum, max_cells=1_000_000):
+def _window(path, geometry, maximum, max_cells=1_000_000, source_kind="dem"):
     measure_geometry(geometry)
     if geometry["type"] not in {"Polygon","MultiPolygon"}:
         raise RasterError("Draw or select a polygon study area.")
     with rasterio.open(path) as source:
-        _check_dem(source)
+        if source_kind=="dem":
+            _check_dem(source)
+        elif source_kind=="external_cells":
+            # Flow-equivalent rasters are *not* elevations. Validate their
+            # geometry/scaling without invoking the DEM-only vertical-unit rule.
+            if source.count!=1 or not source.crs or not source.crs.is_projected or (
+                source.crs.linear_units.lower() not in {"metre","meter","metres","meters"}):
+                raise RasterError("External upstream inflow must be a projected single-band metric raster.")
+            if abs(source.transform.b)>1e-9 or abs(source.transform.d)>1e-9 or source.transform.a<=0 or source.transform.e>=0:
+                raise RasterError("External inflow GeoTIFF must be north-up.")
+            if not (math.isclose(float(source.scales[0]),1.,abs_tol=1e-12) and math.isclose(float(source.offsets[0]),0.,abs_tol=1e-12)):
+                raise RasterError("External inflow must have a physical cell-equivalent scale of 1.")
+            from .projection import grid_scale_error_percent
+            grid_scale_error_percent(source)
+        else:
+            raise RasterError("Unsupported raster source kind.")
         projected=transform_geom("EPSG:4326",source.crs,geometry)
         boundary=shape(projected)
         try:
@@ -358,7 +373,7 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
         with rasterio.open(external_inflow_path) as source:
             if source.tags().get("TERRAIN_UNIT") not in {"cells","cell_equivalents"}:
                 raise RasterError("External inflow raster needs TERRAIN_UNIT=cells or cell_equivalents.")
-        flow,flow_valid,_,flow_affine,flow_crs,_,_=_window(external_inflow_path,geometry,maximum,max_cells)
+        flow,flow_valid,_,flow_affine,flow_crs,_,_=_window(external_inflow_path,geometry,maximum,max_cells,source_kind="external_cells")
         if flow.shape!=z.shape or flow_crs!=crs or not np.allclose(tuple(flow_affine),tuple(affine),atol=1e-8,rtol=0):
             raise RasterError("External contributing area raster must match the DEM grid exactly.")
         if not flow_valid[valid].all():
