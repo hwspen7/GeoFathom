@@ -61,7 +61,7 @@ def stream_mesh_tile(path,geometry,level,tile_row,tile_col,tile_cells=32,cancel=
         checkpoint(cancel)
         part=Window(int(window.col_off)+col_start,int(window.row_off)+row_start,
                     col_end-col_start+1,row_end-row_start+1)
-        samples=src.read(1,window=part,masked=True)
+        samples=src.read(1,window=part,masked=True).astype(np.float64)
         affine=src.window_transform(part)
         covered=geometry_mask([projected],out_shape=samples.shape,
                               transform=affine,invert=True)
