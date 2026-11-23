@@ -16,7 +16,9 @@ from .cancellation import checkpoint
 _BLOCK=512
 
 
-def analyze_area_tiled(source, polygon, window, cancel=None):
+def analyze_area_tiled(source, polygon, window, cancel=None,gradient_method="horn"):
+    if gradient_method not in {"horn","zevenbergen_thorne"}:
+        raise RasterError("Unsupported terrain gradient method.")
     """Compute complete-window terrain statistics with at most 514x514 pixels."""
     height,width=int(window.height),int(window.width)
     if height<3 or width<3:
@@ -77,10 +79,14 @@ def analyze_area_tiled(source, polygon, window, cancel=None):
                 continue
             # The Horn derivative matches the small-grid NumPy fallback.
             p=neighborhoods
-            east=(p[:,:,0,2]+2*p[:,:,1,2]+p[:,:,2,2]
-                  -p[:,:,0,0]-2*p[:,:,1,0]-p[:,:,2,0])/(8*dx)
-            south=(p[:,:,2,0]+2*p[:,:,2,1]+p[:,:,2,2]
-                   -p[:,:,0,0]-2*p[:,:,0,1]-p[:,:,0,2])/(8*dy)
+            if gradient_method=="horn":
+                east=(p[:,:,0,2]+2*p[:,:,1,2]+p[:,:,2,2]
+                      -p[:,:,0,0]-2*p[:,:,1,0]-p[:,:,2,0])/(8*dx)
+                south=(p[:,:,2,0]+2*p[:,:,2,1]+p[:,:,2,2]
+                       -p[:,:,0,0]-2*p[:,:,0,1]-p[:,:,0,2])/(8*dy)
+            else:
+                east=(p[:,:,1,2]-p[:,:,1,0])/(2*dx)
+                south=(p[:,:,2,1]-p[:,:,0,1])/(2*dy)
             gradient=np.hypot(east,south)
             angles=np.degrees(np.arctan(gradient))[good]
             slope_pixels+=int(angles.size)
@@ -106,5 +112,5 @@ def analyze_area_tiled(source, polygon, window, cancel=None):
         "mean_aspect_deg":bearing,
         "gradient_pixels":slope_pixels,
         "maximum_slope_deg":slope_max,
-        "engine":"numpy-tiled-horn",
+        "engine":"numpy-tiled-"+gradient_method,
     }

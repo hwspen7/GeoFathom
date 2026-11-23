@@ -47,6 +47,7 @@ class TerrainInput(BaseModel):
     image_id:str
     geometry:dict
     vertical_unit:str="meter"
+    gradient_method:Literal["horn","zevenbergen_thorne"]="horn"
     samples:int=Field(default=80,ge=4,le=250)
 
 
@@ -60,7 +61,7 @@ def raster(identifier):
 async def area(request:Request,body:TerrainInput)->dict:
     try:
         return await run_cancelable(request,analyze_area,raster(body.image_id),
-                                       body.geometry,body.vertical_unit)
+                                       body.geometry,body.vertical_unit,body.gradient_method)
     except (GeometryError,RasterError,ValueError) as error:
         raise HTTPException(status_code=422,detail=str(error)) from error
 
