@@ -37,7 +37,7 @@ jobs:
           python benchmarks/terrain_reference.py --strict --output build/terrain-reference.json
       - name: Test P0 scientific invariants and edge cases
         run: |
-          python -m pytest -q --junitxml=build/terrain-p0-tests.xml tests/test_terrain_p0_all_operations.py tests/test_terrain_projection_p0.py tests/test_terrain_scope_p0.py tests/test_terrain_p0_scientific_invariants.py tests/test_terrain_professional.py tests/test_terrain_conditioning.py tests/test_terrain_gradient_unification.py tests/test_terrain_catalog.py
+          python -m pytest -q --junitxml=build/terrain-p0-tests.xml tests/test_terrain_p0_all_operations.py tests/test_terrain_p0_gate.py tests/test_terrain_projection_p0.py tests/test_terrain_scope_p0.py tests/test_terrain_p0_scientific_invariants.py tests/test_terrain_professional.py tests/test_terrain_conditioning.py tests/test_terrain_gradient_unification.py tests/test_terrain_catalog.py
       - name: Enforce >=95 P0 synthetic numerical score for every Terrain operation
         run: |
           python scripts/terrain_p0_gate.py --junit build/terrain-p0-tests.xml --reference build/terrain-reference.json --output build/terrain-p0-matrix.json
