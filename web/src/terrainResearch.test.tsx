@@ -7,7 +7,7 @@ import type {RasterAsset} from './api';
 const api=vi.hoisted(()=>({
  runTerrainResearch:vi.fn(),
  checkTerrainCheckpointAccuracy:vi.fn(),
- verifyTerrainResearchArchive:vi.fn(),
+ verifyTerrainResearchArchive:vi.fn(),replayTerrainResearchArchive:vi.fn(),
 }));
 vi.mock('./api',()=>api);
 
@@ -27,7 +27,7 @@ const output={
  warning:'Research screening',
 };
 const change=(label:string,value:string)=>fireEvent.change(screen.getByLabelText(label),{target:{value}});
-beforeEach(()=>{vi.resetAllMocks();api.runTerrainResearch.mockResolvedValue(output);api.verifyTerrainResearchArchive.mockResolvedValue({valid:true,files:7,source_sha256:[]});});
+beforeEach(()=>{vi.resetAllMocks();api.runTerrainResearch.mockResolvedValue(output);api.verifyTerrainResearchArchive.mockResolvedValue({valid:true,files:7,source_sha256:[]});api.replayTerrainResearchArchive.mockResolvedValue({reproducible:true,verified_files:7,outputs:{suitability:0},warning:'Numerical reproduction'});});
 afterEach(cleanup);
 
 it('connects selected DEM and study geometry to explicit weighted raster criteria',async()=>{
@@ -51,6 +51,8 @@ it('connects selected DEM and study geometry to explicit weighted raster criteri
  expect(screen.getByText('0.68')).toBeTruthy();
  fireEvent.click(screen.getByRole('button',{name:'Verify'}));
  expect(await screen.findByText(/Verified 7 research artifacts/)).toBeTruthy();
+ fireEvent.click(screen.getByRole('button',{name:'Recompute'}));
+ expect(await screen.findByText(/Numerical replay matched 1 archived raster products/)).toBeTruthy();
 });
 
 it('offers explicit factor controls and retains only one selected factor edit surface',()=>{
