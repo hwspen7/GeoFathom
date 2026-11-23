@@ -99,6 +99,9 @@ with tempfile.TemporaryDirectory() as directory:
  await visual();
  await expect(page.getByRole('img',{name:'Elevation distribution and cumulative area'})).toBeVisible();
  await expect(page.getByLabel('Elevation distribution bin')).toBeVisible();
+ await page.getByRole('button',{name:'Hypsometry',exact:true}).click();
+ await expect(page.getByRole('img',{name:'Hypsometric curve'})).toBeVisible();
+ await page.getByRole('button',{name:'Analysis',exact:true}).click();
  await page.getByRole('button',{name:'Expand',exact:true}).click();
  const dialogue=page.getByRole('dialog',{name:'Expanded terrain result'});
  await expect(dialogue).toBeVisible();
@@ -117,6 +120,9 @@ with tempfile.TemporaryDirectory() as directory:
  await page.getByRole('button',{name:'Run terrain operation'}).click();
  await visual();
  await expect(page.getByAltText('Derived terrain raster')).toBeVisible();
+ await page.getByRole('button',{name:'Composition',exact:true}).click();
+ await expect(page.getByRole('img',{name:'Terrain class composition'})).toBeVisible();
+ await page.getByRole('button',{name:'Analysis',exact:true}).click();
  await expect(map).toHaveAttribute('data-terrain-raster-count','1');
  await details();
  await page.getByLabel('Additional terrain metrics').locator('summary').click();
@@ -229,6 +235,9 @@ with tempfile.TemporaryDirectory() as directory:
  await visual();
  const chart=page.getByRole('img',{name:'Interactive elevation profile'});
  await expect(chart).toBeVisible();await chart.hover();
+ await page.getByRole('button',{name:'Gradient',exact:true}).click();
+ await expect(page.getByRole('img',{name:'Longitudinal profile grade'})).toBeVisible();
+ await page.getByRole('button',{name:'Analysis',exact:true}).click();
  await expect(page.getByLabel('Terrain sample location')).toHaveCount(1);
  await details();
  await expect(page.getByLabel('Terrain run provenance')).toBeVisible();
