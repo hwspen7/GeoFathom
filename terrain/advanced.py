@@ -554,15 +554,17 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
             raise RasterError("Multi-observer visibility exceeds 100 million ray samples; reduce the area.")
         cached=None
         if optimize_observers:
-            from .p1_science import greedy_coverage
+            from .coverage_exact import exact_maximum_coverage
             cached=[_visibility(z,valid,origin,affine,observer_height,target_height,cancel,
                 consider_curvature,refraction_coeff,max_distance_m,view_azimuth,view_width,
                 blocking_surface,blocking_valid) for origin in origins]
-            indices,gains,_=greedy_coverage([pair[0] for pair in cached],
+            indices,gains,_,optimizer_audit=exact_maximum_coverage(
+                [pair[0] for pair in cached],
                 [pair[1] for pair in cached],optimize_observers,cancel)
             result["selection"]={"selected_candidate_indices":indices,
                                  "marginal_visible_cells":gains,
-                                 "total_candidate_sites":len(origins)}
+                                 "total_candidate_sites":len(origins),
+                                 "optimizer":optimizer_audit}
             origins=[origins[i] for i in indices]
             cached=[cached[i] for i in indices]
         count=np.zeros(z.shape,dtype=np.uint8)
@@ -618,7 +620,7 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
             "when other observer rays are unknown. "+
             ("Supplied co-registered DSM obstructs rays; missing DSM cells remain unknown. " if dsm_path else
              "Bare DEM only; buildings and vegetation are not evaluated. ")+
-            ("Greedy selection maximises incremental known-cell coverage, not a global optimum. " if optimize_observers else "")+
+            ("Exhaustive site selection attains the maximum positively observed cells among the supplied candidate sites; this does not certify optimal locations outside the candidate set. " if optimize_observers else "")+
             "Outside-sector/range cells are excluded from raster counts and coverage denominators.")
     elif operation=="watershed":
         origin=_origin(point,crs,affine,valid)
@@ -685,7 +687,7 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
     if external_inflow is not None:
         flags.append("external_upstream_contribution_input_unverified")
     if optimize_observers and operation=="viewshed_multi":
-        flags.append("greedy_coverage_not_global_optimum")
+        flags.append("optimal_only_within_supplied_candidate_sites")
     if operation in {"volume","cutfill_map"} and elevation_sigma_m>0:
         flags.append("vertical_uncertainty_input_assumed_not_measured")
     if operation=="mesh" and mesh_lod:
