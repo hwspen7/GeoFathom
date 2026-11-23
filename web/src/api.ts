@@ -988,7 +988,7 @@ export interface AdvancedTerrainResult {
     neighborhood_radius_cells?:number|null;route_model?:string|null;
     mesh_samples?:number|null;stream_order_scheme?:string|null;hillshade_mode?:string|null;maximum_distance_m?:number|null;
     view_azimuth_deg?:number|null;view_width_deg?:number|null;
-    flow_routing_method?:string|null;depression_method?:string|null;
+    flow_routing_method?:string|null;depression_method?:string|null;external_inflow_supplied?:boolean|null;
     curvature_method?:string|null;curvature_radius_cells?:number|null;
     design_east_grade?:number|null;design_north_grade?:number|null;
     design_max_grade?:number|null;elevation_sigma_m?:number|null;
@@ -1009,7 +1009,8 @@ export function advancedTerrain(body:{image_id:string;geometry:GeoJSON.Geometry;
   curvature_method?:'finite_difference'|'quadratic';curvature_radius?:number;
   design_east_grade?:number;design_north_grade?:number;design_max_grade?:number;elevation_sigma_m?:number;
   optimize_observers?:number;dsm_image_id?:string|null;mesh_lod?:boolean;
-  suitability_model?:'binary'|'weighted';suitability_weights?:[number,number,number]},signal?:AbortSignal):Promise<AdvancedTerrainResult>{
+  suitability_model?:'binary'|'weighted';suitability_weights?:[number,number,number];
+  external_inflow_image_id?:string|null},signal?:AbortSignal):Promise<AdvancedTerrainResult>{
   return request('/terrain/advanced',{signal,method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
 }
 
