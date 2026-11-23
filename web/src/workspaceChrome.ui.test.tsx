@@ -28,7 +28,10 @@ describe('shared research workbench chrome',()=>{
     {id:'study',name:'Study area',visible:true},
     {id:'off',name:'Hidden sites',visible:false},
    ]} features={features} selectedId="a" onOpen={open}/>);
-  expect(screen.getByRole('button',{name:/Campus boundary/}).getAttribute('aria-pressed')).toBe('true');
+  // Revision badges remain visible without becoming part of the feature name.
+  const selected=screen.getByRole('button',{name:'Campus boundary'});
+  expect(selected.getAttribute('aria-pressed')).toBe('true');
+  expect(selected.textContent).toContain('r2');
   expect(screen.getByRole('button',{name:/Remote site/}).hasAttribute('disabled')).toBe(true);
   fireEvent.change(screen.getByRole('searchbox',{name:'Filter project features'}),
     {target:{value:'north'}});

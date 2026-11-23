@@ -1351,7 +1351,9 @@ export default function MapCanvas({
     for(const face of (draft?[]:networkFaces).slice(0,50)){
       const m=face.measurement;
       const before=labels.length;
-      label(face.name+' · '+areaText(m.area_m2??0,display.area)+'\n'+
+      // Keep a single area's numeric label stable when asynchronous network
+      // detection replaces its selection total. Names distinguish multiple faces.
+      label((networkFaces.length>1?face.name+' · ':'')+areaText(m.area_m2??0,display.area)+'\n'+
         distanceText(m.perimeter_m??0,display.distance)+' perimeter',
         face.label_anchor);
       labels[before].node.classList.add('map-face-dimension');

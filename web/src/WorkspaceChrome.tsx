@@ -114,6 +114,7 @@ function FeatureGroup({name,features,visible,selectedId,onOpen,search}:{
     <div className="project-features">
       {features.map(item=><button key={item.id} type="button"
         disabled={!visible} onClick={()=>onOpen(item.id)}
+        aria-label={item.name}
         aria-pressed={selectedId===item.id}
         className={selectedId===item.id?'active':''}
         title={visible?item.name:'Layer hidden: '+name}>

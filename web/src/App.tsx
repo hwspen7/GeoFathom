@@ -484,6 +484,10 @@ export default function App() {
       return;
     }
     setShowTools(true);setActiveTool(id);if(id!=='tools-terrain'){setTerrainPicking(false);setTerrainHover(null);}
+    // Tool activation, including keyboard shortcuts, dismisses the transient
+    // drawer so it cannot intercept input intended for the operations dock.
+    // Its project/search state stays mounted and the selected place is retained.
+    setShowLayers(false);setExpandedDock(null);
     // Only scroll the inspector's own pane. scrollIntoView also scrolls
     // the outer document and can move the central map off-screen when a
     // long Terrain chart is active.
