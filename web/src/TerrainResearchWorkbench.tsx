@@ -234,3 +234,4 @@ export default function TerrainResearchWorkbench({
    </section>}
    {message&&<small role="status" className="terrain-research-status">{message}</small>}
  </div>;
+}
