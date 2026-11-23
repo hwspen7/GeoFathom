@@ -2,7 +2,7 @@ import {useEffect,useMemo,useRef,useState,type ChangeEvent} from 'react';
 import {createPortal} from 'react-dom';
 import {Mountain} from 'lucide-react';
 import {advancedTerrain,saveFeatureBatch,analyzeTerrain,terrainProfile,listImagery,uploadImagery,fetchPublicDEM,prepareDEM,type DEMProcessMode,type TerrainMesh,type TerrainOperation,type RasterAsset,type TerrainRasterLayer} from './api';
-import {ProfilePlot,MetricBars,ElevationDistribution,AspectRose,SectionPlot,ResultPane,HypsometricPlot,ProfileGradePlot,TerrainClassShare} from './TerrainCharts';
+import {ProfilePlot,MetricBars,ElevationDistribution,AspectRose,SectionPlot,ResultPane,HypsometricPlot,ProfileGradePlot,TerrainClassShare,TerrainCumulativeArea,TerrainClassTable,terrainClassesCsv} from './TerrainCharts';
 import {GPUView} from './TerrainMeshView';
 import type {Position} from './editing';
 import {measurementAnchor} from './editing';
@@ -173,7 +173,8 @@ export default function TerrainWorkbench(p:Props){
    ...(profile?.samples?.length?[{id:'gradient',label:'Gradient',
      plot:<ProfileGradePlot samples={profile.samples}/>}] : []),
    ...(result?.raster?.legend?.length?[{id:'composition',label:'Composition',
-     plot:<TerrainClassShare bins={result.raster.legend}/>}] : []),
+     plot:<TerrainClassShare bins={result.raster.legend}/>},
+     {id:'cumulative',label:'Cumulative',plot:<TerrainCumulativeArea bins={result.raster.legend} cellAreaM2={result.cell_area_m2}/>}]:[]),
  ];
  const activeResearch=researchFigures.find(item=>item.id===figureView);
  // Show operation-critical metrics first; keep all scientific fields in More.
@@ -728,6 +729,11 @@ export default function TerrainWorkbench(p:Props){
        {resultTab==='visual'&&figureView==='analysis'&&(result.operation==='visibility'||result.operation==='viewshed_multi')&&<MetricBars label="Visibility (cells)" values={[{name:'Visible',value:result.metrics.visible_cells,color:'#34885c'},{name:'Unknown',value:result.metrics.unknown_cells,color:'#9099a2'},{name:'Hidden',value:Math.max(0,result.valid_cells-result.metrics.visible_cells-result.metrics.unknown_cells),color:'#c17d55'}]}/>}
        {resultTab==='visual'&&figureView==='analysis'&&result.operation==='watershed'&&<MetricBars label="Catchment (cells)" values={[{name:'Upstream',value:result.metrics.upstream_cells,color:'#3687b9'},{name:'Other',value:Math.max(0,result.valid_cells-result.metrics.upstream_cells),color:'#9ba7ad'}]}/>}
        {resultTab==='visual'&&figureView==='analysis'&&result.distribution&&<ElevationDistribution bins={result.distribution}/>}
+       {resultTab==='overview'&&result.raster&&<div className="terrain-quality-summary">
+          <span>Classified {result.raster.valid_cells.toLocaleString()} / {result.valid_cells.toLocaleString()} valid DEM cells</span>
+          <span>{(100*result.raster.valid_cells/Math.max(1,result.valid_cells)).toFixed(1)}% analysis coverage</span>
+          <span>{(result.raster.valid_cells*result.cell_area_m2/1e6).toFixed(3)} km² classified</span>
+        </div>}
        {resultTab==='overview'&&result.raster&&<img className="terrain-overview-preview" src={result.raster.png} alt="Terrain overview preview"/>}
        {resultTab==='visual'&&figureView==='analysis'&&result.raster&&<div className="terrain-profile-chart">
          <label className="terrain-opacity-control">Result opacity · {Math.round((selected?.opacity??.5)*100)}%
@@ -750,6 +756,10 @@ export default function TerrainWorkbench(p:Props){
        {resultTab==='visual'&&figureView==='analysis'&&result.operation==='aspect_map'&&result.raster&&<AspectRose bins={result.raster.legend}/>}
        {resultTab==='visual'&&figureView==='analysis'&&result.sections&&<SectionPlot sections={result.sections} onHover={p.onHover}/>}
        {resultTab==='visual'&&figureView==='analysis'&&result.mesh&&<GPUView mesh={result.mesh} fallback={<MeshView mesh={result.mesh}/>}/>}
+       {resultTab==='details'&&result.raster&&<details className="terrain-metric-details" aria-label="Terrain class statistics">
+         <summary>Class statistics · {result.raster.legend.length} classes</summary>
+         <TerrainClassTable bins={result.raster.legend} cellAreaM2={result.cell_area_m2}/>
+       </details>}
        {resultTab==='details'&&result.operation==='slope_map'&&result.raster&&result.valid_cells>result.raster.valid_cells&&
          <small className="compact-notice" aria-label="Slope edge cells explanation">
            {fmt(result.valid_cells-result.raster.valid_cells)} boundary cells excluded by the 3 × 3 slope calculation.
@@ -768,6 +778,12 @@ export default function TerrainWorkbench(p:Props){
        </details>}
        {resultTab==='details'&&<div className="terrain-output-downloads">
          {result.raster&&<button onClick={()=>{const a=document.createElement('a');const data=Uint8Array.from(atob(result.raster!.geotiff),c=>c.charCodeAt(0));const url=URL.createObjectURL(new Blob([data],{type:'image/tiff'}));a.href=url;a.download=result.operation+'.tif';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}}>GeoTIFF</button>}
+         {result.raster&&<button aria-label="Export terrain class CSV" onClick={()=>{
+           const csv=terrainClassesCsv(result.raster!.legend,result.cell_area_m2);
+           const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+           const a=document.createElement('a');a.href=url;a.download=result.operation+'-classes.csv';a.click();
+           setTimeout(()=>URL.revokeObjectURL(url),1000);
+         }}>Class CSV</button>}
          {result.features.length>0&&<small>{result.features.length} vector features</small>}
        </div>}
      </>}
