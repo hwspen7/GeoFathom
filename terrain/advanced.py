@@ -284,7 +284,10 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
                 stream_cells=100,azimuth=315.,altitude=45.,section_spacing=50.,section_width=20.,texture_path=None,
                 fill_sinks=False,consider_curvature=False,refraction_coeff=0.13,comparison_path=None,observer_points=None,gradient_method="horn",slope_classes="standard",mfd_exponent=1.1,neighborhood_radius=1,
                 max_distance_m=0.,view_azimuth=0.,view_width=360.,
-                route_model="surface",mesh_samples=256,stream_order_scheme="strahler",hillshade_mode="single",cancel=None):
+                route_model="surface",mesh_samples=256,stream_order_scheme="strahler",hillshade_mode="single",
+                flow_routing_method="d8",depression_method="fill",curvature_method="finite_difference",curvature_radius=2,
+                design_east_grade=0.,design_north_grade=0.,design_max_grade=.3,elevation_sigma_m=0.,
+                optimize_observers=0,dsm_path=None,mesh_lod=False,cancel=None):
     checkpoint(cancel)
     if gradient_method not in {"horn","zevenbergen_thorne"}:
         raise RasterError("Unsupported terrain gradient method.")
@@ -308,6 +311,12 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
         raise RasterError("Unsupported stream hierarchy algorithm.")
     if hillshade_mode not in {"single","four_direction"}:
         raise RasterError("Unsupported hillshade illumination model.")
+    if flow_routing_method not in {"d8","dinf"} or depression_method not in {"fill","breach"}:
+        raise RasterError("Unsupported hydrological routing or depression handling method.")
+    if curvature_method not in {"finite_difference","quadratic"} or curvature_radius not in (1,2,3,4):
+        raise RasterError("Unsupported curvature fitting method or radius.")
+    if not isinstance(optimize_observers,int) or not 0<=optimize_observers<=4:
+        raise RasterError("Coverage optimisation count must be 0–4.")
     if operation=="cross_sections":
         from .corridor import cross_sections
         return cross_sections(path,geometry,section_spacing,section_width,cancel)
@@ -332,8 +341,14 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
                "streams","stream_order","watershed"}
     # Drainage may use a conditioned working grid; other surface products
     # always operate on the original elevations.
-    flow_z,conditioned=(condition_dem(z,valid,cancel) if fill_sinks and operation in hydro_ops
-                        else (z,None))
+    if fill_sinks and operation in hydro_ops:
+        if depression_method=="breach":
+            from .p1_science import breach_depressions
+            flow_z,conditioned=breach_depressions(z,valid,abs(affine.a),abs(affine.e),cancel=cancel)
+        else:
+            flow_z,conditioned=condition_dem(z,valid,cancel)
+    else:
+        flow_z,conditioned=z,None
     cell=abs(affine.a*affine.e)
     result={"operation":operation,"source_crs":str(crs),
         "algorithm_options":{"gradient_method":gradient_method,"slope_classes":slope_classes,
@@ -343,6 +358,17 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
                              "stream_order_scheme":stream_order_scheme if operation=="stream_order" else None,
                              "hillshade_mode":hillshade_mode if operation=="hillshade" else None,
                              "mesh_samples":mesh_samples if operation=="mesh" else None,
+                             "flow_routing_method":flow_routing_method if operation in hydro_ops else None,
+                             "depression_method":depression_method if fill_sinks and operation in hydro_ops else None,
+                             "curvature_method":curvature_method if operation in {"curvature","plan_curvature","profile_curvature"} else None,
+                             "curvature_radius_cells":curvature_radius if operation in {"curvature","plan_curvature","profile_curvature"} else None,
+                             "design_east_grade":design_east_grade if operation in {"volume","cutfill_map"} else None,
+                             "design_north_grade":design_north_grade if operation in {"volume","cutfill_map"} else None,
+                             "design_max_grade":design_max_grade if operation in {"volume","cutfill_map"} else None,
+                             "elevation_sigma_m":elevation_sigma_m if operation in {"volume","cutfill_map"} else None,
+                             "optimize_observers":optimize_observers if operation=="viewshed_multi" else None,
+                             "dsm_source":bool(dsm_path) if operation in {"visibility","viewshed_multi"} else None,
+                             "mesh_lod":mesh_lod if operation=="mesh" else None,
                              "maximum_distance_m":max_distance_m if operation in {"visibility","viewshed_multi"} else None,
                              "view_azimuth_deg":view_azimuth if operation in {"visibility","viewshed_multi"} else None,
                              "view_width_deg":view_width if operation in {"visibility","viewshed_multi"} else None},"valid_cells":int(valid.sum()),
@@ -353,7 +379,10 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
             max_slope,min_elevation,max_elevation,max_tri,stream_cells,azimuth,altitude,
             _feature,_origin,cancel,source_datum=source_datum,
             gradient_method=gradient_method,slope_classes=slope_classes,mfd_exponent=mfd_exponent,
-            neighborhood_radius=neighborhood_radius,route_model=route_model,stream_order_scheme=stream_order_scheme,hillshade_mode=hillshade_mode)
+            neighborhood_radius=neighborhood_radius,route_model=route_model,stream_order_scheme=stream_order_scheme,hillshade_mode=hillshade_mode,
+            flow_routing_method=flow_routing_method,curvature_method=curvature_method,curvature_radius=curvature_radius,
+            design_east_grade=design_east_grade,design_north_grade=design_north_grade,
+            design_max_grade=design_max_grade,elevation_sigma_m=elevation_sigma_m)
         result["warning"]="Projected source-grid product; nodata and incomplete neighborhoods excluded. Unconditioned D8 terminates at sinks/flats; suitability and path costs are screening estimates, not engineering certification."
         if operation=="flow_accumulation_mfd":
             result["warning"]=(
@@ -415,12 +444,11 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
         result["warning"]="Cell-center elevation distribution on the valid projected DEM grid; nodata excluded. Cumulative area includes elevations through each bin."
     elif operation=="volume":
         if not math.isfinite(reference):raise RasterError("Reference elevation must be finite.")
-        delta=z[valid]-reference
-        cut=float(np.maximum(delta,0).sum()*cell)
-        fill=float(np.maximum(-delta,0).sum()*cell)
-        result["metrics"]={"cut_m3":cut,"fill_m3":fill,"net_cut_m3":cut-fill,
-            "covered_grid_area_m2":int(valid.sum())*cell,"reference_elevation_m":reference}
-        result["warning"]="Projected cell-center cut/fill estimate versus a horizontal reference plane; nodata excluded, not a certified earthworks survey."
+        from .p1_science import design_surface
+        _,design_metrics=design_surface(z,valid,abs(affine.a),abs(affine.e),reference,
+            design_east_grade,design_north_grade,elevation_sigma_m,design_max_grade)
+        result["metrics"]={**design_metrics,"reference_elevation_m":reference}
+        result["warning"]="Projected cell-center cut/fill against the declared grade-constrained design plane; NoData excluded. Uncertainty bounds assume the supplied one-sigma vertical error and independent versus fully correlated cell errors; not survey-certified."
     elif operation=="visibility":
         origin=_origin(point,crs,affine,valid)
         seen,known=_visibility(z,valid,origin,affine,observer_height,target_height,cancel,
