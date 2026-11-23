@@ -97,6 +97,7 @@ export default function App() {
   const [measurement, setMeasurement] = useState<Measurement | null>(null);
   const [drawingMode, setDrawingMode] = useState<ShapeMode>(null);
   const [vertices, setVertices] = useState<Position[]>([]);
+  const [vertexRedo,setVertexRedo]=useState<Position[]>([]);
   const [viewport, setViewport] = useState<[number, number, number, number] | null>(null);
   const [discovered, setDiscovered] = useState<Place[]>([]);
   const [focus, setFocus] = useState<FocusPoint | null>(null);
@@ -565,6 +566,21 @@ export default function App() {
     }catch(err){if(ticket===geometrySequence.current)setError(err instanceof Error?err.message:String(err));}
   }
 
+  // Undo/Redo while sketching operate on the pending coordinates, not the
+  // previously selected geometry's history. A new click clears redo.
+  function undoSketchPoint(){
+    if(!drawingMode||!vertices.length||busy)return;
+    setVertexRedo(old=>[vertices[vertices.length-1],...old]);
+    setVertices(vertices.slice(0,-1));setError('');
+  }
+  function redoSketchPoint(){
+    if(!drawingMode||!vertexRedo.length||busy)return;
+    const next=vertexRedo[0];
+    const reason=sketchAddError(drawingMode,vertices,next);
+    if(reason){setError(reason);return;}
+    setVertices([...vertices,next]);setVertexRedo(old=>old.slice(1));setError('');
+  }
+
   function startTerrainLine(){
     if(busy)return;
     if(drawingMode&&vertices.length){setError('Finish or cancel the current sketch before starting a profile line.');return;}
@@ -572,7 +588,7 @@ export default function App() {
     // scratch selection and all existing map layers.
     geometrySequence.current++;
     setTerrainLineDrawing(true);
-    setDrawingMode('line');setVertices([]);
+    setDrawingMode('line');setVertices([]);setVertexRedo([]);
     setEditing(false);setMoving(false);setEdgeMoving(false);
     setTerrainPicking(false);setTerrainHover(null);setTraceMode(false);
     setPromptMode(null);setPendingAnnotation(null);setSelectionBoxMode(false);setLabelMoveMode(false);
@@ -612,7 +628,7 @@ export default function App() {
     } else {
       setFeatureProperties(current => ({ ...current, last_operation: next }));
     }
-    setVertices([]);
+    setVertices([]);setVertexRedo([]);
     // Existing selection and search candidates are stable through drawing.
     // Only a successful Finish may select the new independent feature.
     setEditing(false);setEdgeMoving(false);
@@ -734,7 +750,7 @@ export default function App() {
       timeline.current.push(result);
       setHistoryPulse(value => value + 1);
       setMeasurement(measured);
-      setDrawingMode(null); setVertices([]); setPreview(null);
+      setDrawingMode(null); setVertices([]);setVertexRedo([]); setPreview(null);
       setMessage(mode === 'split'
         ? 'Polygon divided into independent local features. Original saved features are unchanged.'
         : 'Drawing completed and measured on the WGS84 ellipsoid.');
@@ -749,7 +765,7 @@ export default function App() {
             setGeometrySource('User drawn');setFeatureProperties({source_type:'user_drawn'});
             setGeometry(local.geometry);setMeasurement(local.measurement);
             lastValid.current=structuredClone(local.geometry);timeline.current.push(local.geometry);
-            setHistoryPulse(v=>v+1);setDrawingMode(null);setVertices([]);setPreview(null);
+            setHistoryPulse(v=>v+1);setDrawingMode(null);setVertices([]);setVertexRedo([]);setPreview(null);
             setError('');setMessage('Drawing completed locally · approximate measurement. Connect API for exact validation.');
             return;
           }
@@ -762,6 +778,7 @@ export default function App() {
   async function numericShape(mode: string, body: {
     vertices: Position[]; radius_m?: number; bearing_deg?: number; length_m?: number;
   }) {
+    if(drawingMode){setError('Finish or cancel the current sketch before constructing another shape.');return;}
     const sequence=++geometrySequence.current;
     setBusy(true); setError('');
     try {
@@ -854,7 +871,7 @@ export default function App() {
   }
 
   function stopInteraction(){
-    geometrySequence.current++;setBusy(false);setTerrainLineDrawing(false);setDrawingMode(null);setVertices([]);setTerrainPicking(false);
+    geometrySequence.current++;setBusy(false);setTerrainLineDrawing(false);setDrawingMode(null);setVertices([]);setVertexRedo([]);setTerrainPicking(false);
     setEditing(false);setEdgeMoving(false);setMoving(false);setTraceMode(false);setPromptMode(null);
     setSelectionBoxMode(false);setLabelMoveMode(false);setPendingAnnotation(null);setContextMenu(null);
     if(preview||pendingShared){setGeometry(lastValid.current);setPreview(null);setPendingShared(null);}
@@ -941,19 +958,19 @@ export default function App() {
         if(event.key.toLowerCase()==='z'){
           event.preventDefault();
           if(busy)return;
-          if(drawingMode){if(!event.shiftKey)setVertices(value=>value.slice(0,-1));return;}
+          if(drawingMode){if(event.shiftKey)redoSketchPoint();else undoSketchPoint();return;}
           historyStep(event.shiftKey);
         }else if(event.key.toLowerCase()==='y'){
-          event.preventDefault();if(!busy&&!drawingMode)historyStep(true);
+          event.preventDefault();if(!busy){if(drawingMode)redoSketchPoint();else historyStep(true);}
         }
         return;
       }
       if(event.altKey||event.repeat)return;
-      if(drawingMode&&!busy&&event.key==='Enter'){
+      if(drawingMode&&!busy&&(event.key==='Enter'||event.key==='F2')){
         event.preventDefault();void finishDrawing();return;
       }
       if(drawingMode&&!busy&&event.key==='Backspace'){
-        event.preventDefault();setVertices(value=>value.slice(0,-1));return;
+        event.preventDefault();undoSketchPoint();return;
       }
       if(contextMenu&&event.key==='Tab'){setContextMenu(null);return;}
       if(shortcutHelp||busy)return;
@@ -1498,7 +1515,7 @@ export default function App() {
                 return;
               }
               const next=[...vertices,position];
-              setVertices(next);setError('');
+              setVertices(next);setVertexRedo([]);setError('');
               const complete=drawingMode==='point'?1:
                 ['rectangle','circle','trace-along'].includes(drawingMode)?2:4000;
               if(complete<4000&&next.length===complete)void finishDrawing(next);
@@ -1640,15 +1657,17 @@ export default function App() {
                 }
                 setLinked(enabled);if(enabled)setEdgeMoving(false);setPendingShared(null);
               }}
-              canUndo={(selectedFeatureId?timeline.current.canUndo:scratchHistory.current!.canUndo) && historyPulse >= 0}
-              canRedo={(selectedFeatureId?timeline.current.canRedo:scratchHistory.current!.canRedo) && historyPulse >= 0}
+              canUndo={drawingMode?vertices.length>0:
+                (selectedFeatureId?timeline.current.canUndo:scratchHistory.current!.canUndo) && historyPulse >= 0}
+              canRedo={drawingMode?vertexRedo.length>0:
+                (selectedFeatureId?timeline.current.canRedo:scratchHistory.current!.canRedo) && historyPulse >= 0}
               saved={activeProjectId ? projectWorkspace?.features ?? [] : []}
               onStart={startDrawing}
               onFinish={() => { if(!busy)void finishDrawing(); }}
-              onCancel={() => { geometrySequence.current++;setBusy(false);setError('');setTerrainLineDrawing(false);setDrawingMode(null);setVertices([]);setMessage('Drawing cancelled. Retained locations are unchanged.'); }}
-              onUndoPoint={() => setVertices(value => value.slice(0,-1))}
-              onUndo={()=>historyStep()}
-              onRedo={()=>historyStep(true)}
+              onCancel={() => { geometrySequence.current++;setBusy(false);setError('');setTerrainLineDrawing(false);setDrawingMode(null);setVertices([]);setVertexRedo([]);setMessage('Drawing cancelled. Retained locations are unchanged.'); }}
+              onUndoPoint={undoSketchPoint}
+              onUndo={()=>drawingMode?undoSketchPoint():historyStep()}
+              onRedo={()=>drawingMode?redoSketchPoint():historyStep(true)}
               onEdit={(active, shouldMove) => {
                 if (selectedLocked) {
                   setError('Unlock the feature layer before editing.');
@@ -1666,7 +1685,7 @@ export default function App() {
                   }
                   const problem=sketchAddError(drawingMode,vertices,point);
                   if(problem){setError(problem);return;}
-                  const next=[...vertices,point];setVertices(next);setError('');
+                  const next=[...vertices,point];setVertices(next);setVertexRedo([]);setError('');
                   const complete=drawingMode==='point'?1:
                     ['rectangle','circle','trace-along'].includes(drawingMode)?2:4000;
                   if(complete<4000&&next.length===complete)void finishDrawing(next);
