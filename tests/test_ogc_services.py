@@ -241,7 +241,7 @@ def test_wfs_feature_properties_are_sanitized_without_mutating_source(monkeypatc
 
 
 @pytest.mark.parametrize("data,expected",[
-    (b"not a real image",422),(b"\\xff\\xd8\\xffjpeg-body",200)
+    (b"not a real image",422),(b"\xff\xd8\xffjpeg-body",200)
 ])
 def test_tile_proxy_validates_encoded_image_magic(monkeypatch,data,expected):
     root=make();uid=source(root,service="wms").json()["id"]
