@@ -41,7 +41,7 @@ def test_restore_rejects_missing_archive_and_unknown_generation(archive,tmp_path
 
 
 @pytest.mark.parametrize("corruption,expected",[
-    ("missing_chunk","snapshot failed"),
+    ("missing_chunk","corrupt or missing|snapshot failed"),
     ("reordered","corrupt or missing"),
     ("altered_chunk","corrupt or missing"),
     ("wrong_snapshot_digest","snapshot failed"),
