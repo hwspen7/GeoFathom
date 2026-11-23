@@ -82,7 +82,7 @@ describe('Data and Export independent fixed workbenches',()=>{
  it('imports a validated vector dataset and refreshes its owning project',async()=>{
   const props=dataProps();
   render(<DataWorkbench {...props}/>);
-  fireEvent.click(screen.getByRole('button',{name:'Import',exact:true}));
+  fireEvent.click(screen.getByRole('button',{name:'Import'}));
   const dataset=new File(['{}'],'parcels.geojson',{type:'application/geo+json'});
   fireEvent.change(screen.getByLabelText('Import dataset file'),{target:{files:[dataset]}});
   fireEvent.click(screen.getByRole('button',{name:'Import & validate'}));
