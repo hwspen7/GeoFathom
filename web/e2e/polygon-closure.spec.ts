@@ -116,3 +116,31 @@ test('Line drawing closed at its starting node produces an area with exact measu
  await expect(dimensions.locator('.map-dimension-total')).toContainText(/km²|m²|ha/);
  await expect(dimensions.locator('.map-dimension-total')).not.toContainText('~ ');
 });
+
+test('four separate connected lines create a selectable independently measured area',async({page})=>{
+ const toolbar=page.getByLabel('Survey toolbar');
+ // Zoom to a local geography so the GEOS metric polygonizer receives a
+ // realistic small-area network, independent of map tile availability.
+ const map=page.getByLabel('Interactive geospatial map');
+ const box=(await map.boundingBox())!;
+ await page.mouse.move(box.x+box.width/2,box.y+box.height/2);
+ await page.mouse.wheel(0,-1600);
+ await page.waitForTimeout(900);
+ const p=await positions(page);
+ for(const [from,to] of [[p.a,p.b],[p.b,p.c],[p.c,p.d],[p.d,p.a]] as const){
+   await toolbar.getByRole('button',{name:'Line',exact:true}).click();
+   await page.mouse.click(...from);
+   await page.mouse.click(...to);
+   await page.keyboard.press('Enter');
+   await expect(toolbar.getByRole('button',{name:'Line',exact:true})).toHaveAttribute('aria-pressed','false');
+ }
+ const labels=page.getByLabel('Live map dimensions').locator('.map-face-dimension');
+ await expect(labels.first()).toBeVisible({timeout:25000});
+ await expect(labels.first()).toContainText(/km²|m²|ha/);
+ const midpoint:[number,number]=[(p.a[0]+p.c[0])/2,(p.a[1]+p.c[1])/2];
+ await page.mouse.click(...midpoint);
+ await expect(page.getByText(/closed polygon selected with area and perimeter/)).toBeVisible({timeout:10000});
+ // Derived polygons are saved as independent local objects, not discarded
+ // with their source line segments.
+ await expect(page.getByLabel('Live map dimensions').locator('.map-face-dimension').first()).toContainText('perimeter');
+});
