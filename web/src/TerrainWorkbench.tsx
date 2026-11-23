@@ -841,7 +841,8 @@ export default function TerrainWorkbench(p:Props){
 </div>}
        {resultTab==='visual'&&figureView==='analysis'&&result.operation==='aspect_map'&&result.raster&&<AspectRose bins={result.raster.legend}/>}
        {resultTab==='visual'&&figureView==='analysis'&&result.sections&&<SectionPlot sections={result.sections} onHover={p.onHover}/>}
-       {resultTab==='visual'&&figureView==='analysis'&&result.mesh&&<GPUView mesh={result.mesh} fallback={<MeshView mesh={result.mesh}/>}/>}
+       {resultTab==='visual'&&figureView==='analysis'&&result.mesh&&<GPUView mesh={result.mesh} fallback={<MeshView mesh={result.mesh}/>}
+           tileSource={selected?{image_id:selected.source.id,geometry:selected.geometry}:undefined}/>}
        {resultTab==='details'&&result.raster&&<details className="terrain-metric-details" aria-label="Terrain class statistics">
          <summary>Class statistics · {result.raster.legend.length} classes</summary>
          <TerrainClassTable bins={result.raster.legend} cellAreaM2={result.cell_area_m2}/>
