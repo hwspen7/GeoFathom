@@ -23,7 +23,7 @@ def test_dinfinity_cardinal_plane_conserves_water_and_injected_external_area():
     valid=np.ones(z.shape,bool)
     acc,angle=dinfinity_accumulation(z,valid,10,20)
     np.testing.assert_allclose(acc,np.tile(np.arange(1.,7.),(5,1)),atol=1e-12)
-    assert np.all(angle[:,:-1]==pytest.approx(0))
+    np.testing.assert_allclose(angle[:,:-1],0,atol=1e-12)
     assert np.isnan(angle[:,-1]).all()
     external=np.zeros_like(z);external[2,0]=14
     out,_=dinfinity_accumulation(z,valid,10,20,external)
@@ -58,16 +58,16 @@ def test_dinfinity_multiple_slopes_and_cancellation():
 
 @pytest.mark.parametrize("radius",[1,2,3,4])
 def test_quadratic_fitted_curvature_exact_analytic_surface(radius):
-    y,x=np.mgrid[-7:8,-7:8]
+    y,x=np.mgrid[-12:13,-12:13]
     z=1000000.+.02*x*x+.03*y*y+.1*x-.2*y+.01*x*y
     valid=np.ones(z.shape,bool)
     curvature=quadratic_curvature(z,valid,1,1,radius,"curvature")
     # d2z/dx2 + d2z/dy2 = 0.04 + 0.06 = 0.10 / m.
-    assert curvature[7,7]==pytest.approx(.1,abs=1e-8)
+    assert curvature[12,12]==pytest.approx(.1,abs=1e-8)
     assert np.isnan(curvature[:radius]).all()
-    valid[7,8]=False
+    valid[12,13]=False
     curvature=quadratic_curvature(z,valid,1,1,radius,"curvature")
-    assert np.isnan(curvature[7,7])
+    assert np.isnan(curvature[12,12])
 
 
 def test_quadratic_curvature_flats_undefined_and_parameters_rejected():
