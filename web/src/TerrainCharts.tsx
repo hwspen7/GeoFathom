@@ -148,6 +148,104 @@ export function ResultPane({expanded,onClose,children}:{expanded:boolean;onClose
    {error&&<small role="alert">{error}</small>}</section>;
  return expanded?<dialog ref={ref} className="terrain-result-dialog" aria-label="Expanded terrain result" onCancel={e=>{e.preventDefault();onClose();}}>{panel}</dialog>:panel;
 }
+
+/** Area-elevation relation derived from the actual valid-cell histogram, not a fitted DEM. */
+export function hypsometricPoints(bins:import('./api').TerrainDistributionBin[]){
+ if(!bins.length)return [];
+ const minimum=Math.min(...bins.map(b=>b.lower_m)),maximum=Math.max(...bins.map(b=>b.upper_m));
+ const relief=Math.max(maximum-minimum,1e-12);
+ return [{area_above:1,relative_elevation:0},...bins.map(b=>({
+   area_above:Math.max(0,Math.min(1,1-b.cumulative_pct/100)),
+   relative_elevation:Math.max(0,Math.min(1,(b.upper_m-minimum)/relief)),
+ }))].sort((a,b)=>a.area_above-b.area_above);
+}
+export function HypsometricPlot({bins}:{bins:import('./api').TerrainDistributionBin[]}){
+ const points=hypsometricPoints(bins);
+ if(!points.length)return null;
+ const line=points.map(p=>(46+p.area_above*260).toFixed(2)+','+(124-p.relative_elevation*103).toFixed(2)).join(' ');
+ const area=points.reduce((sum,p,i)=>i?sum+Math.abs(points[i-1].area_above-p.area_above)*
+   (points[i-1].relative_elevation+p.relative_elevation)/2:0,0);
+ return <div className="terrain-research-figure">
+   <svg className="terrain-chart" viewBox="0 0 345 161" role="img" aria-label="Hypsometric curve">
+     <rect x="46" y="21" width="260" height="103" fill="#f4f8fa"/>
+     {[0,.25,.5,.75,1].map(t=><g key={t}>
+       <line x1={46+t*260} x2={46+t*260} y1="21" y2="124" stroke="#dbe5ea"/>
+       <line x1="46" x2="306" y1={124-t*103} y2={124-t*103} stroke="#dbe5ea"/>
+       <text x={46+t*260} y="139" textAnchor="middle" fontSize="9" fill="#5b7181">{Math.round(t*100)}%</text>
+       <text x="40" y={127-t*103} textAnchor="end" fontSize="9" fill="#5b7181">{t.toFixed(2)}</text>
+     </g>)}
+     <polyline points={line} fill="none" stroke="#246b91" strokeWidth="2.5" strokeLinejoin="round"/>
+     <text x="176" y="155" textAnchor="middle" fontSize="10" fill="#4c6475">Relative area above elevation</text>
+     <text x="46" y="13" fontSize="9" fill="#4c6475">Relative elevation</text>
+   </svg>
+   <div className="profile-readout">Hypsometric integral ≈ {area.toFixed(3)} · valid DEM cells</div>
+ </div>;
+}
+/** Consecutive valid profile stations only; no slope is inferred across nodata gaps. */
+export function profileGrades(samples:ProfileSample[]){
+ const grades:Array<{distance_m:number;grade_pct:number}>=[];
+ for(let i=1;i<samples.length;i++){
+   const previous=samples[i-1],current=samples[i],distance=current.distance_m-previous.distance_m;
+   if(previous.elevation_m===null||current.elevation_m===null||!Number.isFinite(previous.elevation_m)||
+      !Number.isFinite(current.elevation_m)||!Number.isFinite(distance)||distance<=0)continue;
+   grades.push({distance_m:(previous.distance_m+current.distance_m)/2,
+      grade_pct:100*(current.elevation_m-previous.elevation_m)/distance});
+ }
+ return grades;
+}
+export function ProfileGradePlot({samples}:{samples:ProfileSample[]}){
+ const grades=profileGrades(samples);
+ if(!grades.length)return null;
+ const lo=Math.min(0,...grades.map(p=>p.grade_pct)),hi=Math.max(0,...grades.map(p=>p.grade_pct));
+ const range=Math.max(hi-lo,.001),distance=Math.max(1,samples.at(-1)?.distance_m??1);
+ const bars=grades.map((p,i)=>{const x=46+(p.distance_m/distance)*260;
+   const zero=122-((0-lo)/range)*97,top=122-((p.grade_pct-lo)/range)*97;
+   return <line key={i} x1={x} x2={x} y1={zero} y2={top} stroke={p.grade_pct>=0?'#277f75':'#bd7943'} strokeWidth="2.5"/>;
+ });
+ return <div className="terrain-research-figure">
+   <svg className="terrain-chart" viewBox="0 0 345 157" role="img" aria-label="Longitudinal profile grade">
+     <rect x="46" y="25" width="260" height="97" fill="#f4f8fa"/>
+     <line x1="46" x2="306" y1={122-((0-lo)/range)*97} y2={122-((0-lo)/range)*97} stroke="#8495a2" strokeDasharray="3 3"/>
+     {bars}
+     <text x="46" y="15" fontSize="10" fill="#4c6475">Grade (%)</text>
+     <text x="42" y="29" fontSize="9" textAnchor="end" fill="#4c6475">{hi.toFixed(1)}</text>
+     <text x="42" y="123" fontSize="9" textAnchor="end" fill="#4c6475">{lo.toFixed(1)}</text>
+     <text x="46" y="138" fontSize="9" fill="#4c6475">0</text>
+     <text x="306" y="138" textAnchor="end" fontSize="9" fill="#4c6475">{fmt(distance)} m</text>
+     <text x="176" y="152" fontSize="10" textAnchor="middle" fill="#4c6475">Distance along line</text>
+   </svg>
+   <div className="profile-readout">Ascent +{fmt(grades.filter(p=>p.grade_pct>0).length)} segments · descent {fmt(grades.filter(p=>p.grade_pct<0).length)} segments</div>
+ </div>;
+}
+export function TerrainClassShare({bins}:{bins:{label:string;color:string;cells:number}[]}){
+ const positive=bins.filter(b=>Number.isFinite(b.cells)&&b.cells>0);
+ const total=positive.reduce((sum,b)=>sum+b.cells,0);
+ if(!total)return null;
+ const sorted=[...positive].sort((a,b)=>b.cells-a.cells);
+ const major=sorted.slice(0,5);
+ const other=sorted.slice(5);
+ const groups=other.length?[...major,{label:'Other',cells:other.reduce((n,b)=>n+b.cells,0),color:'#aab8c3'}]:major;
+ let previous=0;
+ return <div className="terrain-research-figure terrain-class-share">
+   <svg className="terrain-chart" viewBox="0 0 345 205" role="img" aria-label="Terrain class composition">
+     <circle cx="100" cy="101" r="62" stroke="#edf2f6" fill="none" strokeWidth="27"/>
+     {groups.map(b=>{const fraction=b.cells/total,start=previous;previous+=fraction;
+       return <circle key={b.label} cx="100" cy="101" r="62" fill="none" stroke={b.color}
+         strokeWidth="27" strokeDasharray={Math.max(0,fraction*389.56-.6)+' 389.56'}
+         strokeDashoffset={-start*389.56} transform="rotate(-90 100 101)">
+         <title>{b.label}: {(100*fraction).toFixed(1)}% ({b.cells.toLocaleString()} cells)</title>
+       </circle>;
+     })}
+     <text x="100" y="98" fontSize="17" fontWeight="700" textAnchor="middle" fill="#26465b">{total.toLocaleString()}</text>
+     <text x="100" y="115" fontSize="10" textAnchor="middle" fill="#688092">cells</text>
+     {groups.map((b,i)=><g key={b.label} transform={'translate(188 '+(45+i*26)+')'}>
+       <rect width="8" height="8" rx="2" fill={b.color}/>
+       <text x="14" y="8" fontSize="10" fill="#3e586b">{b.label.length>17?b.label.slice(0,16)+'…':b.label}</text>
+       <text x="14" y="20" fontSize="9" fill="#728796">{(b.cells/total*100).toFixed(1)}%</text>
+     </g>)}
+   </svg>
+ </div>;
+}
 export function AspectRose({bins}:{bins:{label:string;color:string;cells:number}[]}){
  const directions=bins.filter(b=>b.label!=='Flat'),flat=bins.find(b=>b.label==='Flat');
  const max=Math.max(1,...directions.map(x=>x.cells));
