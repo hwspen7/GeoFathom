@@ -333,9 +333,30 @@ def raster_product(values,operation,affine,crs,cancel=None,
             "width":width,"height":height,"valid_cells":int(finite.sum()),
             "unit":("Shreve_magnitude" if operation=="stream_order" and stream_order_scheme=="shreve" else RASTER_UNITS[operation])}
 
+
+def hillshade_illumination(east,south,azimuth,altitude,mode="single"):
+    """Compute physical 0-255 illumination, averaging four real sun vectors if requested.
+
+    Multidirectional mode averages azimuths at -45, 0, +45, +90 degrees
+    relative to the user's azimuth, all at the stated solar elevation.
+    No shadow ray casting is implied; this is local Lambertian hillshade.
+    """
+    if mode not in {"single","four_direction"}:
+        raise RasterError("Unsupported hillshade illumination model.")
+    if not (0<=azimuth<=360 and 0<=altitude<=90):
+        raise RasterError("Invalid sun angles.")
+    beta=math.radians(altitude)
+    magnitude=np.sqrt(1+east**2+south**2)
+    def illum(angle):
+        az=math.radians(angle)
+        return np.clip((math.sin(beta)-east*math.cos(beta)*math.sin(az)+
+                        south*math.cos(beta)*math.cos(az))/magnitude,0,1)
+    angles=[azimuth] if mode=="single" else [azimuth-45,azimuth,azimuth+45,azimuth+90]
+    return 255*sum(illum(angle) for angle in angles)/len(angles)
+
 def _derived_surface_tiled(z,valid,dx,dy,operation,max_slope=30.,
                            min_elevation=-12000.,max_elevation=12000.,max_tri=100.,
-                           azimuth=315.,altitude=45.,cancel=None,block=384,gradient_method="horn"):
+                           azimuth=315.,altitude=45.,cancel=None,block=384,gradient_method="horn",hillshade_mode="single"):
     """One selected product from 3x3 halo tiles; no nine full-size rasters.
 
     The existing Horn/curvature derivative is reused unchanged per tile.
@@ -352,8 +373,6 @@ def _derived_surface_tiled(z,valid,dx,dy,operation,max_slope=30.,
     output=np.full(z.shape,np.nan,dtype=np.float64)
     qualified=0
     suitable=0
-    if operation=="hillshade":
-        a,b=math.radians(azimuth),math.radians(altitude)
     for r0 in range(1,z.shape[0]-1,block):
         r1=min(z.shape[0]-1,r0+block)
         for c0 in range(1,z.shape[1]-1,block):
@@ -371,10 +390,7 @@ def _derived_surface_tiled(z,valid,dx,dy,operation,max_slope=30.,
             crop=(slice(1,-1),slice(1,-1))
             if operation=="hillshade":
                 east,south=derived["east"][crop],derived["south"][crop]
-                product=255*np.clip(
-                    (math.sin(b)-east*math.cos(b)*math.sin(a)
-                     +south*math.cos(b)*math.cos(a))/
-                    np.sqrt(1+east**2+south**2),0,1)
+                product=hillshade_illumination(east,south,azimuth,altitude,hillshade_mode)
             elif operation=="suitability":
                 good=np.isfinite(derived["slope_map"][crop])
                 passed=(derived["slope_map"][crop]<=max_slope)
@@ -401,7 +417,7 @@ def _derived_surface_tiled(z,valid,dx,dy,operation,max_slope=30.,
 
 def surface(z,valid,affine,crs,operation,reference,point,end_point,max_slope,
             min_elevation,max_elevation,max_tri,stream_cells,azimuth,altitude,feature,origin,cancel=None,
-            source_datum=None,gradient_method="horn",slope_classes="standard",mfd_exponent=1.1,neighborhood_radius=1,route_model="surface",stream_order_scheme="strahler"):
+            source_datum=None,gradient_method="horn",slope_classes="standard",mfd_exponent=1.1,neighborhood_radius=1,route_model="surface",stream_order_scheme="strahler",hillshade_mode="single"):
     """Return the exact source-grid derivative and product-specific statistics."""
     dx,dy=abs(affine.a),abs(affine.e);cell=dx*dy
     features=[];metrics={}
@@ -467,14 +483,13 @@ def surface(z,valid,affine,crs,operation,reference,point,end_point,max_slope,
         elif z.size>1_000_000:
             values,metrics=_derived_surface_tiled(
                 z,valid,dx,dy,operation,max_slope,min_elevation,
-                max_elevation,max_tri,azimuth,altitude,cancel,gradient_method=gradient_method)
+                max_elevation,max_tri,azimuth,altitude,cancel,gradient_method=gradient_method,hillshade_mode=hillshade_mode)
         else:
             d=derivatives(z,valid,dx,dy,gradient_method);checkpoint(cancel)
             if operation=="hillshade":
                 if not (0<=azimuth<=360 and 0<=altitude<=90):raise RasterError("Invalid sun angles.")
-                a,b=math.radians(azimuth),math.radians(altitude)
                 east,south=d["east"],d["south"]
-                values=255*np.clip((math.sin(b)-east*math.cos(b)*math.sin(a)+south*math.cos(b)*math.cos(a))/np.sqrt(1+east**2+south**2),0,1)
+                values=hillshade_illumination(east,south,azimuth,altitude,hillshade_mode)
             elif operation=="suitability":
                 if not (0<=max_slope<=90 and min_elevation<=max_elevation and max_tri>=0):
                     raise RasterError("Invalid suitability limits.")

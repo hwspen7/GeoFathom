@@ -242,3 +242,16 @@ def test_slope_classification_presets_leave_physical_geotiff_untouched():
                 np.testing.assert_allclose(src.read(1),values,equal_nan=True)
     with pytest.raises(RasterError,match="classification preset"):
         classification(values,"slope_map","invalid")
+
+
+def test_hillshade_four_direction_differs_from_single_and_is_bounded():
+    from terrain.professional import hillshade_illumination
+    east=np.array([[0.,.4],[-.2,1.2]])
+    south=np.array([[0.,.1],[.4,-.6]])
+    one=hillshade_illumination(east,south,315,45,"single")
+    four=hillshade_illumination(east,south,315,45,"four_direction")
+    assert one.shape==four.shape
+    assert np.max(np.abs(one-four))>1
+    assert np.all((four>=0)&(four<=255))
+    with pytest.raises(RasterError,match="illumination"):
+        hillshade_illumination(east,south,315,45,"unknown")

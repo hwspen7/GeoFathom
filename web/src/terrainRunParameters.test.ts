@@ -9,7 +9,7 @@ const base:TerrainParameterForm={
  comparisonId:'',observerPoints:[['',''],['','']],drape:false,
  textureImageId:null,gradientMethod:'horn',slopeClasses:'standard',
  neighborhoodRadius:'1',viewshedDistance:'0',viewshedAzimuth:'0',
- viewshedWidth:'360',routeModel:'surface',meshSamples:'256',streamOrderScheme:'strahler',
+ viewshedWidth:'360',routeModel:'surface',meshSamples:'256',streamOrderScheme:'strahler',hillshadeMode:'single',
 };
 describe('scientific operation-specific input manifests',()=>{
  it('does not invent a zero-degree observer for a contour experiment',()=>{

@@ -139,6 +139,7 @@ export default function TerrainWorkbench(p:Props){
  const [routeModel,setRouteModel]=useState<'surface'|'distance'|'gentle'>('surface');
  const [meshSamples,setMeshSamples]=useState('256');
  const [streamOrderScheme,setStreamOrderScheme]=useState<'strahler'|'shreve'>('strahler');
+ const [hillshadeMode,setHillshadeMode]=useState<'single'|'four_direction'>('single');
  const [fillSinks,setFillSinks]=useState(true),[considerCurvature,setConsiderCurvature]=useState(true),[refractionCoeff,setRefractionCoeff]=useState('0.13');
  const [sectionSpacing,setSectionSpacing]=useState('50'),[sectionWidth,setSectionWidth]=useState('20'),[drape,setDrape]=useState(false),[expanded,setExpanded]=useState(false);
  const [pickEnd,setPickEnd]=useState(false);
@@ -304,7 +305,7 @@ export default function TerrainWorkbench(p:Props){
    considerCurvature,refractionCoeff,comparisonId,observerPoints,drape,
    textureImageId:p.imageRaster?.id??null,gradientMethod,slopeClasses,
    neighborhoodRadius,viewshedDistance,viewshedAzimuth,viewshedWidth,
-   routeModel,meshSamples,streamOrderScheme,
+   routeModel,meshSamples,streamOrderScheme,hillshadeMode,
  });
  // Only edits to the actual operation inputs invalidate a scientific run.
  const inputKey=JSON.stringify([dem?.id,analysisGeometry,operation,scientificParameters]);
@@ -381,7 +382,7 @@ export default function TerrainWorkbench(p:Props){
          neighborhood_radius:Number(neighborhoodRadius),
          max_distance_m:Number(viewshedDistance),view_azimuth:Number(viewshedAzimuth),
          view_width:Number(viewshedWidth),route_model:routeModel,
-         mesh_samples:Number(meshSamples),stream_order_scheme:streamOrderScheme},controller.signal);
+         mesh_samples:Number(meshSamples),stream_order_scheme:streamOrderScheme,hillshade_mode:hillshadeMode},controller.signal);
      if(ticket!==sequence.current||controller.signal.aborted)return;
      // Commit scientific data before reporting a completed run. An immediate
      // reload or project switch must never race a pending cache write.
@@ -1017,6 +1018,13 @@ export default function TerrainWorkbench(p:Props){
           <option value="2">5 × 5 · intermediate</option>
           <option value="3">7 × 7 · regional</option>
           <option value="4">9 × 9 · broad</option>
+        </select>
+      </label>}
+      {operation==='hillshade'&&<label>Illumination model
+        <select aria-label="Hillshade illumination model" value={hillshadeMode}
+          onChange={e=>setHillshadeMode(e.target.value as 'single'|'four_direction')}>
+          <option value="single">Single solar direction</option>
+          <option value="four_direction">Four-direction averaged illumination</option>
         </select>
       </label>}
       {operation==='hillshade'&&<div className="area-fields"><label>Sun azimuth (°)<input type="number" value={azimuth} onChange={e=>setAzimuth(e.target.value)}/></label><label>Sun altitude (°)<input type="number" value={altitude} onChange={e=>setAltitude(e.target.value)}/></label></div>}

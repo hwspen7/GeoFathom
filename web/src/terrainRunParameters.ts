@@ -17,7 +17,7 @@ export interface TerrainParameterForm {
  observerPoints:[string,string][];drape:boolean;textureImageId:string|null;
  gradientMethod:'horn'|'zevenbergen_thorne';slopeClasses:'standard'|'detailed'|'broad';
  neighborhoodRadius:string;viewshedDistance:string;viewshedAzimuth:string;
- viewshedWidth:string;routeModel:'surface'|'distance'|'gentle';meshSamples:string;streamOrderScheme:'strahler'|'shreve';
+ viewshedWidth:string;routeModel:'surface'|'distance'|'gentle';meshSamples:string;streamOrderScheme:'strahler'|'shreve';hillshadeMode:'single'|'four_direction';
 }
 
 export function terrainParametersForOperation(
@@ -95,6 +95,7 @@ export function terrainParametersForOperation(
    params.max_tri_m=Number(form.maxTri);
    break;
   case 'hillshade':
+   params.hillshade_mode=form.hillshadeMode;
    params.azimuth_deg=Number(form.azimuth);
    params.altitude_deg=Number(form.altitude);
    break;
