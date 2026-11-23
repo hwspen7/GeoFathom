@@ -27,7 +27,7 @@ def polygonize_network(geometries: list[dict[str, Any]], tolerance_m: float = 1.
     count=0
     for geometry in geometries:
         if not isinstance(geometry, dict) or geometry.get("type") not in (
-            "Polygon","MultiPolygon","LineString","MultiLineString","Point"):
+            "Polygon","MultiPolygon","LineString","MultiLineString","Point","MultiPoint"):
             raise GeometryError("Sources must be GeoJSON lines, polygon boundaries or point anchors.")
         try:
             feature=shape(geometry)
@@ -35,8 +35,9 @@ def polygonize_network(geometries: list[dict[str, Any]], tolerance_m: float = 1.
         except (TypeError,ValueError,KeyError,IndexError,GEOSException,OverflowError) as exc:
             raise GeometryError("Invalid source coordinates.") from exc
         # Points alone do not define edges. The user must draw connecting lines.
-        if feature.geom_type=="Point":
-            if not -180<=feature.x<=180 or not -90<=feature.y<=90:
+        if feature.geom_type in {"Point","MultiPoint"}:
+            anchors=[feature] if feature.geom_type=="Point" else feature.geoms
+            if any(not -180<=point.x<=180 or not -90<=point.y<=90 for point in anchors):
                 raise GeometryError("Point source outside WGS84.")
             continue
         pieces=[feature] if feature.geom_type in ("LineString","Polygon") else list(feature.geoms)

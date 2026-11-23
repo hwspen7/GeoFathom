@@ -9,6 +9,9 @@ import type {ScratchFeature} from './scratch';
 const api=vi.hoisted(()=>({
  importVectorFile:vi.fn(),uploadImagery:vi.fn(),saveFeatureBatch:vi.fn(),
  exportVectorFile:vi.fn(),exportProject:vi.fn(),downloadMapPDF:vi.fn(),
+ downloadDatasetExport:vi.fn(),preflightDatasetExport:vi.fn(),startDatasetExport:vi.fn(),
+ getGISJob:vi.fn(),cancelGISJob:vi.fn(),downloadExchangeJob:vi.fn(),downloadProjectPackage:vi.fn(),
+ inspectDatasetFiles:vi.fn(),inspectDatasetOptions:vi.fn(),discardDatasetUpload:vi.fn(),startDatasetImport:vi.fn(),restoreProjectPackage:vi.fn(),
  bufferGeometry:vi.fn(),applyOverlay:vi.fn(),transformProjectCoordinates:vi.fn(),
 }));
 vi.mock('./api',()=>api);
@@ -43,6 +46,10 @@ beforeEach(()=>{
  api.uploadImagery.mockResolvedValue({id:'dem',name:'DEM'});
  api.saveFeatureBatch.mockResolvedValue({created:1,results:[]});
  api.exportVectorFile.mockResolvedValue(undefined);
+ api.downloadDatasetExport.mockResolvedValue(undefined);
+ api.preflightDatasetExport.mockResolvedValue({count:620,schema:[{name:"name"},{name:"category"}],geometry_types:["Point"],warnings:[],target_crs:"EPSG:4326"});
+ api.discardDatasetUpload.mockResolvedValue(undefined);
+ api.cancelGISJob.mockResolvedValue({id:"job",status:"cancelled",progress:100});
  api.exportProject.mockResolvedValue({type:'FeatureCollection',features:[{
   type:'Feature',geometry,properties:{name:'Area'}}]});
  api.downloadMapPDF.mockResolvedValue(undefined);
@@ -132,11 +139,13 @@ describe('Data and Export independent fixed workbenches',()=>{
  it('exports selection GeoJSON and detected-area measurements CSV',async()=>{
   render(<ExportWorkbench {...exportProps()}/>);
   fireEvent.click(screen.getByRole('button',{name:'Export GEOJSON'}));
-  await waitFor(()=>expect(URL.createObjectURL).toHaveBeenCalled());
+  await waitFor(()=>expect(api.downloadDatasetExport).toHaveBeenCalledWith(
+   "project-1",expect.objectContaining({format:"geojson",collection:expect.objectContaining({features:expect.any(Array)})}),expect.any(AbortSignal)));
   fireEvent.change(screen.getByLabelText('Export scope'),{target:{value:'areas'}});
   fireEvent.change(screen.getByLabelText('Export format'),{target:{value:'csv'}});
   fireEvent.click(screen.getByRole('button',{name:'Export CSV'}));
-  await waitFor(()=>expect((URL.createObjectURL as ReturnType<typeof vi.fn>).mock.calls.length).toBe(2));
+  await waitFor(()=>expect(api.downloadDatasetExport).toHaveBeenCalledTimes(2));
+  expect(api.downloadDatasetExport.mock.calls[1][1]).toMatchObject({format:"csv",include_measurements:true,collection:{features:[{properties:{name:"Area 1"}}]}});
  });
  it('project GeoPackage uses server OGR export and map PDF uses project print engine',async()=>{
   const props=exportProps();
@@ -145,7 +154,8 @@ describe('Data and Export independent fixed workbenches',()=>{
   fireEvent.change(screen.getByLabelText('Export scope'),{target:{value:'project'}});
   fireEvent.change(screen.getByLabelText('Export format'),{target:{value:'gpkg'}});
   fireEvent.click(screen.getByRole('button',{name:'Export GPKG'}));
-  await waitFor(()=>expect(api.exportVectorFile).toHaveBeenCalledWith('project-1','gpkg'));
+  await waitFor(()=>expect(api.downloadDatasetExport).toHaveBeenCalledWith('project-1',expect.objectContaining({format:'gpkg'}),expect.any(AbortSignal)));
+  expect(api.downloadDatasetExport.mock.calls[0][1].collection).toBeUndefined();
   fireEvent.change(screen.getByLabelText('Export format'),{target:{value:'pdf'}});
   fireEvent.click(screen.getByRole('button',{name:'Export PDF'}));
   await waitFor(()=>expect(api.downloadMapPDF).toHaveBeenCalled());
@@ -158,5 +168,54 @@ describe('Data and Export independent fixed workbenches',()=>{
   render(<ExportWorkbench {...props}/>);
   fireEvent.change(screen.getByLabelText('Export format'),{target:{value:'geotiff'}});
   expect((screen.getByRole('button',{name:'Export GEOTIFF'}) as HTMLButtonElement).disabled).toBe(true);
+ });
+});
+
+describe('comprehensive dataset delivery',()=>{
+ it('exports every project record and selected attributes independently of the loaded page',async()=>{
+  const props=exportProps();props.workspace.total=620;render(<ExportWorkbench {...props}/>);
+  fireEvent.change(screen.getByLabelText('Export scope'),{target:{value:'project'}});
+  expect(screen.getByText('620')).toBeTruthy();fireEvent.click(screen.getByRole('button',{name:'Inspect export'}));
+  await waitFor(()=>expect(screen.getByText(/620 features/)).toBeTruthy());
+  fireEvent.change(screen.getByLabelText('Export setup'),{target:{value:'fields'}});
+  const select=screen.getByLabelText('Export attribute fields') as HTMLSelectElement;
+  Array.from(select.options).forEach(o=>o.selected=o.value==='category');fireEvent.change(select);
+  expect(screen.getByLabelText('Export attribute fields')).toBeTruthy();
+  fireEvent.click(screen.getByRole('button',{name:'Export GEOJSON'}));
+  await waitFor(()=>expect(api.downloadDatasetExport).toHaveBeenCalled());
+  expect(api.downloadDatasetExport.mock.calls[0][1]).toEqual({format:'geojson',target_crs:'EPSG:4326',include_measurements:false,fields:['category']});
+ });
+ it('ignores stale export preflight after switching project A–B–A',async()=>{
+  let resolve!:(value:unknown)=>void;api.preflightDatasetExport.mockImplementationOnce(()=>new Promise(r=>{resolve=r;}));
+  const props=exportProps();const view=render(<ExportWorkbench {...props}/>);
+  fireEvent.click(screen.getByRole('button',{name:'Inspect export'}));
+  view.rerender(<ExportWorkbench {...props} projectId="project-2"/>);view.rerender(<ExportWorkbench {...props}/>);
+  resolve({count:999,schema:[],geometry_types:['Point'],warnings:[],target_crs:'EPSG:4326'});
+  await waitFor(()=>expect(screen.queryByText(/999 features/)).toBeNull());
+ });
+ it('inspects batch files and submits explicit source layers',async()=>{
+  api.inspectDatasetFiles.mockResolvedValue({upload_id:'upload',files:[{id:'file',name:'many.gpkg',bytes:20,layers:[
+   {name:'roads',feature_count:620,source_crs:'EPSG:3857',fields:[{name:'height',type:'number'}]},
+   {name:'sites',feature_count:3,source_crs:'EPSG:4326',fields:[]},
+  ]}]});
+  api.startDatasetImport.mockResolvedValue({id:'job',status:'completed',progress:100,result:{created:620,rejected:0}});
+  render(<DataWorkbench {...dataProps()}/>);
+  fireEvent.click(screen.getByRole('button',{name:'Import'}));fireEvent.click(screen.getByRole('button',{name:'Advanced import'}));
+  fireEvent.change(screen.getByLabelText('Batch dataset files'),{target:{files:[new File(['x'],'many.gpkg')]}});
+  await waitFor(()=>expect(screen.getByText('many.gpkg')).toBeTruthy());
+  const layers=screen.getByLabelText('Source layers') as HTMLSelectElement;
+  Array.from(layers.options).forEach(o=>o.selected=o.value==='roads');fireEvent.change(layers);
+  fireEvent.click(screen.getByRole('button',{name:'Import batch'}));
+  await waitFor(()=>expect(api.startDatasetImport).toHaveBeenCalledWith('project-1','upload',[{id:'file',options:{layers:['roads']}}],''));
+ });
+ it('discards an inspected upload returned after switching A–B–A',async()=>{
+  let resolve!:(value:unknown)=>void;api.inspectDatasetFiles.mockImplementationOnce(()=>new Promise(r=>{resolve=r;}));
+  const props=dataProps();const view=render(<DataWorkbench {...props}/>);
+  fireEvent.click(screen.getByRole('button',{name:'Import'}));fireEvent.click(screen.getByRole('button',{name:'Advanced import'}));
+  fireEvent.change(screen.getByLabelText('Batch dataset files'),{target:{files:[new File(['x'],'late.gpkg')]}});
+  view.rerender(<DataWorkbench {...props} projectId="project-2"/>);view.rerender(<DataWorkbench {...props}/>);
+  resolve({upload_id:'late-upload',files:[{id:'late',name:'late.gpkg',layers:[]}]});
+  await waitFor(()=>expect(api.discardDatasetUpload).toHaveBeenCalledWith('project-1','late-upload'));
+  expect(screen.queryByText('late.gpkg')).toBeNull();expect(props.onRefresh).not.toHaveBeenCalled();
  });
 });

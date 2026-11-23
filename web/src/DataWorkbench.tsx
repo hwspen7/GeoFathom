@@ -5,6 +5,7 @@ import {importVectorFile,uploadImagery,saveFeatureBatch,
  type Measurement} from './api';
 import DataServicesPanel,{type ExternalTile} from './DataServicesPanel';
 import ApiAccessPanel from './ApiAccessPanel';
+import DatasetImport from './DatasetImport';
 
 type BBox=[number,number,number,number];
 type DataPage='import'|'areas'|'process'|'sources'|'system';
@@ -33,7 +34,7 @@ export default function DataWorkbench(p:Props){
  const [targetCRS,setTargetCRS]=useState('EPSG:3857');
  const [projected,setProjected]=useState<{crs:string;x:number;y:number}|null>(null);
  const [file,setFile]=useState<File|null>(null);
- const [kind,setKind]=useState<'vector'|'raster'>('vector');
+ const [kind,setKind]=useState<'vector'|'raster'|'batch'>('vector');
  const [rasterKind,setRasterKind]=useState<'dem'|'image'>('dem');
  const [layer,setLayer]=useState('');
  const [token,setToken]=useState('');
@@ -57,10 +58,10 @@ export default function DataWorkbench(p:Props){
   if(!source)throw Error('Choose a file.');
   if(kind==='vector'){
    if(!scope)throw Error('Select or create a project before vector import.');
-   if(source.size===0||source.size>25*1024*1024)
-    throw Error('Vector files must be non-empty and no larger than 25 MB.');
-   if(!/\.(geojson|gpkg|kml|gpx|zip)$/i.test(source.name))
-    throw Error('Supported: GeoJSON, GPKG, KML, GPX or zipped Shapefile.');
+   if(source.size===0||source.size>128*1024*1024)
+    throw Error('Vector files must be non-empty and no larger than 128 MB.');
+   if(!/\.(json|geojson|csv|gpkg|kml|gpx|zip)$/i.test(source.name))
+    throw Error('Supported: GeoJSON, CSV, GPKG, KML, GPX or zipped Shapefile.');
    const result=await importVectorFile(scope,source,layer||undefined);
    if(latest.current!==scope)return;
    p.onRefresh();setStatus('Imported '+result.created+' validated features.');
@@ -102,9 +103,11 @@ export default function DataWorkbench(p:Props){
    <div className="data-choice-buttons">
     <button type="button" aria-pressed={kind==='vector'} onClick={()=>{setKind('vector');setFile(null);}}>Vector</button>
     <button type="button" aria-pressed={kind==='raster'} onClick={()=>{setKind('raster');setFile(null);}}>GeoTIFF</button>
+    <button type="button" aria-pressed={kind==='batch'} onClick={()=>{setKind('batch');setFile(null);}}>Advanced import</button>
    </div>
+   {kind==='batch'?<DatasetImport projectId={p.projectId} workspace={p.workspace} onRefresh={p.onRefresh} onRasterAdded={p.onRasterAdded}/>:<>
    <input aria-label="Import dataset file" type="file" value="" onChange={acceptFile}
-    accept={kind==='vector'?'.geojson,.gpkg,.kml,.gpx,.zip':
+    accept={kind==='vector'?'.json,.geojson,.csv,.gpkg,.kml,.gpx,.zip':
       '.tif,.tiff,image/tiff'}/>
    {file&&<small>{file.name} · {fmt(file.size/1024/1024)} MB</small>}
    {kind==='raster'&&<label>Raster type
@@ -125,6 +128,7 @@ export default function DataWorkbench(p:Props){
    </label>}
    <button className="data-primary" disabled={busy||!file||(kind==='vector'&&!p.projectId)}
     onClick={()=>void action(importDataset)}>{busy?'Importing…':'Import & validate'}</button>
+   </>}
    <button type="button" onClick={p.onOpenLayers}>Manage project layers</button>
   </div>
   <div className="data-page" hidden={page!=='areas'}>

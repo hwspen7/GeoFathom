@@ -79,7 +79,8 @@ function sessionHeaders(initial?: HeadersInit): Headers {
 }
 async function rawRequest(path: string, init?: RequestInit): Promise<Response> {
   // Local geometry and project requests must not strand the editor indefinitely.
-  const fast=/^\/(measure|edit\/|health|capabilities|projects(?:\/|$))/.test(path);
+  const exchange=/\/(vector|package)(?:\/|$)/.test(path);
+  const fast=!exchange&&/^\/(measure|edit\/|health|capabilities|projects(?:\/|$))/.test(path);
   try{
     return await fetch(API_URL+path,{...init,headers:sessionHeaders(init?.headers),
       signal:init?.signal?AbortSignal.any([init.signal,AbortSignal.timeout(fast?12000:120000)]):AbortSignal.timeout(fast?12000:120000)});
@@ -931,7 +932,7 @@ export function getVisionModels():Promise<VisionModels>{
 
 export type GISJobKind='topology_qa'|'spatial_select'|'export_geojson'|
   'postgis_sync'|'rebuild_index'|'spectral_index'|'spectral_change'|
-  'semantic_segmentation'|'stac_ndvi';
+  'semantic_segmentation'|'stac_ndvi'|'vector_import'|'vector_export';
 export interface GISJob {
   id:string;project_id:string;kind:GISJobKind;
   status:'queued'|'running'|'completed'|'failed'|'cancelled'|'interrupted';
@@ -1049,4 +1050,64 @@ export function polygonizeNetwork(
   headers:{'Content-Type':'application/json'},
   body:JSON.stringify({geometries,tolerance_m,minimum_area_m2,max_faces:300}),
  });
+}
+
+export interface ExchangeField {name:string;type?:string;types?:string[];nullable?:boolean}
+export interface ExchangeLayer {name:string;source_crs:string|null;feature_count:number;geometry_type:string;fields:ExchangeField[]}
+export interface ExchangeFile {id:string;name:string;bytes:number;layers:ExchangeLayer[];error?:string;errors?:Array<{row:number;message:string}>}
+export interface ExchangeUpload {upload_id:string;files:ExchangeFile[]}
+export interface ImportDatasetOptions {
+ layers?:string[];source_crs?:string;encoding?:string;error_policy?:'strict'|'skip';
+ field_map?:Record<string,string>;field_types?:Record<string,string>;
+ longitude_field?:string;latitude_field?:string;geometry_field?:string;delimiter?:string;
+}
+export interface DatasetExportOptions {
+ format:'geojson'|'gpkg'|'shapefile'|'kml'|'gpx'|'csv'|'report';include_measurements?:boolean;target_crs?:string;
+ layer_ids?:string[];feature_ids?:string[];viewport?:[number,number,number,number];
+ fields?:string[];precision?:number;collection?:GeoJSON.FeatureCollection;
+}
+export interface ExportPreflight {count:number;schema:ExchangeField[];geometry_types:string[];warnings:string[];target_crs:string}
+const exchangePath=(project:string)=>'/projects/'+encodeURIComponent(project);
+const jsonPost=(value:unknown,signal?:AbortSignal):RequestInit=>({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(value),signal});
+export function inspectDatasetFiles(project:string,files:File[],signal?:AbortSignal):Promise<ExchangeUpload>{
+ const body=new FormData();files.forEach(file=>body.append('files',file));
+ return request(exchangePath(project)+'/vector/uploads',{method:'POST',body,signal});
+}
+export function inspectDatasetOptions(project:string,upload:string,file:string,options:ImportDatasetOptions,signal?:AbortSignal):Promise<{layers:ExchangeLayer[];errors?:ExchangeFile['errors']}>{
+ return request(exchangePath(project)+'/vector/uploads/'+encodeURIComponent(upload)+'/inspect',jsonPost({file_id:file,options},signal));
+}
+export async function discardDatasetUpload(project:string,id:string):Promise<void>{
+ const response=await rawRequest(exchangePath(project)+'/vector/uploads/'+encodeURIComponent(id),{method:'DELETE'});
+ if(!response.ok)throw await responseError(response);
+}
+export function startDatasetImport(project:string,upload:string,files:Array<{id:string;options:ImportDatasetOptions}>,layer?:string):Promise<GISJob>{
+ return request(exchangePath(project)+'/vector/import/jobs',jsonPost({upload_id:upload,files,layer_id:layer||null,separate_layers:!layer}));
+}
+export function preflightDatasetExport(project:string,options:DatasetExportOptions,signal?:AbortSignal):Promise<ExportPreflight>{
+ return request(exchangePath(project)+'/vector/export/preflight',jsonPost(options,signal));
+}
+export function startDatasetExport(project:string,options:DatasetExportOptions):Promise<GISJob>{
+ return request(exchangePath(project)+'/vector/export/jobs',jsonPost(options));
+}
+async function exchangeDownload(path:string,init?:RequestInit):Promise<void>{
+ const response=await rawRequest(path,init);
+ if(!response.ok)throw await responseError(response,'Dataset download failed.');
+ const blob=await response.blob();if(init?.signal?.aborted)return;
+ const filename=response.headers.get('Content-Disposition')?.match(/filename="([^"]+)"/)?.[1]??'geofathom-download';
+ const url=URL.createObjectURL(blob);const link=document.createElement('a');
+ link.href=url;link.download=filename;document.body.appendChild(link);link.click();link.remove();
+ window.setTimeout(()=>URL.revokeObjectURL(url),1500);
+}
+export function downloadDatasetExport(project:string,options:DatasetExportOptions,signal?:AbortSignal):Promise<void>{
+ return exchangeDownload(exchangePath(project)+'/vector/export',jsonPost(options,signal));
+}
+export function downloadExchangeJob(project:string,id:string):Promise<void>{
+ return exchangeDownload(exchangePath(project)+'/vector/jobs/'+encodeURIComponent(id)+'/download');
+}
+export function downloadProjectPackage(project:string,rasters:Array<{id:string;kind:'image'|'dem'}>,signal?:AbortSignal):Promise<void>{
+ return exchangeDownload(exchangePath(project)+'/package/export',jsonPost({rasters},signal));
+}
+export function restoreProjectPackage(project:string,file:File,token:string,signal?:AbortSignal):Promise<{created:number;layers:number;rasters:Array<{asset:RasterAsset;kind:'image'|'dem'}>}>{
+ const body=new FormData();body.append('file',file);
+ return request(exchangePath(project)+'/package/import',{method:'POST',body,signal,headers:{'X-GeoFathom-Local-Import':'1','X-GeoFathom-Admin-Token':token}});
 }

@@ -2108,8 +2108,10 @@ export default function App() {
             <ExportWorkbench
               projectId={activeProjectId} workspace={projectWorkspace}
               selected={geometry} measurement={measurement}
+              selectedProperties={selectedSaved?{...selectedSaved.properties,name:selectedSaved.name,source:selectedSaved.source}:scratch.find(f=>f.id===scratchId)?.properties}
               scratch={scratch} faces={networkAreas?.faces??[]}
-              terrainRasters={terrainRasters} viewport={viewport}/>
+              terrainRasters={terrainRasters} viewport={viewport}
+              rasterSources={rasterLayers.map(l=>({id:l.asset.id,kind:l.kind}))}/>
             <div className="gis-terrain-export-action export-specialized-actions"
               ref={setTerrainExportTarget}/>
           </section>

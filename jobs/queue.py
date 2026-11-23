@@ -13,7 +13,7 @@ import sqlite3
 import time
 from datetime import datetime,timezone
 from threading import Lock,Thread,Event
-from uuid import uuid4
+from uuid import UUID,uuid4
 import json
 import os
 
@@ -22,7 +22,7 @@ from storage.database import (StorageError,_connect,_required_project,
 from .leases import (PROCESS_ID,LEASE_SECONDS,ensure_lease_schema,
     recover_expired,claim,heartbeat,is_owner,release_slot)
 
-KINDS={"topology_qa","spatial_select","export_geojson","postgis_sync",
+KINDS={"vector_import","vector_export","topology_qa","spatial_select","export_geojson","postgis_sync",
        "rebuild_index","spectral_index","spectral_change","semantic_segmentation",
        "stac_ndvi"}
 _POOL=ThreadPoolExecutor(max_workers=2,thread_name_prefix="geofathom-gis")
@@ -58,6 +58,7 @@ def _progress(fraction):
     uid=_ACTIVE_JOB.get()
     if uid is None:
         return
+    if _cancel_marker(uid).exists():raise RuntimeError("GIS operation cancelled.")
     state=_ACTIVE_PROGRESS.get()
     if state is None:
         return
@@ -203,19 +204,32 @@ def list_jobs(project_id,limit=30):
     return [_from_row(r) for r in rows]
 
 
+def _cancel_marker(job_id):
+    if str(UUID(job_id))!=job_id:raise StorageError('Invalid job identifier.')
+    directory=database_path().with_suffix(database_path().suffix+'.cancellations')
+    return directory/job_id
+
 def cancel_job(project_id,job_id):
     _ensure()
+    # A filesystem marker can reach the importing worker while its atomic SQL
+    # transaction owns the write lock. It also works with external workers
+    # sharing this local database; no half-import needs to be committed.
+    with _job_db() as c:
+        row=c.execute('SELECT * FROM gis_jobs WHERE project_id=? AND id=?',(project_id,job_id)).fetchone()
+        if row is None:raise StorageError('Job not found.')
+    marker=None
+    if row['status'] in ('queued','running'):
+        marker=_cancel_marker(job_id);marker.parent.mkdir(parents=True,exist_ok=True);marker.touch()
     with _connect() as c:
-        _required_project(c,project_id);_schema(c)
-        row=c.execute("SELECT * FROM gis_jobs WHERE project_id=? AND id=?",
-                      (project_id,job_id)).fetchone()
-        if row is None:raise StorageError("Job not found.")
-        if row["status"] in ("queued","running"):
-            c.execute("""UPDATE gis_jobs
-                SET cancel_requested=1,
-                status=CASE WHEN status='queued' THEN 'cancelled' ELSE status END,
-                updated_at=? WHERE id=?""",(_now(),job_id))
-    return get_job(project_id,job_id)
+        c.execute("""UPDATE gis_jobs SET cancel_requested=1,
+            status=CASE WHEN status='queued' THEN 'cancelled' ELSE status END,
+            updated_at=? WHERE id=? AND project_id=? AND status IN ('queued','running')""",(_now(),job_id,project_id))
+    if row['kind']=='vector_import' and row['status']=='queued':
+        from storage.exchange import discard_stage
+        discard_stage(project_id,json.loads(row['payload'])['upload_id'])
+    result=get_job(project_id,job_id)
+    if marker and result['status'] not in ('queued','running'):marker.unlink(missing_ok=True)
+    return result
 
 
 def _execute(kind,project_id,payload):
@@ -241,7 +255,22 @@ def _execute(kind,project_id,payload):
     return _execute_impl(kind,project_id,payload)
 
 
+def check_cancelled():
+    uid=_ACTIVE_JOB.get()
+    if uid is None:return
+    if _cancel_marker(uid).exists():raise RuntimeError("GIS operation cancelled before commit.")
+    with _job_db() as c:
+        row=c.execute("SELECT cancel_requested,lease_owner FROM gis_jobs WHERE id=?",(uid,)).fetchone()
+        if row is None or row["cancel_requested"] or row["lease_owner"]!=_ACTIVE_OWNER.get():
+            raise RuntimeError("GIS operation cancelled before commit.")
+
 def _execute_impl(kind,project_id,payload):
+    if kind=="vector_import":
+        from storage.exchange import execute_import
+        return execute_import(project_id,payload,_progress,check_cancelled)
+    if kind=="vector_export":
+        from storage.exchange import execute_export
+        return execute_export(project_id,payload,_progress,check_cancelled)
     if kind=="stac_ndvi":
         from imagery.remote import run_stac_ndvi
         return run_stac_ndvi(payload["collection"],payload["item_id"],
@@ -422,7 +451,7 @@ def _worker(uid,path):
                 row=c.execute("SELECT cancel_requested FROM gis_jobs WHERE id=?",
                               (uid,)).fetchone()
                 if row is None:return
-                if row["cancel_requested"]:
+                if (row["cancel_requested"] or _cancel_marker(uid).exists()) and not (kind=="vector_import" and outcome.get("committed")):
                     c.execute("""UPDATE gis_jobs SET status='cancelled',progress=100,
                         lease_owner=NULL,lease_expires=NULL,updated_at=?
                         WHERE id=? AND lease_owner=?""",(_now(),uid,owner))
@@ -444,7 +473,7 @@ def _worker(uid,path):
                 row=c.execute("SELECT cancel_requested FROM gis_jobs WHERE id=?",
                               (uid,)).fetchone()
                 if row is None:return
-                if row["cancel_requested"]:
+                if row["cancel_requested"] or _cancel_marker(uid).exists():
                     c.execute("""UPDATE gis_jobs SET status='cancelled',
                         progress=100,error=NULL,result=NULL,lease_owner=NULL,
                         lease_expires=NULL,updated_at=? WHERE id=? AND lease_owner=?""",

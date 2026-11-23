@@ -69,6 +69,15 @@ def permits(principal,method,path):
     if role not in ("viewer","editor"):
         return False
     tail=tuple(parts[2:])
+    # Exchange reads and downloads are scoped by project membership. Uploads
+    # and import jobs require an editor; raster restoration remains operator-only.
+    if method=='POST' and tail in {('vector','export'),('vector','export','preflight'),('vector','export','jobs'),('package','export')}:
+        return True
+    if method=='GET' and ((len(tail)==3 and tail[:2]==('vector','export')) or (len(tail)==4 and tail[:2]==('vector','jobs') and tail[3]=='download')):
+        return True
+    if role=='editor':
+        if method=='POST' and (tail in {('vector','import'),('vector','uploads'),('vector','import','jobs')} or (len(tail)==4 and tail[:2]==('vector','uploads') and tail[3]=='inspect')):return True
+        if method=='DELETE' and len(tail)==3 and tail[:2]==('vector','uploads'):return True
     if method=="GET":
         return tail in {(),("features",),("export",),("workspace",),("layers",),("jobs",)} or (
             len(tail)==2 and tail[0] in {"features","jobs"}) or (

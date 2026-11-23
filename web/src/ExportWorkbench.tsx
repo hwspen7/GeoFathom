@@ -1,13 +1,17 @@
-import {useState} from 'react';
-import {downloadMapPDF,exportProject,exportVectorFile,
+import {useEffect,useRef,useState} from 'react';
+import {downloadMapPDF,downloadDatasetExport,preflightDatasetExport,startDatasetExport,
+ getGISJob,cancelGISJob,downloadExchangeJob,downloadProjectPackage,
+ type DatasetExportOptions,type ExportPreflight,type GISJob,
  type GeoWorkspace,type Measurement,type NetworkFace,type TerrainRasterLayer} from './api';
 import type {ScratchFeature} from './scratch';
 
-type ExportScope='selection'|'local'|'areas'|'project';
-type ExportFormat='geojson'|'gpkg'|'kml'|'gpx'|'shapefile'|'csv'|'report'|'pdf'|'geotiff';
+type ExportScope='selection'|'local'|'areas'|'project'|'layer'|'viewport';
+type ExportFormat='geojson'|'gpkg'|'kml'|'gpx'|'shapefile'|'csv'|'report'|'pdf'|'geotiff'|'package';
 interface Props{
  projectId:string|null;workspace:GeoWorkspace|null;selected:GeoJSON.Geometry|null;
+ selectedProperties?:Record<string,unknown>;
  measurement:Measurement|null;scratch:ScratchFeature[];faces:NetworkFace[];
+ rasterSources?:Array<{id:string;kind:'image'|'dem'}>;
  terrainRasters:TerrainRasterLayer[];viewport:[number,number,number,number]|null;
 }
 const fileSave=(filename:string,blob:Blob)=>{
@@ -33,7 +37,7 @@ function collectionFromScope(scope:ExportScope,p:Props):GeoJSON.FeatureCollectio
   scope==='selection'?(p.selected?[{type:'Feature',geometry:p.selected,
    properties:{name:'Selected geometry',
     area_m2:p.measurement?.area_m2,perimeter_m:p.measurement?.perimeter_m,
-    length_m:p.measurement?.length_m,method:p.measurement?.method}}]:[]):
+    length_m:p.measurement?.length_m,method:p.measurement?.method,...p.selectedProperties}}]:[]):
   scope==='areas'?p.faces.map(f=>({type:'Feature',geometry:f.geometry,
    properties:{name:f.name,...f.properties,measurement_method:f.measurement.method}})):
   p.scratch.map(f=>({type:'Feature',geometry:f.geometry,properties:{
@@ -55,18 +59,46 @@ export default function ExportWorkbench(p:Props){
  const [busy,setBusy]=useState(false);
  const [message,setMessage]=useState('');
  const [error,setError]=useState('');
+ const [layer,setLayer]=useState(''),[targetCRS,setTargetCRS]=useState('EPSG:4326');
+ const [precision,setPrecision]=useState(''),[fields,setFields]=useState<string[]|null>(null);
+ const [preview,setPreview]=useState<ExportPreflight|null>(null),[job,setJob]=useState<GISJob|null>(null);
+ const [setup,setSetup]=useState<'scope'|'fields'|'delivery'>('scope');
+ const [background,setBackground]=useState(false),[includeRasters,setIncludeRasters]=useState(false);
+ const epoch=useRef(0),abort=useRef<AbortController|null>(null);
+ useEffect(()=>{epoch.current++;abort.current?.abort();setPreview(null);setJob(null);setFields(null);setLayer('');setMessage('');setError('');setBusy(false);},[p.projectId]);
+ const savedScope=['project','layer','viewport'].includes(scope);
+ const signature=JSON.stringify([scope,layer,format,targetCRS,precision,p.selected,p.scratch,p.faces,p.viewport,p.workspace?.total]);
+ useEffect(()=>{epoch.current++;abort.current?.abort();setBusy(false);setPreview(null);setMessage('');setError('');},[signature]);
+ useEffect(()=>()=>abort.current?.abort(),[]);
+ useEffect(()=>{
+  if(!job||!p.projectId||!['queued','running'].includes(job.status))return;
+  let live=true;const generation=epoch.current,project=p.projectId;
+  const timer=window.setTimeout(()=>{void getGISJob(project,job.id).then(next=>{
+   if(live&&epoch.current===generation){setJob(next);if(next.status==='failed')setError(next.error||'Export failed.');}
+  }).catch(e=>{if(live)setError(String(e));});},700);
+  return ()=>{live=false;window.clearTimeout(timer);};
+ },[job,p.projectId]);
  const count=scope==='selection'?Number(Boolean(p.selected)):
   scope==='local'?p.scratch.length:scope==='areas'?p.faces.length:
-  (p.workspace?.features.length??0);
- const projectFormat=['geojson','gpkg','kml','gpx','shapefile'].includes(format);
- const canExport=format==='geotiff'?p.terrainRasters.length>0:
+  preview?.count??(p.workspace?.total??0);
+ const vectorFormat=['geojson','gpkg','kml','gpx','shapefile','csv','report'].includes(format);
+ function options():DatasetExportOptions{
+  return {format:format as DatasetExportOptions['format'],target_crs:['geojson','kml','gpx','report'].includes(format)?'EPSG:4326':targetCRS,
+   include_measurements:format==='csv',...(precision.trim()?{precision:Number(precision)}:{}),...(fields?{fields}:{}),
+   ...(scope==='layer'?{layer_ids:[layer]}:{}),...(scope==='viewport'&&p.viewport?{viewport:p.viewport}:{}),
+   ...(!savedScope?{collection:collectionFromScope(scope,p)}:{})};
+ }
+ const canExport=format==='package'?Boolean(p.projectId):format==='geotiff'?p.terrainRasters.length>0:
   format==='pdf'?Boolean(p.projectId&&title.trim()&&(extent!=='viewport'||p.viewport)):
-  scope==='project'?Boolean(p.projectId&&count):
-  Boolean(count&&(format==='geojson'||format==='csv'||format==='report'));
+  savedScope?Boolean(p.projectId&&count&&(scope!=='layer'||layer)&&(scope!=='viewport'||p.viewport)):
+  Boolean(count&&(p.projectId||['geojson','csv','report'].includes(format)));
  async function run(){
   if(!canExport||busy)return;setBusy(true);setError('');setMessage('');
+  const generation=epoch.current;abort.current?.abort();abort.current=new AbortController();
   try{
-   if(format==='geotiff'){
+   if(format==='package'){
+    await downloadProjectPackage(p.projectId!,includeRasters?p.rasterSources??[]:[],abort.current.signal);
+   }else if(format==='geotiff'){
     const raster=p.terrainRasters[rasterIndex];
     if(!raster?.raster.geotiff)throw Error('No georeferenced raster result selected.');
     const bytes=Uint8Array.from(atob(raster.raster.geotiff),c=>c.charCodeAt(0));
@@ -78,34 +110,27 @@ export default function ExportWorkbench(p:Props){
       title,paper,orientation,extent:extent==='viewport'?p.viewport:null,
       show_grid:grid,show_legend:legend,layer_ids:null,
     });
-   }else if(scope==='project'&&projectFormat){
-    await exportVectorFile(p.projectId!,format as 'geojson'|'gpkg'|'kml'|'gpx'|'shapefile');
+   }else if(p.projectId&&vectorFormat){
+    if(background&&savedScope){
+     const result=await startDatasetExport(p.projectId,options());
+     if(epoch.current!==generation)return;setJob(result);
+    }else await downloadDatasetExport(p.projectId,options(),abort.current.signal);
    }else{
     // CSV / scientific reports use authoritative persisted measurements.
     // A generic vector-only GeoJSON export need not carry those attributes.
-    const featureCollection=scope==='project'&&['csv','report'].includes(format)?
-      {type:'FeatureCollection' as const,features:(p.workspace?.features??[]).map(f=>({
-        type:'Feature' as const,geometry:f.geometry,properties:{
-          ...f.properties,name:f.name,source:f.source,
-          area_m2:f.measurement?.area_m2,perimeter_m:f.measurement?.perimeter_m,
-          length_m:f.measurement?.length_m,measurement_method:f.measurement?.method,
-        },
-      }))}:
-      scope==='project'?await exportProject(p.projectId!):collectionFromScope(scope,p);
+    const featureCollection=collectionFromScope(scope,p);
     if(!featureCollection.features.length)throw Error('No features in the selected export scope.');
     if(format==='geojson'){
      fileSave('geofathom-'+scope+'.geojson',new Blob([
       JSON.stringify(featureCollection,null,2)],{type:'application/geo+json'}));
     }else if(format==='csv'){
-     const headers=['name','geometry_type','area_m2','perimeter_m','length_m',
-       'source','measurement_method'];
+     const headers=Array.from(new Set(featureCollection.features.flatMap(f=>Object.keys(f.properties??{}))));
+     headers.push('geometry_geojson','coordinate_system');
      const lines=[headers.map(csvCell).join(',')];
      for(const f of featureCollection.features){
       const props:Record<string,unknown>=f.properties??{};
-      const values=[props.name,f.geometry.type,props.area_m2,
-        props.perimeter_m,props.length_m,props.source,
-        props.measurement_method??props.method];
-      lines.push(values.map(csvCell).join(','));
+      const values=headers.slice(0,-2).map(key=>{const value=props[key];return typeof value==='object'&&value!==null?JSON.stringify(value):value;});
+      lines.push([...values,JSON.stringify(f.geometry),'EPSG:4326'].map(csvCell).join(','));
      }
      fileSave('geofathom-'+scope+'-measurements.csv',
        new Blob(['\ufeff'+lines.join('\r\n')+'\r\n'],{type:'text/csv;charset=utf-8'}));
@@ -126,41 +151,77 @@ export default function ExportWorkbench(p:Props){
      });
     }else throw Error('This format requires a saved project.');
    }
-   setMessage('Export generated: '+format.toUpperCase()+'.');
-  }catch(e){setError(e instanceof Error?e.message:String(e));}
-  finally{setBusy(false);}
+   if(epoch.current===generation)setMessage(background&&savedScope?'Export queued. The artifact will be available when complete.':'Export generated: '+format.toUpperCase()+'.');
+  }catch(e){if(epoch.current===generation)setError(e instanceof Error?e.message:String(e));}
+  finally{if(epoch.current===generation)setBusy(false);}
  }
  return <div className="export-workbench">
   <div className="data-metric-band">
    <div><small>Source</small><strong>{scope==='selection'?'Selection':
-     scope==='local'?'Local drawings':scope==='areas'?'Enclosed areas':'Project'}</strong></div>
-   <div><small>Features</small><strong>{count}</strong></div>
+     scope==='local'?'Local drawings':scope==='areas'?'Enclosed areas':scope==='layer'?'Layer':scope==='viewport'?'Map view':'Project'}</strong></div>
+   <div><small>Features</small><strong>{savedScope&&!preview&&scope!=='project'?'Inspect scope':count}</strong></div>
   </div>
   <label>Export scope
    <select aria-label="Export scope" value={scope} onChange={e=>setScope(e.target.value as ExportScope)}>
     <option value="selection">Current selection</option>
     <option value="areas">Detected closed areas</option>
     <option value="local">All local drawings</option>
-    <option value="project" disabled={!p.projectId}>Active project</option>
+    <option value="project" disabled={!p.projectId}>Active project · all records</option>
+    <option value="layer" disabled={!p.projectId}>Project layer</option>
+    <option value="viewport" disabled={!p.projectId||!p.viewport}>Project features in map view</option>
    </select>
   </label>
+  {scope==='layer'&&<label>Project layer<select aria-label="Export project layer" value={layer} onChange={e=>setLayer(e.target.value)}>
+   <option value="">Choose layer</option>{p.workspace?.layers.map(l=><option key={l.id} value={l.id}>{l.name}</option>)}
+  </select></label>}
   <label>Output
    <select aria-label="Export format" value={format} onChange={e=>setFormat(e.target.value as ExportFormat)}>
     <optgroup label="Vector datasets">
      <option value="geojson">GeoJSON · WGS84</option>
-     <option value="gpkg">GeoPackage · project</option>
-     <option value="shapefile">Shapefile ZIP · project</option>
-     <option value="kml">KML · project</option>
-     <option value="gpx">GPX · points & lines, project</option>
+     <option value="gpkg">GeoPackage</option>
+     <option value="shapefile">Shapefile ZIP</option>
+     <option value="kml">KML</option>
+     <option value="gpx">GPX · points & lines</option>
     </optgroup>
     <optgroup label="Research outputs">
-     <option value="csv">Measurements CSV</option>
+     <option value="csv">Attributes & measurements CSV</option>
      <option value="report">Measurements report JSON</option>
-     <option value="pdf">Printable map PDF · project</option>
+     <option value="pdf">Printable map PDF</option>
      <option value="geotiff">Analysis GeoTIFF</option>
+     <option value="package">Portable project ZIP</option>
     </optgroup>
    </select>
   </label>
+  {vectorFormat&&p.projectId&&<>
+   <select aria-label="Export setup" value={setup} onChange={e=>setSetup(e.target.value as typeof setup)}>
+    <option value="scope">Coordinates & precision</option><option value="fields">Attributes & checks</option><option value="delivery">Delivery</option>
+   </select>
+   {setup==='scope'&&<div className="data-input-pair">
+    <label>Output CRS<input aria-label="Export target EPSG" value={['geojson','kml','gpx','report'].includes(format)?'EPSG:4326':targetCRS}
+     disabled={['geojson','kml','gpx','report'].includes(format)} onChange={e=>setTargetCRS(e.target.value)}/></label>
+    <label>Decimals<input aria-label="Export coordinate precision" type="number" min="0" max="15" placeholder="Full precision" value={precision} onChange={e=>setPrecision(e.target.value)}/></label>
+   </div>}
+   {setup==='fields'&&<>
+    <small>{fields===null?'All source attributes are included.':fields.length+' fields selected.'}</small>
+    {preview&&<label>Fields<select aria-label="Export attribute fields" multiple size={3} value={fields??preview.schema.map(f=>f.name)}
+     onChange={e=>setFields(Array.from(e.target.selectedOptions,o=>o.value))}>
+     {preview.schema.map(f=><option key={f.name}>{f.name}</option>)}
+    </select></label>}
+    <button type="button" onClick={()=>setFields(null)}>Include all fields</button>
+   </>}
+   {setup==='delivery'&&<label><input aria-label="Background dataset export" type="checkbox" disabled={!savedScope} checked={background&&savedScope} onChange={e=>setBackground(e.target.checked)}/> Prepare as background job</label>}
+   <button type="button" disabled={busy||!canExport} onClick={()=>{
+    const generation=epoch.current;abort.current?.abort();abort.current=new AbortController();setBusy(true);setError('');
+    void preflightDatasetExport(p.projectId!,options(),abort.current.signal).then(r=>{if(epoch.current===generation)setPreview(r);})
+     .catch(e=>{if(epoch.current===generation)setError(e instanceof Error?e.message:String(e));}).finally(()=>{if(epoch.current===generation)setBusy(false);});
+   }}>Inspect export</button>
+   {preview&&<small role="status">{preview.count.toLocaleString()} features · {preview.geometry_types.join(', ')} · {preview.target_crs}</small>}
+   {preview?.warnings.map(w=><small key={w}>{w}</small>)}
+  </>}
+  {format==='package'&&<>
+   <small>Saved features, layers, styles, CRS and revisions. Restore into a new empty project. Local unsaved drawings and browser analysis caches are excluded.</small>
+   <label><input type="checkbox" aria-label="Include source GeoTIFFs" checked={includeRasters} onChange={e=>setIncludeRasters(e.target.checked)}/> Include loaded source GeoTIFFs ({p.rasterSources?.length??0})</label>
+  </>}
   {format==='geotiff'&&<label>Raster result
    <select aria-label="GeoTIFF result" value={rasterIndex}
     onChange={e=>setRasterIndex(Number(e.target.value))}>
@@ -186,10 +247,15 @@ export default function ExportWorkbench(p:Props){
    </div>
   </div>}
   <button type="button" className="data-primary" onClick={()=>void run()}
-   disabled={!canExport||busy}>{busy?'Preparing…':'Export '+format.toUpperCase()}</button>
+   disabled={!canExport||busy||Boolean(job&&['queued','running'].includes(job.status))}>{busy?'Preparing…':'Export '+format.toUpperCase()}</button>
   {format!=='geotiff'&&count===0&&<small>No features in the current scope.</small>}
-  {scope!=='project'&&['gpkg','kml','gpx','shapefile'].includes(format)&&
-    <small>Save features to a project to use this vector format.</small>}
+  {!p.projectId&&['gpkg','kml','gpx','shapefile'].includes(format)&&
+    <small>Open a project to use the GIS conversion service.</small>}
+  {job&&<div role="status">{job.status} · {job.progress}%
+   <progress aria-label="Dataset export progress" max={100} value={job.progress}/>
+   {['queued','running'].includes(job.status)&&<button type="button" onClick={()=>void cancelGISJob(p.projectId!,job.id).then(setJob).catch(e=>setError(String(e)))}>Cancel export</button>}
+   {job.status==='completed'&&<button type="button" onClick={()=>void downloadExchangeJob(p.projectId!,job.id).catch(e=>setError(String(e)))}>Download dataset</button>}
+  </div>}
   {message&&<small className="project-info" role="status">{message}</small>}
   {error&&<small className="discovery-error" role="alert">{error}</small>}
  </div>;

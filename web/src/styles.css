@@ -1496,3 +1496,11 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 }
 .desktop-gis .data-page-buttons button{padding:5px 4px;font-size:10px}
 .desktop-gis .data-network-result-row{margin:3px 0}
+
+/* Dataset controls page their configuration inside the existing fixed dock. */
+.dataset-exchange{display:flex;flex-direction:column;gap:8px;min-width:0}
+.dataset-exchange label{display:flex;flex-direction:column;gap:4px}
+.dataset-exchange select,.dataset-exchange input,.export-workbench input{min-width:0;max-width:100%;box-sizing:border-box}
+.dataset-exchange select[multiple],.export-workbench select[multiple]{max-height:82px}
+.exchange-filename{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dataset-exchange progress,.export-workbench progress{display:block;width:100%;height:6px;margin:6px 0;accent-color:#24736a}
