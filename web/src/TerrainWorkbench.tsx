@@ -153,6 +153,33 @@ export default function TerrainWorkbench(p:Props){
  const [compareRecordId,setCompareRecordId]=useState('');
  const selected=records.find(r=>r.id===selectedRecord);
  const result=selected?.advanced??null,slope=selected?.slope??null,profile=selected?.profile??null;
+ // Show operation-critical metrics first; keep all scientific fields in More.
+ const metricEntries=Object.entries(result?.metrics??{});
+ const preferredMetricKeys:Record<string,string[]>={
+   elevation:['product_min','product_max','product_mean'],
+   slope_map:['product_min','product_max','product_mean'],
+   aspect_map:['circular_mean_aspect_deg','flat_cells','directional_cells'],
+   contours:['contour_levels','contour_lines','interval_m'],
+   hillshade:['product_min','product_max','product_mean'],
+   flow_direction:['outlet_cells','flat_routing_cells','product_valid_cells'],
+   flow_accumulation:['product_max','product_mean','outlet_cells'],
+   flow_accumulation_mfd:['product_max','product_mean','mfd_exponent'],
+   streams:['channel_cells','drainage_edges','vector_edges'],
+   stream_order:['max_stream_order','channel_cells','stream_threshold_cells'],
+   watershed:['upstream_cells','upstream_grid_area_m2'],
+   visibility:['visible_cells','visible_grid_area_m2','unknown_cells'],
+   viewshed_multi:['visible_cells','visible_by_all_cells','unknown_cells'],
+   volume:['cut_m3','fill_m3','net_cut_m3'],
+   cutfill_map:['cut_m3','fill_m3','net_cut_m3'],
+   least_cost:['route_length_m','route_cells','route_cost'],
+   dem_difference:['elevation_change_mean_m','comparison_coverage_pct','elevation_change_rmse_m'],
+ };
+ const priority=preferredMetricKeys[result?.operation??'']??[];
+ const featuredMetrics=priority.length
+   ?metricEntries.filter(([key])=>priority.includes(key)).slice(0,4)
+   :metricEntries.filter(([key])=>!['dataset_overlap_pct','valid_grid_pct','product_valid_cells'].includes(key)).slice(0,4);
+ const shownKeys=new Set(featuredMetrics.map(([key])=>key));
+ const additionalMetrics=metricEntries.filter(([key])=>!shownKeys.has(key));
  const activeProfileSamples=profile?.samples??null;
  const comparableRuns=selected?records.filter(r=>r.id!==selected.id&&r.operation===selected.operation):[];
  const comparison=comparableRuns.find(r=>r.id===compareRecordId)??null;
@@ -611,11 +638,19 @@ export default function TerrainWorkbench(p:Props){
      <small className="compact-notice" title={slope.warning}>{slope.valid_pixels} valid cells · {slope.engine}</small></>}
      {profile&&<ProfilePlot samples={profile.samples} length={profile.length_m} onHover={p.onHover} mapIndex={p.profileMapIndex??null}/>}
      {result&&<>
-       <div className="terrain-metrics">{Object.entries(result.metrics).map(([k,v])=><div key={k}><span>{names[k]??k.replaceAll('_',' ')}</span><strong>{fmt(v)} {units[k]??(['product_min','product_max','product_mean'].includes(k)?(
+       <div className="terrain-metrics terrain-key-metrics">{featuredMetrics.map(([k,v])=><div key={k}><span>{names[k]??k.replaceAll('_',' ')}</span><strong>{fmt(v)} {units[k]??(['product_min','product_max','product_mean'].includes(k)?(
           ['elevation','tpi','tri','cutfill_map','dem_difference'].includes(result.operation)?'m':
           ['slope_map','aspect_map'].includes(result.operation)?'°':
           result.operation==='flow_accumulation'?'cells':
            ['curvature','plan_curvature','profile_curvature'].includes(result.operation)?'m⁻¹':''):'')}</strong></div>)}</div>
+       {!!additionalMetrics.length&&<details className="terrain-metric-details" aria-label="Additional terrain metrics">
+         <summary>More metrics · {additionalMetrics.length}</summary>
+       <div className="terrain-metrics">{additionalMetrics.map(([k,v])=><div key={k}><span>{names[k]??k.replaceAll('_',' ')}</span><strong>{fmt(v)} {units[k]??(['product_min','product_max','product_mean'].includes(k)?(
+          ['elevation','tpi','tri','cutfill_map','dem_difference'].includes(result.operation)?'m':
+          ['slope_map','aspect_map'].includes(result.operation)?'°':
+          result.operation==='flow_accumulation'?'cells':
+           ['curvature','plan_curvature','profile_curvature'].includes(result.operation)?'m⁻¹':''):'')}</strong></div>)}</div>
+       </details>}
        {result.operation==='volume'&&<MetricBars label="Earthwork volume (m³)" values={[{name:'Cut',value:result.metrics.cut_m3,color:'#b87848'},{name:'Fill',value:result.metrics.fill_m3,color:'#3b82ab'}]}/>}
        {(result.operation==='visibility'||result.operation==='viewshed_multi')&&<MetricBars label="Visibility (cells)" values={[{name:'Visible',value:result.metrics.visible_cells,color:'#34885c'},{name:'Unknown',value:result.metrics.unknown_cells,color:'#9099a2'},{name:'Hidden',value:Math.max(0,result.valid_cells-result.metrics.visible_cells-result.metrics.unknown_cells),color:'#c17d55'}]}/>}
        {result.operation==='watershed'&&<MetricBars label="Catchment (cells)" values={[{name:'Upstream',value:result.metrics.upstream_cells,color:'#3687b9'},{name:'Other',value:Math.max(0,result.valid_cells-result.metrics.upstream_cells),color:'#9ba7ad'}]}/>}
@@ -634,9 +669,7 @@ export default function TerrainWorkbench(p:Props){
              <option value="nearest">Exact class boundaries</option>
            </select>
          </label>
-         {selected?.resampling==='linear'&&<small className="compact-notice">
-           Visual interpolation only; original DEM grid, class counts and GeoTIFF resolution are unchanged.
-         </small>}
+
          <img src={result.raster.png} alt="Derived terrain raster" style={{width:'100%',maxHeight:180,objectFit:'contain'}}/>
          <MetricBars label="Terrain class distribution (cells)" values={result.raster.legend.map(b=>({name:b.label,value:b.cells,color:b.color}))}/>
          <button onClick={()=>{const a=document.createElement('a');const data=Uint8Array.from(atob(result.raster!.geotiff),c=>c.charCodeAt(0));const url=URL.createObjectURL(new Blob([data],{type:'image/tiff'}));a.href=url;a.download=result.operation+'.tif';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}}>GeoTIFF</button></div>}
