@@ -1233,6 +1233,14 @@ export default function App() {
             {!capabilities&&connectionError&&<div className="discovery-error" role="alert">{connectionError} <button onClick={()=>setConnectionRetry(v=>v+1)}>Reconnect</button></div>}
             <ProjectsPanel toolbarTarget={projectToolbarTarget} toolbarActionsTarget={projectActionsTarget} treeTarget={objectTreeTarget}
               interactionBusy={busy||Boolean(drawingMode)} objectPageSize={3}
+              onObjectMutation={(id,feature)=>{
+                // Search/attribute results may lie outside the workspace's
+                // first page. Update their owner as well, avoiding ghost
+                // rows and stale map labels after rename/delete/restore.
+                setPagedFeatures(old=>feature?[feature,...old.filter(item=>item.id!==id)]:old.filter(item=>item.id!==id));
+                setProjectWorkspace(old=>old?{...old,features:feature?
+                  old.features.map(item=>item.id===id?feature:item):old.features.filter(item=>item.id!==id)}:old);
+              }}
               objectGroups={[{id:'local-drawings',name:'Local drawings',items:scratch,
                 selectedId:scratchId,onOpen:id=>{const item=scratch.find(f=>f.id===id);if(item){
                   setScratch(old=>old.map(f=>f.id===id?{...f,visible:true}:f));selectScratch({...item,visible:true});

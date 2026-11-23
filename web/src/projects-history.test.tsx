@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import {act,cleanup,fireEvent,render,screen,waitFor} from '@testing-library/react';
+import {act,cleanup,fireEvent,render,screen,waitFor,within} from '@testing-library/react';
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
 import ProjectsPanel from './ProjectsPanel';
 import type {ComponentProps} from 'react';
@@ -40,6 +40,27 @@ beforeEach(()=>{
   api.getFeatureHistory.mockImplementation(async (_project,id)=>history(id==='first'?first:second,2));
 });
 afterEach(()=>{cleanup();sessionStorage.clear();});
+it('updates the owner of renamed and deleted search results outside the workspace page',async()=>{
+  const outside=feature('outside'),p=props('first'),notify=vi.fn();
+  const renamed={...outside,name:'Renamed outside',revision:4};
+  api.updateProjectFeature.mockResolvedValue(renamed);
+  api.deleteProjectFeature.mockResolvedValue(undefined);
+  const view=render(<ProjectsPanel {...p} extraFeatures={[outside]} onObjectMutation={notify}/>);
+  const row=within(await screen.findByRole('group',{name:'Object outside'}));
+  fireEvent.click(row.getByRole('button',{name:'Rename object'}));
+  fireEvent.change(row.getByRole('textbox',{name:'Object name'}),{target:{value:'Renamed outside'}});
+  fireEvent.click(row.getByRole('button',{name:'Save name'}));
+  await waitFor(()=>expect(notify).toHaveBeenCalledWith('outside',renamed));
+  expect(api.updateProjectFeature).toHaveBeenCalledWith('p','outside',{name:'Renamed outside',expected_revision:3});
+  await waitFor(()=>expect(row.queryByRole('textbox')).toBeNull());
+  view.rerender(<ProjectsPanel {...p} extraFeatures={[renamed]} onObjectMutation={notify}/>);
+  const updated=within(screen.getByRole('group',{name:'Object Renamed outside'}));
+  fireEvent.click(updated.getByRole('button',{name:'Delete object'}));
+  await waitFor(()=>expect(notify).toHaveBeenCalledWith('outside',null));
+  expect(api.deleteProjectFeature).toHaveBeenCalledWith('p','outside',4);
+  expect(p.onOpen).not.toHaveBeenCalled();
+  expect(p.onFeatureDeleted).not.toHaveBeenCalled();
+});
 it('ignores a late manually requested history after selecting another feature',async()=>{
   const p=props('first');
   const {rerender}=render(<ProjectsPanel {...p}/>);

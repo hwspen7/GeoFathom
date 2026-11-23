@@ -36,12 +36,13 @@ interface Props {
   objectGroups?:WorkspaceObjectGroup[];
   interactionBusy?:boolean;
   objectPageSize?:number;
+  onObjectMutation?:(id:string,feature:WorkspaceFeature|null)=>void;
 }
 
 export default function ProjectsPanel({
   geometry, featureName, featureSource, featureProperties, selectedFeatureId,
   splitParts, refreshToken, onOpen, onWorkspace, onPlaceAnnotation, onFeatureDeleted,
-  extraFeatures,onSavedDraft,onProjectSwitch,toolbarTarget,toolbarActionsTarget,treeTarget,objectGroups,interactionBusy=false,objectPageSize=5,
+  extraFeatures,onSavedDraft,onProjectSwitch,toolbarTarget,toolbarActionsTarget,treeTarget,objectGroups,interactionBusy=false,objectPageSize=5,onObjectMutation,
 }: Props) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [listRetry,setListRetry]=useState(0);
@@ -370,10 +371,12 @@ export default function ProjectsPanel({
     objectWriting.current=true;setBusy(true);setError('');
     try{
       if(name!==undefined){
-        await updateProjectFeature(projectId,feature.id,{name,expected_revision:feature.revision});
+        const updated=await updateProjectFeature(projectId,feature.id,{name,expected_revision:feature.revision});
+        if(selection.current===projectId)onObjectMutation?.(feature.id,updated);
       }else{
         await deleteProjectFeature(projectId,feature.id,feature.revision);
         if(selection.current===projectId){
+          onObjectMutation?.(feature.id,null);
           if(featureIdentity.current===feature.id)onFeatureDeleted();
           setRecentDeleted({id:feature.id,name:feature.name});
           setTrashPulse(value=>value+1);
@@ -395,8 +398,9 @@ export default function ProjectsPanel({
     const projectId=selected,item=recentDeleted;
     objectWriting.current=true;setBusy(true);setObjectError('');
     try{
-      await restoreDeletedFeature(projectId,item.id);
+      const restored=await restoreDeletedFeature(projectId,item.id);
       if(selection.current===projectId){
+        onObjectMutation?.(item.id,restored);
         await reload(projectId);
         setRecentDeleted(null);setTrashPulse(value=>value+1);
       }
