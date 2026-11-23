@@ -76,10 +76,12 @@ test('advanced surface families retain distinct real results and scientific expo
  const fixture=await setup(page);
  const tools=page.getByLabel('Terrain tools');
  const run=page.getByRole('button',{name:'Run terrain operation'});
- const select=async(group:string,title:string)=>{
+ const select=async(group:string,title:string,expectEnabled=true)=>{
   await page.getByLabel('Terrain tool group').selectOption(group);
   await tools.getByRole('button',{name:title,exact:true}).click();
-  await expect(run).toBeEnabled();
+  // Tools needing additional inputs must stay disabled until their prerequisites are valid.
+  if(expectEnabled) await expect(run).toBeEnabled();
+  else await expect(run).toBeDisabled();
  };
  const execute=async(title:string)=>{
   const oldCount=await page.getByLabel('Analysis result layers').locator('.scratch-row').count();
@@ -102,7 +104,7 @@ test('advanced surface families retain distinct real results and scientific expo
   await execute(name);
   await expect(page.getByAltText('Derived terrain raster')).toBeVisible();
  }
- await select('Surface','DEM difference');
+ await select('Surface','DEM difference',false);
  await expect(run).toBeDisabled();
  await page.getByLabel('Reference comparison DEM').selectOption(fixture.ids[1]);
  await expect(run).toBeEnabled();
@@ -136,7 +138,7 @@ test('advanced surface families retain distinct real results and scientific expo
  await page.getByLabel('Max elevation (m)').fill('200');
  await expect(run).toBeEnabled();
  await execute('Site suitability');
- await select('Engineering','Least-cost route');
+ await select('Engineering','Least-cost route',false);
  await expect(run).toBeDisabled();
  await page.getByLabel('Terrain origin longitude').fill(String(fixture.start[0]));
  await page.getByLabel('Terrain origin latitude').fill(String(fixture.start[1]));
