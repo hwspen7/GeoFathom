@@ -15,6 +15,7 @@ export interface TerrainParameterForm {
  sectionSpacing:string;sectionWidth:string;fillSinks:boolean;
  considerCurvature:boolean;refractionCoeff:string;comparisonId:string;
  observerPoints:[string,string][];drape:boolean;textureImageId:string|null;
+ gradientMethod:'horn'|'zevenbergen_thorne';slopeClasses:'standard'|'detailed'|'broad';
 }
 
 export function terrainParametersForOperation(
@@ -104,5 +105,10 @@ export function terrainParametersForOperation(
    // slope, elevation, aspect, derivatives, distribution and so forth.
    break;
  }
+ // Method selections are scientific inputs, not display-only settings.
+ if(['slope_map','aspect_map','hillshade','suitability','curvature',
+     'plan_curvature','profile_curvature'].includes(operation))
+  params.gradient_method=form.gradientMethod;
+ if(operation==='slope_map')params.slope_classes=form.slopeClasses;
  return params;
 }
