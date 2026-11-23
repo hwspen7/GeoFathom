@@ -139,6 +139,9 @@ export default function App() {
   const [pinPage,setPinPage]=useState(0);
   const [candidatePage,setCandidatePage]=useState(0);
   const scratchSize=6,pinSize=5,candidateSize=5;
+  useEffect(()=>setScratchPage(page=>Math.min(page,Math.max(0,Math.ceil(scratch.length/scratchSize)-1))),[scratch.length]);
+  useEffect(()=>setPinPage(page=>Math.min(page,Math.max(0,Math.ceil(pinnedPlaces.length/pinSize)-1))),[pinnedPlaces.length]);
+  useEffect(()=>setCandidatePage(0),[candidates]);
   // Fixed-size workbench docks: map takes all remaining viewport width.
   // No draggable splitters, scrolling side panels, or stored widths.
   // Exceptional long controls open as an expanded workspace, not as a scrolling sidebar.
