@@ -25,7 +25,6 @@ import ProfessionalPanel from './ProfessionalPanel';
 import TerrainWorkbench from './TerrainWorkbench';
 import {WorkspaceModuleBar,WorkspaceCommandPalette,WorkspaceDockHeading,
   WORKSPACE_MODULES,type WorkspaceCommand} from './WorkspaceChrome';
-import WorkspaceDockResizer,{readDockWidth} from './WorkspaceDockResizer';
 import GeometryAnalysis from './GeometryAnalysis';
 import SpatialToolsPanel from './SpatialToolsPanel';
 import CartographyProPanel from './CartographyProPanel';
@@ -133,14 +132,10 @@ export default function App() {
   const [terrainLineDrawing,setTerrainLineDrawing]=useState(false);
   const [terrainVisible,setTerrainVisible]=useState(true);
   const [showLayers,setShowLayers]=useState(false);
-  const [leftDockWidth,setLeftDockWidth]=useState(()=>readDockWidth('results',340));
-  const [rightDockWidth,setRightDockWidth]=useState(()=>readDockWidth('operations',320));
-  useEffect(()=>{
-    try{
-      localStorage.setItem('geofathom-dock-width:results',String(leftDockWidth));
-      localStorage.setItem('geofathom-dock-width:operations',String(rightDockWidth));
-    }catch{/* Preferences never block a research session. */}
-  },[leftDockWidth,rightDockWidth]);
+  // Fixed-size workbench docks: map takes all remaining viewport width.
+  // No draggable splitters or stored widths; wheel/keyboard scrolling remains.
+  const [operationsFooterTarget,setOperationsFooterTarget]=useState<HTMLDivElement|null>(null);
+  const [resultsFooterTarget,setResultsFooterTarget]=useState<HTMLDivElement|null>(null);
   const [terrainPicking,setTerrainPicking]=useState(false);
   const [terrainOrigin,setTerrainOrigin]=useState<Position|null>(null);
   const [terrainHover,setTerrainHover]=useState<Position|null>(null);
@@ -1480,7 +1475,7 @@ export default function App() {
         </div>
 
         </main>
-        <aside className="gis-inspector gis-operations" hidden={!showTools} style={{width:rightDockWidth}} aria-label="Operations">
+        <aside className="gis-inspector gis-operations" hidden={!showTools} aria-label="Operations">
           <WorkspaceDockHeading><Compass size={15}/> Tools</WorkspaceDockHeading>
           <div className="sidebar-scroll">
           <details className="workspace-objects" open>
@@ -1750,6 +1745,8 @@ export default function App() {
             <div className="section-heading"><Layers3 size={16}/><span>Terrain analysis</span></div>
             <TerrainWorkbench key={'terrain-'+(activeProjectId??'no-project')} projectId={activeProjectId}
               resultsTarget={resultsTarget}
+              operationsFooterTarget={operationsFooterTarget}
+              resultsFooterTarget={resultsFooterTarget}
               active={activeTool==='tools-terrain'&&showTools}
               geometry={preview||drawingMode&&!terrainLineDrawing?null:extentMode?extentGeometry:geometry}
               profileGeometry={terrainProfileLine} raster={demLayer} imageRaster={imageLayer} viewport={viewport}
@@ -1890,14 +1887,14 @@ export default function App() {
 
             <div hidden={activeTool!=='tools-services'}><ApiAccessPanel/></div>
           </div>
+          <div className="workspace-fixed-footer" ref={setOperationsFooterTarget}/>
         </aside>
-        {showTools&&<WorkspaceDockResizer side="left" width={rightDockWidth} onChange={setRightDockWidth}/>}
-        <WorkspaceDockResizer side="right" width={leftDockWidth} onChange={setLeftDockWidth}/>
-        <aside className="gis-results-monitor" aria-label="Results monitor" style={{width:leftDockWidth}}>
+        <aside className="gis-results-monitor" aria-label="Results monitor">
           <WorkspaceDockHeading><Layers3 size={15}/> Results</WorkspaceDockHeading>
           <div className="sidebar-scroll" ref={setResultsTarget}>
             {!measurement&&activeTool!=='tools-terrain'&&<div className="workspace-monitor-empty">No selection</div>}
           </div>
+          <div className="workspace-fixed-footer" ref={setResultsFooterTarget}/>
         </aside>
       </div>
       {contextMenu&&<div className="gis-context-menu" role="menu" aria-label="Map commands"

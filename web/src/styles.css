@@ -827,3 +827,50 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .desktop-gis .gis-professional-results .terrain-metrics strong{font-size:15px}
 .desktop-gis .gis-professional-results .terrain-profile{padding:6px 0;border-top:1px solid #dfe5ea}
 .desktop-gis .gis-header .workspace-module-bar{flex:1;min-width:130px;max-width:100%;overflow-x:auto;white-space:nowrap}
+
+
+/* Fixed-width, edge-to-edge research workbench. Both side panels remain
+   internally scrollable with mouse/touch/keyboard; their scroll chrome is hidden.
+   Horizontal screen space belongs to the map, never a draggable divider. */
+.desktop-gis .gis-body {display:flex;gap:0;min-height:0;}
+.desktop-gis .gis-body>.workspace-dock-resize {display:none!important;}
+.desktop-gis .gis-operations {
+  order:0;flex:0 0 318px;width:318px!important;min-width:318px!important;
+  max-width:318px!important;box-shadow:none;border-right:1px solid #dce3ea;
+  background:#f8fafc;
+}
+.desktop-gis .gis-body>.main {order:1;flex:1 1 auto;min-width:200px;min-height:0;}
+.desktop-gis .gis-results-monitor {
+  order:2;flex:0 0 364px;width:364px!important;min-width:364px!important;
+  max-width:364px!important;box-shadow:none;border-left:1px solid #dce3ea;
+  background:#fff;
+}
+.desktop-gis .gis-operations .sidebar-scroll,
+.desktop-gis .gis-results-monitor .sidebar-scroll,
+.desktop-gis .gis-project-drawer .sidebar-scroll,
+.desktop-gis .terrain-result-layer-list,
+.desktop-gis .gis-results-monitor .gis-result-list {
+  scrollbar-width:none;-ms-overflow-style:none;overscroll-behavior:contain;
+}
+.desktop-gis .gis-operations .sidebar-scroll::-webkit-scrollbar,
+.desktop-gis .gis-results-monitor .sidebar-scroll::-webkit-scrollbar,
+.desktop-gis .gis-project-drawer .sidebar-scroll::-webkit-scrollbar,
+.desktop-gis .terrain-result-layer-list::-webkit-scrollbar,
+.desktop-gis .gis-results-monitor .gis-result-list::-webkit-scrollbar {display:none;width:0;height:0;}
+.desktop-gis .gis-operations .sidebar-scroll{padding:8px 14px 18px;}
+.desktop-gis .gis-results-monitor .sidebar-scroll{padding:9px 15px 18px;}
+.desktop-gis .workspace-fixed-footer:empty{display:none}
+.desktop-gis .workspace-fixed-footer:not(:empty){
+  flex:0 0 auto;background:#fff;border-top:1px solid #e1e8ef;
+  padding:10px 13px;box-shadow:0 -5px 18px rgba(25,49,71,.045);z-index:2;
+}
+.desktop-gis .gis-results-monitor>.workspace-fixed-footer:not(:empty){padding:9px 14px 12px;}
+@media(max-width:1120px){
+  .desktop-gis .gis-operations{flex-basis:294px;width:294px!important;min-width:294px!important;max-width:294px!important}
+  .desktop-gis .gis-results-monitor{flex-basis:330px;width:330px!important;min-width:330px!important;max-width:330px!important}
+}
+@media(max-width:780px){
+  .desktop-gis .gis-operations{position:absolute;left:0;top:0;bottom:0;z-index:9;max-width:min(310px,85vw)!important;min-width:min(310px,85vw)!important;width:min(310px,85vw)!important;box-shadow:3px 0 12px #10213224}
+  .desktop-gis .gis-results-monitor{flex:0 0 min(320px,55vw);min-width:min(320px,55vw)!important;max-width:min(320px,55vw)!important;width:min(320px,55vw)!important}
+  .desktop-gis .gis-body>.main{min-width:0}
+}
