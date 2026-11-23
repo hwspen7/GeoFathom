@@ -979,14 +979,21 @@ export type TerrainOperation='dem_difference'|'contours'|'volume'|'visibility'|'
 export interface TerrainRaster {png:string;geotiff:string;corners:[[number,number],[number,number],[number,number],[number,number]];legend:{label:string;color:string;cells:number}[];width:number;height:number;valid_cells:number;unit?:string}
 export interface TerrainRasterLayer {id:string;title:string;raster:TerrainRaster;opacity:number;resampling:'nearest'|'linear'}
 export interface TerrainDistributionBin {lower_m:number;upper_m:number;cells:number;area_m2:number;cumulative_pct:number}
-export interface TerrainMesh {rows:number;cols:number;dx_m:number;dy_m:number;heights:Array<number|null>;origin_xy?:[number,number];source_crs?:string;texture?:{png:string;coverage_pct:number}}
+export interface TerrainLOD {tile_cells:number;levels:number[];transport:string;tiles:Array<{lod_step:number;row_start:number;col_start:number;rows:number;cols:number;bounds_cell:number[];row_indices:number[];col_indices:number[];heights:Array<number|null>}>}
+export interface TerrainMesh {rows:number;cols:number;dx_m:number;dy_m:number;heights:Array<number|null>;origin_xy?:[number,number];source_crs?:string;texture?:{png:string;coverage_pct:number};lod?:TerrainLOD}
 export interface AdvancedTerrainResult {
   operation:TerrainOperation;source_crs:string;source_vertical_datum?:string|null;valid_cells:number;missing_cells:number;
   cell_area_m2:number;metrics:Record<string,number>;warning:string;
   algorithm_options?:{gradient_method:string;slope_classes:string;
     neighborhood_radius_cells?:number|null;route_model?:string|null;
     mesh_samples?:number|null;stream_order_scheme?:string|null;hillshade_mode?:string|null;maximum_distance_m?:number|null;
-    view_azimuth_deg?:number|null;view_width_deg?:number|null};
+    view_azimuth_deg?:number|null;view_width_deg?:number|null;
+    flow_routing_method?:string|null;depression_method?:string|null;
+    curvature_method?:string|null;curvature_radius_cells?:number|null;
+    design_east_grade?:number|null;design_north_grade?:number|null;
+    design_max_grade?:number|null;elevation_sigma_m?:number|null;
+    optimize_observers?:number|null;dsm_source?:boolean|null;mesh_lod?:boolean|null};
+  selection?:{selected_candidate_indices:number[];marginal_visible_cells:number[];total_candidate_sites:number};
   quality?:{status:string;reference_validation:string;uncertainty:string;
     source_overlap_pct:number;valid_study_cell_pct:number;
     derivative_coverage_pct:number|null;flags:string[];area_basis:string;
@@ -996,7 +1003,11 @@ export interface AdvancedTerrainResult {
 export function advancedTerrain(body:{image_id:string;geometry:GeoJSON.Geometry;operation:TerrainOperation;
   interval:number;reference:number;point:[number,number]|null;observer_height:number;target_height:number;end_point?:[number,number]|null;max_slope?:number;min_elevation?:number;max_elevation?:number;max_tri?:number;stream_cells?:number;azimuth?:number;altitude?:number;section_spacing?:number;section_width?:number;texture_image_id?:string|null;fill_sinks?:boolean;consider_curvature?:boolean;refraction_coeff?:number;comparison_image_id?:string|null;observer_points?:[number,number][]|null;gradient_method?:'horn'|'zevenbergen_thorne';slope_classes?:'standard'|'detailed'|'broad';mfd_exponent?:number;neighborhood_radius?:number;max_distance_m?:number;
   view_azimuth?:number;view_width?:number;route_model?:'surface'|'distance'|'gentle';
-  mesh_samples?:number;stream_order_scheme?:'strahler'|'shreve';hillshade_mode?:'single'|'four_direction'},signal?:AbortSignal):Promise<AdvancedTerrainResult>{
+  mesh_samples?:number;stream_order_scheme?:'strahler'|'shreve';hillshade_mode?:'single'|'four_direction';
+  flow_routing_method?:'d8'|'dinf';depression_method?:'fill'|'breach';
+  curvature_method?:'finite_difference'|'quadratic';curvature_radius?:number;
+  design_east_grade?:number;design_north_grade?:number;design_max_grade?:number;elevation_sigma_m?:number;
+  optimize_observers?:number;dsm_image_id?:string|null;mesh_lod?:boolean},signal?:AbortSignal):Promise<AdvancedTerrainResult>{
   return request('/terrain/advanced',{signal,method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
 }
 
