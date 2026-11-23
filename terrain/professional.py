@@ -40,7 +40,7 @@ RASTER_UNITS = {
     "profile_curvature":"1/m", "flow_direction":"D8_code",
     "flow_accumulation":"cells", "flow_accumulation_mfd":"cell_equivalents",
     "streams":"binary", "stream_order":"Strahler_order",
-    "suitability":"binary", "least_cost":"binary",
+    "suitability":"binary", "research_score":"0..1", "least_cost":"binary",
     "viewshed_multi":"observer_count",
 }
 
