@@ -119,6 +119,7 @@ export default function App() {
   const [resultsTarget,setResultsTarget]=useState<HTMLDivElement|null>(null);
   const [projectToolbarTarget,setProjectToolbarTarget]=useState<HTMLDivElement|null>(null);
   const [projectActionsTarget,setProjectActionsTarget]=useState<HTMLDivElement|null>(null);
+  const [terrainExportTarget,setTerrainExportTarget]=useState<HTMLDivElement|null>(null);
   const [objectTreeTarget,setObjectTreeTarget]=useState<HTMLDivElement|null>(null);
   const [shortcutHelp,setShortcutHelp]=useState(false);
   const [commandOpen,setCommandOpen]=useState(false);
@@ -985,8 +986,8 @@ export default function App() {
       shortcut:'Ctrl S',disabled:!geometry||busy,run:saveSelection},
     {id:'map:layers',label:showLayers?'Hide object tree':'Show object tree',
       group:'View',run:()=>setShowLayers(v=>!v)},
-    {id:'map:inspector',label:showTools?'Hide operations':'Show operations',
-      group:'View',run:()=>setShowTools(v=>!v)},
+    {id:'map:inspector',label:'Focus operations',
+      group:'View',run:()=>setShowTools(true)},
     {id:'map:help',label:'Keyboard shortcuts',group:'Help',
       shortcut:'?',run:()=>setShortcutHelp(true)},
   ];
@@ -994,18 +995,8 @@ export default function App() {
     <div className="workspace desktop-gis">
       <header className="gis-header">
         <div className="gis-brand"><Globe2 size={19}/> <strong>GeoFathom</strong></div>
-        <WorkspaceModuleBar active={activeTool} open={showTools}
-          onActivate={id=>{
-            // Project/search is a temporary drawer; changing workbenches
-            // returns its space to the active operation panel and map.
-            setShowLayers(false);
-            if(id==='tools-terrain'&&activeTool===id&&showTools){
-              if(drawingMode&&vertices.length){
-                setError('Finish or cancel the current drawing before closing Terrain.');return;
-              }
-              setShowTools(false);setTerrainPicking(false);setTerrainHover(null);
-            }else revealPanel(id);
-          }}/>
+        <WorkspaceModuleBar active={activeTool} open={true}
+          onActivate={id=>revealPanel(id)}/>
 
         <details className="gis-settings">
           <summary>Settings</summary>
@@ -1049,20 +1040,31 @@ export default function App() {
           aria-label="Command search" onClick={()=>setCommandOpen(true)}>
           <Search size={14}/> <span>Commands</span><kbd>Ctrl K</kbd>
         </button>
-        <button className="gis-shortcut-help" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts" onClick={()=>setShortcutHelp(true)}>?</button>
         <div className="gis-active-project" ref={setProjectToolbarTarget} aria-label="Active workspace"/>
-        <button className="gis-inspector-toggle" aria-label="Toggle project and layers" aria-expanded={showLayers} aria-pressed={showLayers} onClick={()=>setShowLayers(v=>!v)}>Project / Search</button>
-        <button className="gis-inspector-toggle" aria-label="Toggle operations" aria-pressed={showTools} onClick={()=>setShowTools(v=>!v)}>Tools</button>
+        <details className="gis-header-menu gis-workspace-menu">
+          <summary aria-label="Workspace menu">Workspace</summary>
+          <div className="gis-header-popover">
+            <button type="button" aria-expanded={showLayers} onClick={()=>setShowLayers(v=>!v)}>Project / Layers</button>
+            <button type="button" onClick={()=>{setShowLayers(false);revealPanel('tools-survey');}}>Find a place</button>
+            <button type="button" onClick={()=>setShortcutHelp(true)}>Shortcuts</button>
+          </div>
+        </details>
+        <details className="gis-header-menu gis-file-menu">
+          <summary aria-label="File actions">File</summary>
+          <div className="gis-header-popover" aria-label="Unified save and export actions">
+            <div className="gis-project-actions" ref={setProjectActionsTarget}/>
+            <button type="button" disabled={!geometry} onClick={exportGeoJSON}>Selection GeoJSON</button>
+            <div className="gis-terrain-export-action" ref={setTerrainExportTarget}/>
+          </div>
+        </details>
         <button className="gis-connection" title={connectionError||'Check backend connection'} onClick={()=>setConnectionRetry(v=>v+1)}>{capabilities?<Wifi size={14}/>:<WifiOff size={14}/>} {capabilities?'Connected':'Reconnect API'}</button>
       </header>
       <div className="gis-toolbar" aria-label="Survey toolbar">
         <div className="gis-navigation-tools">
           <button aria-label="Pan and select" title="Pan and select (V / Esc)" onClick={stopInteraction}>Pan</button>
           <button disabled={!measurement||!!preview} title="Zoom to selected geometry (F)" onClick={fitSelection}>Fit selection</button>
-          <button disabled={!geometry} onClick={exportGeoJSON} title="Export selected geometry as GeoJSON"><Download size={14}/> Export GeoJSON</button>
           <button disabled={!geometry} onClick={deselect} title="Clear selection without deleting saved features"><RotateCcw size={14}/> Deselect</button>
         </div>
-        <div className="gis-project-actions" ref={setProjectActionsTarget}/>
         <div className="gis-survey-commands" ref={setToolbarTarget}/>
         <div className="gis-quick-basemap" aria-label="Quick basemap tools">
           <button aria-pressed={basemap==='street'} onClick={()=>setBasemap('street')}>Street</button>
@@ -1485,7 +1487,7 @@ export default function App() {
 
         </main>
         <aside className={'gis-inspector gis-operations'+(expandedDock==='operations'?' workspace-dock-expanded':'')}
-          hidden={!showTools} aria-label="Operations">
+          aria-label="Operations">
           <WorkspaceDockHeading actions={<button className="workspace-dock-expand-button"
             aria-label={expandedDock==='operations'?'Close full operations view':'Open full operations view'}
             title={expandedDock==='operations'?'Return to workspace':'Open larger workspace'}
@@ -1761,6 +1763,7 @@ export default function App() {
               resultsTarget={resultsTarget}
               operationsFooterTarget={operationsFooterTarget}
               resultsFooterTarget={resultsFooterTarget}
+              exportTarget={terrainExportTarget}
               active={activeTool==='tools-terrain'}
               geometry={preview||drawingMode&&!terrainLineDrawing?null:extentMode?extentGeometry:geometry}
               profileGeometry={terrainProfileLine} raster={demLayer} imageRaster={imageLayer} viewport={viewport}
