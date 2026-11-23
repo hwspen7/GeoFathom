@@ -2,8 +2,11 @@ import {useEffect,useRef,useState,type ReactNode} from 'react';
 import type {TerrainMesh} from './api';
 
 export function meshData(mesh:TerrainMesh){
- const valid=mesh.heights.filter((h):h is number=>h!==null&&Number.isFinite(h));
- const lo=valid.length?Math.min(...valid):0,hi=valid.length?Math.max(...valid):0;
+ let lo=Infinity,hi=-Infinity;
+ for(const height of mesh.heights){
+  if(height!==null&&Number.isFinite(height)){lo=Math.min(lo,height);hi=Math.max(hi,height);}
+ }
+ if(!Number.isFinite(lo)){lo=0;hi=0;}
  const scale=Math.max((mesh.cols-1)*mesh.dx_m,(mesh.rows-1)*mesh.dy_m,hi-lo,1);
  const vertices:number[]=[],triangles:number[]=[],edges:number[]=[];
  for(let r=0;r<mesh.rows;r++)for(let c=0;c<mesh.cols;c++){
