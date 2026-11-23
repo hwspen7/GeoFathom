@@ -77,17 +77,18 @@ def polygonize_network(geometries: list[dict[str, Any]], tolerance_m: float = 1.
         geographic=mapping(transform(backward,face))
         result=measure_geometry(geographic)  # Ellipsoidal, includes inner rings.
         if result["area_m2"]<minimum_area_m2:continue
-        measured.append((face.centroid.y,face.centroid.x,geographic,result))
+        anchor=transform(backward,face.representative_point())
+        measured.append((face.centroid.y,face.centroid.x,geographic,result,[anchor.x,anchor.y]))
     if len(measured)>max_faces:
         raise GeometryError(f"Detected {len(measured)} faces; reduce input or increase max_faces.")
     measured.sort(key=lambda x:(-round(x[0],3),round(x[1],3)))
     outputs=[{"id":f"area-{index+1}","name":f"Area {index+1}",
-              "geometry":geometry,"measurement":measurement,
+              "geometry":geometry,"measurement":measurement,"label_anchor":anchor,
               "properties":{"source_type":"polygonized_network",
                             "area_m2":measurement["area_m2"],
                             "perimeter_m":measurement["perimeter_m"],
                             "snap_tolerance_m":tolerance_m}}
-             for index,(_,__,geometry,measurement) in enumerate(measured)]
+             for index,(_,__,geometry,measurement,anchor) in enumerate(measured)]
     return {"faces":outputs,"count":len(outputs),
             "area_m2":math.fsum(f["measurement"]["area_m2"] for f in outputs),
             "dangles":len(dangles.geoms),"cuts":len(cuts.geoms),
