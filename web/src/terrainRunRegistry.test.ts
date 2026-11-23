@@ -34,3 +34,22 @@ describe('DEM change source lineage',()=>{
   expect(JSON.stringify(run)).not.toMatch(/geotiff|preview_url|png/);
  });
 });
+
+
+describe('research-grade parameter and source fingerprint receipts',()=>{
+ it('records exact parameter choices and hashes without copying raster bytes',()=>{
+  const sourceWithHash={...source,sha256:'b'.repeat(64),vertical_datum:'NAVD88'};
+  const params={contour_interval_m:5,fill_sinks:false,observer_points:[
+   [-83.01,40.01],[-83.012,40.015]]};
+  const receipt=summarizeTerrainRun('research',123,'viewshed_multi',sourceWithHash,
+   {type:'Polygon',coordinates:[[[-83,40],[-83.1,40],[-83,40.1],[-83,40]]]},
+   {visible_cells:250},undefined,params);
+  expect(receipt.sourceSha256).toBe('b'.repeat(64));
+  expect(receipt.sourceVerticalDatum).toBe('NAVD88');
+  expect(receipt.parameters).toEqual(params);
+  params.observer_points[0][0]=0;
+  expect(receipt.parameters?.observer_points).toEqual([
+   [-83.01,40.01],[-83.012,40.015]]);
+  expect(JSON.stringify(receipt)).not.toContain('data:image');
+ });
+});

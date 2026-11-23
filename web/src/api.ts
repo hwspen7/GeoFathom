@@ -294,6 +294,7 @@ export interface RasterAsset {
   // These values are declared by the source file, never inferred from the
   // requested output grid and never treated as verified geodetic control.
   resolution_unit?: string;
+  sha256?: string;
   vertical_unit?: string | null;
   vertical_datum?: string | null;
   provenance: string;

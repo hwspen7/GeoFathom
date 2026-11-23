@@ -6,7 +6,7 @@ import {GPUView} from './TerrainMeshView';
 import type {Position} from './editing';
 import {measurementAnchor} from './editing';
 import {terrainMetricDifferences,sameGeometryFootprint} from './terrainComparison';
-import {readTerrainRuns,writeTerrainRuns,insertTerrainRun,summarizeTerrainRun} from './terrainRunRegistry';
+import {readTerrainRuns,writeTerrainRuns,insertTerrainRun,summarizeTerrainRun,type TerrainRunParameters} from './terrainRunRegistry';
 import {loadTerrainResults,cacheTerrainResult,deleteTerrainResult,markTerrainResultSaved,type PersistedTerrainResult} from './terrainResultStore';
 import WorkspaceToolShelf from './WorkspaceToolShelf';
 import {terrainFetchBounds,terrainGeometryBounds,terrainFetchBudget,terrainBoundsOverlap,terrainRasterMatchesTarget,describeTerrainBounds,preferredTerrainFetchScope,terrainSupportsUSGS,recommendDEMResolution,availableDEMResolutions,type FetchScope,type TerrainBBox} from './terrainSource';
@@ -314,9 +314,27 @@ export default function TerrainWorkbench(p:Props){
        // available but must be explicitly enabled to avoid opaque stacking.
        return [...kept.map(r=>r.advanced?.raster?{...r,visible:false}:r),record];
      });
+     const parameters:TerrainRunParameters={
+       contour_interval_m:Number(interval),
+       reference_elevation_m:Number(reference),
+       observer_longitude:Number(lon),observer_latitude:Number(lat),
+       observer_height_m:Number(height),target_height_m:Number(target),
+       end_longitude:Number(endLon),end_latitude:Number(endLat),
+       max_slope_deg:Number(maxSlope),min_elevation_m:Number(minElevation),
+       max_elevation_m:Number(maxElevation),max_tri_m:Number(maxTri),
+       min_stream_cells:Number(streamCells),azimuth_deg:Number(azimuth),
+       altitude_deg:Number(altitude),section_spacing_m:Number(sectionSpacing),
+       section_half_width_m:Number(sectionWidth),
+       fill_sinks:fillSinks,consider_curvature:considerCurvature,
+       refraction_coefficient:Number(refractionCoeff),
+       comparison_image_id:operation==='dem_difference'?comparisonId:null,
+       observer_points:operation==='viewshed_multi'?observerPoints.map(
+         ([x,y])=>[Number(x),Number(y)]):[],
+     };
+     record.parameters=parameters;
      setRunHistory(old=>insertTerrainRun(old,summarizeTerrainRun(
        record.id,record.createdAt,record.operation,record.source,record.geometry,
-       physicalMetrics(record),record.referenceSource,
+       physicalMetrics(record),record.referenceSource,parameters,
      )));
      setSelectedRecord(record.id);latest.current.onHover(null);
    }catch(e){if(ticket===sequence.current&&!controller.signal.aborted)setError(e instanceof Error?e.message:'Terrain analysis failed.');}
@@ -418,14 +436,58 @@ export default function TerrainWorkbench(p:Props){
    finally{if(ticket===sequence.current)setBusy(false);}
  }
  function exportResult(){
-   // Export scientific metadata without embedding large raster binaries twice.
-   const payload=result?.features.length&&!result.raster&&!result.mesh?
-     {type:'FeatureCollection',features:result.features}:
-     result?{...result,raster:result.raster?{...result.raster,png:undefined,geotiff:undefined,export_hint:'Use GeoTIFF for georeferenced raster data'}:undefined,
-       mesh:result.mesh?{...result.mesh,texture:result.mesh.texture?{...result.mesh.texture,png:undefined}:undefined}:undefined}:slope??profile;
-   if(!payload)return;
-   const link=document.createElement('a'),url=URL.createObjectURL(new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}));
-   link.href=url;link.download='terrain-'+(selected?.operation??operation)+(result?.features.length?'.geojson':'.json');link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+   if(!selected)return;
+   // A portable scientific manifest contains the exact input geometry and
+   // parameters, not only its bounding rectangle. Keep pixel arrays in their
+   // native GeoTIFF download rather than embedding base64 twice.
+   const run={
+     schema:'geofathom.terrain-run.v2',
+     id:selected.id,operation:selected.operation,
+     created_at:new Date(selected.createdAt).toISOString(),
+     geometry:structuredClone(selected.geometry),
+     parameters:structuredClone(selected.parameters??{}),
+     source:{
+       id:selected.source.id,name:selected.source.name,
+       sha256:selected.source.sha256??null,
+       crs:selected.source.crs,bbox:selected.source.bbox,
+       vertical_unit:selected.source.vertical_unit??null,
+       vertical_datum:selected.source.vertical_datum??null,
+       acquired_at:selected.source.acquired_at,
+       provenance:selected.source.provenance,
+     },
+     reference:selected.referenceSource?{
+       id:selected.referenceSource.id,name:selected.referenceSource.name,
+       sha256:selected.referenceSource.sha256??null,
+       crs:selected.referenceSource.crs,
+       vertical_datum:selected.referenceSource.vertical_datum??null,
+       provenance:selected.referenceSource.provenance,
+     }:null,
+   };
+   let payload:unknown;
+   let extension='.json';
+   if(result?.features.length){
+     // A .geojson file must be a valid FeatureCollection. Previous exports
+     // sometimes used that suffix for a non-GeoJSON analysis object.
+     payload={type:'FeatureCollection',features:result.features,
+       geofathom_run:run,geofathom_metrics:result.metrics,
+       geofathom_warning:result.warning};
+     extension='.geojson';
+   }else if(result){
+     payload={...result,
+       raster:result.raster?{...result.raster,png:undefined,geotiff:undefined,
+         export_hint:'Download the separate georeferenced GeoTIFF'}:undefined,
+       mesh:result.mesh?{...result.mesh,texture:result.mesh.texture?
+         {...result.mesh.texture,png:undefined}:undefined}:undefined,
+       geofathom_run:run};
+   }else{
+     payload={...(slope??profile??{}),geofathom_run:run};
+   }
+   const url=URL.createObjectURL(new Blob([JSON.stringify(payload,null,2)],{
+     type:extension==='.geojson'?'application/geo+json':'application/json'}));
+   const link=document.createElement('a');
+   link.href=url;link.download='terrain-'+selected.operation+extension;
+   document.body.appendChild(link);link.click();link.remove();
+   window.setTimeout(()=>URL.revokeObjectURL(url),1000);
  }
  return <div className="terrain-workbench professional-panel">
    <div className="terrain-source">
@@ -632,6 +694,9 @@ export default function TerrainWorkbench(p:Props){
            <div>Reference provenance: {selected.referenceSource.provenance}</div>
          </>}
          <div>Acquired: {selected.source.acquired_at??'Not recorded'}</div>
+         <div>Source SHA-256: {selected.source.sha256??'Not recorded'}</div>
+         <div>Declared vertical datum: {selected.source.vertical_datum??'Not declared'}</div>
+         <div>Vertical unit: {selected.source.vertical_unit??'Unverified'}</div>
          <div>Grid: {selected.source.width} × {selected.source.height} · {selected.source.crs}</div>
          <div>Geographic footprint: {selected.source.bbox.map(n=>n.toFixed(5)).join(', ')}</div>
          <div>Provenance: {selected.source.provenance}</div>

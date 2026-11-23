@@ -1,19 +1,25 @@
 import type {RasterAsset} from './api';
 import {terrainGeometryBounds} from './terrainSource';
+export type TerrainParameterValue=number|string|boolean|null|number[]|number[][];
+export type TerrainRunParameters=Record<string,TerrainParameterValue>;
 export interface TerrainRunReceipt{
  id:string;createdAt:number;operation:string;sourceId:string;sourceName:string;
  provenance:string;crs:string;grid:[number,number];
  sourceBounds:[number,number,number,number];
  studyBounds:[number,number,number,number]|null;
  sourceAcquiredAt:string|null;metrics:Record<string,number>;
+ sourceSha256?:string;sourceVerticalDatum?:string|null;
+ parameters?:TerrainRunParameters;
  referenceSourceId?:string;referenceSourceName?:string;
  referenceCRS?:string;referenceAcquiredAt?:string|null;
+ referenceSha256?:string;referenceVerticalDatum?:string|null;
 }
 const LIMIT=100;
 const key=(projectId:string|null)=>'geofathom-terrain-run-history-v1:'+(projectId??'local');
 export function summarizeTerrainRun(
  id:string,createdAt:number,operation:string,source:RasterAsset,
  geometry:GeoJSON.Geometry,metrics:Record<string,number>,reference?:RasterAsset,
+ parameters:TerrainRunParameters={},
 ):TerrainRunReceipt{
  const valid=Object.fromEntries(Object.entries(metrics)
    .filter(([,v])=>typeof v==='number'&&Number.isFinite(v)));
@@ -21,8 +27,13 @@ export function summarizeTerrainRun(
    provenance:source.provenance,crs:source.crs,grid:[source.width,source.height],
    sourceBounds:[...source.bbox],studyBounds:terrainGeometryBounds(geometry),
    sourceAcquiredAt:source.acquired_at,metrics:valid,
+   sourceSha256:source.sha256,
+   sourceVerticalDatum:source.vertical_datum??null,
+   parameters:structuredClone(parameters),
    ...(reference?{referenceSourceId:reference.id,referenceSourceName:reference.name,
-     referenceCRS:reference.crs,referenceAcquiredAt:reference.acquired_at}:{})};
+     referenceCRS:reference.crs,referenceAcquiredAt:reference.acquired_at,
+     referenceSha256:reference.sha256,
+     referenceVerticalDatum:reference.vertical_datum??null}:{})};
 }
 /** Preserve only compact scientific metadata, not base64 PNG/GeoTIFF payloads. */
 export function insertTerrainRun(history:TerrainRunReceipt[],run:TerrainRunReceipt):TerrainRunReceipt[]{
