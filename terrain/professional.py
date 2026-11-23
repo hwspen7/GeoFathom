@@ -442,7 +442,8 @@ def surface(z,valid,affine,crs,operation,reference,point,end_point,max_slope,
             source_datum=None,gradient_method="horn",slope_classes="standard",mfd_exponent=1.1,neighborhood_radius=1,route_model="surface",stream_order_scheme="strahler",hillshade_mode="single",
             flow_routing_method="d8",curvature_method="finite_difference",curvature_radius=2,
             design_east_grade=0.,design_north_grade=0.,design_max_grade=.3,elevation_sigma_m=0.,
-            suitability_model="binary",suitability_weights=(.5,.25,.25),external_inflow=None):
+            suitability_model="binary",suitability_weights=(.5,.25,.25),external_inflow=None,
+            design_curvature_east=0.,design_curvature_cross=0.,design_curvature_north=0.):
     """Return the exact source-grid derivative and product-specific statistics."""
     dx,dy=abs(affine.a),abs(affine.e);cell=dx*dy
     features=[];metrics={}
@@ -455,7 +456,8 @@ def surface(z,valid,affine,crs,operation,reference,point,end_point,max_slope,
     elif operation=="cutfill_map":
         from .p1_science import design_surface
         values,metrics=design_surface(z,valid,dx,dy,reference,
-            design_east_grade,design_north_grade,elevation_sigma_m,design_max_grade)
+            design_east_grade,design_north_grade,elevation_sigma_m,design_max_grade,
+            design_curvature_east,design_curvature_cross,design_curvature_north)
     elif operation=="suitability" and suitability_model=="weighted" and z.size<=1_000_000:
         from .p1_science import weighted_suitability
         d=derivatives(z,valid,dx,dy,gradient_method)
