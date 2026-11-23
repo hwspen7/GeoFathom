@@ -181,7 +181,8 @@ def _visibility_scope(valid,origin,affine,max_distance_m=0.,view_azimuth=0.,view
 
 def _visibility(z,valid,origin,affine,observer_height,target_height,cancel=None,
                 consider_curvature=False,refraction_coeff=0.13,
-                max_distance_m=0.,view_azimuth=0.,view_width=360.):
+                max_distance_m=0.,view_azimuth=0.,view_width=360.,
+                blocking_surface=None,blocking_valid=None):
     if any(not math.isfinite(v) or not 0<=v<=1000 for v in (observer_height,target_height)):
         raise RasterError("Observer and target heights must be 0–1000 meters.")
     if consider_curvature and not (math.isfinite(refraction_coeff) and 0 <= refraction_coeff <= .5):
@@ -202,6 +203,8 @@ def _visibility(z,valid,origin,affine,observer_height,target_height,cancel=None,
     # eligible population separately to callers. Outside-scope is neither
     # a failed line of sight nor an unknown/missing DEM pixel.
     scope=_visibility_scope(valid,origin,affine,max_distance_m,view_azimuth,view_width)
+    blocking_surface=z if blocking_surface is None else blocking_surface
+    blocking_valid=valid if blocking_valid is None else blocking_valid
     known[valid&~scope]=True
     rows,cols=np.nonzero(scope)
     distances=np.maximum(np.abs(rows-r0),np.abs(cols-c0))
@@ -221,11 +224,11 @@ def _visibility(z,valid,origin,affine,observer_height,target_height,cancel=None,
             cc_end=cols[start:min(last,start+chunk)]
             rr=np.rint(r0+(rr_end[:,None]-r0)*fractions).astype(np.intp)
             cc=np.rint(c0+(cc_end[:,None]-c0)*fractions).astype(np.intp)
-            complete=valid[rr,cc].all(axis=1)
+            complete=blocking_valid[rr,cc].all(axis=1)
             distance_sq=((rr_end-r0)*dy_m)**2+((cc_end-c0)*dx_m)**2
             target_z=z[rr_end,cc_end]-curvature*distance_sq+target_height
             line=eye+(target_z[:,None]-eye)*fractions
-            blockers=z[rr,cc]-curvature*distance_sq[:,None]*fractions[None,:]**2
+            blockers=blocking_surface[rr,cc]-curvature*distance_sq[:,None]*fractions[None,:]**2
             known[rr_end,cc_end]=complete
             seen[rr_end,cc_end]=complete&np.all(blockers<=line+1e-8,axis=1)
     return seen,known
@@ -337,6 +340,14 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
         from .projection import grid_scale_error_percent
         grid_scale_error_pct=grid_scale_error_percent(source)
     checkpoint(cancel)
+    blocking_surface=z
+    blocking_valid=valid
+    if dsm_path is not None and operation in {"visibility","viewshed_multi"}:
+        dsm,dsm_valid,_,dsm_affine,dsm_crs,_,_=_window(dsm_path,geometry,maximum,max_cells)
+        if dsm.shape!=z.shape or dsm_crs!=crs or not np.allclose(tuple(dsm_affine),tuple(affine),rtol=0,atol=1e-8):
+            raise RasterError("DSM and DEM must have the same projected grid; explicitly resample first.")
+        blocking_valid=valid&dsm_valid
+        blocking_surface=np.where(blocking_valid,np.maximum(z,dsm),np.nan)
     hydro_ops={"flow_direction","flow_accumulation","flow_accumulation_mfd",
                "streams","stream_order","watershed"}
     # Drainage may use a conditioned working grid; other surface products
@@ -452,7 +463,8 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
     elif operation=="visibility":
         origin=_origin(point,crs,affine,valid)
         seen,known=_visibility(z,valid,origin,affine,observer_height,target_height,cancel,
-                               consider_curvature,refraction_coeff,max_distance_m,view_azimuth,view_width)
+                               consider_curvature,refraction_coeff,max_distance_m,view_azimuth,view_width,
+                               blocking_surface,blocking_valid)
         scope=_visibility_scope(valid,origin,affine,max_distance_m,view_azimuth,view_width)
         result["features"]=_mask_features(seen,affine,crs,"Visible terrain",cancel)
         eligible=int(scope.sum());known_eligible=int((scope&known).sum())
@@ -466,7 +478,8 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
         result["warning"]=(
             ("Local cell-center visibility with Earth curvature and configurable atmospheric refraction. "
              if consider_curvature else "Local planar cell-center visibility; curvature and refraction disabled. ")
-            + "Buildings/vegetation depend on the input DEM/DSM; NoData along rays is unknown. "
+            + ("DSM obstruction elevations were provided; any DSM NoData on a ray is unknown. " if dsm_path is not None else
+               "No independent DSM was supplied, so buildings and vegetation are not modeled. ")
             + "Cells outside the chosen viewing sector or range are not part of visibility statistics."
         )
     elif operation=="viewshed_multi":
@@ -565,8 +578,12 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
         result["warning"]="Interactive 3D elevation preview sampled from the DEM; gaps represent nodata."
     if conditioned is not None:
         result["metrics"].update(conditioned)
-        result["metrics"]["conditioning_fill_volume_m3"]=conditioned["total_fill_depth_m"]*cell
-        result["warning"]+=" Priority-flood depression filling and flat routing applied to a working surface; NoData boundaries are outlets."
+        if "total_fill_depth_m" in conditioned:
+            result["metrics"]["conditioning_fill_volume_m3"]=conditioned["total_fill_depth_m"]*cell
+            result["warning"]+=" Priority-flood depression filling and flat routing applied to a working surface; NoData boundaries are outlets."
+        else:
+            result["metrics"]["conditioning_excavation_volume_m3"]=conditioned["breach_total_excavation_depth_m"]*cell
+            result["warning"]+=" Bounded least-cut depression breaching applied to a working surface. Unresolved pits are reported and must not be treated as connected."
     result["metrics"].update({"dataset_overlap_pct":coverage,
         "valid_grid_pct":100*int(valid.sum())/int(covered.sum())})
     if coverage<99.99:
