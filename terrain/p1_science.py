@@ -312,3 +312,50 @@ def breach_depressions(z,valid,dx,dy,max_pits=64,max_cut_m=100.,cancel=None):
         "breach_total_excavation_depth_m":cut_total,
         "breach_maximum_cut_m":max_cut,
     }
+
+
+def weighted_suitability(z,valid,slope_deg,tri,max_slope,min_z,max_z,max_tri,
+                         weights=(.5,.25,.25),sigma_z=0.):
+    """Weighted linear combination after hard physical exclusion criteria.
+
+    The scores [0,1] are ordinal utility ratings, *not probabilities*.
+    Elevation preference peaks at the midpoint of the declared band; slope
+    and TRI prefer small values. Invalid derivative neighborhoods are NoData.
+    """
+    z=np.asarray(z,dtype=np.float64)
+    valid=np.asarray(valid,dtype=bool)
+    slope=np.asarray(slope_deg,dtype=np.float64)
+    tri=np.asarray(tri,dtype=np.float64)
+    weights=np.asarray(weights,dtype=np.float64)
+    if z.ndim!=2 or z.shape!=valid.shape or slope.shape!=z.shape or tri.shape!=z.shape:
+        raise RasterError("Weighted suitability requires aligned 2-D derivative grids.")
+    if weights.shape!=(3,) or not np.isfinite(weights).all() or (weights<0).any() or weights.sum()<=0:
+        raise RasterError("Weighted suitability needs three nonnegative finite weights with a positive sum.")
+    if not all(map(math.isfinite,(max_slope,min_z,max_z,max_tri,sigma_z))) or not (
+        0<=max_slope<=90 and min_z<=max_z and max_tri>=0 and sigma_z>=0):
+        raise RasterError("Weighted suitability has invalid hard thresholds or elevation uncertainty.")
+    good=valid&np.isfinite(z)&np.isfinite(slope)&np.isfinite(tri)
+    if not good.any():raise RasterError("No valid cells for weighted suitability.")
+    permitted=good&(slope<=max_slope)&(z>=min_z)&(z<=max_z)&(tri<=max_tri)
+    slope_utility=1-np.clip(slope/max(max_slope,1e-12),0,1)
+    tri_utility=1-np.clip(tri/max(max_tri,1e-12),0,1)
+    midpoint=(min_z+max_z)/2
+    elevation_utility=1-np.clip(np.abs(z-midpoint)/max((max_z-min_z)/2,1e-12),0,1)
+    normalized=weights/weights.sum()
+    rating=(normalized[0]*slope_utility+normalized[1]*tri_utility+
+            normalized[2]*elevation_utility)
+    score=np.where(good,np.where(permitted,rating,0.),np.nan)
+    # Loose per-cell utility bound induced only by the explicitly assumed
+    # elevation uncertainty; this is not a confidence interval.
+    elevation_error=normalized[2]*sigma_z/max((max_z-min_z)/2,1e-12)
+    finite_values=score[np.isfinite(score)]
+    return score,{
+        "suitability_model_weighted":1,
+        "suitable_area_m2":float(permitted.sum()),  # Caller scales by grid area.
+        "suitable_pct":float(100*permitted.sum()/max(1,good.sum())),
+        "mean_weighted_score":float(finite_values.mean()),
+        "weighted_score_uncertainty_bound":float(min(1,elevation_error)),
+        "score_weight_slope":float(normalized[0]),
+        "score_weight_tri":float(normalized[1]),
+        "score_weight_elevation":float(normalized[2]),
+    }
