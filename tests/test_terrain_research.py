@@ -112,6 +112,7 @@ def test_ahp_criteria_constraints_and_zero_valid_grid(tmp_path):
     assert run["model"]["weights"] == pytest.approx([2 / 3, 1 / 3])
     assert run["metrics"]["eligible_cells"] < run["metrics"]["valid_primary_cells"]
     factors[0]["allowed_min"] = 1000
+    factors[0]["allowed_max"] = None
     with pytest.raises(RasterError, match="Fewer than three"):
         analyze_research(paths[0], polygon, factors, {"trials": 0})
 
