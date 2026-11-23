@@ -311,10 +311,15 @@ export default function App() {
 
   function keepNetworkAreas(faces:NetworkFace[]){
     if(!faces.length)return;
-    if(scratchHistory.current!.current.length+faces.length>SCRATCH_LIMIT){
+    const existing=scratchHistory.current!.current.filter(
+      item=>item.properties?.source_type==='polygonized_network');
+    const missing=faces.filter(face=>!existing.some(item=>
+      JSON.stringify(item.geometry)===JSON.stringify(face.geometry)));
+    if(!missing.length){setMessage('All these enclosed areas already exist locally.');return;}
+    if(scratchHistory.current!.current.length+missing.length>SCRATCH_LIMIT){
       setError('Too many local drawings. Save or delete sources before keeping enclosed areas.');return;
     }
-    const saved=faces.map(face=>({
+    const saved=missing.map(face=>({
       id:'scratch-'+crypto.randomUUID(),name:face.name,
       geometry:structuredClone(face.geometry),measurement:face.measurement,visible:true,
       source:'GEOS line-network polygonization',properties:{...face.properties},
