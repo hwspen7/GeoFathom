@@ -134,6 +134,7 @@ export default function App() {
   const [projectActionsTarget,setProjectActionsTarget]=useState<HTMLDivElement|null>(null);
   const [terrainExportTarget,setTerrainExportTarget]=useState<HTMLDivElement|null>(null);
   const [objectTreeTarget,setObjectTreeTarget]=useState<HTMLDivElement|null>(null);
+  const [objectsOpen,setObjectsOpen]=useState(true);
   const [shortcutHelp,setShortcutHelp]=useState(false);
   const [commandOpen,setCommandOpen]=useState(false);
   const [contextMenu,setContextMenu]=useState<{x:number;y:number}|null>(null);
@@ -485,6 +486,7 @@ export default function App() {
       return;
     }
     setShowTools(true);setActiveTool(id);if(id!=='tools-terrain'){setTerrainPicking(false);setTerrainHover(null);}
+    setObjectsOpen(id!=='tools-terrain');
     // Tool activation, including keyboard shortcuts, dismisses the transient
     // drawer so it cannot intercept input intended for the operations dock.
     // Its project/search state stays mounted and the selected place is retained.
@@ -974,7 +976,7 @@ export default function App() {
     setEditing(false);setEdgeMoving(false);setMoving(false);setTraceMode(false);setPromptMode(null);
     setSelectionBoxMode(false);setLabelMoveMode(false);setPendingAnnotation(null);setContextMenu(null);
     if(preview||pendingShared){setGeometry(lastValid.current);setPreview(null);setPendingShared(null);}
-    setError('');setMessage('Select / pan');
+    setError('');setMessage(drawingMode?'Drawing cancelled. Retained locations are unchanged.':'Select / pan');
   }
   function editMode(mode:'vertices'|'edge'|'move'){
     if(!geometry||selectedLocked||busy||drawingMode)return;
@@ -1230,10 +1232,11 @@ export default function App() {
             <div className="section-heading"><Layers3 size={16} /><span>Projects</span></div>
             {!capabilities&&connectionError&&<div className="discovery-error" role="alert">{connectionError} <button onClick={()=>setConnectionRetry(v=>v+1)}>Reconnect</button></div>}
             <ProjectsPanel toolbarTarget={projectToolbarTarget} toolbarActionsTarget={projectActionsTarget} treeTarget={objectTreeTarget}
-              interactionBusy={busy||Boolean(drawingMode)}
+              interactionBusy={busy||Boolean(drawingMode)} objectPageSize={3}
               objectGroups={[{id:'local-drawings',name:'Local drawings',items:scratch,
                 selectedId:scratchId,onOpen:id=>{const item=scratch.find(f=>f.id===id);if(item){
                   setScratch(old=>old.map(f=>f.id===id?{...f,visible:true}:f));selectScratch({...item,visible:true});
+                  if(activeTool==='tools-terrain')setObjectsOpen(false);
                 }},
                 onRename:async(id,name)=>{setScratch(old=>old.map(item=>item.id===id?{...item,name}:item));setMessage('Local drawing renamed · Ctrl Z to undo.');},
                 onDelete:async id=>removeLocal(id)}]}
@@ -1296,7 +1299,7 @@ export default function App() {
                 setProjectWorkspace(data);
                 setActiveProjectId(id);
               }}
-              onOpen={openStoredFeature}
+              onOpen={feature=>{openStoredFeature(feature);if(activeTool==='tools-terrain')setObjectsOpen(false);}}
               onSavedDraft={()=>{if(scratchId)setScratchState(scratchHistory.current!.checkpoint(scratchHistory.current!.current.filter(f=>f.id!==scratchId)));setScratchId(null);}}
               onFeatureDeleted={deselect}
               onPlaceAnnotation={(projectId,layerId,text)=>{
@@ -1668,6 +1671,7 @@ export default function App() {
 
         </main>
         <aside className={'gis-inspector gis-operations'+(expandedDock==='operations'?' workspace-dock-expanded':'')}
+          data-object-browser={activeTool==='tools-terrain'&&objectsOpen?'true':'false'}
           aria-label="Operations">
           <WorkspaceDockHeading actions={<button className="workspace-dock-expand-button"
             aria-label={expandedDock==='operations'?'Close full operations view':'Open full operations view'}
@@ -1677,8 +1681,13 @@ export default function App() {
           </button>}><Compass size={15}/> Tools</WorkspaceDockHeading>
           <div className={'sidebar-scroll'+(['tools-services','tools-export'].includes(activeTool)?' data-fixed-operations':'')}
             tabIndex={0} aria-label="Operations scrolling region">
-          <details className="workspace-objects" hidden={['tools-services','tools-export'].includes(activeTool)} open>
-            <summary>Objects</summary>
+          <details className="workspace-objects" hidden={['tools-services','tools-export'].includes(activeTool)}
+            open={objectsOpen} onToggle={event=>setObjectsOpen(event.currentTarget.open)}>
+            <summary>Objects{activeTool==='tools-terrain'&&!objectsOpen&&<small className="workspace-object-current">
+              {selectedSaved?.name??scratch.find(item=>item.id===scratchId)?.name??selectedPlace?.name??'Choose an object'}
+            </small>}</summary>
+            {activeTool==='tools-terrain'&&objectsOpen&&<button type="button" className="workspace-object-back"
+              onClick={()=>setObjectsOpen(false)}>Back to terrain tools</button>}
             <div ref={setObjectTreeTarget}/>
             {geometry&&<details className="geometry-edit-controls">
               <summary>Geometry / vertices</summary>

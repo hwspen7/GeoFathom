@@ -35,12 +35,13 @@ interface Props {
   treeTarget?:HTMLElement|null;
   objectGroups?:WorkspaceObjectGroup[];
   interactionBusy?:boolean;
+  objectPageSize?:number;
 }
 
 export default function ProjectsPanel({
   geometry, featureName, featureSource, featureProperties, selectedFeatureId,
   splitParts, refreshToken, onOpen, onWorkspace, onPlaceAnnotation, onFeatureDeleted,
-  extraFeatures,onSavedDraft,onProjectSwitch,toolbarTarget,toolbarActionsTarget,treeTarget,objectGroups,interactionBusy=false,
+  extraFeatures,onSavedDraft,onProjectSwitch,toolbarTarget,toolbarActionsTarget,treeTarget,objectGroups,interactionBusy=false,objectPageSize=5,
 }: Props) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [listRetry,setListRetry]=useState(0);
@@ -446,7 +447,7 @@ export default function ProjectsPanel({
     features={[...(workspace?.features??[]),
       ...extraFeatures.filter(f=>!(workspace?.features??[]).some(x=>x.id===f.id)).slice(0,60)]}
     selectedId={selectedFeatureId} onOpen={onOpen} busy={busy||interactionBusy}
-    additionalGroups={objectGroups} onRename={(feature,name)=>changeObject(feature,name)}
+    additionalGroups={objectGroups} pageSize={objectPageSize} onRename={(feature,name)=>changeObject(feature,name)}
     onDelete={feature=>changeObject(feature)}/>
     {recentDeleted&&<div className="workspace-object-notice" role="status">
       <span>{recentDeleted.name} moved to project trash.</span>

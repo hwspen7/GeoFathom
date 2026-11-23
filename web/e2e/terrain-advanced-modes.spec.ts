@@ -68,6 +68,7 @@ with tempfile.TemporaryDirectory() as directory:
  await activateWorkspaceModule(page,'Terrain');
  await page.getByLabel('DEM elevation layer').selectOption(fixture.ids[0]);
  await page.getByLabel('Confirm DEM meter elevations').check();
+ await page.locator('.workspace-objects > summary').click();
  await page.getByRole('button',{name:/Advanced terrain study area/}).click();
  await expect(page.getByLabel('DEM fetch area')).toHaveValue('selection');
  return fixture;
@@ -279,6 +280,7 @@ test('3D DEM remains inspectable using the CPU preview if WebGL2 is unavailable'
 test('shared Onshape-style command search and newly exposed Terrain tools',async({page})=>{
  test.setTimeout(120000);
  const fixture=await setup(page);
+ await page.locator('.workspace-objects > summary').click();
  const filter=page.getByRole('searchbox',{name:'Filter project features'});
  await filter.fill('not-the-fixture');
  await expect(page.getByLabel('Project feature tree')
@@ -293,6 +295,7 @@ test('shared Onshape-style command search and newly exposed Terrain tools',async
  await expect(dialog.getByRole('button',{name:/Fit selected area/})).toBeVisible();
  await page.keyboard.press('Escape');
  await expect(dialog).toHaveCount(0);
+ await page.getByRole('button',{name:'Back to terrain tools',exact:true}).click();
  const shelf=page.getByLabel('Terrain tools',{exact:true});
  const run=page.getByRole('button',{name:'Run terrain operation'});
  await page.getByRole('button',{name:'Browse terrain tools',exact:true}).click();

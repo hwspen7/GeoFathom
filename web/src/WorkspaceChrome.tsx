@@ -150,35 +150,24 @@ function ObjectRow({item,selected,disabled,locked,busy,onOpen,onRename,onDelete}
     {error&&<small role="alert" className="workspace-object-error">{error}</small>}
   </div>;
 }
-function FeatureGroup({name,features,visible,selectedId,onOpen,search,locked=false,busy=false,onRename,onDelete}:{
+function FeatureGroup({name,features,visible,selectedId,onOpen,search,locked=false,busy=false,onRename,onDelete,total=features.length}:{
   name:string;features:FeatureItem[];visible:boolean;selectedId:string|null;
   onOpen:(id:string)=>void;search:boolean;
   locked?:boolean;busy?:boolean;
   onRename?:(id:string,name:string)=>Promise<void>;onDelete?:(id:string)=>Promise<void>;
+  total?:number;
 }){
   const [expanded,setExpanded]=useState(true);
-  const [page,setPage]=useState(0);
-  const pageSize=5,lastPage=Math.max(0,Math.ceil(features.length/pageSize)-1);
-  const currentPage=Math.min(page,lastPage);
-  useEffect(()=>{
-    const index=features.findIndex(item=>item.id===selectedId);
-    setPage(index>=0?Math.floor(index/pageSize):0);
-  },[selectedId,search]);
   return <details className="workspace-feature-group" open={search||expanded}
     onToggle={event=>{if(!search)setExpanded(event.currentTarget.open);}}>
-    <summary><Layers3 size={13}/>{name}<small>{features.length}</small></summary>
+    <summary><Layers3 size={13}/>{name}<small>{total}</small></summary>
     <div className="project-features">
-      {features.slice(currentPage*pageSize,(currentPage+1)*pageSize).map(item=><ObjectRow key={item.id} item={item}
+      {features.map(item=><ObjectRow key={item.id} item={item}
         selected={selectedId===item.id} disabled={!visible} locked={locked} busy={busy}
         onOpen={()=>onOpen(item.id)}
         onRename={onRename?value=>onRename(item.id,value):undefined}
         onDelete={onDelete?()=>onDelete(item.id):undefined}/>)}
     </div>
-    {features.length>pageSize&&<div className="workspace-object-pager">
-      <button type="button" aria-label={'Previous objects in '+name} disabled={currentPage===0} onClick={()=>setPage(currentPage-1)}>Previous</button>
-      <span>{currentPage*pageSize+1}–{Math.min((currentPage+1)*pageSize,features.length)} / {features.length}</span>
-      <button type="button" aria-label={'Next objects in '+name} disabled={currentPage===lastPage} onClick={()=>setPage(currentPage+1)}>Next</button>
-    </div>}
   </details>;
 }
 
@@ -186,14 +175,16 @@ function FeatureGroup({name,features,visible,selectedId,onOpen,search,locked=fal
  * Renaming never needs to load or replace the object's geometry selection.
  */
 export function WorkspaceFeatureTree<T extends FeatureItem>({
-  layers,features,selectedId,onOpen,onRename,onDelete,busy=false,additionalGroups=[],
+  layers,features,selectedId,onOpen,onRename,onDelete,busy=false,additionalGroups=[],pageSize=5,
 }:{
   layers:readonly FeatureLayer[];features:readonly T[];
   selectedId:string|null;onOpen:(feature:T)=>void;
   onRename?:(feature:T,name:string)=>Promise<void>;onDelete?:(feature:T)=>Promise<void>;
   busy?:boolean;additionalGroups?:WorkspaceObjectGroup[];
+  pageSize?:number;
 }){
   const [filter,setFilter]=useState('');
+  const [page,setPage]=useState(0);
   const lowered=filter.trim().toLocaleLowerCase();
   const visibleFeatures=features.filter(f=>!lowered||
     [f.name, f.id,layers.find(l=>l.id===f.layer_id)?.name??'']
@@ -208,22 +199,51 @@ export function WorkspaceFeatureTree<T extends FeatureItem>({
     !lowered||[item.name,item.id,group.name].some(value=>value.toLocaleLowerCase().includes(lowered)))}))
     .filter(group=>group.items.length>0);
   const lookup=new Map(features.map(f=>[f.id,f]));
+  // Page the whole object browser, rather than allocating a full page to
+  // every layer. Many layers must not push selected objects below the dock.
+  const rows=[...groups.flatMap(g=>g.items.map(item=>({key:g.id+':'+item.id,selected:item.id===selectedId}))),
+    ...extras.flatMap(g=>g.items.map(item=>({key:g.id+':'+item.id,selected:item.id===g.selectedId})))];
+  const selectedKey=rows.find(row=>row.selected)?.key??null;
+  const pages:string[][]=[[]];
+  for(const group of [...groups,...extras]){
+    for(let start=0;start<group.items.length;start+=pageSize){
+      const chunk=group.items.slice(start,start+pageSize).map(item=>group.id+':'+item.id);
+      // Keep a small layer together: freshly split siblings must be visible
+      // side by side, rather than stranded on opposite page boundaries.
+      if(pages[pages.length-1].length+chunk.length>pageSize)pages.push(chunk);
+      else pages[pages.length-1].push(...chunk);
+    }
+  }
+  const lastPage=pages.length-1,currentPage=Math.min(page,lastPage);
+  const offset=pages.slice(0,currentPage).reduce((sum,items)=>sum+items.length,0);
+  const paged=new Set(pages[currentPage]);
+  useEffect(()=>{
+    const index=pages.findIndex(items=>selectedKey!==null&&items.includes(selectedKey));
+    setPage(index>=0?index:0);
+  },[selectedKey,filter,pageSize]);
   return <div className="workspace-feature-tree" role="region" aria-label="Project feature tree">
     <div className="workspace-tree-header"><strong>Features</strong><span>{features.length+additionalGroups.reduce((sum,g)=>sum+g.items.length,0)}</span></div>
     <label className="workspace-tree-filter"><Search size={13}/>
       <input aria-label="Filter project features" type="search"
         value={filter} placeholder="Filter name or layer"
-        onChange={e=>setFilter(e.target.value)}/>
+        onChange={e=>{setFilter(e.target.value);setPage(0);}}/>
     </label>
-    {groups.map(g=><FeatureGroup key={g.id} name={g.name} features={g.items}
+    {groups.filter(g=>g.items.some(item=>paged.has(g.id+':'+item.id))).map(g=><FeatureGroup key={g.id} name={g.name}
+      features={g.items.filter(item=>paged.has(g.id+':'+item.id))} total={g.items.length}
       visible={g.visible} search={Boolean(lowered)}
       selectedId={selectedId} locked={g.locked} busy={busy}
       onRename={onRename?async(id,name)=>{const f=lookup.get(id);if(f)await onRename(f,name);}:undefined}
       onDelete={onDelete?async id=>{const f=lookup.get(id);if(f)await onDelete(f);}:undefined}
       onOpen={id=>{const f=lookup.get(id);if(f)onOpen(f);}}/>)}
-    {extras.map(g=><FeatureGroup key={g.id} name={g.name} features={g.items} visible
+    {extras.filter(g=>g.items.some(item=>paged.has(g.id+':'+item.id))).map(g=><FeatureGroup key={g.id} name={g.name}
+      features={g.items.filter(item=>paged.has(g.id+':'+item.id))} total={g.items.length} visible
       selectedId={g.selectedId} search={Boolean(lowered)} busy={busy}
       onOpen={g.onOpen} onRename={g.onRename} onDelete={g.onDelete}/>)}
+    {pages.length>1&&<div className="workspace-object-pager">
+      <button type="button" aria-label="Previous objects" disabled={currentPage===0} onClick={()=>setPage(currentPage-1)}>Previous</button>
+      <span>{offset+1}–{offset+paged.size} / {rows.length}</span>
+      <button type="button" aria-label="Next objects" disabled={currentPage===lastPage} onClick={()=>setPage(currentPage+1)}>Next</button>
+    </div>}
     {!groups.length&&!extras.length&&<small className="workspace-tree-empty">
       {lowered?'No matching features':'No saved features yet.'}</small>}
   </div>;

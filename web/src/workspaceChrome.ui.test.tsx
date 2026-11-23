@@ -65,8 +65,20 @@ describe('shared research workbench chrome',()=>{
     features={features} selectedId="7" onOpen={vi.fn()} onRename={vi.fn()} onDelete={vi.fn()}/>);
   expect(screen.getByRole('button',{name:'Parcel 7'}).getAttribute('aria-pressed')).toBe('true');
   expect(screen.getAllByRole('button',{name:'Delete object'}).every(button=>button.hasAttribute('disabled'))).toBe(true);
-  fireEvent.click(screen.getByRole('button',{name:'Previous objects in Study'}));
+  fireEvent.click(screen.getByRole('button',{name:'Previous objects'}));
   expect(screen.getByRole('button',{name:'Parcel 0'})).toBeDefined();
   expect(screen.queryByRole('button',{name:'Parcel 7'})).toBeNull();
+ });
+ it('bounds the entire object list across many layers and searches beyond the current page',()=>{
+  const open=vi.fn();
+  const layers=Array.from({length:4},(_,i)=>({id:String(i),name:'Layer '+i,visible:true}));
+  const features=Array.from({length:12},(_,i)=>({id:String(i),name:'P-'+i,layer_id:String(Math.floor(i/3))}));
+  render(<WorkspaceFeatureTree layers={layers} features={features} selectedId={null} pageSize={3} onOpen={open}/>);
+  expect(screen.getAllByRole('button',{name:/^P-/})).toHaveLength(3);
+  fireEvent.click(screen.getByRole('button',{name:'Next objects'}));
+  expect(screen.getAllByRole('button',{name:/^P-/})).toHaveLength(3);
+  fireEvent.change(screen.getByRole('searchbox',{name:'Filter project features'}),{target:{value:'P-11'}});
+  fireEvent.click(screen.getByRole('button',{name:'P-11'}));
+  expect(open).toHaveBeenCalledWith(features[11]);
  });
 });

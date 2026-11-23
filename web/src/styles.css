@@ -1552,6 +1552,10 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .workspace-object-notice{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:7px 0;padding:7px;border:1px solid #c6ded5;border-radius:5px;background:#f1faf6;font-size:11px;color:#396556}
 .workspace-object-notice span{flex:1;min-width:0;overflow-wrap:anywhere}
 .workspace-object-notice button{flex:none;padding:5px 7px;font-size:11px}
+.desktop-gis .survey-tools{gap:0}
+.desktop-gis .gis-operations[data-object-browser="true"] #tools-terrain{display:none!important}
+.workspace-object-current{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#70899a;font-size:10px;font-weight:400;margin:3px 0 0 10px}
+.workspace-object-back{width:100%;margin:3px 0 7px;padding:7px;border:1px solid #c8dce9;border-radius:5px;background:#f0f7fb;color:#355f79;font-size:11px}
 @media(max-width:1200px){
   .desktop-gis .gis-toolbar{grid-template-columns:minmax(0,1fr) auto}
   .desktop-gis .gis-navigation-tools{grid-column:1;grid-row:1}

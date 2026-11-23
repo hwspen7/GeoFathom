@@ -171,6 +171,7 @@ test('OSU disconnected mapped properties default to campus, with inspectable edi
  await activateWorkspaceModule(page,'Terrain');
  await expect(page.getByLabel('DEM fetch area')).toHaveValue('selection');
  await expect(page.getByLabel('DEM download target')).toContainText('N 40.01240°');
+ await page.locator('.workspace-objects > summary').click();
  await page.getByText('Geometry / vertices',{exact:true}).click();
  await page.getByLabel('Study area parcel').selectOption('all');
  await expect(page.getByLabel('DEM download target')).toContainText('N 40.07640°');
@@ -235,6 +236,8 @@ test('OSU disconnected mapped properties default to campus, with inspectable edi
  await page.getByRole('button',{name:'Edit boundary nodes'}).click();
  await expect(page.getByRole('button',{name:'Toggle map legend'})).toBeEnabled();
  await expect(page.locator('.map-legend-items')).toBeVisible();
+ await page.getByRole('button',{name:'Back to terrain tools',exact:true}).click();
+ await expect(page.getByLabel('DEM download target')).toBeVisible();
 });
 
 test('Hong Kong airport area uses global DEM provider and stays within enlarged budget',async({page})=>{
