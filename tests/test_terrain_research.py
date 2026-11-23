@@ -177,7 +177,8 @@ def test_validation_checkpoints_descriptive_errors_and_vertical_datum(tmp_path):
                             "elevation_m": 100. - residual})
     report = checkpoint_accuracy(paths[0], checkpoints, "NAVD88")
     errors = np.asarray([1., -2., 0., 3., -1., 0.])
-    assert report["datum_verified"]
+    assert report["datum_labels_match"]
+    assert not report["datum_verified"]
     assert report["sample_count"] == 6
     assert report["rmse_m"] == pytest.approx(np.sqrt(np.mean(errors**2)))
     assert report["mean_error_m"] == pytest.approx(errors.mean())
@@ -187,6 +188,7 @@ def test_validation_checkpoints_descriptive_errors_and_vertical_datum(tmp_path):
     with pytest.raises(RasterError, match="datum"):
         checkpoint_accuracy(paths[0], checkpoints, "EGM96")
     without_reference = checkpoint_accuracy(paths[0], checkpoints)
+    assert not without_reference["datum_labels_match"]
     assert not without_reference["datum_verified"]
 
 
@@ -312,4 +314,5 @@ def test_research_api_resolves_managed_images_and_replays_bundle(tmp_path, monke
         "image_id": ids[0], "vertical_datum": "NAVD88", "points": points})
     assert check.status_code == 200, check.text
     assert check.json()["rmse_m"] == pytest.approx(0.)
-    assert check.json()["datum_verified"]
+    assert check.json()["datum_labels_match"]
+    assert not check.json()["datum_verified"]
