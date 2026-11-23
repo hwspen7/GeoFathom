@@ -30,7 +30,7 @@ describe('scientific operation-specific input manifests',()=>{
     ['-83.001','40.01'],['-83.02','40.015']] as [string,string][]};
   const route=terrainParametersForOperation('least_cost',filled);
   expect(route).toEqual({observer_longitude:-83.001,observer_latitude:40.01,
-   end_longitude:-83.02,end_latitude:40.015,max_slope_deg:30});
+   end_longitude:-83.02,end_latitude:40.015,max_slope_deg:30,route_model:'surface'});
   expect(terrainParametersForOperation('flow_accumulation_mfd',{...filled,mfdExponent:'2.5'}))
     .toEqual({fill_sinks:true,mfd_exponent:2.5});
    expect(terrainParametersForOperation('stream_order',filled))
