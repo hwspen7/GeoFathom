@@ -14,7 +14,7 @@ interface Props{
  geometry:GeoJSON.Geometry|null;network:NetworkPolygonization|null;
  networkNotice:string;sourceCount:number;connected:boolean;
  onRebuild:(tolerance:number,minArea:number)=>Promise<void>;
- onStoreAreas:(faces:NetworkFace[])=>void;onRefresh:()=>void;
+ onStoreAreas:(faces:NetworkFace[])=>void;onSelectArea:(id:string)=>void;onRefresh:()=>void;
  onTiles:(tiles:ExternalTile[])=>void;onPreview:(features:GeoJSON.Geometry[])=>void;
  onPage:(features:GeoWorkspace['features'])=>void;
  onRasterAdded:(asset:RasterAsset,kind:'dem'|'image')=>void;
@@ -161,6 +161,8 @@ export default function DataWorkbench(p:Props){
       <div key={f.id}><strong>{f.name}</strong>
        <span>{fmt((f.measurement.area_m2??0)/1e6)} km²</span>
        <small>{fmt((f.measurement.perimeter_m??0)/1000)} km perimeter</small>
+        <button type="button" aria-label={'Select enclosed area '+f.name}
+          onClick={()=>p.onSelectArea(f.id)}>Select & measure</button>
       </div>)}
     </div>
     {p.network.count>4&&<div className="gis-record-pager">

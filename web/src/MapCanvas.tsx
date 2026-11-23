@@ -44,6 +44,7 @@ export interface MapLayerFeature {
 interface Props {
   selected: GeoJSON.Geometry | null;
   networkFaces?:NetworkFace[];
+  onSelectNetworkFace?:(id:string)=>void;
   drawingMode: ShapeMode;
   vertices: Position[];
   focus: FocusPoint | null;
@@ -57,7 +58,7 @@ interface Props {
   rasterLayers:RasterLayerView[];
   onRasterError:(message:string)=>void;
   onMapClick: (position: Position) => void;
-  onFinishDrawing:()=>void;
+  onFinishDrawing:(closeLine?:boolean)=>void;
   terrainPicking:boolean;
   terrainMarker:Position|null;
   profileSamples?:ProfileSample[];
@@ -290,7 +291,7 @@ type Drag = {
 };
 
 export default function MapCanvas({
-  selected,drawingMode,vertices,networkFaces=[],focus,basemap,customBasemap,onBasemapStatus,measurement,showMeasurements,display,selectedFeatureId,rasterLayers,onRasterError,onMapClick,onFinishDrawing,
+  selected,drawingMode,vertices,networkFaces=[],onSelectNetworkFace,focus,basemap,customBasemap,onBasemapStatus,measurement,showMeasurements,display,selectedFeatureId,rasterLayers,onRasterError,onMapClick,onFinishDrawing,
   terrainPicking,terrainMarker,profileSamples=[],onProfileCursor,terrainResults,terrainRasters,terrainFetchTarget,onTerrainPick,onContextMenu,onEditingError,
   onViewportChange, discovered, traceMode, onTraceClick,
   editing, moving,edgeMoving, snapping, selectedLocked, layerFeatures,
@@ -309,7 +310,7 @@ export default function MapCanvas({
   const eventRef = useRef({
     selected,selectedFeatureId,drawingMode,vertices, traceMode, annotationMode,selectionBoxMode,labelMoveMode,editing, moving,edgeMoving, snapping, selectedLocked,
     layerFeatures, onMapClick,onFinishDrawing,terrainPicking,onTerrainPick,onContextMenu,onEditingError, onTraceClick,onAnnotationClick,onSelectionBox,onLabelMove,onViewportChange,
-    onGeometryPreview, onGeometryCommit, onSelectSavedFeature,onDeselect,preservePlaceSelection,onSelectPinnedPlace,onSelectBoundaryNode,
+    onGeometryPreview, onGeometryCommit, onSelectSavedFeature,onSelectNetworkFace,onDeselect,preservePlaceSelection,onSelectPinnedPlace,onSelectBoundaryNode,
     profileSamples,onProfileCursor,
   });
   const renderRef = useRef({
@@ -332,7 +333,7 @@ export default function MapCanvas({
   eventRef.current = {
     selected,selectedFeatureId,drawingMode,vertices, traceMode, annotationMode,selectionBoxMode,labelMoveMode,editing, moving,edgeMoving, snapping, selectedLocked,
     layerFeatures, onMapClick,onFinishDrawing,terrainPicking,onTerrainPick,onContextMenu,onEditingError, onTraceClick,onAnnotationClick,onSelectionBox,onLabelMove,onViewportChange,
-    onGeometryPreview, onGeometryCommit, onSelectSavedFeature,onDeselect,preservePlaceSelection,onSelectPinnedPlace,onSelectBoundaryNode,
+    onGeometryPreview, onGeometryCommit, onSelectSavedFeature,onSelectNetworkFace,onDeselect,preservePlaceSelection,onSelectPinnedPlace,onSelectBoundaryNode,
     profileSamples,onProfileCursor,
   };
 
@@ -658,12 +659,13 @@ export default function MapCanvas({
         // A browser double-click fires two click events. The second must
         // never add a phantom last vertex before the dblclick finish event.
         if(event.originalEvent.detail>=2)return;
-        if((state.drawingMode==='polygon'||state.drawingMode==='hole')&&state.vertices.length>=3){
+        if(['polygon','hole','line'].includes(state.drawingMode)&&state.vertices.length>=3){
           const first=state.vertices[0],pixel=map.project(first as maplibregl.LngLatLike);
           if(Math.hypot(pixel.x-event.point.x,pixel.y-event.point.y)<=14){
             // Topological closure: reusing the start is a FINISH action,
             // not a repeated point that creates a bow-tie polygon.
-            state.onFinishDrawing();
+            // A closed line is a region; polygon/hole finish unchanged.
+            state.onFinishDrawing(state.drawingMode==='line');
             return;
           }
         }
@@ -702,8 +704,10 @@ export default function MapCanvas({
         const boundary=features.find(f=>f.properties?.role==='boundary-node'||f.properties?.role==='boundary-node-selected');
         if(boundary){state.onSelectBoundaryNode?.(nodePath(boundary.properties));return;}
         const saved=features.find(f=>f.properties?.role==='saved');
+        const region=features.find(f=>f.properties?.role==='network-face');
         const retained=features.find(f=>f.properties?.role==='pinned-place');
         if(saved?.properties?.id)state.onSelectSavedFeature(String(saved.properties.id));
+        else if(region?.properties?.id)state.onSelectNetworkFace?.(String(region.properties.id));
         else if(retained?.properties?.id)state.onSelectPinnedPlace?.(String(retained.properties.id));
         // Blank map clicks are navigation, never an implicit deletion or Deselect.
         // Deselect and Remove are explicit controls only.
@@ -729,8 +733,11 @@ export default function MapCanvas({
         }
       }
       if(!state.editing){
-        const feature=hits(event).find(f=>f.properties?.role==='saved');
+        const features=hits(event);
+        const feature=features.find(f=>f.properties?.role==='saved');
+        const region=features.find(f=>f.properties?.role==='network-face');
         if(feature?.properties?.id)state.onSelectSavedFeature(String(feature.properties.id));
+        else if(region?.properties?.id)state.onSelectNetworkFace?.(String(region.properties.id));
       }
       state.onContextMenu(event.originalEvent.clientX,event.originalEvent.clientY);
     }

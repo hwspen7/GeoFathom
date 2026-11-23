@@ -22,7 +22,7 @@ export function distanceText(m:number,unit:DistanceUnit='auto'){
  return fmt(m/(u==='km'?1000:1),u==='km'?3:2)+' '+u;
 }
 export function mapPalette(base:BasemapId,contrast:DisplaySettings['contrast']){
- const dark=contrast==='light'||(contrast==='auto'&&['satellite','sentinel','global','custom','relief'].includes(base));
+ const dark=contrast==='light'||(contrast==='auto'&&['imagery','satellite','sentinel','global','custom','relief','imagerytopo'].includes(base));
  return dark?{selected:'#7affc3',draw:'#6bf1ff',halo:'#142826',text:'#ffffff',contour:'#ffd06f',major:'#fff0a7'}:
  {selected:'#006846',draw:'#006c9c',halo:'#ffffff',text:'#162c36',contour:'#91521e',major:'#652e10'};
 }
