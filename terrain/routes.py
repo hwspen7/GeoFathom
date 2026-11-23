@@ -130,6 +130,11 @@ class AdvancedTerrainInput(BaseModel):
     slope_classes:Literal['standard','detailed','broad']='standard'
     mfd_exponent:float=Field(default=1.1,ge=0.5,le=8.0)
     neighborhood_radius:int=Field(default=1,ge=1,le=4)
+    max_distance_m:float=Field(default=0,ge=0,le=10000)
+    view_azimuth:float=Field(default=0,ge=0,le=360)
+    view_width:float=Field(default=360,gt=0,le=360)
+    route_model:Literal['surface','distance','gentle']='surface'
+    mesh_samples:int=Field(default=256,ge=64,le=512)
 
 @router.post("/advanced")
 async def advanced(request:Request,body:AdvancedTerrainInput):
@@ -142,6 +147,8 @@ async def advanced(request:Request,body:AdvancedTerrainInput):
             body.fill_sinks,body.consider_curvature,body.refraction_coeff,
             raster(body.comparison_image_id) if body.operation=="dem_difference" and body.comparison_image_id else None,
             body.observer_points,body.gradient_method,body.slope_classes,
-            body.mfd_exponent,body.neighborhood_radius)
+            body.mfd_exponent,body.neighborhood_radius,
+            body.max_distance_m,body.view_azimuth,body.view_width,
+            body.route_model,body.mesh_samples)
     except (GeometryError,RasterError,ValueError,OverflowError) as error:
         raise HTTPException(status_code=422,detail=str(error)) from error

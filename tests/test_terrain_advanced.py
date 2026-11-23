@@ -355,3 +355,41 @@ def test_gradient_and_class_options_propagate_through_real_terrain_run(dem):
             assert source.crs.to_epsg()==32617
             assert np.nanmedian(heights)==pytest.approx(
                 alternative["metrics"]["product_p50"],rel=1e-6)
+
+def test_viewshed_distance_and_direction_exclude_known_outside_sector():
+    from terrain.advanced import _visibility
+    z=np.zeros((9,9),float);valid=np.ones_like(z,bool)
+    affine=from_origin(0,90,10,10)
+    seen,known=_visibility(z,valid,(4,4),affine,1.7,0,
+                            max_distance_m=25,view_azimuth=0,view_width=90)
+    assert seen[4,4] and seen[2,4] and not seen[6,4] and not seen[4,1]
+    assert known[6,4] and known[4,1]
+    assert known.all()
+    with pytest.raises(RasterError,match="range"):
+        run_terrain("unused",{"type":"Polygon","coordinates":[]},
+                    "visibility",max_distance_m=-1)
+
+
+def test_least_cost_mode_has_distinct_nonnegative_physical_costs():
+    from terrain.professional import least_cost
+    grid=np.tile(np.arange(6,dtype=float)*2,(6,1))
+    valid=np.ones_like(grid,bool)
+    start,end=(2,0),(2,5)
+    route_distance,cost_distance=least_cost(grid,valid,start,end,10,10,80,route_model="distance")
+    route_surface,cost_surface=least_cost(grid,valid,start,end,10,10,80,route_model="surface")
+    route_gentle,cost_gentle=least_cost(grid,valid,start,end,10,10,80,route_model="gentle")
+    assert cost_distance>0 and cost_surface>cost_distance
+    assert cost_gentle>cost_distance
+    assert route_distance[0]==start and route_gentle[-1]==end
+    with pytest.raises(RasterError,match="cost model"):
+        least_cost(grid,valid,start,end,10,10,80,route_model="invented")
+
+
+def test_mesh_resolution_controls_actual_sampling_grid(dem):
+    path,polygon=dem
+    a=run_terrain(path,polygon,"mesh",mesh_samples=64)
+    b=run_terrain(path,polygon,"mesh",mesh_samples=512)
+    assert a["algorithm_options"]["mesh_samples"]==64
+    assert b["algorithm_options"]["mesh_samples"]==512
+    assert a["metrics"]["mesh_vertices"]>0
+    assert b["quality"]["reference_validation"]=="not_performed"

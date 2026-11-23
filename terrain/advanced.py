@@ -160,7 +160,8 @@ def _origin(point,crs,affine,valid):
     return r,c
 
 def _visibility(z,valid,origin,affine,observer_height,target_height,cancel=None,
-                consider_curvature=False,refraction_coeff=0.13):
+                consider_curvature=False,refraction_coeff=0.13,
+                max_distance_m=0.,view_azimuth=0.,view_width=360.):
     if any(not math.isfinite(v) or not 0<=v<=1000 for v in (observer_height,target_height)):
         raise RasterError("Observer and target heights must be 0–1000 meters.")
     if consider_curvature and not (math.isfinite(refraction_coeff) and 0 <= refraction_coeff <= .5):
@@ -178,6 +179,17 @@ def _visibility(z,valid,origin,affine,observer_height,target_height,cancel=None,
     # Batch rays by integer step count. This preserves the exact nearest-cell
     # ray sampling / nodata semantics while bounding temporary arrays.
     rows,cols=np.nonzero(valid)
+    # Azimuth is clockwise from grid north. Pixels outside the requested
+    # sector are known to be outside the observation model, not NoData rays.
+    included=np.ones(rows.shape,bool)
+    if max_distance_m>0:
+        included &= np.hypot((rows-r0)*dy_m,(cols-c0)*dx_m)<=max_distance_m+1e-9
+    if view_width<360:
+        bearing=(np.degrees(np.arctan2((cols-c0)*dx_m,(r0-rows)*dy_m))+360)%360
+        delta=(bearing-view_azimuth+180)%360-180
+        included &= np.abs(delta)<=view_width/2+1e-10
+    known[rows[~included],cols[~included]]=True
+    rows,cols=rows[included],cols[included]
     distances=np.maximum(np.abs(rows-r0),np.abs(cols-c0))
     if int(distances.sum())>100_000_000:
         raise RasterError("Visibility exceeds 100 million ray samples; reduce the area or use a coarser DEM.")
@@ -256,7 +268,9 @@ def _mask_features(mask,affine,crs,name,cancel=None):
 def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,observer_height=1.7,target_height=0.,
                 end_point=None,max_slope=30.,min_elevation=-12000.,max_elevation=12000.,max_tri=100.,
                 stream_cells=100,azimuth=315.,altitude=45.,section_spacing=50.,section_width=20.,texture_path=None,
-                fill_sinks=False,consider_curvature=False,refraction_coeff=0.13,comparison_path=None,observer_points=None,gradient_method="horn",slope_classes="standard",mfd_exponent=1.1,neighborhood_radius=1,cancel=None):
+                fill_sinks=False,consider_curvature=False,refraction_coeff=0.13,comparison_path=None,observer_points=None,gradient_method="horn",slope_classes="standard",mfd_exponent=1.1,neighborhood_radius=1,
+                max_distance_m=0.,view_azimuth=0.,view_width=360.,
+                route_model="surface",mesh_samples=256,cancel=None):
     checkpoint(cancel)
     if gradient_method not in {"horn","zevenbergen_thorne"}:
         raise RasterError("Unsupported terrain gradient method.")
@@ -266,6 +280,16 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
         raise RasterError("MFD exponent must be between 0.5 and 8.")
     if neighborhood_radius not in (1,2,3,4):
         raise RasterError("Neighborhood radius must be 1–4 cells.")
+    if not math.isfinite(max_distance_m) or not 0<=max_distance_m<=10000:
+        raise RasterError("Viewshed range must be 0–10,000 meters.")
+    if not math.isfinite(view_azimuth) or not 0<=view_azimuth<=360:
+        raise RasterError("Viewshed azimuth must be 0–360 degrees.")
+    if not math.isfinite(view_width) or not 0<view_width<=360:
+        raise RasterError("Viewshed width must be in (0, 360] degrees.")
+    if route_model not in {"surface","distance","gentle"}:
+        raise RasterError("Unsupported route cost model.")
+    if not isinstance(mesh_samples,int) or not 64<=mesh_samples<=512:
+        raise RasterError("3D mesh budget must be 64–512 samples per axis.")
     if operation=="cross_sections":
         from .corridor import cross_sections
         return cross_sections(path,geometry,section_spacing,section_width,cancel)
@@ -294,7 +318,12 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
     result={"operation":operation,"source_crs":str(crs),
         "algorithm_options":{"gradient_method":gradient_method,"slope_classes":slope_classes,
                              "mfd_exponent":mfd_exponent if operation=="flow_accumulation_mfd" else None,
-                             "neighborhood_radius_cells":neighborhood_radius if operation in {"tri","tpi"} else None},"valid_cells":int(valid.sum()),
+                             "neighborhood_radius_cells":neighborhood_radius if operation in {"tri","tpi"} else None,
+                             "route_model":route_model if operation=="least_cost" else None,
+                             "mesh_samples":mesh_samples if operation=="mesh" else None,
+                             "maximum_distance_m":max_distance_m if operation in {"visibility","viewshed_multi"} else None,
+                             "view_azimuth_deg":view_azimuth if operation in {"visibility","viewshed_multi"} else None,
+                             "view_width_deg":view_width if operation in {"visibility","viewshed_multi"} else None},"valid_cells":int(valid.sum()),
         "missing_cells":int((covered&~valid).sum()),"cell_area_m2":cell,
         "source_vertical_datum":source_datum,"metrics":{},"features":[]}
     if operation in SURFACES:
@@ -302,7 +331,7 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
             max_slope,min_elevation,max_elevation,max_tri,stream_cells,azimuth,altitude,
             _feature,_origin,cancel,source_datum=source_datum,
             gradient_method=gradient_method,slope_classes=slope_classes,mfd_exponent=mfd_exponent,
-            neighborhood_radius=neighborhood_radius)
+            neighborhood_radius=neighborhood_radius,route_model=route_model)
         result["warning"]="Projected source-grid product; nodata and incomplete neighborhoods excluded. Unconditioned D8 terminates at sinks/flats; suitability and path costs are screening estimates, not engineering certification."
         if operation=="flow_accumulation_mfd":
             result["warning"]=(
@@ -373,9 +402,11 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
     elif operation=="visibility":
         origin=_origin(point,crs,affine,valid)
         seen,known=_visibility(z,valid,origin,affine,observer_height,target_height,cancel,
-                               consider_curvature,refraction_coeff)
+                               consider_curvature,refraction_coeff,max_distance_m,view_azimuth,view_width)
         result["features"]=_mask_features(seen,affine,crs,"Visible terrain",cancel)
-        result["metrics"]={"visible_cells":int(seen.sum()),"visible_grid_area_m2":int(seen.sum())*cell,"unknown_cells":int((valid&~known).sum())}
+        result["metrics"]={"visible_cells":int(seen.sum()),"visible_grid_area_m2":int(seen.sum())*cell,"unknown_cells":int((valid&~known).sum()),
+            "maximum_distance_m":max_distance_m,"view_azimuth_deg":view_azimuth,
+            "view_width_deg":view_width}
         result["warning"]=("Local cell-center visibility with Earth curvature and configurable atmospheric refraction. "
                            if consider_curvature else "Local planar cell-center visibility; curvature and refraction disabled. ")+"Buildings/vegetation depend on the input DEM/DSM; NoData along rays is unknown."
     elif operation=="viewshed_multi":
@@ -401,7 +432,7 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
             checkpoint(cancel)
             visible,available=_visibility(z,valid,origin,affine,
                 observer_height,target_height,cancel,consider_curvature,
-                refraction_coeff)
+                refraction_coeff,max_distance_m,view_azimuth,view_width)
             count+=visible.astype(np.uint8)
             # A count of zero or one is not exact if ANY observer's ray
             # crosses NoData. Mark such pixels unknown rather than
@@ -424,6 +455,8 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
             "visible_by_all_cells":int((count==len(origins)).sum()),
             "visible_grid_area_m2":int(fully_visible.sum())*cell,
             "unknown_cells":int((valid&~fully_known).sum()),
+            "maximum_distance_m":max_distance_m,"view_azimuth_deg":view_azimuth,
+            "view_width_deg":view_width,
         }
         result["warning"]=(
             "Multi-observer cell-center viewshed: raster values count the "
@@ -444,7 +477,7 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
     else:
         # Interactive WebGL2 preview: preserve up to 256 samples per axis.
         # Original source DEM and raster exports are never downsampled here.
-        step=max(1,math.ceil(max(z.shape)/256))
+        step=max(1,math.ceil(max(z.shape)/mesh_samples))
         heights=z[::step,::step];mask=valid[::step,::step]
         first=mask[:-1,:-1]&mask[1:,:-1]&mask[:-1,1:]
         second=mask[:-1,1:]&mask[1:,:-1]&mask[1:,1:]
@@ -456,7 +489,9 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
         if texture_path is not None:
             from .texture import mesh_texture
             result["mesh"]["texture"]=mesh_texture(texture_path,affine,crs,heights.shape[0],heights.shape[1],step,cancel)
-        result["metrics"]={"minimum_m":float(z[valid].min()),"maximum_m":float(z[valid].max())}
+        result["metrics"]={"minimum_m":float(z[valid].min()),"maximum_m":float(z[valid].max()),
+            "mesh_vertices":int(mask.sum()),"mesh_sampling_step":int(step),
+            "mesh_grid_coverage_pct":100*float(mask.sum())/max(1,mask.size)}
         result["warning"]="Interactive 3D elevation preview sampled from the DEM; gaps represent nodata."
     if conditioned is not None:
         result["metrics"].update(conditioned)
@@ -468,5 +503,23 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
         result["warning"]+=" Study area extends beyond the DEM footprint; results cover the intersection only."
     if int((covered&~valid).sum()):
         result["warning"]+=" Some covered cells are nodata."
+    # Explicit, machine-readable scientific boundaries for each result.
+    # Passing a test fixture is not equivalent to independent field accuracy.
+    flags=[]
+    if coverage < 99.99:flags.append("partial_source_overlap")
+    if result["missing_cells"]:flags.append("nodata_within_study")
+    if not source_datum:flags.append("vertical_datum_unreported")
+    if operation in {"watershed","flow_accumulation","flow_accumulation_mfd","streams","stream_order"}:
+        flags.append("upstream_outside_grid_not_evaluated")
+    result["quality"]={
+        "status":"provisional_not_independently_verified",
+        "reference_validation":"not_performed",
+        "uncertainty":"not_quantified",
+        "source_overlap_pct":float(coverage),
+        "valid_study_cell_pct":float(result["metrics"]["valid_grid_pct"]),
+        "derivative_coverage_pct":float(100*result["raster"]["valid_cells"]/max(1,result["valid_cells"])) if "raster" in result else None,
+        "flags":flags,
+        "area_basis":"planar_projected_grid_cells"
+    }
     checkpoint(cancel)
     return result

@@ -125,7 +125,9 @@ def d8_flow(z, valid, dx, dy, cancel=None):
         if target>=0:accum[target]+=accum[index]
     return dst,direction,np.where(valid,accum.reshape(z.shape),np.nan)
 
-def least_cost(z,valid,start,end,dx,dy,max_grade,cancel=None):
+def least_cost(z,valid,start,end,dx,dy,max_grade,cancel=None,route_model="surface"):
+    if route_model not in {"surface","distance","gentle"}:
+        raise RasterError("Unsupported route cost model.")
     """Dijkstra on raster cell centres; no diagonal corner cutting through nodata."""
     if valid.size>262144:raise RasterError("Route grid exceeds 262,144 cells.")
     if not math.isfinite(max_grade) or not 0<max_grade<=90:
@@ -151,7 +153,12 @@ def least_cost(z,valid,start,end,dx,dy,max_grade,cancel=None):
             rise=float(z[rr,cc]-z[r,c]);grade=math.degrees(math.atan(abs(rise)/horizontal))
             if grade>max_grade:continue
             # Cost is surface length with a symmetric grade penalty.
-            candidate=cost+math.hypot(horizontal,rise)*(1+(rise/horizontal)**2)
+            # Exact 2-D distance, physical surface-length cost, or an explicitly
+            # grade-averse engineering screening model; all weights >= 0.
+            step=(horizontal if route_model=="distance" else
+                  math.hypot(horizontal,rise)*(1+(4 if route_model=="gentle" else 1)
+                                                  *(rise/horizontal)**2))
+            candidate=cost+step
             if candidate<dist[rr,cc]:
                 dist[rr,cc]=candidate;prev[rr,cc]=r*w+c
                 heapq.heappush(queue,(candidate,rr,cc))
@@ -379,7 +386,7 @@ def _derived_surface_tiled(z,valid,dx,dy,operation,max_slope=30.,
 
 def surface(z,valid,affine,crs,operation,reference,point,end_point,max_slope,
             min_elevation,max_elevation,max_tri,stream_cells,azimuth,altitude,feature,origin,cancel=None,
-            source_datum=None,gradient_method="horn",slope_classes="standard",mfd_exponent=1.1,neighborhood_radius=1):
+            source_datum=None,gradient_method="horn",slope_classes="standard",mfd_exponent=1.1,neighborhood_radius=1,route_model="surface"):
     """Return the exact source-grid derivative and product-specific statistics."""
     dx,dy=abs(affine.a),abs(affine.e);cell=dx*dy
     features=[];metrics={}
@@ -427,13 +434,15 @@ def surface(z,valid,affine,crs,operation,reference,point,end_point,max_slope,
     elif operation=="least_cost":
         start=origin(point,crs,affine,valid);end=origin(end_point,crs,affine,valid)
         if start==end:raise RasterError("Route endpoints must occupy different cells.")
-        route,cost=least_cost(z,valid,start,end,dx,dy,max_slope,cancel)
+        route,cost=least_cost(z,valid,start,end,dx,dy,max_slope,cancel,route_model=route_model)
         coordinates=[affine*(c+.5,r+.5) for r,c in route]
         line=LineString(coordinates)
         values=np.where(valid,0.,np.nan)
         for r,c in route:values[r,c]=1
         features=[feature(line,crs,{"name":"Least-cost route","color":"#b74127"})]
-        metrics={"route_length_m":float(line.length),"route_cost":cost,"route_cells":len(route)}
+        metrics={"route_length_m":float(line.length),"route_cost":cost,"route_cells":len(route),
+                 "route_surface_length_m":float(sum(math.hypot(math.hypot((b[0]-a[0]),(b[1]-a[1])),float(z[r2,c2]-z[r1,c1]))
+                     for (r1,c1),(r2,c2),a,b in zip(route,route[1:],coordinates,coordinates[1:])))}
     else:
         # Large-area surfaces avoid keeping nine full-sized derived arrays.
         if operation in {"tri","tpi"} and neighborhood_radius>1:
