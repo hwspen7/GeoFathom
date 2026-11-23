@@ -18,6 +18,11 @@ from terrain.p1_science import dinfinity_accumulation
 
 def test_dinfinity_cardinal_flow_agrees_with_independent_pysheds(tmp_path):
     pytest.importorskip("pysheds")
+    # PySheds 0.5 still calls the removed NumPy 2.4 alias np.in1d.
+    # np.isin is its documented equivalent; compatibility here changes
+    # only the independently maintained reference test environment.
+    if not hasattr(np,"in1d"):
+        np.in1d=np.isin
     from pysheds.grid import Grid
 
     z=np.tile(np.arange(32.,0.,-1.),(24,1)).astype("float32")
