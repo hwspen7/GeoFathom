@@ -158,7 +158,9 @@ test('advanced surface families retain distinct real results and scientific expo
  await page.getByRole('tab',{name:'Overview',exact:true}).click();
  await expect(page.getByLabel('Terrain results')).toContainText(/route length/i);
  const exportEvent=page.waitForEvent('download');
- await page.getByLabel('Terrain results').getByRole('button',{name:'Export',exact:true}).click();
+ await page.locator('.gis-file-menu > summary').click();
+ await page.getByRole('button',{name:'Terrain result JSON'}).click();
+ await page.locator('.gis-file-menu > summary').click();
  const exported=await exportEvent;
  expect(exported.suggestedFilename()).toMatch(/terrain-least_cost.*geojson/);
  const exportedJson=JSON.parse(await readFile(await exported.path(),'utf8'));
