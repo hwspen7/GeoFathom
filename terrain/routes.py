@@ -61,6 +61,10 @@ async def area(request:Request,body:TerrainInput)->dict:
 @router.post("/profile")
 async def profile(request:Request,body:TerrainInput)->dict:
     try:
+        # Profile elevations and output field names are always in meters.
+        # Honor the API unit contract rather than silently accepting feet.
+        if body.vertical_unit!="meter":
+            raise RasterError("Terrain model currently supports vertical elevations in meters only.")
         return await run_cancelable(request,elevation_profile,raster(body.image_id),
                                        body.geometry,body.samples)
     except (GeometryError,RasterError,ValueError) as error:
