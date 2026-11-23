@@ -156,6 +156,10 @@ export default function TerrainWorkbench(p:Props){
  const [resultTab,setResultTab]=useState<'overview'|'visual'|'outputs'|'details'>('overview');
  useEffect(()=>{setResultTab('overview');setExpanded(false);},[selectedRecord]);
  const [historyFocus,setHistoryFocus]=useState('');
+ const [layerPage,setLayerPage]=useState(0);
+ const layerPageSize=5;
+ const layerPageCount=Math.max(1,Math.ceil(records.length/layerPageSize));
+ const visibleLayerPage=Math.min(layerPage,layerPageCount-1);
  const [compareRecordId,setCompareRecordId]=useState('');
  const selected=records.find(r=>r.id===selectedRecord);
  const result=selected?.advanced??null,slope=selected?.slope??null,profile=selected?.profile??null;
@@ -579,7 +583,8 @@ export default function TerrainWorkbench(p:Props){
      <details className="terrain-layer-manager">
        <summary>Layers · {records.length}</summary>
        <div className="terrain-result-layer-list">
-         {[...records].reverse().map(record=><div key={record.id} className={'scratch-row '+(selectedRecord===record.id?'active':'')}>
+         {[...records].reverse().slice(visibleLayerPage*layerPageSize,(visibleLayerPage+1)*layerPageSize)
+           .map(record=><div key={record.id} className={'scratch-row '+(selectedRecord===record.id?'active':'')}>
            <input type="checkbox" aria-label={'Show '+record.title+' '+record.id}
              checked={record.visible} disabled={!record.advanced?.features.length&&!record.advanced?.raster}
              onChange={e=>setRecords(old=>old.map(r=>r.id===record.id?{...r,visible:e.target.checked}:r))}/>
@@ -594,6 +599,12 @@ export default function TerrainWorkbench(p:Props){
            }}>×</button>
          </div>)}
        </div>
+       {layerPageCount>1&&<div className="terrain-layer-pager" aria-label="Terrain layer pages">
+         <button type="button" disabled={visibleLayerPage===0} onClick={()=>setLayerPage(p=>Math.max(0,p-1))}>Previous</button>
+         <span>{visibleLayerPage+1} / {layerPageCount}</span>
+         <button type="button" disabled={visibleLayerPage===layerPageCount-1}
+           onClick={()=>setLayerPage(p=>Math.min(layerPageCount-1,p+1))}>Next</button>
+       </div>}
      </details>
 
    </section>}

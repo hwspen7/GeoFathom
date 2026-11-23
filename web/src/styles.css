@@ -1146,3 +1146,18 @@ button:disabled { opacity: .45; cursor: not-allowed; }
     width:calc(100vw - 24px)!important;max-width:calc(100vw - 24px)!important;
   }
 }
+
+
+/* Result layer manager is paginated, not a hidden nested scroller. */
+.desktop-gis .terrain-outputs-list .terrain-result-layer-list{
+  max-height:none!important;overflow:hidden!important;
+}
+.desktop-gis .terrain-layer-pager{
+  display:flex;gap:8px;justify-content:space-between;align-items:center;
+  padding:7px 1px 4px;color:#64798a;font-size:10px;
+}
+.desktop-gis .terrain-layer-pager button{
+  background:#fff;border:1px solid #d7e1e8;padding:5px 8px;
+  border-radius:5px!important;color:#35647e;font-size:10px;
+}
+.desktop-gis .terrain-layer-pager button:disabled{opacity:.35}
