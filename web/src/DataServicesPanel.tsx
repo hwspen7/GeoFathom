@@ -100,6 +100,8 @@ export default function DataServicesPanel(p:Props){
       service,title,base_url:url,layer_name:layer,attribution,tile_matrix_set:matrixSet,
     },adminToken);
     setSources(old=>[...old,saved]);
+    setSourceView('browse');
+    setSourcePage(Math.floor(sources.length/2));
     setInfo('OGC source registered. Add its hostname to the server allowlist first.');
   }
   async function inspect(source:OGCSource){
