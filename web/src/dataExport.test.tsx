@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import {afterEach,beforeEach,describe,expect,it,vi} from 'vitest';
-import {cleanup,fireEvent,render,screen,waitFor} from '@testing-library/react';
+import {act,cleanup,fireEvent,render,screen,waitFor} from '@testing-library/react';
 import DataWorkbench from './DataWorkbench';
 import ExportWorkbench from './ExportWorkbench';
 import type {NetworkPolygonization,NetworkFace} from './api';
@@ -229,4 +229,102 @@ it('quick import cannot refresh or show success after project A–B–A',async()
  view.rerender(<DataWorkbench {...props} projectId="project-2"/>);view.rerender(<DataWorkbench {...props}/>);
  resolve({created:99});await new Promise(r=>setTimeout(r,0));
  expect(props.onRefresh).not.toHaveBeenCalled();expect(screen.queryByText(/Imported 99/)).toBeNull();
+});
+
+
+it('keeps a queued export observable when its input scope or map view changes',async()=>{
+ vi.useFakeTimers();
+ try{
+  const props=exportProps();props.workspace.total=3;
+  const queued={id:'export-job',status:'queued',progress:0};
+  api.startDatasetExport.mockResolvedValue(queued);
+  api.getGISJob.mockResolvedValue({...queued,status:'completed',progress:100});
+  const view=render(<ExportWorkbench {...props}/>);
+  fireEvent.change(screen.getByLabelText('Export scope'),{target:{value:'project'}});
+  fireEvent.change(screen.getByLabelText('Export setup'),{target:{value:'delivery'}});
+  fireEvent.click(screen.getByLabelText('Background dataset export'));
+  await act(async()=>{fireEvent.click(screen.getByRole('button',{name:'Export GEOJSON'}));});
+  expect(api.startDatasetExport).toHaveBeenCalledTimes(1);
+  fireEvent.change(screen.getByLabelText('Export scope'),{target:{value:'local'}});
+  view.rerender(<ExportWorkbench {...props} viewport={[1,1,2,2]}/>);
+  await act(async()=>{await vi.advanceTimersByTimeAsync(750);});
+  expect(api.getGISJob).toHaveBeenCalledWith('project-1','export-job');
+  expect(screen.getByRole('button',{name:'Download dataset'})).toBeTruthy();
+ }finally{vi.useRealTimers();}
+});
+
+
+it('tracks a pending job submission across export input changes without submitting twice',async()=>{
+ vi.useFakeTimers();
+ try{
+  const props=exportProps();props.workspace.total=3;
+  let resolve!:(value:unknown)=>void;
+  api.startDatasetExport.mockImplementationOnce(()=>new Promise(r=>{resolve=r;}));
+  api.getGISJob.mockResolvedValue({id:'pending-job',status:'completed',progress:100});
+  render(<ExportWorkbench {...props}/>);
+  fireEvent.change(screen.getByLabelText('Export scope'),{target:{value:'project'}});
+  fireEvent.change(screen.getByLabelText('Export setup'),{target:{value:'delivery'}});
+  fireEvent.click(screen.getByLabelText('Background dataset export'));
+  fireEvent.click(screen.getByRole('button',{name:'Export GEOJSON'}));
+  fireEvent.change(screen.getByLabelText('Export scope'),{target:{value:'local'}});
+  expect((screen.getByRole('button',{name:'Preparing…'}) as HTMLButtonElement).disabled).toBe(true);
+  await act(async()=>{resolve({id:'pending-job',status:'queued',progress:0});});
+  await act(async()=>{await vi.advanceTimersByTimeAsync(750);});
+  expect(screen.getByRole('button',{name:'Download dataset'})).toBeTruthy();
+  expect(api.startDatasetExport).toHaveBeenCalledTimes(1);
+ }finally{vi.useRealTimers();}
+});
+
+it('does not attach a late queued export to a project revisited through A–B–A',async()=>{
+ let resolve!:(value:unknown)=>void;
+ api.startDatasetExport.mockImplementationOnce(()=>new Promise(r=>{resolve=r;}));
+ const props=exportProps();props.workspace.total=3;
+ const view=render(<ExportWorkbench {...props}/>);
+ fireEvent.change(screen.getByLabelText('Export scope'),{target:{value:'project'}});
+ fireEvent.change(screen.getByLabelText('Export setup'),{target:{value:'delivery'}});
+ fireEvent.click(screen.getByLabelText('Background dataset export'));
+ fireEvent.click(screen.getByRole('button',{name:'Export GEOJSON'}));
+ view.rerender(<ExportWorkbench {...props} projectId="project-2"/>);
+ view.rerender(<ExportWorkbench {...props}/>);
+ await act(async()=>{resolve({id:'stale-job',status:'queued',progress:0});});
+ expect(screen.queryByLabelText('Dataset export progress')).toBeNull();
+ expect(api.getGISJob).not.toHaveBeenCalled();
+ expect((screen.getByRole('button',{name:'Export GEOJSON'}) as HTMLButtonElement).disabled).toBe(false);
+});
+
+
+it('reports a rejected background submission even after its input scope changes',async()=>{
+ let reject!:(error:Error)=>void;
+ api.startDatasetExport.mockImplementationOnce(()=>new Promise((_,r)=>{reject=r;}));
+ const props=exportProps();props.workspace.total=3;
+ render(<ExportWorkbench {...props}/>);
+ fireEvent.change(screen.getByLabelText('Export scope'),{target:{value:'project'}});
+ fireEvent.change(screen.getByLabelText('Export setup'),{target:{value:'delivery'}});
+ fireEvent.click(screen.getByLabelText('Background dataset export'));
+ fireEvent.click(screen.getByRole('button',{name:'Export GEOJSON'}));
+ fireEvent.change(screen.getByLabelText('Export scope'),{target:{value:'local'}});
+ await act(async()=>{reject(new Error('Dataset validation failed'));});
+ expect(screen.getByRole('alert').textContent).toContain('Dataset validation failed');
+ expect((screen.getByRole('button',{name:'Export GEOJSON'}) as HTMLButtonElement).disabled).toBe(false);
+});
+
+it('recovers job progress and clears a transient status error after reconnecting',async()=>{
+ vi.useFakeTimers();
+ try{
+  const props=exportProps();props.workspace.total=3;
+  api.startDatasetExport.mockResolvedValue({id:'retry-job',status:'queued',progress:0});
+  api.getGISJob.mockRejectedValueOnce(new Error('Temporary status outage'))
+   .mockResolvedValueOnce({id:'retry-job',status:'completed',progress:100});
+  render(<ExportWorkbench {...props}/>);
+  fireEvent.change(screen.getByLabelText('Export scope'),{target:{value:'project'}});
+  fireEvent.change(screen.getByLabelText('Export setup'),{target:{value:'delivery'}});
+  fireEvent.click(screen.getByLabelText('Background dataset export'));
+  await act(async()=>{fireEvent.click(screen.getByRole('button',{name:'Export GEOJSON'}));});
+  await act(async()=>{await vi.advanceTimersByTimeAsync(750);});
+  expect(screen.getByRole('alert').textContent).toContain('Temporary status outage');
+  await act(async()=>{await vi.advanceTimersByTimeAsync(750);});
+  expect(api.getGISJob).toHaveBeenCalledTimes(2);
+  expect(screen.getByRole('button',{name:'Download dataset'})).toBeTruthy();
+  expect(screen.queryByRole('alert')).toBeNull();
+ }finally{vi.useRealTimers();}
 });

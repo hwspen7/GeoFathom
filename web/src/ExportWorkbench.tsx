@@ -56,28 +56,32 @@ export default function ExportWorkbench(p:Props){
  const [grid,setGrid]=useState(true);
  const [legend,setLegend]=useState(true);
  const [rasterIndex,setRasterIndex]=useState(0);
- const [busy,setBusy]=useState(false);
+ const [busy,setBusy]=useState(false),[jobStarting,setJobStarting]=useState(false);
  const [message,setMessage]=useState('');
  const [error,setError]=useState('');
+ const [jobError,setJobError]=useState(''),[pollAttempt,setPollAttempt]=useState(0);
  const [layer,setLayer]=useState(''),[targetCRS,setTargetCRS]=useState('EPSG:4326');
  const [precision,setPrecision]=useState(''),[fields,setFields]=useState<string[]|null>(null);
  const [preview,setPreview]=useState<ExportPreflight|null>(null),[job,setJob]=useState<GISJob|null>(null);
  const [setup,setSetup]=useState<'scope'|'fields'|'delivery'>('scope');
  const [background,setBackground]=useState(false),[includeRasters,setIncludeRasters]=useState(false);
- const epoch=useRef(0),abort=useRef<AbortController|null>(null);
- useEffect(()=>{epoch.current++;abort.current?.abort();setPreview(null);setJob(null);setFields(null);setLayer('');setMessage('');setError('');setBusy(false);},[p.projectId]);
+ const epoch=useRef(0),projectEpoch=useRef(0),abort=useRef<AbortController|null>(null);
+ useEffect(()=>{epoch.current++;projectEpoch.current++;abort.current?.abort();setPreview(null);setJob(null);setJobStarting(false);setJobError('');setPollAttempt(0);setFields(null);setLayer('');setMessage('');setError('');setBusy(false);},[p.projectId]);
  const savedScope=['project','layer','viewport'].includes(scope);
  const signature=JSON.stringify([scope,layer,format,targetCRS,precision,p.selected,p.scratch,p.faces,p.viewport,p.workspace?.total]);
  useEffect(()=>{epoch.current++;abort.current?.abort();setBusy(false);setPreview(null);setMessage('');setError('');},[signature]);
  useEffect(()=>()=>abort.current?.abort(),[]);
  useEffect(()=>{
   if(!job||!p.projectId||!['queued','running'].includes(job.status))return;
-  let live=true;const generation=epoch.current,project=p.projectId;
+  // Queued jobs belong to the project, independently of editable export inputs.
+  let live=true;const generation=projectEpoch.current,project=p.projectId;
   const timer=window.setTimeout(()=>{void getGISJob(project,job.id).then(next=>{
-   if(live&&epoch.current===generation){setJob(next);if(next.status==='failed')setError(next.error||'Export failed.');}
-  }).catch(e=>{if(live)setError(String(e));});},700);
+   if(live&&projectEpoch.current===generation){
+    setJob(next);setJobError(next.status==='failed'?next.error||'Export failed.':'');
+   }
+  }).catch(e=>{if(live&&projectEpoch.current===generation){setJobError(String(e));setPollAttempt(n=>n+1);}});},700);
   return ()=>{live=false;window.clearTimeout(timer);};
- },[job,p.projectId]);
+ },[job,p.projectId,pollAttempt]);
  useEffect(()=>{setFields(null);},[scope,layer,p.selected]);
  const count=scope==='selection'?Number(Boolean(p.selected)):
   scope==='local'?p.scratch.length:scope==='areas'?p.faces.length:
@@ -94,8 +98,8 @@ export default function ExportWorkbench(p:Props){
   savedScope?Boolean(p.projectId&&count&&(scope!=='layer'||layer)&&(scope!=='viewport'||p.viewport)):
   Boolean(count&&(p.projectId||['geojson','csv','report'].includes(format)));
  async function run(){
-  if(!canExport||busy)return;setBusy(true);setError('');setMessage('');
-  const generation=epoch.current;abort.current?.abort();abort.current=new AbortController();
+  if(!canExport||busy||jobStarting)return;setBusy(true);setError('');setMessage('');
+  const generation=epoch.current,jobGeneration=projectEpoch.current;abort.current?.abort();abort.current=new AbortController();
   try{
    if(format==='package'){
     await downloadProjectPackage(p.projectId!,includeRasters?p.rasterSources??[]:[],abort.current.signal);
@@ -113,8 +117,14 @@ export default function ExportWorkbench(p:Props){
     });
    }else if(p.projectId&&vectorFormat){
     if(background&&savedScope){
-     const result=await startDatasetExport(p.projectId,options());
-     if(epoch.current!==generation)return;setJob(result);
+     setJobStarting(true);
+     try{
+      const result=await startDatasetExport(p.projectId,options());
+      if(projectEpoch.current!==jobGeneration)return;setJob(result);setJobError('');
+     }catch(e){
+      if(projectEpoch.current===jobGeneration)setError(e instanceof Error?e.message:String(e));
+      return;
+     }finally{if(projectEpoch.current===jobGeneration)setJobStarting(false);}
     }else await downloadDatasetExport(p.projectId,options(),abort.current.signal);
    }else{
     // CSV / scientific reports use authoritative persisted measurements.
@@ -248,7 +258,7 @@ export default function ExportWorkbench(p:Props){
    </div>
   </div>}
   <button type="button" className="data-primary" onClick={()=>void run()}
-   disabled={!canExport||busy||Boolean(job&&['queued','running'].includes(job.status))}>{busy?'Preparing…':'Export '+format.toUpperCase()}</button>
+   disabled={!canExport||busy||jobStarting||Boolean(job&&['queued','running'].includes(job.status))}>{busy||jobStarting?'Preparing…':'Export '+format.toUpperCase()}</button>
   {format!=='geotiff'&&count===0&&<small>No features in the current scope.</small>}
   {!p.projectId&&['gpkg','kml','gpx','shapefile'].includes(format)&&
     <small>Open a project to use the GIS conversion service.</small>}
@@ -259,5 +269,6 @@ export default function ExportWorkbench(p:Props){
   </div>}
   {message&&<small className="project-info" role="status">{message}</small>}
   {error&&<small className="discovery-error" role="alert">{error}</small>}
+  {jobError&&<small className="discovery-error" role="alert">{jobError}</small>}
  </div>;
 }

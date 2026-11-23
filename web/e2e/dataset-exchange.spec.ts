@@ -40,6 +40,9 @@ test('batch imports 620 rows and exports full CSV and GDAL datasets beyond the U
  await page.getByLabel('Export setup').selectOption('delivery');
  await page.getByLabel('Background dataset export').check();
  await page.getByRole('button',{name:'Export GPKG',exact:true}).click();
+ // The queued artifact retains its original project scope while the user
+ // edits inputs for a subsequent export. Progress must keep updating.
+ await page.getByLabel('Export scope',{exact:true}).selectOption('local');
  await expect(page.getByRole('button',{name:'Download dataset',exact:true})).toBeVisible({timeout:30000});
  const gpkgEvent=page.waitForEvent('download');await page.getByRole('button',{name:'Download dataset',exact:true}).click();
  const binary=await downloaded(await gpkgEvent);expect(binary.subarray(0,15).toString()).toBe('SQLite format 3');
