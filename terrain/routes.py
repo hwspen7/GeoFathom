@@ -133,3 +133,88 @@ async def advanced(request:Request,body:AdvancedTerrainInput):
             body.observer_points)
     except (GeometryError,RasterError,ValueError,OverflowError) as error:
         raise HTTPException(status_code=422,detail=str(error)) from error
+
+
+class ResearchCriterionInput(BaseModel):
+    image_id:str
+    name:str=Field(min_length=1,max_length=80)
+    direction:str
+    low:float
+    high:float
+    target:float|None=None
+    weight:float=Field(default=1,gt=0)
+    sigma:float=Field(default=0,ge=0)
+    weight_sigma:float=Field(default=0,ge=0,le=1)
+    allowed_min:float|None=None
+    allowed_max:float|None=None
+    sampling:str="bilinear"
+    vertical_elevation:bool=False
+
+
+class ResearchInput(BaseModel):
+    image_id:str
+    geometry:dict
+    criteria:list[ResearchCriterionInput]=Field(min_length=2,max_length=8)
+    threshold:float=Field(default=.65,ge=0,le=1)
+    sensitivity_fraction:float=Field(default=.2,gt=0,le=.5)
+    trials:int=Field(default=64,ge=0,le=256)
+    seed:int=Field(default=42,ge=0,lt=4294967296)
+    pairwise:list[list[float]]|None=None
+
+
+@router.post("/research")
+async def research(request:Request,body:ResearchInput):
+    """Bounded, source-ID-only multicriteria GIS study with a portable evidence bundle."""
+    from .research import analyze_research
+    try:
+        # Client-provided filesystem paths are never accepted. All inputs
+        # resolve through managed imagery IDs with the normal API access policy.
+        criteria=[{**entry.model_dump(), "path":raster(entry.image_id)}
+                  for entry in body.criteria]
+        options={"threshold":body.threshold,"sensitivity_fraction":body.sensitivity_fraction,
+                 "trials":body.trials,"seed":body.seed,"pairwise":body.pairwise}
+        return await run_cancelable(request,analyze_research,raster(body.image_id),
+                                    body.geometry,criteria,options)
+    except (GeometryError,RasterError,ValueError,OverflowError) as error:
+        raise HTTPException(status_code=422,detail=str(error)) from error
+
+
+class ElevationCheckpoint(BaseModel):
+    longitude:float
+    latitude:float
+    elevation_m:float
+
+
+class CheckpointValidationInput(BaseModel):
+    image_id:str
+    points:list[ElevationCheckpoint]=Field(min_length=5,max_length=10000)
+    vertical_datum:str|None=None
+
+
+@router.post("/research/checkpoints")
+async def research_checkpoints(request:Request,body:CheckpointValidationInput):
+    """Observed-minus-reference DEM error metrics from independently supplied GCPs."""
+    from .research import checkpoint_accuracy
+    try:
+        return await run_cancelable(request,checkpoint_accuracy,raster(body.image_id),
+                                    [point.model_dump() for point in body.points],
+                                    body.vertical_datum)
+    except (RasterError,ValueError,OverflowError) as error:
+        raise HTTPException(status_code=422,detail=str(error)) from error
+
+
+class ResearchArchiveInput(BaseModel):
+    archive_base64:str=Field(max_length=100_000_000)
+
+
+@router.post("/research/verify")
+async def research_verify(request:Request,body:ResearchArchiveInput):
+    """Verify SHA-256 and archive structure for a portable research evidence set."""
+    import base64
+    import binascii
+    from .research import verify_research_bundle
+    try:
+        raw=base64.b64decode(body.archive_base64,validate=True)
+        return await run_cancelable(request,verify_research_bundle,raw)
+    except (RasterError,ValueError,binascii.Error) as error:
+        raise HTTPException(status_code=422,detail=str(error)) from error
