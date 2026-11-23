@@ -151,6 +151,7 @@ class AdvancedTerrainInput(BaseModel):
     mesh_lod:bool=False
     suitability_model:Literal['binary','weighted']='binary'
     suitability_weights:tuple[float,float,float]=(0.5,0.25,0.25)
+    external_inflow_image_id:str|None=None
 
 @router.post("/advanced")
 async def advanced(request:Request,body:AdvancedTerrainInput):
@@ -170,6 +171,7 @@ async def advanced(request:Request,body:AdvancedTerrainInput):
             body.design_east_grade,body.design_north_grade,body.design_max_grade,body.elevation_sigma_m,
             body.optimize_observers,
             raster(body.dsm_image_id) if body.dsm_image_id and body.operation in {"visibility","viewshed_multi"} else None,
-            body.mesh_lod,body.suitability_model,body.suitability_weights)
+            body.mesh_lod,body.suitability_model,body.suitability_weights,
+            raster(body.external_inflow_image_id) if body.external_inflow_image_id else None)
     except (GeometryError,RasterError,ValueError,OverflowError) as error:
         raise HTTPException(status_code=422,detail=str(error)) from error
