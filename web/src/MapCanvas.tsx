@@ -195,14 +195,19 @@ function featureCollection(
     });
   }
   if (selected) {
+    // A retained selection is contextual while sketching a new feature.
+    // It must not masquerade as part of the newly drawn connected polygon.
+    const context=!!drawingMode&&drawingMode!=='hole'&&drawingMode!=='split';
     features.push({
-      type: 'Feature', properties: { role: 'selected', color: '#168047',fillOpacity:.28,lineWidth:2.5 },
+      type: 'Feature', properties: {role:'selected',color:context?'#8da3b1':'#168047',
+        fillOpacity:context?.025:.28,lineWidth:context?1.2:2.5},
       geometry: selected,
     });
   }
 
   const draft=drawingPreview(drawingMode,vertices,cursor);
-  if(draft)features.push({type:'Feature',properties:{role:'drawing',color:'#168047',fillOpacity:.22,lineWidth:2},geometry:draft});
+  if(draft)features.push({type:'Feature',properties:{
+    role:'drawing',color:'#167ab4',fillOpacity:.16,lineWidth:2.5},geometry:draft});
   for (const [index,position] of vertices.entries()) {
     features.push({
       type: 'Feature',
