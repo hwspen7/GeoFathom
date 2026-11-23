@@ -148,6 +148,10 @@ export default function TerrainWorkbench(p:Props){
  const [designMaxGrade,setDesignMaxGrade]=useState('0.3'),[elevationSigma,setElevationSigma]=useState('0');
  const [dsmImageId,setDsmImageId]=useState(''),[optimizeObservers,setOptimizeObservers]=useState('0');
  const [meshLod,setMeshLod]=useState(false);
+ const [suitabilityModel,setSuitabilityModel]=useState<'binary'|'weighted'>('binary');
+ const [suitabilitySlopeWeight,setSuitabilitySlopeWeight]=useState('0.5');
+ const [suitabilityTriWeight,setSuitabilityTriWeight]=useState('0.25');
+ const [suitabilityElevationWeight,setSuitabilityElevationWeight]=useState('0.25');
  const [fillSinks,setFillSinks]=useState(true),[considerCurvature,setConsiderCurvature]=useState(true),[refractionCoeff,setRefractionCoeff]=useState('0.13');
  const [sectionSpacing,setSectionSpacing]=useState('50'),[sectionWidth,setSectionWidth]=useState('20'),[drape,setDrape]=useState(false),[expanded,setExpanded]=useState(false);
  const [pickEnd,setPickEnd]=useState(false);
@@ -299,7 +303,9 @@ export default function TerrainWorkbench(p:Props){
    (operation!=='dem_difference'||!!comparisonId&&comparisonId!==dem?.id&&assets.some(a=>a.id===comparisonId&&a.bands===1))&&
    ((operation!=='volume'&&operation!=='cutfill_map')||validNumber(reference,-12000,12000))&&
    (operation!=='least_cost'||validNumber(endLon,-180,180)&&validNumber(endLat,-90,90)&&validNumber(maxSlope,.01,90))&&
-   (operation!=='suitability'||validNumber(maxSlope,0,90)&&validNumber(minElevation,-12000,12000)&&validNumber(maxElevation,-12000,12000)&&Number(minElevation)<=Number(maxElevation)&&validNumber(maxTri,0,100000))&&
+   (operation!=='suitability'||validNumber(maxSlope,0,90)&&validNumber(minElevation,-12000,12000)&&validNumber(maxElevation,-12000,12000)&&Number(minElevation)<=Number(maxElevation)&&validNumber(maxTri,0,100000)&&
+      (suitabilityModel==='binary'||[suitabilitySlopeWeight,suitabilityTriWeight,suitabilityElevationWeight].every(n=>validNumber(n,0,100))&&
+        [suitabilitySlopeWeight,suitabilityTriWeight,suitabilityElevationWeight].reduce((sum,w)=>sum+Number(w),0)>0))&&
    (!['streams','stream_order'].includes(operation??'')||validNumber(streamCells,1,1000000)&&Number.isInteger(Number(streamCells)))&&
    (operation!=='hillshade'||validNumber(azimuth,0,360)&&validNumber(altitude,0,90))&&
    (!needsPoint||validNumber(lon,-180,180)&&validNumber(lat,-90,90))&&
@@ -322,6 +328,7 @@ export default function TerrainWorkbench(p:Props){
    flowRoutingMethod,depressionMethod,curvatureMethod,curvatureRadius,
    designEastGrade,designNorthGrade,designMaxGrade,elevationSigma,
    dsmImageId,optimizeObservers,meshLod,
+   suitabilityModel,suitabilitySlopeWeight,suitabilityTriWeight,suitabilityElevationWeight,
  });
  // Only edits to the actual operation inputs invalidate a scientific run.
  const inputKey=JSON.stringify([dem?.id,analysisGeometry,operation,scientificParameters]);
@@ -405,7 +412,9 @@ export default function TerrainWorkbench(p:Props){
          design_max_grade:Number(designMaxGrade),elevation_sigma_m:Number(elevationSigma),
          optimize_observers:operation==='viewshed_multi'?Number(optimizeObservers):0,
          dsm_image_id:['visibility','viewshed_multi'].includes(operation)?dsmImageId||null:null,
-         mesh_lod:operation==='mesh'&&meshLod},controller.signal);
+         mesh_lod:operation==='mesh'&&meshLod,
+         suitability_model:suitabilityModel,
+         suitability_weights:[Number(suitabilitySlopeWeight),Number(suitabilityTriWeight),Number(suitabilityElevationWeight)]},controller.signal);
      if(ticket!==sequence.current||controller.signal.aborted)return;
      // Commit scientific data before reporting a completed run. An immediate
      // reload or project switch must never race a pending cache write.
@@ -1148,6 +1157,21 @@ export default function TerrainWorkbench(p:Props){
         </select>
       </label>}
       {(operation==='suitability'||operation==='least_cost')&&<label>Maximum slope (°)<input type="number" value={maxSlope} onChange={e=>setMaxSlope(e.target.value)}/></label>}
+     {operation==='suitability'&&<label>Site suitability model
+       <select aria-label="Suitability scoring method" value={suitabilityModel} onChange={e=>setSuitabilityModel(e.target.value as 'binary'|'weighted')}>
+         <option value="binary">Hard constraints (pass/fail)</option>
+         <option value="weighted">Weighted multi-criteria score 0–1</option>
+       </select>
+     </label>}
+     {operation==='suitability'&&suitabilityModel==='weighted'&&<details open className="terrain-method-settings">
+       <summary>Criterion weights</summary>
+       <div className="area-fields">
+         <label>Slope<input aria-label="Slope criterion weight" type="number" min="0" max="100" step="0.05" value={suitabilitySlopeWeight} onChange={e=>setSuitabilitySlopeWeight(e.target.value)}/></label>
+         <label>Ruggedness<input aria-label="Ruggedness criterion weight" type="number" min="0" max="100" step="0.05" value={suitabilityTriWeight} onChange={e=>setSuitabilityTriWeight(e.target.value)}/></label>
+         <label>Elevation<input aria-label="Elevation criterion weight" type="number" min="0" max="100" step="0.05" value={suitabilityElevationWeight} onChange={e=>setSuitabilityElevationWeight(e.target.value)}/></label>
+       </div>
+       <small className="compact-notice">Weights are normalized to sum to one. Constraints remain mandatory; scores are not predicted probabilities.</small>
+     </details>}
      {operation==='suitability'&&<><div className="area-fields"><label>Min elevation (m)<input type="number" value={minElevation} onChange={e=>setMinElevation(e.target.value)}/></label><label>Max elevation (m)<input type="number" value={maxElevation} onChange={e=>setMaxElevation(e.target.value)}/></label></div><label>Maximum TRI (m)<input type="number" value={maxTri} onChange={e=>setMaxTri(e.target.value)}/></label></>}
      {needsPoint&&<>
        <div className="survey-action-bar"><button className={p.picking?'active':''} disabled={!area} onClick={()=>{setPickEnd(false);p.onPick();}}>{p.picking?'Click map…':operation==='visibility'?'Pick observer':operation==='least_cost'?'Pick route start':'Pick outlet'}</button>
