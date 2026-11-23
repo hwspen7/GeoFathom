@@ -10,11 +10,14 @@ export default function DatasetImport(p:Props){
  const [index,setIndex]=useState(0),[view,setView]=useState<'layers'|'fields'|'coordinates'>('layers');
  const [field,setField]=useState(''),[layer,setLayer]=useState('');
  const [job,setJob]=useState<GISJob|null>(null),[busy,setBusy]=useState(false);
+ const [pollAttempt,setPollAttempt]=useState(0);
+ const refresh=useRef(p.onRefresh);refresh.current=p.onRefresh;
+ const jobIdentity=useRef<string|null>(null);jobIdentity.current=job?.id??null;
  const [error,setError]=useState(''),[notice,setNotice]=useState(''),[token,setToken]=useState('');
  const epoch=useRef(0),controller=useRef<AbortController|null>(null);
  const staged=useRef<{project:string;id:string}|null>(null),running=useRef<{project:string;id:string}|null>(null);
  useEffect(()=>{
-  epoch.current++;setUpload(null);setOptions({});setJob(null);setBusy(false);setError('');setNotice('');setLayer('');setIndex(0);setField('');
+  epoch.current++;setPollAttempt(0);setUpload(null);setOptions({});setJob(null);setBusy(false);setError('');setNotice('');setLayer('');setIndex(0);setField('');
   return ()=>{
    epoch.current++;controller.current?.abort();
    const active=running.current;running.current=null;
@@ -27,16 +30,27 @@ export default function DatasetImport(p:Props){
   if(!job||!p.projectId||!['queued','running'].includes(job.status))return;
   let live=true;const project=p.projectId,id=job.id,generation=epoch.current;
   const timer=window.setTimeout(()=>{void getGISJob(project,id).then(next=>{
-   if(!live||epoch.current!==generation)return;setJob(next);
-   if(next.status==='completed'){
-    running.current=null;p.onRefresh();const r=next.result as {created?:number;rejected?:number};
-    setNotice(`Imported ${r.created??0} features · ${r.rejected??0} rejected. Download the validation report for row details.`);
-   }else if(['failed','cancelled','interrupted'].includes(next.status)){
-    running.current=null;setError(next.error||'Import '+next.status+'. No uncommitted features were saved.');
-   }
-  }).catch(e=>{if(live)setError(String(e));});},700);
+   if(!live||epoch.current!==generation)return;publishJob(next);
+  }).catch(e=>{if(live&&epoch.current===generation){setError(String(e));setPollAttempt(n=>n+1);}});},700);
   return ()=>{live=false;window.clearTimeout(timer);};
- },[job,p.projectId,p.onRefresh]);
+ },[job,p.projectId,pollAttempt]);
+ function publishJob(next:GISJob){
+  jobIdentity.current=next.id;setJob(next);setError('');
+  if(next.status==='completed'){
+   running.current=null;refresh.current();const r=(next.result??{}) as {created?:number;rejected?:number};
+   setNotice(`Imported ${r.created??0} features · ${r.rejected??0} rejected. Download the validation report for row details.`);
+  }else if(['failed','cancelled','interrupted'].includes(next.status)){
+   running.current=null;setError(next.error||'Import '+next.status+'. No uncommitted features were saved.');
+  }
+ }
+ async function cancelCurrentJob(){
+  if(!p.projectId||!job)return;
+  const generation=epoch.current,id=job.id;
+  try{
+   const next=await cancelGISJob(p.projectId,id);
+   if(epoch.current===generation&&jobIdentity.current===id)publishJob(next);
+  }catch(e){if(epoch.current===generation&&jobIdentity.current===id)setError(String(e));}
+ }
  const current=upload?.files[index],opts=current?options[current.id]??{}:{};
  const fields=current?.layers.flatMap(l=>l.fields).filter((f,i,a)=>a.findIndex(v=>v.name===f.name)===i)??[];
  const activeField=field||fields[0]?.name||'';
@@ -60,10 +74,9 @@ export default function DatasetImport(p:Props){
   setBusy(true);setError('');
   try{
    const result=await startDatasetImport(project,upload.upload_id,upload.files.map(f=>({id:f.id,options:options[f.id]??{}})),layer);
-   staged.current=null;
    if(epoch.current!==generation){void cancelGISJob(project,result.id).catch(()=>{});return;}
-   running.current={project,id:result.id};setJob(result);setUpload(null);
-   if(result.status==='completed'){running.current=null;p.onRefresh();const r=result.result as {created:number;rejected:number};setNotice(`Imported ${r.created} features · ${r.rejected} rejected. Download the validation report for row details.`);}
+   staged.current=null;
+   running.current={project,id:result.id};setUpload(null);publishJob(result);
   }catch(e){if(epoch.current===generation)setError(e instanceof Error?e.message:String(e));}
   finally{if(epoch.current===generation)setBusy(false);}
  }
@@ -150,8 +163,8 @@ export default function DatasetImport(p:Props){
   </>}
   {job&&<div role="status"><span>{job.status} · {job.progress}%</span>
    <progress aria-label="Dataset import progress" value={job.progress} max={100}/>
-   {['queued','running'].includes(job.status)&&<button type="button" onClick={()=>void cancelGISJob(p.projectId!,job.id).then(setJob).catch(e=>setError(String(e)))}>Cancel import</button>}
-   {job.status==='completed'&&<button type="button" onClick={()=>void downloadExchangeJob(p.projectId!,job.id).catch(e=>setError(String(e)))}>Download import report</button>}
+   {['queued','running'].includes(job.status)&&<button type="button" onClick={()=>void cancelCurrentJob()}>Cancel import</button>}
+   {job.status==='completed'&&<button type="button" onClick={()=>{const generation=epoch.current,id=job.id;void downloadExchangeJob(p.projectId!,id).catch(e=>{if(epoch.current===generation&&jobIdentity.current===id)setError(String(e));});}}>Download import report</button>}
   </div>}
   {busy&&<small role="status">Validating dataset…</small>}
   {notice&&<small role="status">{notice}</small>}{error&&<small className="discovery-error" role="alert">{error}</small>}

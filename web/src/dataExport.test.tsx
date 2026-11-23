@@ -3,6 +3,7 @@ import {afterEach,beforeEach,describe,expect,it,vi} from 'vitest';
 import {act,cleanup,fireEvent,render,screen,waitFor} from '@testing-library/react';
 import DataWorkbench from './DataWorkbench';
 import ExportWorkbench from './ExportWorkbench';
+import DatasetImport from './DatasetImport';
 import type {NetworkPolygonization,NetworkFace} from './api';
 import type {ScratchFeature} from './scratch';
 
@@ -327,4 +328,80 @@ it('recovers job progress and clears a transient status error after reconnecting
   expect(screen.getByRole('button',{name:'Download dataset'})).toBeTruthy();
   expect(screen.queryByRole('alert')).toBeNull();
  }finally{vi.useRealTimers();}
+});
+
+
+it('ignores a late export cancellation response after project A–B–A',async()=>{
+ let resolve!:(value:unknown)=>void;
+ api.cancelGISJob.mockImplementationOnce(()=>new Promise(r=>{resolve=r;}));
+ api.startDatasetExport.mockResolvedValue({id:'cancelled-export',status:'queued',progress:0});
+ const props=exportProps();props.workspace.total=3;
+ const view=render(<ExportWorkbench {...props}/>);
+ fireEvent.change(screen.getByLabelText('Export scope'),{target:{value:'project'}});
+ fireEvent.change(screen.getByLabelText('Export setup'),{target:{value:'delivery'}});
+ fireEvent.click(screen.getByLabelText('Background dataset export'));
+ await act(async()=>{fireEvent.click(screen.getByRole('button',{name:'Export GEOJSON'}));});
+ fireEvent.click(screen.getByRole('button',{name:'Cancel export'}));
+ view.rerender(<ExportWorkbench {...props} projectId="project-2"/>);
+ view.rerender(<ExportWorkbench {...props}/>);
+ await act(async()=>{resolve({id:'cancelled-export',status:'completed',progress:100});});
+ expect(screen.queryByLabelText('Dataset export progress')).toBeNull();
+ expect(screen.queryByRole('button',{name:'Download dataset'})).toBeNull();
+});
+
+const stagedImport={upload_id:'status-upload',files:[{id:'file',name:'status.geojson',bytes:20,layers:[
+ {name:'GeoJSON',feature_count:1,source_crs:'EPSG:4326',fields:[]},
+]}]};
+async function submitQueuedImport(){
+ await act(async()=>{fireEvent.change(screen.getByLabelText('Batch dataset files'),{target:{files:[new File(['{}'],'status.geojson')]}});});
+ await act(async()=>{fireEvent.click(screen.getByRole('button',{name:'Import batch'}));});
+}
+it('ignores a late import cancellation response after switching projects',async()=>{
+ let resolve!:(value:unknown)=>void;
+ api.cancelGISJob.mockImplementationOnce(()=>new Promise(r=>{resolve=r;}));
+ api.inspectDatasetFiles.mockResolvedValue(stagedImport);
+ api.startDatasetImport.mockResolvedValue({id:'cancelled-import',status:'queued',progress:0});
+ const props=dataProps();const view=render(<DatasetImport {...props}/>);
+ await submitQueuedImport();
+ fireEvent.click(screen.getByRole('button',{name:'Cancel import'}));
+ view.rerender(<DatasetImport {...props} projectId="project-2"/>);
+ await act(async()=>{resolve({id:'cancelled-import',status:'completed',progress:100,result:{created:99,rejected:0}});});
+ expect(screen.queryByLabelText('Dataset import progress')).toBeNull();
+ expect(screen.queryByText(/Imported 99/)).toBeNull();expect(props.onRefresh).not.toHaveBeenCalled();
+});
+
+it('resumes import status after a transient outage while parent callbacks change',async()=>{
+ vi.useFakeTimers();
+ try{
+  api.inspectDatasetFiles.mockResolvedValue(stagedImport);
+  api.startDatasetImport.mockResolvedValue({id:'retry-import',status:'queued',progress:0});
+  api.getGISJob.mockRejectedValueOnce(new Error('Import status outage'))
+   .mockResolvedValueOnce({id:'retry-import',status:'completed',progress:100,result:{created:1,rejected:0}});
+  const props=dataProps(),currentRefresh=vi.fn();const view=render(<DatasetImport {...props}/>);
+  await submitQueuedImport();
+  for(let i=0;i<3;i++){
+   await act(async()=>{await vi.advanceTimersByTimeAsync(250);});
+   view.rerender(<DatasetImport {...props} onRefresh={i===2?currentRefresh:vi.fn()}/>);
+  }
+  expect(screen.getByRole('alert').textContent).toContain('Import status outage');
+  await act(async()=>{await vi.advanceTimersByTimeAsync(750);});
+  expect(screen.getByText(/Imported 1 features · 0 rejected/)).toBeTruthy();
+  expect(screen.queryByRole('alert')).toBeNull();expect(currentRefresh).toHaveBeenCalledTimes(1);
+  expect(props.onRefresh).not.toHaveBeenCalled();
+ }finally{vi.useRealTimers();}
+});
+
+
+it('retains ownership of a new project upload when an older import submission returns',async()=>{
+ let resolve!:(value:unknown)=>void;
+ api.startDatasetImport.mockImplementationOnce(()=>new Promise(r=>{resolve=r;}));
+ api.inspectDatasetFiles.mockResolvedValueOnce(stagedImport)
+  .mockResolvedValueOnce({...stagedImport,upload_id:'new-project-upload'});
+ const props=dataProps();const view=render(<DatasetImport {...props}/>);
+ await submitQueuedImport();
+ view.rerender(<DatasetImport {...props} projectId="project-2"/>);
+ await act(async()=>{fireEvent.change(screen.getByLabelText('Batch dataset files'),{target:{files:[new File(['{}'],'new.geojson')]}});});
+ await act(async()=>{resolve({id:'old-import',status:'queued',progress:0});});
+ view.unmount();
+ expect(api.discardDatasetUpload).toHaveBeenCalledWith('project-2','new-project-upload');
 });

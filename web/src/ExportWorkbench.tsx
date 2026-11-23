@@ -65,6 +65,7 @@ export default function ExportWorkbench(p:Props){
  const [preview,setPreview]=useState<ExportPreflight|null>(null),[job,setJob]=useState<GISJob|null>(null);
  const [setup,setSetup]=useState<'scope'|'fields'|'delivery'>('scope');
  const [background,setBackground]=useState(false),[includeRasters,setIncludeRasters]=useState(false);
+ const jobIdentity=useRef<string|null>(null);jobIdentity.current=job?.id??null;
  const epoch=useRef(0),projectEpoch=useRef(0),abort=useRef<AbortController|null>(null);
  useEffect(()=>{epoch.current++;projectEpoch.current++;abort.current?.abort();setPreview(null);setJob(null);setJobStarting(false);setJobError('');setPollAttempt(0);setFields(null);setLayer('');setMessage('');setError('');setBusy(false);},[p.projectId]);
  const savedScope=['project','layer','viewport'].includes(scope);
@@ -83,6 +84,14 @@ export default function ExportWorkbench(p:Props){
   return ()=>{live=false;window.clearTimeout(timer);};
  },[job,p.projectId,pollAttempt]);
  useEffect(()=>{setFields(null);},[scope,layer,p.selected]);
+ async function cancelCurrentJob(){
+  if(!p.projectId||!job)return;
+  const generation=projectEpoch.current,id=job.id;
+  try{
+   const next=await cancelGISJob(p.projectId,id);
+   if(projectEpoch.current===generation&&jobIdentity.current===id){setJob(next);setJobError(next.status==='failed'?next.error||'Export failed.':'');}
+  }catch(e){if(projectEpoch.current===generation&&jobIdentity.current===id)setJobError(String(e));}
+ }
  const count=scope==='selection'?Number(Boolean(p.selected)):
   scope==='local'?p.scratch.length:scope==='areas'?p.faces.length:
   preview?.count??(p.workspace?.total??0);
@@ -120,7 +129,7 @@ export default function ExportWorkbench(p:Props){
      setJobStarting(true);
      try{
       const result=await startDatasetExport(p.projectId,options());
-      if(projectEpoch.current!==jobGeneration)return;setJob(result);setJobError('');
+      if(projectEpoch.current!==jobGeneration)return;jobIdentity.current=result.id;setJob(result);setJobError(result.status==='failed'?result.error||'Export failed.':'');
      }catch(e){
       if(projectEpoch.current===jobGeneration)setError(e instanceof Error?e.message:String(e));
       return;
@@ -264,8 +273,8 @@ export default function ExportWorkbench(p:Props){
     <small>Open a project to use the GIS conversion service.</small>}
   {job&&<div role="status">{job.status} · {job.progress}%
    <progress aria-label="Dataset export progress" max={100} value={job.progress}/>
-   {['queued','running'].includes(job.status)&&<button type="button" onClick={()=>void cancelGISJob(p.projectId!,job.id).then(setJob).catch(e=>setError(String(e)))}>Cancel export</button>}
-   {job.status==='completed'&&<button type="button" onClick={()=>void downloadExchangeJob(p.projectId!,job.id).catch(e=>setError(String(e)))}>Download dataset</button>}
+   {['queued','running'].includes(job.status)&&<button type="button" onClick={()=>void cancelCurrentJob()}>Cancel export</button>}
+   {job.status==='completed'&&<button type="button" onClick={()=>{const generation=projectEpoch.current,id=job.id;void downloadExchangeJob(p.projectId!,id).catch(e=>{if(projectEpoch.current===generation&&jobIdentity.current===id)setJobError(String(e));});}}>Download dataset</button>}
   </div>}
   {message&&<small className="project-info" role="status">{message}</small>}
   {error&&<small className="discovery-error" role="alert">{error}</small>}
