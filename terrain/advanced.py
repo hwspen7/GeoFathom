@@ -14,6 +14,7 @@ from .engine import _check_dem
 from .cancellation import checkpoint
 from .vertical import vertical_datum
 from .professional import SURFACES, surface, d8_directions, D8, raster_product
+from .catalog import ADVANCED_OPERATIONS
 from .hydrology import condition_dem
 
 def _window(path, geometry, maximum, max_cells=1_000_000):
@@ -255,7 +256,7 @@ def _mask_features(mask,affine,crs,name,cancel=None):
 def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,observer_height=1.7,target_height=0.,
                 end_point=None,max_slope=30.,min_elevation=-12000.,max_elevation=12000.,max_tri=100.,
                 stream_cells=100,azimuth=315.,altitude=45.,section_spacing=50.,section_width=20.,texture_path=None,
-                fill_sinks=False,consider_curvature=False,refraction_coeff=0.13,comparison_path=None,observer_points=None,gradient_method="horn",slope_classes="standard",mfd_exponent=1.1,cancel=None):
+                fill_sinks=False,consider_curvature=False,refraction_coeff=0.13,comparison_path=None,observer_points=None,gradient_method="horn",slope_classes="standard",mfd_exponent=1.1,neighborhood_radius=1,cancel=None):
     checkpoint(cancel)
     if gradient_method not in {"horn","zevenbergen_thorne"}:
         raise RasterError("Unsupported terrain gradient method.")
@@ -263,10 +264,12 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
         raise RasterError("Unsupported slope classification preset.")
     if not math.isfinite(mfd_exponent) or not .5<=mfd_exponent<=8:
         raise RasterError("MFD exponent must be between 0.5 and 8.")
+    if neighborhood_radius not in (1,2,3,4):
+        raise RasterError("Neighborhood radius must be 1–4 cells.")
     if operation=="cross_sections":
         from .corridor import cross_sections
         return cross_sections(path,geometry,section_spacing,section_width,cancel)
-    if operation not in {"contours","volume","visibility","viewshed_multi","watershed","mesh","distribution","dem_difference"}|SURFACES:
+    if operation not in ADVANCED_OPERATIONS:
         raise RasterError("Unknown terrain operation.")
     # Independent analysis budgets. Local surface derivatives can use large
     # grids; visibility ray tracing and catchment/path traversals remain bounded.
@@ -290,14 +293,16 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
     cell=abs(affine.a*affine.e)
     result={"operation":operation,"source_crs":str(crs),
         "algorithm_options":{"gradient_method":gradient_method,"slope_classes":slope_classes,
-                             "mfd_exponent":mfd_exponent if operation=="flow_accumulation_mfd" else None},"valid_cells":int(valid.sum()),
+                             "mfd_exponent":mfd_exponent if operation=="flow_accumulation_mfd" else None,
+                             "neighborhood_radius_cells":neighborhood_radius if operation in {"tri","tpi"} else None},"valid_cells":int(valid.sum()),
         "missing_cells":int((covered&~valid).sum()),"cell_area_m2":cell,
         "source_vertical_datum":source_datum,"metrics":{},"features":[]}
     if operation in SURFACES:
         result["raster"],result["metrics"],result["features"]=surface(flow_z,valid,affine,crs,operation,reference,point,end_point,
             max_slope,min_elevation,max_elevation,max_tri,stream_cells,azimuth,altitude,
             _feature,_origin,cancel,source_datum=source_datum,
-            gradient_method=gradient_method,slope_classes=slope_classes,mfd_exponent=mfd_exponent)
+            gradient_method=gradient_method,slope_classes=slope_classes,mfd_exponent=mfd_exponent,
+            neighborhood_radius=neighborhood_radius)
         result["warning"]="Projected source-grid product; nodata and incomplete neighborhoods excluded. Unconditioned D8 terminates at sinks/flats; suitability and path costs are screening estimates, not engineering certification."
         if operation=="flow_accumulation_mfd":
             result["warning"]=(

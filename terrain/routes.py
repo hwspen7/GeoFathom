@@ -12,6 +12,7 @@ from imagery.store import image_file
 from geometry.measure import GeometryError
 from .engine import analyze_area,elevation_profile
 from .cancellation import TerrainCancelled
+from .catalog import terrain_catalog
 
 
 async def run_cancelable(request, fn, *args):
@@ -35,6 +36,11 @@ async def run_cancelable(request, fn, *args):
 
 
 router=APIRouter(prefix="/terrain",tags=["terrain"])
+
+
+@router.get("/catalog")
+def catalog():
+    return terrain_catalog()
 
 
 class TerrainInput(BaseModel):
@@ -123,6 +129,7 @@ class AdvancedTerrainInput(BaseModel):
     gradient_method:Literal['horn','zevenbergen_thorne']='horn'
     slope_classes:Literal['standard','detailed','broad']='standard'
     mfd_exponent:float=Field(default=1.1,ge=0.5,le=8.0)
+    neighborhood_radius:int=Field(default=1,ge=1,le=4)
 
 @router.post("/advanced")
 async def advanced(request:Request,body:AdvancedTerrainInput):
@@ -134,6 +141,7 @@ async def advanced(request:Request,body:AdvancedTerrainInput):
             body.section_spacing,body.section_width,raster(body.texture_image_id) if body.texture_image_id and body.operation=='mesh' else None,
             body.fill_sinks,body.consider_curvature,body.refraction_coeff,
             raster(body.comparison_image_id) if body.operation=="dem_difference" and body.comparison_image_id else None,
-            body.observer_points,body.gradient_method,body.slope_classes,body.mfd_exponent)
+            body.observer_points,body.gradient_method,body.slope_classes,
+            body.mfd_exponent,body.neighborhood_radius)
     except (GeometryError,RasterError,ValueError,OverflowError) as error:
         raise HTTPException(status_code=422,detail=str(error)) from error

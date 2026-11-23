@@ -379,7 +379,7 @@ def _derived_surface_tiled(z,valid,dx,dy,operation,max_slope=30.,
 
 def surface(z,valid,affine,crs,operation,reference,point,end_point,max_slope,
             min_elevation,max_elevation,max_tri,stream_cells,azimuth,altitude,feature,origin,cancel=None,
-            source_datum=None,gradient_method="horn",slope_classes="standard",mfd_exponent=1.1):
+            source_datum=None,gradient_method="horn",slope_classes="standard",mfd_exponent=1.1,neighborhood_radius=1):
     """Return the exact source-grid derivative and product-specific statistics."""
     dx,dy=abs(affine.a),abs(affine.e);cell=dx*dy
     features=[];metrics={}
@@ -436,7 +436,10 @@ def surface(z,valid,affine,crs,operation,reference,point,end_point,max_slope,
         metrics={"route_length_m":float(line.length),"route_cost":cost,"route_cells":len(route)}
     else:
         # Large-area surfaces avoid keeping nine full-sized derived arrays.
-        if z.size>1_000_000:
+        if operation in {"tri","tpi"} and neighborhood_radius>1:
+            from .multiscale import multiscale_terrain
+            values=multiscale_terrain(z,valid,neighborhood_radius,operation,cancel)
+        elif z.size>1_000_000:
             values,metrics=_derived_surface_tiled(
                 z,valid,dx,dy,operation,max_slope,min_elevation,
                 max_elevation,max_tri,azimuth,altitude,cancel,gradient_method=gradient_method)
@@ -460,6 +463,8 @@ def surface(z,valid,affine,crs,operation,reference,point,end_point,max_slope,
             else:values=d[operation]
     if not np.isfinite(values).any():raise RasterError("No valid cells for this terrain product.")
     product=raster_product(values,operation,affine,crs,cancel,source_datum=source_datum,slope_classes=slope_classes)
+    if operation in {"tri","tpi"}:
+        metrics["neighborhood_radius_cells"]=neighborhood_radius
     if operation in {"flow_direction","streams","suitability","least_cost"}:
         metrics["product_valid_cells"]=product["valid_cells"]
     elif operation=="aspect_map":
