@@ -765,6 +765,7 @@ export default function TerrainWorkbench(p:Props){
        <div><span>Samples</span><strong>{profile.samples.length}</strong></div>
      </div>}
      {result&&<>
+       {resultTab==='overview'&&result.selection&&<small className="compact-notice">Selected candidate positions: {result.selection.selected_candidate_indices.map(i=>i+1).join(', ')} · marginal visible cells: {result.selection.marginal_visible_cells.join(', ')}</small>}
        {resultTab==='overview'&&<div className="terrain-metrics terrain-key-metrics">{featuredMetrics.map(([k,v])=><div key={k}><span>{names[k]??k.replaceAll('_',' ')}</span><strong>{fmt(v)} {units[k]??(['product_min','product_max','product_mean','product_std','product_p10','product_p50','product_p90'].includes(k)?(
           ['elevation','tpi','tri','cutfill_map','dem_difference'].includes(result.operation)?'m':
           ['slope_map','aspect_map'].includes(result.operation)?'°':
@@ -1011,6 +1012,18 @@ export default function TerrainWorkbench(p:Props){
      {operation==='contours'&&<label>Interval (m)<input aria-label="Contour interval" type="number" min=".01" step="any" value={interval} onChange={e=>setInterval(e.target.value)}/></label>}
      {operation==='dem_difference'&&<label>Reference DEM<select aria-label="Reference comparison DEM" value={comparisonId} onChange={e=>setComparisonId(e.target.value)}><option value="">Select second DEM</option>{assets.filter(a=>a.bands===1&&a.id!==dem?.id).map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>}
      {(operation==='volume'||operation==='cutfill_map')&&<label>Reference elevation (m)<input aria-label="Reference elevation" type="number" step="any" value={reference} onChange={e=>setReference(e.target.value)}/></label>}
+     {['volume','cutfill_map'].includes(operation)&&<details className="terrain-method-settings">
+       <summary>Design surface and uncertainty</summary>
+       <div className="area-fields">
+         <label>East grade (m/m)<input aria-label="Design east grade" type="number" step="0.01" min="-1" max="1" value={designEastGrade} onChange={e=>setDesignEastGrade(e.target.value)}/></label>
+         <label>North grade (m/m)<input aria-label="Design north grade" type="number" step="0.01" min="-1" max="1" value={designNorthGrade} onChange={e=>setDesignNorthGrade(e.target.value)}/></label>
+       </div>
+       <div className="area-fields">
+         <label>Maximum grade (m/m)<input aria-label="Design maximum grade" type="number" step="0.01" min="0.001" max="1" value={designMaxGrade} onChange={e=>setDesignMaxGrade(e.target.value)}/></label>
+         <label>Assumed vertical error σ (m)<input aria-label="Assumed elevation sigma" type="number" step="0.1" min="0" max="10000" value={elevationSigma} onChange={e=>setElevationSigma(e.target.value)}/></label>
+       </div>
+       <small className="compact-notice">A design plane is evaluated against original DEM cells; uncertainty is an explicit assumption, not a measured accuracy claim.</small>
+     </details>}
      {operation==='cross_sections'&&<div className="area-fields"><label>Station spacing (m)<input type="number" value={sectionSpacing} onChange={e=>setSectionSpacing(e.target.value)}/></label><label>Half-width (m)<input type="number" value={sectionWidth} onChange={e=>setSectionWidth(e.target.value)}/></label></div>}
      {operation==='mesh'&&<label>3D mesh detail
         <select aria-label="3D mesh sampling budget" value={meshSamples} onChange={e=>setMeshSamples(e.target.value)}>
@@ -1020,6 +1033,8 @@ export default function TerrainWorkbench(p:Props){
           <option value="512">High detail · 512 samples/axis</option>
         </select>
       </label>}
+      {operation==='mesh'&&<label className="gis-check"><input aria-label="Generate 3D LOD tiles" type="checkbox" checked={meshLod} onChange={e=>setMeshLod(e.target.checked)}/> Generate mesh LOD pyramid (transport-ready)</label>}
+      {operation==='mesh'&&meshLod&&<small className="compact-notice">Aligned tile levels are calculated for export; camera-triggered streaming is not implemented.</small>}
       {operation==='mesh'&&p.imageRaster&&p.imageRaster.bands>=3&&<label className="gis-check"><input type="checkbox" checked={drape} onChange={e=>setDrape(e.target.checked)}/> Drape selected RGB imagery</label>}
      {['slope','slope_map','aspect_map','hillshade','suitability','plan_curvature','profile_curvature'].includes(operation)&&
         <label>Gradient algorithm
@@ -1029,6 +1044,18 @@ export default function TerrainWorkbench(p:Props){
             <option value="zevenbergen_thorne">Zevenbergen–Thorne · cardinal neighbors</option>
           </select>
         </label>}
+      {['curvature','plan_curvature','profile_curvature'].includes(operation)&&<label>Curvature method
+        <select aria-label="Terrain curvature method" value={curvatureMethod} onChange={e=>setCurvatureMethod(e.target.value as 'finite_difference'|'quadratic')}>
+          <option value="finite_difference">Central 3 × 3 finite differences</option>
+          <option value="quadratic">Least-squares quadratic surface</option>
+        </select>
+      </label>}
+      {['curvature','plan_curvature','profile_curvature'].includes(operation)&&curvatureMethod==='quadratic'&&<label>Fitting window
+        <select aria-label="Curvature fitting radius" value={curvatureRadius} onChange={e=>setCurvatureRadius(e.target.value)}>
+          <option value="1">3 × 3</option><option value="2">5 × 5</option>
+          <option value="3">7 × 7</option><option value="4">9 × 9</option>
+        </select>
+      </label>}
       {operation==='slope_map'&&<label>Slope classification
         <select aria-label="Slope classification preset" value={slopeClasses}
           onChange={e=>setSlopeClasses(e.target.value as 'standard'|'detailed'|'broad')}>
@@ -1054,6 +1081,12 @@ export default function TerrainWorkbench(p:Props){
         </select>
       </label>}
       {operation==='hillshade'&&<div className="area-fields"><label>Sun azimuth (°)<input type="number" value={azimuth} onChange={e=>setAzimuth(e.target.value)}/></label><label>Sun altitude (°)<input type="number" value={altitude} onChange={e=>setAltitude(e.target.value)}/></label></div>}
+     {operation==='flow_accumulation'&&<label>Contributing area routing
+       <select aria-label="Flow routing method" value={flowRoutingMethod} onChange={e=>setFlowRoutingMethod(e.target.value as 'd8'|'dinf')}>
+         <option value="d8">D8 · one downslope receiver</option>
+         <option value="dinf">D∞ · triangular-facet split</option>
+       </select>
+     </label>}
      {operation==='flow_accumulation_mfd'&&<label>MFD convergence exponent
        <input aria-label="MFD routing exponent" type="number" min="0.5" max="8" step="0.1"
          value={mfdExponent} onChange={e=>setMfdExponent(e.target.value)}/>
@@ -1068,6 +1101,26 @@ export default function TerrainWorkbench(p:Props){
       </label>}
       {(operation==='streams'||operation==='stream_order')&&<label>Minimum upstream cells<input type="number" min="1" step="1" value={streamCells} onChange={e=>setStreamCells(e.target.value)}/></label>}
      {['flow_direction','flow_accumulation','flow_accumulation_mfd','streams','stream_order','watershed'].includes(operation)&&<label className="gis-check"><input aria-label="Condition drainage DEM" type="checkbox" checked={fillSinks} onChange={e=>setFillSinks(e.target.checked)}/> Fill depressions and route flat cells</label>}
+     {['flow_direction','flow_accumulation','flow_accumulation_mfd','streams','stream_order','watershed'].includes(operation)&&fillSinks&&<label>Depression conditioning
+       <select aria-label="Depression conditioning method" value={depressionMethod} onChange={e=>setDepressionMethod(e.target.value as 'fill'|'breach')}>
+         <option value="fill">Priority-flood fill and flat routing</option>
+         <option value="breach">Bounded least-cut drainage breach</option>
+       </select>
+     </label>}
+     {['visibility','viewshed_multi'].includes(operation)&&<label>Obstruction surface (optional DSM)
+       <select aria-label="Terrain obstruction DSM" value={dsmImageId} onChange={e=>setDsmImageId(e.target.value)}>
+         <option value="">Bare DEM · no building blockage</option>
+         {assets.filter(a=>a.bands===1&&a.id!==dem?.id).map(a=><option key={a.id} value={a.id}>{a.name}</option>)}
+       </select>
+       <small className="compact-notice">DSM must align with the DEM grid; unknown DSM cells remain unclassified.</small>
+     </label>}
+     {operation==='viewshed_multi'&&<label>Optimize observation sites
+       <select aria-label="Optimize observer count" value={optimizeObservers} onChange={e=>setOptimizeObservers(e.target.value)}>
+         <option value="0">Use all sites (up to 4)</option>
+         <option value="1">Best 1 of candidate sites</option><option value="2">Best 2</option>
+         <option value="3">Best 3</option><option value="4">Best 4</option>
+       </select>
+     </label>}
      {['visibility','viewshed_multi'].includes(operation)&&<details className="terrain-method-settings">
         <summary>Viewing sector and range</summary>
         <label>Maximum distance (m, 0 = all)
@@ -1108,7 +1161,7 @@ export default function TerrainWorkbench(p:Props){
      </>}
      {operation==='viewshed_multi'&&<div className="terrain-multi-observers">
       <div className="section-heading">Observers · {observerPoints.length}</div>
-      <small className="compact-notice">Specify 2–4 points in WGS84. Each must occupy a distinct valid DEM cell. The study area stays selected.</small>
+      <small className="compact-notice">Specify {Number(optimizeObservers)>0?'2–12 candidate':'2–4'} WGS84 positions in distinct valid DEM cells. Optimization uses greedy known-cell coverage, not a global optimum.</small>
       <div className="terrain-observer-grid">
         {observerPoints.map(([x,y],index)=><div className="terrain-observer-row" key={index}>
           <label>Observer {index+1} longitude
@@ -1123,8 +1176,8 @@ export default function TerrainWorkbench(p:Props){
       </div>
       <div className="survey-action-bar">
         <button disabled={!area||p.picking} onClick={()=>p.onPick()}>Pick next observer on map</button>
-        <button disabled={observerPoints.length>=4}
-          onClick={()=>setObserverPoints(old=>old.length<4?[...old,['','']]:old)}>Add observer</button>
+        <button disabled={observerPoints.length>=(Number(optimizeObservers)>0?12:4)}
+          onClick={()=>setObserverPoints(old=>old.length<(Number(optimizeObservers)>0?12:4)?[...old,['','']]:old)}>Add observer</button>
         <button disabled={observerPoints.length<=2}
           onClick={()=>setObserverPoints(old=>old.length>2?old.slice(0,-1):old)}>Remove last</button>
       </div>
@@ -1135,7 +1188,7 @@ export default function TerrainWorkbench(p:Props){
           value={target} onChange={e=>setTarget(e.target.value)}/></label>
       </div>
       {!multiObserversValid&&<small className="discovery-error">
-        Enter 2–4 different valid longitude/latitude pairs.
+        Enter {Number(optimizeObservers)>0?'2–12':'2–4'} different valid longitude/latitude pairs.
       </small>}
     </div>}
     {!p.operationsFooterTarget&&runActions}
