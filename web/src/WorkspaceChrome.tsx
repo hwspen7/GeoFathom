@@ -150,7 +150,7 @@ export function WorkspaceFeatureTree<T extends FeatureItem>({
       selectedId={selectedId}
       onOpen={id=>{const f=lookup.get(id);if(f)onOpen(f);}}/>)}
     {!groups.length&&<small className="workspace-tree-empty">
-      {lowered?'No matching features':'No saved features yet'}</small>}
+      {lowered?'No matching features':'No saved features yet.'}</small>}
   </div>;
 }
 

@@ -155,6 +155,9 @@ with tempfile.TemporaryDirectory() as directory:
  await expect(page.getByLabel('Terrain run provenance')).toBeVisible();
  // Reverse interaction: actual map-projected profile point → chart cursor.
  await chart.locator('..').hover({position:{x:1,y:1}});
+ // Return from the inspector to the map before using absolute mouse
+ // coordinates. Playwright can scroll an ancestor while hovering charts.
+ await map.scrollIntoViewIfNeeded();
  const pixels=JSON.parse((await map.getAttribute('data-profile-station-pixels'))||'[]') as number[][];
  expect(pixels.length).toBeGreaterThan(10);
  const mapBox=(await map.boundingBox())!;

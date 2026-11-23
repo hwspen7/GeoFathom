@@ -371,7 +371,13 @@ export default function App() {
       return;
     }
     setShowTools(true);setActiveTool(id);if(id!=='tools-terrain'){setTerrainPicking(false);setTerrainHover(null);}
-    requestAnimationFrame(()=>document.getElementById(id)?.scrollIntoView({block:'nearest'}));
+    // Only scroll the inspector's own pane. scrollIntoView also scrolls
+    // the outer document and can move the central map off-screen when a
+    // long Terrain chart is active.
+    requestAnimationFrame(()=>{
+      const scroll=document.querySelector<HTMLElement>('.gis-inspector .sidebar-scroll');
+      if(scroll)scroll.scrollTop=0;
+    });
   }
 
   useEffect(()=>{

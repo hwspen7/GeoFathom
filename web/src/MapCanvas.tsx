@@ -1242,11 +1242,21 @@ export default function MapCanvas({
     const map=mapRef.current;if(!ready||!map||!import.meta.env.DEV||!container.current)return;
     // Browser regression locates a real projected profile sample, never a
     // guessed place on the SVG/map.
-    container.current.setAttribute('data-profile-station-pixels',JSON.stringify(
-      profileSamples.filter(s=>!!s.coordinate).map(s=>{
-        const p=map.project(s.coordinate as maplibregl.LngLatLike);
-        return [p.x,p.y,s.distance_m];
-      })));
+    const publish=()=>{
+      if(!container.current)return;
+      container.current.setAttribute('data-profile-station-pixels',JSON.stringify(
+        profileSamples.filter(s=>!!s.coordinate).map(s=>{
+          const p=map.project(s.coordinate as maplibregl.LngLatLike);
+          return [p.x,p.y,s.distance_m];
+        })));
+    };
+    publish();
+    // Map camera animations or responsive dock resizing change projected
+    // pixels without changing the list of scientific profile samples.
+    // Keep map/chart link targets in the same current viewport projection.
+    map.on('move',publish);
+    map.on('resize',publish);
+    return ()=>{map.off('move',publish);map.off('resize',publish);};
   },[profileSamples,ready]);
   useEffect(()=>{
     const map=mapRef.current;if(!ready||!map||!terrainMarker)return;
