@@ -784,3 +784,20 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 @media(max-width:880px){
  .desktop-gis .gis-results-monitor .terrain-key-metrics{grid-template-columns:1fr}
 }
+
+
+/* Project scope stays in the top toolbar; searchable feature tree lives in
+   left operations. The full project/search drawer is only on demand. */
+.desktop-gis .gis-active-project{flex:0 1 180px;min-width:105px;max-width:235px;display:flex}
+.desktop-gis .gis-active-project select{height:27px;min-width:0;width:100%;border:1px solid #cbd5dc;background:#fff;color:#2b475a;padding:2px 5px;font-size:11px;text-overflow:ellipsis}
+.desktop-gis .workspace-objects{border:0;border-bottom:1px solid #d4dde4;margin:0 0 5px;padding:1px 0 5px}
+.desktop-gis .workspace-objects>summary{cursor:pointer;color:#3c5b70;font-size:11px;font-weight:650;padding:6px 4px}
+.desktop-gis .workspace-objects .workspace-feature-tree{border-top:0;margin-top:2px;padding-top:2px}
+.desktop-gis .workspace-objects .project-features{max-height:110px}
+.desktop-gis .workspace-objects .workspace-tree-header{display:none}
+@media(max-width:1100px){
+ .desktop-gis .gis-active-project{max-width:160px;min-width:90px}
+}
+@media(max-width:740px){
+ .desktop-gis .gis-active-project{max-width:115px;min-width:75px}
+}

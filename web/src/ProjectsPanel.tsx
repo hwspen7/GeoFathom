@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import {createPortal} from 'react-dom';
 import {
   Copy, Download, Eye, EyeOff, History, Layers3, Lock,
   LockOpen, MapPin, Plus, RotateCcw, Save,
@@ -29,12 +30,14 @@ interface Props {
   onSavedDraft?:()=>void;
   onProjectSwitch?:(id:string|null,created:boolean)=>void;
   extraFeatures:WorkspaceFeature[];
+  toolbarTarget?:HTMLElement|null;
+  treeTarget?:HTMLElement|null;
 }
 
 export default function ProjectsPanel({
   geometry, featureName, featureSource, featureProperties, selectedFeatureId,
   splitParts, refreshToken, onOpen, onWorkspace, onPlaceAnnotation, onFeatureDeleted,
-  extraFeatures,onSavedDraft,onProjectSwitch,
+  extraFeatures,onSavedDraft,onProjectSwitch,toolbarTarget,treeTarget,
 }: Props) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [listRetry,setListRetry]=useState(0);
@@ -386,8 +389,17 @@ export default function ProjectsPanel({
     });
   }
 
+  const projectSelector=(
+    <select aria-label="Active project" value={selected} disabled={busy}
+            onFocus={()=>{void refreshProjectList();}}
+            onChange={event => chooseProject(event.target.value)}>
+            <option value="">Local workspace</option>
+            {projects.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}
+    </select>
+  );
   return (
     <div className="project-panel">
+      {toolbarTarget&&createPortal(projectSelector,toolbarTarget)}
       <form onSubmit={create} className="project-create">
         <input aria-label="New project name" placeholder="New project name" maxLength={150}
           value={draftName} onChange={event => setDraftName(event.target.value)} />
@@ -397,12 +409,7 @@ export default function ProjectsPanel({
       </form>
       {projects.length > 0 && (
         <>
-          <select aria-label="Active project" value={selected} disabled={busy}
-            onFocus={()=>{void refreshProjectList();}}
-            onChange={event => chooseProject(event.target.value)}>
-            <option value="">Local workspace</option>
-            {projects.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}
-          </select>
+          {!toolbarTarget&&projectSelector}
 
           <details open={trashOpen} onToggle={e=>setTrashOpen(e.currentTarget.open)}>
             <summary>Project trash {trashOpen?'· '+trashTotal:''}</summary>
@@ -618,11 +625,19 @@ export default function ProjectsPanel({
               onClick={() => void saveSplit()}>Save all {splitParts.length} split pieces</button>
           )}
 
+          {treeTarget?createPortal(<> 
           <WorkspaceFeatureTree
             layers={workspace?.layers??[]}
             features={[...(workspace?.features??[]),
               ...extraFeatures.filter(f=>!(workspace?.features??[]).some(x=>x.id===f.id)).slice(0,60)]}
             selectedId={selectedFeatureId} onOpen={onOpen}/>
+          </>,treeTarget):<>
+          <WorkspaceFeatureTree
+            layers={workspace?.layers??[]}
+            features={[...(workspace?.features??[]),
+              ...extraFeatures.filter(f=>!(workspace?.features??[]).some(x=>x.id===f.id)).slice(0,60)]}
+            selectedId={selectedFeatureId} onOpen={onOpen}/>
+          </>}
 
           {current&&<details className="feature-inspector">
             <summary>Identify feature · properties & measurement</summary>

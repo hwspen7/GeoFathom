@@ -118,6 +118,8 @@ export default function App() {
   const [toolbarTarget,setToolbarTarget]=useState<HTMLDivElement|null>(null);
   const [showTools,setShowTools]=useState(true);
   const [resultsTarget,setResultsTarget]=useState<HTMLDivElement|null>(null);
+  const [projectToolbarTarget,setProjectToolbarTarget]=useState<HTMLDivElement|null>(null);
+  const [objectTreeTarget,setObjectTreeTarget]=useState<HTMLDivElement|null>(null);
   const [shortcutHelp,setShortcutHelp]=useState(false);
   const [commandOpen,setCommandOpen]=useState(false);
   const [contextMenu,setContextMenu]=useState<{x:number;y:number}|null>(null);
@@ -1041,6 +1043,7 @@ export default function App() {
           <Search size={14}/> <span>Commands</span><kbd>Ctrl K</kbd>
         </button>
         <button className="gis-shortcut-help" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts" onClick={()=>setShortcutHelp(true)}>?</button>
+        <div className="gis-active-project" ref={setProjectToolbarTarget} aria-label="Active workspace"/>
         <button className="gis-inspector-toggle" aria-label="Toggle project and layers" aria-expanded={showLayers} aria-pressed={showLayers} onClick={()=>setShowLayers(v=>!v)}>Project / Search</button>
         <button className="gis-inspector-toggle" aria-label="Toggle operations" aria-pressed={showTools} onClick={()=>setShowTools(v=>!v)}>Tools</button>
         <button className="gis-connection" title={connectionError||'Check backend connection'} onClick={()=>setConnectionRetry(v=>v+1)}>{capabilities?<Wifi size={14}/>:<WifiOff size={14}/>} {capabilities?'Connected':'Reconnect API'}</button>
@@ -1066,7 +1069,7 @@ export default function App() {
           <section className="panel-section">
             <div className="section-heading"><Layers3 size={16} /><span>Projects</span></div>
             {!capabilities&&connectionError&&<div className="discovery-error" role="alert">{connectionError} <button onClick={()=>setConnectionRetry(v=>v+1)}>Reconnect</button></div>}
-            <ProjectsPanel
+            <ProjectsPanel toolbarTarget={projectToolbarTarget} treeTarget={objectTreeTarget}
               geometry={busy || preview || pendingShared || drawingMode ? null : geometry}
               featureName={scratch.find(f=>f.id===scratchId)?.name||selectedPlace?.name||'Custom boundary'}
               featureSource={geometrySource || selectedPlace?.source || 'User drawn'}
@@ -1475,6 +1478,10 @@ export default function App() {
         <aside className="gis-inspector gis-operations" hidden={!showTools} style={{width:rightDockWidth}} aria-label="Operations">
           <WorkspaceDockHeading><Compass size={15}/> Tools</WorkspaceDockHeading>
           <div className="sidebar-scroll">
+          <details className="workspace-objects" open>
+            <summary>Objects</summary>
+            <div ref={setObjectTreeTarget}/>
+          </details>
           {resultsTarget&&(geometry||measurement||preview)&&createPortal(<section className="panel-section results-summary">
             <div className="section-heading"><Compass size={16} /><span>Selection</span></div>
             <div className="analysis-card">
