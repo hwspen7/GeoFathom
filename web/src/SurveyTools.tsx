@@ -86,7 +86,7 @@ export default function SurveyTools({
   }
 
   const traceReady=saved.some(feature=>
-    feature.geometry.type==='LineString'||feature.geometry.type==='MultiLineString');
+    feature.geometry?.type==='LineString'||feature.geometry?.type==='MultiLineString');
   const toolbar=<div className="survey-command-bar">
       <div className="survey-mode-grid">
         {buttonModes.map(item => (
