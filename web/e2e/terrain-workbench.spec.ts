@@ -164,7 +164,7 @@ with tempfile.TemporaryDirectory() as directory:
  expect(exported.suggestedFilename()).toBe('slope_map-classes.csv');
  const csv=readFileSync((await exported.path())!,'utf8');
  expect(csv).toContain('class,cells,percent_valid,area_m2,cumulative_percent');
- expect(csv.split('\\n').length).toBeGreaterThan(8);
+ expect(csv.split('\n').length).toBeGreaterThan(8);
  // Two related raster analyses remain independently addressable.
  await page.getByRole('button',{name:'Browse terrain tools',exact:true}).click();
  await tools.getByRole('button',{name:'Hillshade',exact:true}).click();
