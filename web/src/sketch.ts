@@ -60,6 +60,12 @@ export function sketchFinishError(mode:ShapeMode,points:Position[]):string|null{
     if(error)return error;
   }
   if(!polygonMode(mode))return null;
+  return sketchClosingError(points);
+}
+
+/** O(n) closing-edge verification; full O(n²) topology is checked on Finish. */
+function sketchClosingError(points:Position[]):string|null{
+  if(points.length<3)return 'At least three vertices are needed for polygon closure.';
   const start=points[0],end=points[points.length-1];
   if(same(start,end))return 'Do not repeat the starting coordinate; click its handle to close.';
   for(let i=1;i<points.length-2;i++){
@@ -83,5 +89,7 @@ export function sketchFinishError(mode:ShapeMode,points:Position[]):string|null{
 
 /** A preview may be an open line but must never display a knowingly invalid closed polygon. */
 export function canPreviewClosedSketch(mode:ShapeMode,points:Position[]):boolean{
-  return polygonMode(mode)&&sketchFinishError(mode,points)===null;
+  // Every inserted edge has already been checked by sketchAddError.
+  // Checking only the new closing edge keeps mousemove at O(n), not O(n²).
+  return polygonMode(mode)&&sketchClosingError(points)===null;
 }
