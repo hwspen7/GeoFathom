@@ -94,7 +94,7 @@ export default function SurveyTools({
         <div className="survey-mode-family survey-primary-modes" role="group" aria-label="Drawing tools">
           {buttonModes.slice(0,5).map(item => (
           <button key={item.mode} className={mode === item.mode ? 'active' : ''}
-            aria-label=<span className="survey-button-caption">{item.title}</span>
+            aria-label={item.title}
             title={item.mode==='trace-along'&&!traceReady?
               'Save a vector line in the active project before tracing.':
               ['hole','split'].includes(item.mode)&&(!geometry||!['Polygon','MultiPolygon'].includes(geometry.type))?
@@ -104,12 +104,19 @@ export default function SurveyTools({
             aria-pressed={mode===item.mode} onClick={() => mode===item.mode?onCancel():onStart(item.mode)}
             disabled={(busy&&mode!==item.mode)||(item.mode==='trace-along'&&!traceReady)||
               (['hole','split'].includes(item.mode)&&
-                (locked||(geometry?.type!=='Polygon'&&geometry?.type!=='MultiPolygon')))}
+                (locked||(geometry?.type!=='Polygon'&&geometry?.type!=='MultiPolygon')))}>
+            {item.mode === 'circle' ? <Circle size={15}/> :
+             item.mode === 'line' ? <Ruler size={15}/> :
+             item.mode === 'split' || item.mode === 'trace-along' ? <Scissors size={15}/> :
+             item.mode === 'hole' ? <Eraser size={15}/> : <Pencil size={15}/>}
+            <span className="survey-button-caption">{item.title}</span>
+          </button>
+        ))}
         </div>
         <div className="survey-mode-family survey-topology-tools" role="group" aria-label="Topology tools">
           {buttonModes.slice(5).map(item => (
           <button key={item.mode} className={mode === item.mode ? 'active' : ''}
-            aria-label=<span className="survey-button-caption">{item.title}</span>
+            aria-label={item.title}
             title={item.mode==='trace-along'&&!traceReady?
               'Save a vector line in the active project before tracing.':
               ['hole','split'].includes(item.mode)&&(!geometry||!['Polygon','MultiPolygon'].includes(geometry.type))?
@@ -119,7 +126,14 @@ export default function SurveyTools({
             aria-pressed={mode===item.mode} onClick={() => mode===item.mode?onCancel():onStart(item.mode)}
             disabled={(busy&&mode!==item.mode)||(item.mode==='trace-along'&&!traceReady)||
               (['hole','split'].includes(item.mode)&&
-                (locked||(geometry?.type!=='Polygon'&&geometry?.type!=='MultiPolygon')))}
+                (locked||(geometry?.type!=='Polygon'&&geometry?.type!=='MultiPolygon')))}>
+            {item.mode === 'circle' ? <Circle size={15}/> :
+             item.mode === 'line' ? <Ruler size={15}/> :
+             item.mode === 'split' || item.mode === 'trace-along' ? <Scissors size={15}/> :
+             item.mode === 'hole' ? <Eraser size={15}/> : <Pencil size={15}/>}
+            <span className="survey-button-caption">{item.title}</span>
+          </button>
+        ))}
         </div>
       </div>
       {mode && (
