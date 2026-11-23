@@ -1,4 +1,4 @@
-"""P1 scientific terrain kernels: deterministic hydrology, fitted curvature,
+"""Scientific terrain analysis scientific terrain kernels: deterministic hydrology, fitted curvature,
 grade-constrained design, coverage optimization, and seam-aligned 3-D LOD.
 
 All inputs are projected metric grids. The source DEM is never mutated; invalid
@@ -20,11 +20,11 @@ def _validated(z,valid,dx,dy,budget=1_000_000):
     z=np.asarray(z,dtype=np.float64)
     valid=np.asarray(valid,dtype=bool)
     if z.ndim!=2 or z.shape!=valid.shape or not valid.any() or z.size>budget:
-        raise RasterError("P1 requires a nonempty 2-D aligned grid within its memory budget.")
+        raise RasterError("Scientific terrain analysis requires a nonempty 2-D aligned grid within its memory budget.")
     if not (math.isfinite(dx) and math.isfinite(dy) and dx>0 and dy>0):
-        raise RasterError("P1 requires positive projected metric grid spacing.")
+        raise RasterError("Scientific terrain analysis requires positive projected metric grid spacing.")
     if not np.isfinite(z[valid]).all():
-        raise RasterError("P1 valid elevations must be finite.")
+        raise RasterError("Scientific terrain analysis valid elevations must be finite.")
     return z,valid
 
 

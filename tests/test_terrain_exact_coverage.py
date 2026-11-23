@@ -8,7 +8,7 @@ import pytest
 from imagery.raster import RasterError
 from terrain.cancellation import TerrainCancelled
 from terrain.coverage_exact import exact_maximum_coverage
-from terrain.p1_science import greedy_coverage
+from terrain.scientific_kernels import greedy_coverage
 
 
 def test_exact_search_repairs_a_real_greedy_counterexample():

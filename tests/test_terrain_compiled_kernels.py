@@ -8,7 +8,7 @@ import psutil
 import pytest
 
 from terrain.cancellation import TerrainCancelled
-from terrain.p1_science import dinfinity_accumulation
+from terrain.scientific_kernels import dinfinity_accumulation
 
 
 @pytest.mark.parametrize("dx,dy",[(1,1),(5,20),(20,5)])

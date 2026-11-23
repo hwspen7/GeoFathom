@@ -1,7 +1,7 @@
 """Nopython D-infinity flux propagation with bounded cancellation checkpoints.
 
 Identical Tarboton triangular-facet geometry and tie ordering to the Python
-reference in p1_science.py. All arrays remain C-contiguous NumPy source-grid
+reference in scientific_kernels.py. All arrays remain C-contiguous NumPy source-grid
 matrices; only a fixed 4096-cell traversal chunk enters LLVM JIT code.
 """
 import math

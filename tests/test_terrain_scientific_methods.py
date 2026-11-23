@@ -12,7 +12,7 @@ from rasterio.transform import from_origin
 from imagery.raster import RasterError
 from terrain.advanced import run_terrain
 from terrain.cancellation import TerrainCancelled
-from terrain.p1_science import (
+from terrain.scientific_kernels import (
     dinfinity_accumulation, quadratic_curvature, design_surface,
     greedy_coverage, mesh_lod_tiles, breach_depressions, weighted_suitability,
 )

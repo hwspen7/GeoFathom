@@ -4,13 +4,11 @@ on:
   push:
     branches:
       - main
-      - feature/data-export-topology-workbench
-      - feature/terrain-p1-science-95
     paths:
       - 'terrain/**'
       - 'tests/test_terrain_*'
       - 'benchmarks/terrain_reference.py'
-      - 'scripts/terrain_p0_gate.py'
+      - 'scripts/terrain_numerical_gate.py'
       - '.github/workflows/terrain-science.yml'
   pull_request:
     branches: [main]
@@ -42,19 +40,19 @@ jobs:
         run: |
           mkdir -p build
           python benchmarks/terrain_reference.py --strict --output build/terrain-reference.json
-      - name: Test P0 scientific invariants and edge cases
+      - name: Test foundational scientific invariants and edge cases
         run: |
-          python -m pytest -q --junitxml=build/terrain-p0-tests.xml tests/test_terrain_p0_all_operations.py tests/test_terrain_p0_gate.py tests/test_terrain_projection_p0.py tests/test_terrain_scope_p0.py tests/test_terrain_p0_scientific_invariants.py tests/test_terrain_professional.py tests/test_terrain_conditioning.py tests/test_terrain_gradient_unification.py tests/test_terrain_catalog.py
-      - name: Run P1 scientific analytic and GeoTIFF integration checks
+          python -m pytest -q --junitxml=build/terrain-foundation-tests.xml tests/test_terrain_operation_matrix.py tests/test_terrain_numerical_gate.py tests/test_terrain_projection_validation.py tests/test_terrain_scope_validation.py tests/test_terrain_scientific_invariants.py tests/test_terrain_professional.py tests/test_terrain_conditioning.py tests/test_terrain_gradient_unification.py tests/test_terrain_catalog.py
+      - name: Run advanced scientific analytic and GeoTIFF integration checks
         run: |
-          python -m pytest -q --junitxml=build/terrain-p1-tests.xml tests/test_terrain_p1_science.py tests/test_terrain_exact_coverage.py tests/test_terrain_uncertainty.py tests/test_terrain_mesh_streaming.py tests/test_terrain_p1_external_references.py tests/test_terrain_p1_compiled.py
-      - name: Enforce >=95 P0 synthetic numerical score for every Terrain operation
+          python -m pytest -q --junitxml=build/terrain-methods-tests.xml tests/test_terrain_scientific_methods.py tests/test_terrain_exact_coverage.py tests/test_terrain_uncertainty.py tests/test_terrain_mesh_streaming.py tests/test_terrain_independent_references.py tests/test_terrain_compiled_kernels.py
+      - name: Enforce >=95 foundational synthetic numerical score for every Terrain operation
         run: |
-          python scripts/terrain_p0_gate.py --junit build/terrain-p0-tests.xml --reference build/terrain-reference.json --output build/terrain-p0-matrix.json
+          python scripts/terrain_numerical_gate.py --junit build/terrain-foundation-tests.xml --reference build/terrain-reference.json --output build/terrain-foundation-matrix.json
           python - <<'PY'
           import json
-          data=json.load(open("build/terrain-p0-matrix.json"))
-          print(f"## P0 synthetic numerical acceptance: {data['operations_meeting_threshold']}/28 >=95",file=open("/tmp/terrain-summary","w"))
+          data=json.load(open("build/terrain-foundation-matrix.json"))
+          print(f"## foundational synthetic numerical acceptance: {data['operations_meeting_threshold']}/28 >=95",file=open("/tmp/terrain-summary","w"))
           print(f"Minimum benchmark score: {data['minimum_score']}/100")
           PY
       - name: Preserve numeric comparisons and failure evidence
@@ -64,8 +62,8 @@ jobs:
           name: terrain-scientific-reference
           path: |
             build/terrain-reference.json
-            build/terrain-p0-tests.xml
-            build/terrain-p0-matrix.json
-            build/terrain-p1-tests.xml
+            build/terrain-foundation-tests.xml
+            build/terrain-foundation-matrix.json
+            build/terrain-methods-tests.xml
           if-no-files-found: warn
           retention-days: 30

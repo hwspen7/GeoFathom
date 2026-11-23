@@ -1,4 +1,4 @@
-# P0 — Independent scientific reference acceptance
+# Numerical foundations — Independent scientific reference acceptance
 
 The independent test gate deliberately runs a **separate GDAL gdaldem binary**,
 rather than calling GeoFathom's own derivative implementation to generate its
@@ -36,7 +36,7 @@ To run locally on a machine with gdaldem available:
 ## Projection-scale numerical integrity
 
 Meter-valued projected coordinates alone do **not** guarantee that cell
-resolution corresponds to ground distance. The P0 preflight audits meridional
+resolution corresponds to ground distance. The foundation preflight audits meridional
 and parallel projection-scale factors at the center and four corners of each
 DEM. A sampled scale error above **2.0% fails closed** with an actionable
 request to reproject to a locally suitable metric CRS. Scale error above
@@ -45,15 +45,15 @@ the actual sampled maximum is in the machine-readable result and UI.
 Neither this geometric scale check nor a matching vertical datum label
 validates the absolute survey accuracy of the elevations.
 
-## Strict >=95 P0 controlled-numerical acceptance
+## Strict >=95 foundation controlled-numerical acceptance
 
-The P0 gate includes **two independent known-answer scenes for each of the
+The foundation gate includes **two independent known-answer scenes for each of the
 28 operations**: a UTM linear-gradient plane and a horizontal zero-gradient
 surface. Reference values are derived by algebra and explicit graph/geometry
 identities, never by calling GeoFathom to generate expected answers. A
 duplicate terminal cross-section near an interval multiple was corrected.
 
-Run: `python scripts/terrain_p0_gate.py --junit build/terrain-p0-tests.xml --reference build/terrain-reference.json --output build/terrain-p0-matrix.json`
+Run: `python scripts/terrain_numerical_gate.py --junit build/terrain-foundation-tests.xml --reference build/terrain-reference.json --output build/terrain-foundation-matrix.json`
 
 | Evidence enforced by CI | Score |
 | --- | ---: |

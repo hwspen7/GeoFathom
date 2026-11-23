@@ -2,7 +2,7 @@
 import json
 from xml.etree import ElementTree as ET
 
-from scripts.terrain_p0_gate import (
+from scripts.terrain_numerical_gate import (
     BENCHMARKS, MANDATORY_INVARIANTS, evaluate
 )
 from terrain.catalog import CORE_OPERATIONS

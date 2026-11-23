@@ -399,7 +399,7 @@ def _derived_surface_tiled(z,valid,dx,dy,operation,max_slope=30.,
                 east,south=derived["east"][crop],derived["south"][crop]
                 product=hillshade_illumination(east,south,azimuth,altitude,hillshade_mode)
             elif operation=="suitability" and suitability_model=="weighted":
-                from .p1_science import weighted_suitability
+                from .scientific_kernels import weighted_suitability
                 product,tile_metrics=weighted_suitability(z[r0:r1,c0:c1],valid[r0:r1,c0:c1],
                     derived["slope_map"][crop],derived["tri"][crop],max_slope,
                     min_elevation,max_elevation,max_tri,suitability_weights,elevation_sigma_m)
@@ -460,18 +460,18 @@ def surface(z,valid,affine,crs,operation,reference,point,end_point,max_slope,
     if operation=="elevation":
         values=np.where(valid,z,np.nan)
     elif operation=="cutfill_map":
-        from .p1_science import design_surface
+        from .scientific_kernels import design_surface
         values,metrics=design_surface(z,valid,dx,dy,reference,
             design_east_grade,design_north_grade,elevation_sigma_m,design_max_grade,
             design_curvature_east,design_curvature_cross,design_curvature_north,cancel=cancel)
     elif operation=="suitability" and suitability_model=="weighted" and z.size<=1_000_000:
-        from .p1_science import weighted_suitability
+        from .scientific_kernels import weighted_suitability
         d=derivatives(z,valid,dx,dy,gradient_method)
         values,metrics=weighted_suitability(z,valid,d["slope_map"],d["tri"],
             max_slope,min_elevation,max_elevation,max_tri,suitability_weights,elevation_sigma_m)
         metrics["suitable_area_m2"]*=cell
     elif operation=="flow_accumulation" and flow_routing_method=="dinf":
-        from .p1_science import dinfinity_accumulation
+        from .scientific_kernels import dinfinity_accumulation
         values,angles=dinfinity_accumulation(z,valid,dx,dy,external_inflow=external_inflow,cancel=cancel)
         metrics={"dinf_direction_valid_cells":int(np.isfinite(angles).sum()),
                  "external_inflow_total_cell_equivalents":float(np.sum(external_inflow)) if external_inflow is not None else 0.}
@@ -525,7 +525,7 @@ def surface(z,valid,affine,crs,operation,reference,point,end_point,max_slope,
     else:
         # Large-area surfaces avoid keeping nine full-sized derived arrays.
         if operation in {"curvature","plan_curvature","profile_curvature"} and curvature_method=="quadratic":
-            from .p1_science import quadratic_curvature
+            from .scientific_kernels import quadratic_curvature
             values=quadratic_curvature(z,valid,dx,dy,curvature_radius,operation,cancel)
             metrics={"curvature_fit_radius_cells":curvature_radius}
         elif operation in {"tri","tpi"} and neighborhood_radius>1:

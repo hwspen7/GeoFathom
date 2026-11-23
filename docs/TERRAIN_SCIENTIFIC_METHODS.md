@@ -1,9 +1,9 @@
-# P1 scientific-engine maturity and acceptance ledger
+# scientific methods scientific-engine maturity and acceptance ledger
 
 This file records the delivered algorithms and the evidence required to claim
 95/100 per professional analysis tool. **Synthetic unit tests and green CI are
 not a survey, field accuracy, or full professional certification.** See also
-[TERRAIN_P0_P6_ACCEPTANCE.md](TERRAIN_P0_P6_ACCEPTANCE.md).
+[TERRAIN_RESEARCH_ACCEPTANCE.md](TERRAIN_RESEARCH_ACCEPTANCE.md).
 
 ## Mathematical / execution implementations
 
@@ -17,7 +17,7 @@ not a survey, field accuracy, or full professional certification.** See also
 
 ## Semantics and reproducibility
 
-- Existing 28 Terrain operation IDs remain available; new P1 algorithms are
+- Existing 28 Terrain operation IDs remain available; new scientific methods algorithms are
   method selections inside the existing operations.
 - The original DEM is immutable; hydrological conditioning, DSM occlusion,
   grade planes and calculated scores operate on separate working arrays.
@@ -65,26 +65,26 @@ Mandatory minimum before calling any operation **95/100**:
    execution, inspectable results, regression with screenshots and saved run.
 
 Each category needs direct evidence; the project cannot raise a score merely
-by adding test names. The P0 gate's **synthetic 95+ score is not a P1
-scientific certificate**. P1 currently records
+by adding test names. The foundation gate's **synthetic 95+ score is not a scientific methods
+scientific certificate**. scientific methods currently records
 \`reference_validation=not_performed\` in individual run receipts pending
 independent reference validation.
 
 ## Automated tests
 
-- \`tests/test_terrain_p1_science.py\`: analytic D-infinity, external inflow,
+- \`tests/test_terrain_scientific_methods.py\`: analytic D-infinity, external inflow,
   corner NoData and invariants, fitted polynomial curvature and large windows,
   designed grade and uncertainty, DSM blockers, multi-observer optimization,
   weighted suitability GeoTIFF, LOD boundary continuity, and bounded breach.
-- \`web/src/terrainP1.test.ts\`: algorithm-specific run identity and source
+- \`web/src/terrainMethods.test.ts\`: algorithm-specific run identity and source
   provenance, no unrelated parameter contamination.
-- \`web/src/terrainP1LOD.test.ts\`: camera mesh LOD node indices, boundary
+- \`web/src/terrainLOD.test.ts\`: camera mesh LOD node indices, boundary
   cells and NoData face exclusion.
-- \`.github/workflows/terrain-science.yml\`: existing independent-GDAL P0
-  reference gate plus an additional, mandatory P1 analytic/GeoTIFF test step.
+- \`.github/workflows/terrain-science.yml\`: existing independent-GDAL foundation
+  reference gate plus an additional, mandatory scientific methods analytic/GeoTIFF test step.
 - The repository's full Python, TypeScript, native, browser, memory and release
   suites remain mandatory prior to merging.
 
 **Current release state:** work in progress. Branch
-\`feature/terrain-p1-science-95\` and PR #9 are intentionally separate from
+\`current scientific-methods branch\` and PR #9 are intentionally separate from
 \`main\`; release readiness requires fresh green checks at the exact head SHA.

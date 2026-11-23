@@ -388,7 +388,7 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
     # always operate on the original elevations.
     if fill_sinks and operation in hydro_ops:
         if depression_method=="breach":
-            from .p1_science import breach_depressions
+            from .scientific_kernels import breach_depressions
             flow_z,conditioned=breach_depressions(z,valid,abs(affine.a),abs(affine.e),cancel=cancel)
         else:
             flow_z,conditioned=condition_dem(z,valid,cancel)
@@ -505,7 +505,7 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
         result["warning"]="Cell-center elevation distribution on the valid projected DEM grid; nodata excluded. Cumulative area includes elevations through each bin."
     elif operation=="volume":
         if not math.isfinite(reference):raise RasterError("Reference elevation must be finite.")
-        from .p1_science import design_surface
+        from .scientific_kernels import design_surface
         _,design_metrics=design_surface(z,valid,abs(affine.a),abs(affine.e),reference,
             design_east_grade,design_north_grade,elevation_sigma_m,design_max_grade,
             design_curvature_east,design_curvature_cross,design_curvature_north,cancel=cancel)
@@ -646,7 +646,7 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
             "source_grid_rows":int(z.shape[0]),"source_grid_cols":int(z.shape[1]),
             "source_sampling_step":int(step)}
         if mesh_lod:
-            from .p1_science import mesh_lod_tiles
+            from .scientific_kernels import mesh_lod_tiles
             tiles=mesh_lod_tiles(heights,mask,abs(affine.a)*step,abs(affine.e)*step,
                                  tile_cells=32,levels=(1,2,4),cancel=cancel)
             result["mesh"]["lod"]={"tile_cells":32,"levels":[1,2,4],"tiles":tiles,

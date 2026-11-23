@@ -1,4 +1,4 @@
-"""Fail-closed Terrain P0 analytical conformance gate.
+"""Fail-closed Terrain Foundational terrain analytical conformance gate.
 
 The 95/100 score measures *controlled synthetic implementation conformance*,
 not field-survey accuracy or a claim of 95% geospatial truth. Each of the 28
@@ -43,7 +43,7 @@ def read_junit(path):
         passed=not skipped and not failed
         counts["skipped" if skipped else "failed" if failed else "passed"]+=1
         if name in status:
-            raise ValueError(f"Duplicate test identity in P0 gate: {name}")
+            raise ValueError(f"Duplicate test identity in Foundational terrain gate: {name}")
         status[name]=passed
     return status,counts
 
@@ -102,13 +102,13 @@ def main():
     target.parent.mkdir(parents=True,exist_ok=True)
     target.write_text(json.dumps(report,indent=2,ensure_ascii=False)+"\n",
                       encoding="utf-8")
-    print(f"Terrain P0: {report['operations_meeting_threshold']}/28 at "
+    print(f"Terrain Foundational terrain: {report['operations_meeting_threshold']}/28 at "
           f">=95 synthetic-conformance points; min={report['minimum_score']}")
     if not report["passed"]:
         for item in report["operations"]:
             if not item["meets_95_threshold"]:
                 print("FAIL",item, file=sys.stderr)
-        raise SystemExit("P0 95-point analytical acceptance gate FAILED")
+        raise SystemExit("Foundational terrain 95-point analytical acceptance gate FAILED")
 
 
 if __name__=="__main__":

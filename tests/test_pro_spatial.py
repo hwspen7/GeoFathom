@@ -1,4 +1,4 @@
-"""P0 selection, SQLite R-tree synchronization and topology QA regression tests."""
+"""Research selection, SQLite R-tree synchronization and topology QA regression tests."""
 import concurrent.futures
 
 import pytest

@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 from imagery.raster import RasterError
-from terrain.p1_science import design_surface
+from terrain.scientific_kernels import design_surface
 from terrain.uncertainty import gaussian_earthwork_uncertainty
 
 def oracle_moments(delta,sigma):

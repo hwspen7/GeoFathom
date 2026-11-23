@@ -13,7 +13,7 @@ import rasterio
 from rasterio.transform import from_origin
 
 from terrain.advanced import _visibility
-from terrain.p1_science import dinfinity_accumulation
+from terrain.scientific_kernels import dinfinity_accumulation
 
 
 def test_dinfinity_cardinal_flow_agrees_with_independent_pysheds(tmp_path):

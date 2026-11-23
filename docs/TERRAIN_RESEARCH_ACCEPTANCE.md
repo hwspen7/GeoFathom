@@ -1,20 +1,20 @@
-# Terrain P0–P6 research acceptance ledger
+# Terrain research acceptance ledger
 
 This is a *verification ledger*, not a completion certificate. Each of the 28
 analysis tools must independently score at least 95/100 against the agreed
 acceptance rubric, and no blocking correctness or data-integrity issue may remain.
 
-## Stage delivery and remaining verification
+## Research modules and remaining verification
 
-| Stage | Implemented in this upgrade | Not yet certified or completed |
+| Module | Implemented capability | Remaining scientific verification |
 | --- | --- | --- |
-| P0 | Discoverable 28-operation catalog; explicit method manifests and API bounds; existing immutable run receipts | A third-party dynamically loadable plugin runtime and formal versioned method migration |
-| P1 | Horn/Zevenbergen–Thorne in summary, small/large surface grids; variable 3×3–9×9 TRI/TPI; single/four-direction hillshade; classification presets | Independent GDAL/GRASS cross-reference and uncertainty envelopes for all derivatives |
-| P2 | D8/MFD, bounded MFD exponent, deterministic conditioning; true Strahler and Shreve alternatives | D-infinity, surveyed stream calibration, full external upstream contributing area |
-| P3 | Single/multi-observer viewsheds with curvature/refraction, observer azimuth, field of view, distance cap | Independent line-of-sight reference suite, large-area optimized rays and DSM inventory accuracy |
-| P4 | Multiple route cost functions; existing volume, cross sections, DEM comparison and suitability | Designed engineering surfaces, stochastic uncertainties and external design-level calibration |
-| P5 | Selectable 64–512 mesh budget, existing WebGL terrain and optional imagery drape | Streaming 3D LOD and guaranteed 3D analysis scalability |
-| P6 | Explicit coverage/NoData/datum/uncertainty status; quantitative distribution, chart mode, class area table and CSV; output provenance | External scientific benchmark set, complete portable project package, performance verification across all algorithm combinations |
+| Core workflow | Discoverable 28-operation catalog, explicit method manifests, bounded API parameters and immutable run receipts | Cross-version run reproducibility and diverse input datasets |
+| Terrain derivatives | Horn and Zevenbergen–Thorne derivatives, fitted 3×3–9×9 quadratic curvature, TRI/TPI and hillshade | Derivative error sensitivity against measured DEM uncertainty |
+| Hydrology | D8/MFD and D-infinity fractional routing, Strahler/Shreve order, priority-flood filling and bounded channel breaching | Complex real-catchment comparison and calibrated input elevations |
+| Visibility | Observer FOV, DSM blockers, curvature/refraction, multiple observers and bounded exact candidate coverage | Independently measured visibility and DSM completeness |
+| Engineering | Grade-constrained quadratic design, cut/fill uncertainty and weighted suitability surfaces | Surveyed design references and sensitivity calibration |
+| 3D terrain | NoData-safe mesh, streaming source windows, camera-prioritized LOD and bounded tile caching | Large-scene GPU performance and complete scientific-result draping |
+| Research outputs | Coverage, NoData, datum and uncertainty flags, charts, CSV, GeoTIFF and input provenance | Independent reproducibility across representative regions |
 
 ## 95/100 acceptance rule (per tool)
 

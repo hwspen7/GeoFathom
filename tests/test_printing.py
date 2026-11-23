@@ -1,4 +1,4 @@
-"""P0 cartographic PDF page and print security tests."""
+"""Research cartographic PDF page and print security tests."""
 from io import BytesIO
 
 import pytest

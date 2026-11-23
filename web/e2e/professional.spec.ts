@@ -38,7 +38,7 @@ function rectangle(x:number,y:number,w=.02,h=.02):GeoJSON.Polygon{
 }
 
 test('professional spatial QA detects overlap and prints a valid real PDF',async({page})=>{
-  const id=await create(page,'P0 quality and PDF');
+  const id=await create(page,'Spatial quality and PDF');
   await add(page,id,'Parcel A',rectangle(0,22));
   await add(page,id,'Parcel B',rectangle(.015,22));
   const other=await page.request.post(API+'/projects',{data:{name:'Unrelated empty QA project '+id}});
@@ -74,7 +74,7 @@ test('professional spatial QA detects overlap and prints a valid real PDF',async
 });
 
 test('graduated choropleth writes real breaks; CRS grid converts and persists',async({page})=>{
-  const id=await create(page,'P1 map styling');
+  const id=await create(page,'Cartographic map styling');
   for(const [i,height] of [12,24,38,80,190].entries())
     await add(page,id,'Asset '+i,{type:'Point',coordinates:[i*.002,22]},
       {height});
@@ -106,8 +106,8 @@ test('graduated choropleth writes real breaks; CRS grid converts and persists',a
   expect((await transform.json()).coordinates[0][0]).toBeGreaterThan(100000);
 });
 
-test('P2 jobs and optional backend status work without configuring cloud services',async({page})=>{
-  const id=await create(page,'P2 background workflows');
+test('Background jobs and optional backend status work without configuring cloud services',async({page})=>{
+  const id=await create(page,'Background background workflows');
   await add(page,id,'Field A',rectangle(0,22));
   await page.reload();
   await activateWorkspaceModule(page,'Data');
@@ -135,7 +135,7 @@ test('P2 jobs and optional backend status work without configuring cloud service
 });
 
 test('drawing selection rectangle selects actual saved map features',async({page})=>{
-  const id=await create(page,'P0 rectangle select');
+  const id=await create(page,'Spatial rectangle select');
   await add(page,id,'Map center',{type:'Point',coordinates:[0,22]});
   await page.reload();
   const map=page.getByLabel('Interactive geospatial map');
@@ -157,8 +157,8 @@ test('drawing selection rectangle selects actual saved map features',async({page
 });
 
 
-test('P1 drag a saved point label and commit revisioned offset fields',async({page})=>{
-  const id=await create(page,'P1 freehand label placement');
+test('Cartographic drag a saved point label and commit revisioned offset fields',async({page})=>{
+  const id=await create(page,'Cartographic freehand label placement');
   await add(page,id,'Important POI',{type:'Point',coordinates:[0,22]},
     {category:'field station'});
   await page.reload();
