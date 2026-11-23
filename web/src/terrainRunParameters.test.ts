@@ -3,7 +3,7 @@ import {terrainParametersForOperation,type TerrainParameterForm} from './terrain
 const base:TerrainParameterForm={
  interval:'10',reference:'0',lon:'',lat:'',height:'1.7',target:'0',
  endLon:'',endLat:'',maxSlope:'30',minElevation:'-12000',
- maxElevation:'12000',maxTri:'100',streamCells:'100',
+ maxElevation:'12000',maxTri:'100',streamCells:'100',mfdExponent:'1.1',
  azimuth:'315',altitude:'45',sectionSpacing:'50',sectionWidth:'20',
  fillSinks:true,considerCurvature:true,refractionCoeff:'0.13',
  comparisonId:'',observerPoints:[['',''],['','']],drape:false,
@@ -29,7 +29,9 @@ describe('scientific operation-specific input manifests',()=>{
   const route=terrainParametersForOperation('least_cost',filled);
   expect(route).toEqual({observer_longitude:-83.001,observer_latitude:40.01,
    end_longitude:-83.02,end_latitude:40.015,max_slope_deg:30});
-  expect(terrainParametersForOperation('stream_order',filled))
+  expect(terrainParametersForOperation('flow_accumulation_mfd',{...filled,mfdExponent:'2.5'}))
+    .toEqual({fill_sinks:true,mfd_exponent:2.5});
+   expect(terrainParametersForOperation('stream_order',filled))
    .toEqual({fill_sinks:true,min_stream_cells:25});
   const viewshed=terrainParametersForOperation('viewshed_multi',filled);
   expect(viewshed.observer_points).toEqual([
