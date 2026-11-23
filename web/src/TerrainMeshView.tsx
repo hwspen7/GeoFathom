@@ -1,5 +1,6 @@
 import {useEffect,useRef,useState,type ReactNode} from 'react';
-import type {TerrainMesh} from './api';
+import {fetchTerrainMeshTile,type TerrainMesh,type StreamedTerrainTile} from './api';
+import {terrainTileRequests,streamedTileMeshGeometry} from './terrainCameraTiles';
 
 export function meshData(mesh:TerrainMesh){
  let lo=Infinity,hi=-Infinity;
@@ -116,6 +117,47 @@ function renderer(gl:WebGL2RenderingContext,mesh:TerrainMesh,redraw:()=>void){
  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
  let disposed=false;
+ let low=Infinity,high=-Infinity;
+ for(const h of mesh.heights)if(h!==null&&Number.isFinite(h)){
+  low=Math.min(low,h);high=Math.max(high,h);
+ }
+ if(!Number.isFinite(low)){low=0;high=0;}
+ type StreamBuffers={vertex:WebGLBuffer;surface:WebGLBuffer;wire:WebGLBuffer;faces:number;edges:number;level:number};
+ const streamingTiles=new Map<string,StreamBuffers>();
+ const streamKey=(level:number,row:number,col:number)=>level+':'+row+':'+col;
+ function bindVertices(buffer:WebGLBuffer|null){
+  gl.bindBuffer(gl.ARRAY_BUFFER,buffer);
+  for(const [name,count,offset] of [['p',3,0],['uv',2,12],['h',1,20]] as const){
+   const loc=gl.getAttribLocation(program,name);
+   gl.enableVertexAttribArray(loc);
+   gl.vertexAttribPointer(loc,count,gl.FLOAT,false,24,offset);
+  }
+ }
+ function hasTile(level:number,row:number,col:number){
+  return streamingTiles.has(streamKey(level,row,col));
+ }
+ function uploadTile(tile:StreamedTerrainTile){
+  if(disposed||gl.isContextLost())return;
+  const key=streamKey(tile.level,tile.tile_row,tile.tile_col);
+  if(streamingTiles.has(key))return;
+  const geometry=streamedTileMeshGeometry(mesh,tile,data.scale,low,high);
+  const vb=gl.createBuffer(),surface=gl.createBuffer(),wire=gl.createBuffer();
+  if(!vb||!surface||!wire)throw Error('3D streaming GPU allocation failed.');
+  gl.bindBuffer(gl.ARRAY_BUFFER,vb);gl.bufferData(gl.ARRAY_BUFFER,geometry.vertices,gl.STATIC_DRAW);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,surface);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,geometry.triangles,gl.STATIC_DRAW);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,wire);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,geometry.edges,gl.STATIC_DRAW);
+  streamingTiles.set(key,{vertex:vb,surface,wire,faces:geometry.triangles.length,
+                          edges:geometry.edges.length,level:tile.level});
+  // A hard GPU cache limit prevents unbounded buffers after extensive panning.
+  if(streamingTiles.size>96){
+   const oldest=streamingTiles.keys().next().value;
+   if(oldest!==undefined){
+    const entry=streamingTiles.get(oldest);
+    if(entry){gl.deleteBuffer(entry.vertex);gl.deleteBuffer(entry.surface);gl.deleteBuffer(entry.wire);}
+    streamingTiles.delete(oldest);
+   }
+  }
+ }
  if(mesh.texture){const img=new Image();img.onload=()=>{if(disposed)return;gl.bindTexture(gl.TEXTURE_2D,texture);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,img);redraw();};img.src=mesh.texture.png;}
  function draw(camera:Camera){
    if(disposed||gl.isContextLost())return;
@@ -128,14 +170,29 @@ function renderer(gl:WebGL2RenderingContext,mesh:TerrainMesh,redraw:()=>void){
    gl.uniform1i(gl.getUniformLocation(program,'wire'),Number(camera.wire));
    gl.uniform1i(gl.getUniformLocation(program,'imagery'),0);
    gl.bindTexture(gl.TEXTURE_2D,texture);
+   bindVertices(vertex);
    const preferred=camera.zoom<1.2?4:camera.zoom<2.4?2:1;
    const active=lodBuffers.get(preferred);
    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,active?(camera.wire?active.wire:active.surface):(camera.wire?wireIndex:index));
    gl.drawElements(camera.wire?gl.LINES:gl.TRIANGLES,
     active?(camera.wire?active.wireCount:active.faceCount):(camera.wire?data.edges.length:data.triangles.length),gl.UNSIGNED_INT,0);
+   const sourceLevel=camera.zoom>=2.4?1:camera.zoom>=1.2?2:4;
+   if((mesh.source_sampling_step??1)>sourceLevel){
+    gl.enable(gl.POLYGON_OFFSET_FILL);gl.polygonOffset(-1,-1);
+    for(const tile of streamingTiles.values()){
+     if(tile.level!==sourceLevel)continue;
+     bindVertices(tile.vertex);
+     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,camera.wire?tile.wire:tile.surface);
+     gl.drawElements(camera.wire?gl.LINES:gl.TRIANGLES,
+        camera.wire?tile.edges:tile.faces,gl.UNSIGNED_INT,0);
+    }
+    gl.disable(gl.POLYGON_OFFSET_FILL);
+   }
  }
- return {draw,dispose(){disposed=true;gl.deleteBuffer(vertex);gl.deleteBuffer(index);gl.deleteBuffer(wireIndex);
+ return {draw,uploadTile,hasTile,dispose(){disposed=true;gl.deleteBuffer(vertex);gl.deleteBuffer(index);gl.deleteBuffer(wireIndex);
   for(const buffers of lodBuffers.values()){gl.deleteBuffer(buffers.surface);gl.deleteBuffer(buffers.wire);}
+  for(const item of streamingTiles.values()){gl.deleteBuffer(item.vertex);gl.deleteBuffer(item.surface);gl.deleteBuffer(item.wire);}
+  streamingTiles.clear();
   gl.deleteTexture(texture);gl.deleteProgram(program);}};
 }
 const initial:Camera={angle:-.6,tilt:.7,exaggeration:1,zoom:1.6,clip:1,wire:false,drape:true,panX:0,panY:0};
