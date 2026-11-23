@@ -42,7 +42,17 @@ export function sketchAddError(mode:ShapeMode,points:Position[],next:Position):s
   if(!polygonMode(mode))return null;
   if(points.some(p=>same(p,next)))return 'Use the first point to close the polygon. Other vertices cannot be repeated.';
   if(points.length<2)return null;
-  const a=points[points.length-1];
+  const previous=points[points.length-2],last=points[points.length-1];
+  const scale=Math.max(Math.abs(last[0]-previous[0]),Math.abs(last[1]-previous[1]),
+    Math.abs(next[0]-last[0]),Math.abs(next[1]-last[1]),1e-9);
+  // Three collinear vertices are allowed in a straight run, but never
+  // overlapping backtracking segments (invalid Simple Features rings).
+  const turn=cross(previous,last,next);
+  const backward=(previous[0]-last[0])*(next[0]-last[0])+
+    (previous[1]-last[1])*(next[1]-last[1]);
+  if(Math.abs(turn)<=scale*scale*1e-12&&backward>scale*scale*1e-14)
+    return 'New edge retraces the preceding polygon edge. Choose a different vertex.';
+  const a=last;
   for(let i=0;i<points.length-2;i++){
     if(sketchSegmentsIntersect(a,next,points[i],points[i+1]))
       return 'New edge crosses or touches an existing polygon edge. Undo or choose another point.';
