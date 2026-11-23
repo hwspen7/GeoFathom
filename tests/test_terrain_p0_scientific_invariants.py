@@ -107,7 +107,7 @@ def test_multiscale_ruggedness_and_position_match_scalar_reference(radius):
     for op in ("tri","tpi"):
         observed=multiscale_terrain(z,valid,radius,op,block=5)
         n=2*radius+1
-        for row,col in ((8,8),(10,11),(3,3)):
+        for row,col in ((8,8),(10,11),(5,5)):
             window=z[row-radius:row+radius+1,col-radius:col+radius+1]
             ok=valid[row-radius:row+radius+1,col-radius:col+radius+1].all()
             if not ok:
