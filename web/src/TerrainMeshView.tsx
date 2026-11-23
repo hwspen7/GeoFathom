@@ -22,6 +22,31 @@ export function meshData(mesh:TerrainMesh){
  }
  return {vertices:new Float32Array(vertices),triangles:new Uint32Array(triangles),edges:new Uint32Array(edges),scale};
 }
+/** Coarse cells never bridge a NoData region, even if their four corners are valid. */
+export function meshLODIndices(mesh:TerrainMesh,step:number){
+ if(!Number.isInteger(step)||step<1||step>8||(step&(step-1))!==0)throw Error('Unsupported 3D LOD step');
+ const {rows,cols,heights}=mesh;
+ const invalid=new Uint32Array((rows+1)*(cols+1));
+ const stride=cols+1;
+ for(let r=0;r<rows;r++){
+  let sum=0;
+  for(let c=0;c<cols;c++){
+   const h=heights[r*cols+c];sum+=h===null||!Number.isFinite(h)?1:0;
+   invalid[(r+1)*stride+c+1]=invalid[r*stride+c+1]+sum;
+  }
+ }
+ const triangles:number[]=[],edges:number[]=[];
+ for(let r=0;r<rows-1;r+=step)for(let c=0;c<cols-1;c+=step){
+  const rr=Math.min(rows-1,r+step),cc=Math.min(cols-1,c+step);
+  const missing=invalid[(rr+1)*stride+cc+1]-invalid[r*stride+cc+1]-
+    invalid[(rr+1)*stride+c]+invalid[r*stride+c];
+  if(missing)continue;
+  const a=r*cols+c,b=r*cols+cc,d=rr*cols+c,e=rr*cols+cc;
+  triangles.push(a,d,b,b,d,e);
+  edges.push(a,d,d,b,b,a,b,d,d,e,e,b);
+ }
+ return {triangles:new Uint32Array(triangles),edges:new Uint32Array(edges)};
+}
 export function meshOBJ(mesh:TerrainMesh){
  const d=meshData(mesh),rows=['# GeoFathom local DEM mesh; coordinates in meters, local origin'];
  if(mesh.source_crs&&mesh.origin_xy)rows.push('# CRS '+mesh.source_crs+'; projected origin '+mesh.origin_xy.join(' '));
@@ -72,6 +97,18 @@ function renderer(gl:WebGL2RenderingContext,mesh:TerrainMesh,redraw:()=>void){
  }
  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,index);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,data.triangles,gl.STATIC_DRAW);
  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,wireIndex);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,data.edges,gl.STATIC_DRAW);
+ // The viewer changes index resolution as the camera zooms; full geometry
+ // remains available in the vertex buffer, and no coarse face spans NoData.
+ const lodBuffers=new Map<number,{surface:WebGLBuffer;wire:WebGLBuffer;faceCount:number;wireCount:number}>();
+ for(const step of mesh.lod?.levels??[]){
+  if(step===1)continue;
+  const local=meshLODIndices(mesh,step);
+  const surface=gl.createBuffer(),wireBuffer=gl.createBuffer();
+  if(!surface||!wireBuffer)throw Error('LOD GPU buffer allocation failed');
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,surface);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,local.triangles,gl.STATIC_DRAW);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,wireBuffer);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,local.edges,gl.STATIC_DRAW);
+  lodBuffers.set(step,{surface,wire:wireBuffer,faceCount:local.triangles.length,wireCount:local.edges.length});
+ }
  gl.bindTexture(gl.TEXTURE_2D,texture);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,1,1,0,gl.RGBA,gl.UNSIGNED_BYTE,new Uint8Array([0,0,0,0]));
  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
@@ -87,10 +124,16 @@ function renderer(gl:WebGL2RenderingContext,mesh:TerrainMesh,redraw:()=>void){
    gl.uniform1i(gl.getUniformLocation(program,'drape'),Number(camera.drape));
    gl.uniform1i(gl.getUniformLocation(program,'wire'),Number(camera.wire));
    gl.uniform1i(gl.getUniformLocation(program,'imagery'),0);
-   gl.bindTexture(gl.TEXTURE_2D,texture);gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,camera.wire?wireIndex:index);
-   gl.drawElements(camera.wire?gl.LINES:gl.TRIANGLES,camera.wire?data.edges.length:data.triangles.length,gl.UNSIGNED_INT,0);
+   gl.bindTexture(gl.TEXTURE_2D,texture);
+   const preferred=camera.zoom<1.2?4:camera.zoom<2.4?2:1;
+   const active=lodBuffers.get(preferred);
+   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,active?(camera.wire?active.wire:active.surface):(camera.wire?wireIndex:index));
+   gl.drawElements(camera.wire?gl.LINES:gl.TRIANGLES,
+    active?(camera.wire?active.wireCount:active.faceCount):(camera.wire?data.edges.length:data.triangles.length),gl.UNSIGNED_INT,0);
  }
- return {draw,dispose(){disposed=true;gl.deleteBuffer(vertex);gl.deleteBuffer(index);gl.deleteBuffer(wireIndex);gl.deleteTexture(texture);gl.deleteProgram(program);}};
+ return {draw,dispose(){disposed=true;gl.deleteBuffer(vertex);gl.deleteBuffer(index);gl.deleteBuffer(wireIndex);
+  for(const buffers of lodBuffers.values()){gl.deleteBuffer(buffers.surface);gl.deleteBuffer(buffers.wire);}
+  gl.deleteTexture(texture);gl.deleteProgram(program);}};
 }
 const initial:Camera={angle:-.6,tilt:.7,exaggeration:1,zoom:1.6,clip:1,wire:false,drape:true,panX:0,panY:0};
 export function GPUView({mesh,fallback}:{mesh:TerrainMesh;fallback:ReactNode}){
@@ -122,6 +165,7 @@ export function GPUView({mesh,fallback}:{mesh:TerrainMesh;fallback:ReactNode}){
    <div className="survey-action-bar"><label><input type="checkbox" checked={camera.wire} onChange={e=>update({wire:e.target.checked})}/>Wireframe</label>
     {mesh.texture&&<label><input type="checkbox" checked={camera.drape} onChange={e=>update({drape:e.target.checked})}/>Imagery</label>}
     <button onClick={()=>setCamera(initial)}>Reset view</button><button onClick={save}>OBJ</button></div>
+   {mesh.lod&&<small>Camera-adaptive mesh geometry · {mesh.lod.levels.join(' / ')} cell steps. LOD is preloaded, not network streamed.</small>}
    {mesh.texture&&<small>RGB image coverage {mesh.texture.coverage_pct.toFixed(1)}%</small>}
  </div>;
 }
