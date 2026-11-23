@@ -165,6 +165,25 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      - name: Validate local Windows one-click launchers
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $parseErrors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path scripts/Local-Research.ps1).Path,
+            [ref]$tokens, [ref]$parseErrors) | Out-Null
+          if ($parseErrors.Count -gt 0) {
+            $parseErrors | Format-List | Out-Host
+            throw "PowerShell one-click launcher syntax invalid."
+          }
+          foreach ($launcher in @(
+            "Start-GeoFathom.bat",
+            "Test-Terrain-Quick.bat",
+            "Test-GeoFathom-Full.bat"
+          )) {
+            if (-not (Test-Path $launcher)) { throw "Missing launcher: $launcher" }
+          }
       - name: Install Windows GIS and test dependencies
         run: python -m pip install -c requirements/windows.lock -e ".[dev]"
       - name: Compile native C++ kernels with MSVC
