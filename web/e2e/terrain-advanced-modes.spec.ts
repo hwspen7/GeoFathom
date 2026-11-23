@@ -191,3 +191,40 @@ test('invalid terrain inputs are blocked and DEM resampling uses real configured
  await expect(page.getByText(/DEM resample ·/)).toBeVisible({timeout:25000});
  await expect(page.getByLabel('DEM elevation layer')).not.toHaveValue(fixture.ids[0]);
 });
+
+
+test('3D DEM remains inspectable using the CPU preview if WebGL2 is unavailable',async({page})=>{
+ test.setTimeout(60000);
+ // Disable WebGL only for the dedicated terrain surface canvas. MapLibre
+ // retains its independent accelerated map context and normal click handling.
+ await page.addInitScript(()=>{
+  const original=HTMLCanvasElement.prototype.getContext;
+  Object.defineProperty(HTMLCanvasElement.prototype,'getContext',{
+   configurable:true,
+   value:function(this:HTMLCanvasElement,kind:string,...options:unknown[]){
+    if(kind==='webgl2'&&this.getAttribute('aria-label')==='Interactive 3D terrain preview')
+      return null;
+    return Reflect.apply(original,this,[kind,...options]);
+   },
+  });
+ });
+ await setup(page);
+ await page.getByLabel('Terrain tools').getByRole('button',{name:'3D terrain',exact:true}).click();
+ await page.getByRole('button',{name:'Run terrain operation'}).click();
+ await expect(page.getByText('WebGL2 unavailable · CPU preview')).toBeVisible();
+ const canvas=page.getByLabel('Interactive 3D terrain preview');
+ await expect(canvas).toBeVisible();
+ await expect(canvas).not.toHaveAttribute('data-renderer','webgl2');
+ const exaggeration=page.getByLabel('Terrain vertical exaggeration');
+ await expect(exaggeration).toHaveValue('1');
+ await exaggeration.focus();
+ await exaggeration.press('ArrowRight');
+ await expect(exaggeration).toHaveValue('1.5');
+ const bbox=(await canvas.boundingBox())!;
+ await page.mouse.move(bbox.x+30,bbox.y+30);
+ await page.mouse.down();
+ await page.mouse.move(bbox.x+80,bbox.y+60,{steps:5});
+ await page.mouse.up();
+ await page.getByRole('button',{name:'Reset view'}).click();
+ await expect(exaggeration).toHaveValue('1');
+});
