@@ -87,8 +87,11 @@ test('advanced surface families retain distinct real results and scientific expo
   await expect(page.getByLabel('Analysis result layers').locator('.scratch-row'))
    .toHaveCount(oldCount+1,{timeout:15000});
   await expect(page.getByLabel('Terrain results')).toBeVisible();
+  // Match the literal title: names like "Ruggedness (TRI)" have regex
+  // metacharacters, which must not change accessible-name matching.
   await expect(page.getByLabel('Analysis result layers')
-    .getByRole('button',{name:new RegExp('^'+title+' ·')})).toBeVisible();
+    .getByRole('button',{name:new RegExp('^'+title.replace(/[.*+?^${}()|[\]\\]/g,'\\  await expect(page.getByLabel('Analysis result layers')
+    .getByRole('button',{name:new RegExp('^'+title+' ·')})).toBeVisible();')+' ·')})).toBeVisible();
  };
  for(const name of [
   'Elevation map','Aspect map','Ruggedness (TRI)','Position (TPI)',
@@ -188,8 +191,10 @@ test('invalid terrain inputs are blocked and DEM resampling uses real configured
  await expect(page.getByRole('alert')).toContainText('1–1,000 m');
  await spacing.fill('20');
  await page.getByRole('button',{name:'Create processed DEM'}).click();
- await expect(page.getByText(/DEM resample ·/)).toBeVisible({timeout:25000});
- await expect(page.getByLabel('DEM elevation layer')).not.toHaveValue(fixture.ids[0]);
+ // The output raster is the durable outcome. Status messages can be
+ // replaced by the parent selection notification during this transition.
+ await expect(page.getByLabel('DEM elevation layer')).not.toHaveValue(fixture.ids[0],{timeout:25000});
+ await expect(page.locator('.terrain-source .compact-notice[title]')).toContainText('12 × 12');
 });
 
 
