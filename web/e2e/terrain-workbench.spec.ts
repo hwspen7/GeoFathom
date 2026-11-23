@@ -69,7 +69,12 @@ with tempfile.TemporaryDirectory() as directory:
  await expect(page.getByRole('button',{name:'Open full operations view'})).toBeVisible();
  await expect(page.getByRole('button',{name:'Open full results view'})).toBeVisible();
  await expect(page.getByRole('separator',{name:/Resize (operations|results)/})).toHaveCount(0);
- const visual=()=>page.getByRole('tab',{name:'Figures',exact:true}).click();
+ const visual=async()=>{
+  // New records intentionally select Overview after the cache commit. Wait
+  // for calculation completion before choosing a figure on that record.
+  await expect(page.getByRole('button',{name:'Calculating…',exact:true})).toHaveCount(0);
+  await page.getByRole('tab',{name:'Figures',exact:true}).click();
+ };
  const outputs=()=>page.getByRole('tab',{name:'Data',exact:true}).click();
  const details=()=>page.getByRole('tab',{name:'Data',exact:true}).click();
  // Survey commands must not remain in the global toolbar while Terrain runs.
@@ -269,6 +274,7 @@ with tempfile.TemporaryDirectory() as directory:
  await page.getByRole('button',{name:'Browse terrain tools',exact:true}).click();
  await page.getByLabel('Terrain tools',{exact:true}).getByRole('button',{name:'Cross sections',exact:true}).click();
  await page.getByRole('button',{name:'Run terrain operation'}).click();
+ await expect(page.getByLabel('Choose terrain result').locator('option:checked')).toContainText('Cross sections');
  await visual();
  await expect(page.getByRole('button',{name:'All sections CSV'})).toBeVisible();
  await page.getByRole('button',{name:'Get DEM',exact:true}).click();

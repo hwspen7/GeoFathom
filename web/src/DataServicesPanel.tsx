@@ -1,6 +1,6 @@
 import {useEffect,useRef,useState} from 'react';
 import {Database,Globe2,Layers3,RefreshCcw} from 'lucide-react';
-import {cancelGISJob,downloadGISJob,getGISJobs,getOGCSources,getPostGISStatus,
+import {cancelGISJob,downloadGISJob,downloadExchangeJob,getGISJobs,getOGCSources,getPostGISStatus,
   inspectOGCSource,ogcTileTemplate,queueGISJob,registerOGCSource,
   remoteOGCFeatures,removeOGCSource,saveFeatureBatch,queryPostGIS,
   viewportFeatures,type GISJob,type GISJobKind,type OGCSource,
@@ -284,6 +284,9 @@ export default function DataServicesPanel(p:Props){
             <small>{job.progress}% · {job.id.slice(0,8)}</small>
             {job.error&&<small>{job.error}</small>}
             <div className="survey-action-bar">
+              {['vector_import','vector_export'].includes(job.kind)&&job.status==='completed'&&
+                <button onClick={()=>void run(()=>downloadExchangeJob(p.projectId!,job.id))}>
+                 {job.kind==='vector_import'?'Download import report':'Download dataset'}</button>}
               {job.kind==='export_geojson'&&job.status==='completed'&&
                 <button onClick={()=>void run(()=>downloadGISJob(p.projectId!,job.id))}>
                   Download GeoJSON

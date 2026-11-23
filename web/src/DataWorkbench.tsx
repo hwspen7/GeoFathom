@@ -45,16 +45,18 @@ export default function DataWorkbench(p:Props){
  const [status,setStatus]=useState('');
  const [error,setError]=useState('');
  const latest=useRef(p.projectId);latest.current=p.projectId;
- useEffect(()=>{setFile(null);setLayer('');setStatus('');setError('');},[p.projectId]);
+ const epoch=useRef(0);
+ useEffect(()=>{epoch.current++;setBusy(false);setReference('');setProjected(null);setFile(null);setLayer('');setStatus('');setError('');},[p.projectId]);
  useEffect(()=>setAreaPage(0),[p.network?.faces]);
  async function action(task:()=>Promise<void>){
   if(busy)return;setBusy(true);setError('');setStatus('');
+  const generation=epoch.current;
   try{await task();}
-  catch(e){setError(e instanceof Error?e.message:String(e));}
-  finally{setBusy(false);}
+  catch(e){if(epoch.current===generation)setError(e instanceof Error?e.message:String(e));}
+  finally{if(epoch.current===generation)setBusy(false);}
  }
  async function importDataset(){
-  const source=file,scope=p.projectId;
+  const source=file,scope=p.projectId,generation=epoch.current;
   if(!source)throw Error('Choose a file.');
   if(kind==='vector'){
    if(!scope)throw Error('Select or create a project before vector import.');
@@ -63,11 +65,11 @@ export default function DataWorkbench(p:Props){
    if(!/\.(json|geojson|csv|gpkg|kml|gpx|zip)$/i.test(source.name))
     throw Error('Supported: GeoJSON, CSV, GPKG, KML, GPX or zipped Shapefile.');
    const result=await importVectorFile(scope,source,layer||undefined);
-   if(latest.current!==scope)return;
+   if(latest.current!==scope||epoch.current!==generation)return;
    p.onRefresh();setStatus('Imported '+result.created+' validated features.');
   }else{
    const asset=await uploadImagery(source,token);
-   if(latest.current!==scope)return;
+   if(latest.current!==scope||epoch.current!==generation)return;
    p.onRasterAdded(asset,rasterKind);setStatus('Imported georeferenced raster: '+asset.name);
   }
   setFile(null);
@@ -77,7 +79,7 @@ export default function DataWorkbench(p:Props){
   setError('');setStatus('');
  }
  async function saveProjectFaces(){
-  const faces=p.network?.faces??[],scope=p.projectId;
+  const faces=p.network?.faces??[],scope=p.projectId,generation=epoch.current;
   if(!scope||!faces.length)throw Error('Create a project and detect enclosed areas first.');
   const selected=faces.filter(face=>!(p.workspace?.features??[]).some(saved=>
    saved.properties?.source_type==='polygonized_network'&&
@@ -88,7 +90,7 @@ export default function DataWorkbench(p:Props){
    name:f.name,source:'GeoFathom network polygonization',geometry:f.geometry,
    properties:{...f.properties,method:p.network?.method},
   })),layer||undefined);
-  if(latest.current!==scope)return;
+  if(latest.current!==scope||epoch.current!==generation)return;
   p.onRefresh();setStatus('Saved '+output.created+' independently measured polygon faces.');
  }
  return <div className="data-workbench">
@@ -215,7 +217,7 @@ export default function DataWorkbench(p:Props){
      (operation==='reproject'?!p.projectId:
       !p.geometry||(['union','intersection','difference'].includes(operation)&&!reference))}
     onClick={()=>void action(async()=>{
-      const current=p.projectId;
+      const current=p.projectId,generation=epoch.current;
       if(operation==='reproject'){
        if(!p.projectId)throw Error('Select a project to use the CRS conversion service.');
        if(!longitude.trim()||!latitude.trim()||
@@ -227,7 +229,7 @@ export default function DataWorkbench(p:Props){
         throw Error('Target CRS must be an EPSG code.');
        const result=await transformProjectCoordinates(p.projectId,
         [[Number(longitude),Number(latitude)]],targetCRS.toUpperCase());
-       if(latest.current!==current)return;
+       if(latest.current!==current||epoch.current!==generation)return;
        setProjected({crs:result.target,x:result.coordinates[0][0],y:result.coordinates[0][1]});
        setStatus('Coordinate transformed. Source remains unchanged.');
       }else{
@@ -236,7 +238,7 @@ export default function DataWorkbench(p:Props){
         await bufferGeometry(p.geometry,Number(bufferMeters)):
         await applyOverlay(operation,p.geometry,
          p.vectorSources.find(item=>item.id===reference)!.geometry);
-       if(latest.current!==current)return;
+       if(latest.current!==current||epoch.current!==generation)return;
        if(!result.geometry||!result.measurement)
         throw Error('Operation returned no valid area.');
        p.onDerived(result.geometry,result.measurement,operation+' derived feature');

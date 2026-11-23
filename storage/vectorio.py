@@ -95,7 +95,7 @@ def _input_file(root,name,blob):
                     raise VectorIOError('Unsafe or unsupported Shapefile bundle member.')
                 seen.add(p.name.lower())
                 (root/p.name).write_bytes(archive.read(entry))
-        paths=sorted(root.glob('*.shp'))+sorted(root.glob('*.SHP'))
+        paths=sorted(path for path in root.iterdir() if path.suffix.lower()=='.shp')
         if not paths:raise VectorIOError('Shapefile .shp component is missing.')
         manifest_path=root/'geofathom.json'
         manifest=json.loads(manifest_path.read_text('utf-8')) if manifest_path.exists() else None

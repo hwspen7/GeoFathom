@@ -210,7 +210,9 @@ def _cancel_marker(job_id):
     return directory/job_id
 
 def cancel_job(project_id,job_id):
-    _ensure()
+    with _job_db() as c:
+        initialized=c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='gis_jobs'").fetchone()
+    if not initialized:_ensure()
     # A filesystem marker can reach the importing worker while its atomic SQL
     # transaction owns the write lock. It also works with external workers
     # sharing this local database; no half-import needs to be committed.
@@ -220,6 +222,7 @@ def cancel_job(project_id,job_id):
     marker=None
     if row['status'] in ('queued','running'):
         marker=_cancel_marker(job_id);marker.parent.mkdir(parents=True,exist_ok=True);marker.touch()
+    _ensure()
     with _connect() as c:
         c.execute("""UPDATE gis_jobs SET cancel_requested=1,
             status=CASE WHEN status='queued' THEN 'cancelled' ELSE status END,

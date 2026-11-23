@@ -219,3 +219,14 @@ describe('comprehensive dataset delivery',()=>{
   expect(screen.queryByText('late.gpkg')).toBeNull();expect(props.onRefresh).not.toHaveBeenCalled();
  });
 });
+
+it('quick import cannot refresh or show success after project A–B–A',async()=>{
+ let resolve!:(value:unknown)=>void;api.importVectorFile.mockImplementationOnce(()=>new Promise(r=>{resolve=r;}));
+ const props=dataProps();const view=render(<DataWorkbench {...props}/>);
+ fireEvent.click(screen.getByRole('button',{name:'Import'}));
+ fireEvent.change(screen.getByLabelText('Import dataset file'),{target:{files:[new File(['{}'],'late.geojson')]}});
+ fireEvent.click(screen.getByRole('button',{name:'Import & validate'}));
+ view.rerender(<DataWorkbench {...props} projectId="project-2"/>);view.rerender(<DataWorkbench {...props}/>);
+ resolve({created:99});await new Promise(r=>setTimeout(r,0));
+ expect(props.onRefresh).not.toHaveBeenCalled();expect(screen.queryByText(/Imported 99/)).toBeNull();
+});
