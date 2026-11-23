@@ -820,6 +820,9 @@ export default function TerrainWorkbench(p:Props){
               {result.quality.derivative_coverage_pct!==null&&
                 <div>Derived product coverage: {result.quality.derivative_coverage_pct.toFixed(2)}%</div>}
               <div>Area measurement: {result.quality.area_basis.replaceAll('_',' ')}</div>
+              {Number.isFinite(result.quality.projection_max_scale_error_pct)&&
+                <div>Max sampled map-distance distortion:
+                  {' '}{result.quality.projection_max_scale_error_pct!.toFixed(3)}%</div>}
               {result.quality.flags.map(flag=><small key={flag} className="compact-notice">
                 {flag.replaceAll('_',' ')}</small>)}
             </div>

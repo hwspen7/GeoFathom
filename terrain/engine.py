@@ -54,6 +54,11 @@ def _check_dem(src):
         raise RasterError("Unsupported DEM orientation.")
     if src.width>20000 or src.height>20000:
         raise RasterError("DEM image dimensions are too large.")
+    # Meters printed on a map's grid are not guaranteed to be ground meters.
+    # At middle latitudes, Web Mercator overstates horizontal distances by
+    # tens of percent and silently corrupts slope/area/volume statistics.
+    from .projection import grid_scale_error_percent
+    grid_scale_error_percent(src)
     # The actual vertical unit cannot be inferred for an arbitrary GeoTIFF.
     # The caller explicitly asserts that the first band contains meter heights.
 

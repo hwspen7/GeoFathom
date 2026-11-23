@@ -989,7 +989,8 @@ export interface AdvancedTerrainResult {
     view_azimuth_deg?:number|null;view_width_deg?:number|null};
   quality?:{status:string;reference_validation:string;uncertainty:string;
     source_overlap_pct:number;valid_study_cell_pct:number;
-    derivative_coverage_pct:number|null;flags:string[];area_basis:string};
+    derivative_coverage_pct:number|null;flags:string[];area_basis:string;
+    projection_max_scale_error_pct?:number};
   features:Array<GeoJSON.Feature<GeoJSON.Geometry,Record<string,unknown>>>;mesh?:TerrainMesh;distribution?:TerrainDistributionBin[];raster?:TerrainRaster;sections?:{station_m:number;length_m:number;samples:{distance_m:number;offset_m:number;elevation_m:number|null;coordinate:[number,number]}[]}[];
 }
 export function advancedTerrain(body:{image_id:string;geometry:GeoJSON.Geometry;operation:TerrainOperation;

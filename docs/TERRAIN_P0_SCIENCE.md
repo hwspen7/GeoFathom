@@ -31,3 +31,16 @@ The separate GitHub Actions workflow is
 To run locally on a machine with gdaldem available:
 
     python benchmarks/terrain_reference.py --strict --output build/terrain-reference.json
+
+
+## Projection-scale numerical integrity
+
+Meter-valued projected coordinates alone do **not** guarantee that cell
+resolution corresponds to ground distance. The P0 preflight audits meridional
+and parallel projection-scale factors at the center and four corners of each
+DEM. A sampled scale error above **2.0% fails closed** with an actionable
+request to reproject to a locally suitable metric CRS. Scale error above
+0.5% (within the accepted 2% maximum) is also surfaced as a quality flag;
+the actual sampled maximum is in the machine-readable result and UI.
+Neither this geometric scale check nor a matching vertical datum label
+validates the absolute survey accuracy of the elevations.

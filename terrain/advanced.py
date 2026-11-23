@@ -325,6 +325,8 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
     # heights. Missing metadata remains unknown; never invent NAVD88/EGM96.
     with rasterio.open(path) as source:
         source_datum=vertical_datum(source)
+        from .projection import grid_scale_error_percent
+        grid_scale_error_pct=grid_scale_error_percent(source)
     checkpoint(cancel)
     hydro_ops={"flow_direction","flow_accumulation","flow_accumulation_mfd",
                "streams","stream_order","watershed"}
@@ -549,6 +551,8 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
     if coverage < 99.99:flags.append("partial_source_overlap")
     if result["missing_cells"]:flags.append("nodata_within_study")
     if not source_datum:flags.append("vertical_datum_unreported")
+    if grid_scale_error_pct>0.5:
+        flags.append("projected_grid_distance_bias_gt_half_percent")
     if operation in {"watershed","flow_accumulation","flow_accumulation_mfd","streams","stream_order"}:
         flags.append("upstream_outside_grid_not_evaluated")
     result["quality"]={
@@ -559,7 +563,8 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
         "valid_study_cell_pct":float(result["metrics"]["valid_grid_pct"]),
         "derivative_coverage_pct":float(100*result["raster"]["valid_cells"]/max(1,result["valid_cells"])) if "raster" in result else None,
         "flags":flags,
-        "area_basis":"planar_projected_grid_cells"
+        "area_basis":"planar_projected_grid_cells",
+        "projection_max_scale_error_pct":grid_scale_error_pct
     }
     checkpoint(cancel)
     return result
