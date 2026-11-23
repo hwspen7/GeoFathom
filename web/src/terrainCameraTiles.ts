@@ -1,4 +1,4 @@
-"""Camera-derived, bounded DEM tile priorities. Kept pure for regression tests."""
+/** Camera-derived, bounded DEM tile priorities. Pure for regression tests. */
 import type {TerrainMesh} from './api';
 
 export interface TerrainCamera {
