@@ -1,5 +1,5 @@
 import {expect,test} from './coverage-fixture';
-import {openProjectDrawer} from './workspace-ui';
+import {openProjectDrawer,openFileMenu} from './workspace-ui';
 const API='http://127.0.0.1:8000';
 const tile='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/ZecAAAAASUVORK5CYII=';
 
@@ -24,6 +24,7 @@ test('project switch clears selected saved geometry and cannot undo into another
   await expect(select.locator('option[value="'+first+'"]')).toHaveCount(1);
   await select.selectOption(first);
   await page.getByRole('button',{name:new RegExp('Isolated parcel '+suffix)}).click();
+  await openFileMenu(page);
   await expect(page.getByRole('button',{name:'Update feature'})).toBeEnabled();
   await openProjectDrawer(page);
   await page.getByLabel('Map note text').fill('Do not put this in another project');
@@ -77,6 +78,7 @@ test('delayed authoritative geometry validation cannot publish after project swi
     await received;
     await select.selectOption(second);
     await expect(select).toHaveValue(second);
+    await openFileMenu(page);
     await expect(page.getByRole('button',{name:'Save selected'})).toBeDisabled();
     const response=page.waitForResponse(r=>r.url().endsWith('/measure')&&r.request().method()==='POST');
     release();await response;
