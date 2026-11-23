@@ -98,6 +98,14 @@ export default function App() {
   const [drawingMode, setDrawingMode] = useState<ShapeMode>(null);
   const [vertices, setVertices] = useState<Position[]>([]);
   const [vertexRedo,setVertexRedo]=useState<Position[]>([]);
+  // MapLibre may dispatch click/dblclick before React paints the previous
+  // vertex. Keep an immediately updated authoritative sketch for Finish.
+  const drawingVerticesRef=useRef<Position[]>(vertices);
+  drawingVerticesRef.current=vertices;
+  function setSketchVertices(next:Position[]){
+    drawingVerticesRef.current=next;
+    setVertices(next);
+  }
   const [viewport, setViewport] = useState<[number, number, number, number] | null>(null);
   const [discovered, setDiscovered] = useState<Place[]>([]);
   const [focus, setFocus] = useState<FocusPoint | null>(null);
@@ -570,15 +578,17 @@ export default function App() {
   // previously selected geometry's history. A new click clears redo.
   function undoSketchPoint(){
     if(!drawingMode||!vertices.length||busy)return;
-    setVertexRedo(old=>[vertices[vertices.length-1],...old]);
-    setVertices(vertices.slice(0,-1));setError('');
+    const current=drawingVerticesRef.current;
+    setVertexRedo(old=>[current[current.length-1],...old]);
+    setSketchVertices(current.slice(0,-1));setError('');
   }
   function redoSketchPoint(){
     if(!drawingMode||!vertexRedo.length||busy)return;
     const next=vertexRedo[0];
-    const reason=sketchAddError(drawingMode,vertices,next);
+    const current=drawingVerticesRef.current;
+    const reason=sketchAddError(drawingMode,current,next);
     if(reason){setError(reason);return;}
-    setVertices([...vertices,next]);setVertexRedo(old=>old.slice(1));setError('');
+    setSketchVertices([...current,next]);setVertexRedo(old=>old.slice(1));setError('');
   }
 
   function startTerrainLine(){
@@ -641,7 +651,7 @@ export default function App() {
         'Click the required points to complete the shape.');
   }
 
-  async function finishDrawing(points:Position[]=vertices) {
+  async function finishDrawing(points:Position[]=drawingVerticesRef.current) {
     if (!drawingMode||busy) return;
     const mode = drawingMode;
     // Reject self-crossings, degenerate rings and repeated non-closing nodes
@@ -1510,13 +1520,14 @@ export default function App() {
               if(busy||!drawingMode)return;
               // The MapCanvas handles start-node pixel snapping and closure.
               // Every other newly committed vertex must preserve simple-ring topology.
-              const reason=sketchAddError(drawingMode,vertices,position);
+              const current=drawingVerticesRef.current;
+              const reason=sketchAddError(drawingMode,current,position);
               if(reason){
                 if(reason!=='Duplicate of the last point.')setError(reason);
                 return;
               }
-              const next=[...vertices,position];
-              setVertices(next);setVertexRedo([]);setError('');
+              const next=[...current,position];
+              setSketchVertices(next);setVertexRedo([]);setError('');
               const complete=drawingMode==='point'?1:
                 ['rectangle','circle','trace-along'].includes(drawingMode)?2:4000;
               if(complete<4000&&next.length===complete)void finishDrawing(next);
@@ -1681,13 +1692,14 @@ export default function App() {
               onSnapping={setSnapping}
               onAddPoint={point => {
                 if(drawingMode){
-                  if(['polygon','hole'].includes(drawingMode)&&vertices.length>=3&&
-                    point[0]===vertices[0][0]&&point[1]===vertices[0][1]){
+                  const current=drawingVerticesRef.current;
+                  if(['polygon','hole'].includes(drawingMode)&&current.length>=3&&
+                    point[0]===current[0][0]&&point[1]===current[0][1]){
                     void finishDrawing();return;
                   }
-                  const problem=sketchAddError(drawingMode,vertices,point);
+                  const problem=sketchAddError(drawingMode,current,point);
                   if(problem){setError(problem);return;}
-                  const next=[...vertices,point];setVertices(next);setVertexRedo([]);setError('');
+                  const next=[...current,point];setSketchVertices(next);setVertexRedo([]);setError('');
                   const complete=drawingMode==='point'?1:
                     ['rectangle','circle','trace-along'].includes(drawingMode)?2:4000;
                   if(complete<4000&&next.length===complete)void finishDrawing(next);
