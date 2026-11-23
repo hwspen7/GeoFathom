@@ -111,7 +111,7 @@ test('click to create, rename, revise and delete a permanent map note',async({pa
   const id=await project(page,'Annotation integration');
   const map=page.getByLabel('Interactive geospatial map');
   await expect(map).toHaveAttribute('data-label-layer-ready','true',{timeout:25000});
-  await page.getByLabel('Map note text').fill('Observation point 设备 A');
+  await page.getByLabel('Map note text',{exact:true}).fill('Observation point 设备 A');
   await openProjectDrawer(page);
   await page.getByLabel('Place map note').click();
   await expect(page.getByLabel('Cancel map note')).toBeVisible();
@@ -216,7 +216,7 @@ test('map labels treat HTML-like annotation content as plain geographic data',as
   // The asynchronous MapLibre source must be ready before accepting
   // geographic clicks; the map canvas existing in the DOM is insufficient.
   await expect(map).toHaveAttribute('data-label-layer-ready','true',{timeout:25000});
-  await page.getByLabel('Map note text').fill(malicious);
+  await page.getByLabel('Map note text',{exact:true}).fill(malicious);
   await openProjectDrawer(page);
   await page.getByLabel('Place map note').click();
   await expect(page.getByLabel('Cancel map note')).toBeVisible();

@@ -853,7 +853,7 @@ export default function TerrainWorkbench(p:Props){
              ' m. This does not guarantee native source accuracy.');}}>
          Auto resolution{recommendedResolution?' · '+recommendedResolution+' m':''}
        </button>
-       <small className="compact-notice">
+       <small className="compact-notice" aria-label="DEM source coverage">
          Up to 8M cells, 4096 px/side · {supportsUSGS?'USGS 3DEP / Copernicus':'Copernicus global'}
        </small>
      </div>}

@@ -1460,10 +1460,10 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 }
 .desktop-gis .data-network-results{margin-top:5px}
 .desktop-gis .map-face-dimension{
-  color:#125a67!important;font-weight:650;font-size:11px;
-  background:rgba(246,253,251,.88);
-  border:1px solid rgba(49,135,131,.2);
-  border-radius:5px;padding:3px 6px;white-space:pre-line;
+  /* Derived areas follow the same transparent, basemap-adaptive labels. */
+  font-weight:650;font-size:11px;
+  background:transparent;border:0;box-shadow:none;
+  border-radius:0;padding:0;white-space:pre-line;
   text-align:center;pointer-events:none;
 }
 .desktop-gis .workspace-module-bar button{padding-left:7px;padding-right:7px}

@@ -26,7 +26,7 @@ test('keyboard drawing, right-click completion, selection context and cancel',as
  await page.keyboard.press('t');
  await expect(page.getByLabel('Project and layers',{exact:true})).toBeHidden();
  await page.getByRole('button',{name:'Browse terrain tools',exact:true}).click();
- await expect(page.getByLabel('Terrain tools')).toBeVisible();
+ await expect(page.getByLabel('Terrain tools',{exact:true})).toBeVisible();
  await page.locator('.gis-workspace-menu > summary').click();
  await page.getByRole('button',{name:'Shortcuts',exact:true}).click();
  await expect(page.getByRole('dialog',{name:'Keyboard shortcuts'})).toBeVisible();

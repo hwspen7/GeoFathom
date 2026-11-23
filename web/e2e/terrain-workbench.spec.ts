@@ -78,7 +78,7 @@ with tempfile.TemporaryDirectory() as directory:
  await activateWorkspaceModule(page,'Terrain');
  await expect(page.getByRole('complementary',{name:'Operations'})).toBeVisible();
  await page.getByRole('button',{name:'Browse terrain tools',exact:true}).click();
- const tools=page.getByLabel('Terrain tools');
+ const tools=page.getByLabel('Terrain tools',{exact:true});
  await expect(tools.getByRole('button',{pressed:true})).toHaveCount(0);
  await expect(page.getByRole('button',{name:'Run terrain operation'})).toHaveCount(0);
  const map=page.getByLabel('Interactive geospatial map');
@@ -231,7 +231,7 @@ with tempfile.TemporaryDirectory() as directory:
  await page.getByLabel('Confirm DEM meter elevations').check();
  await page.getByRole('button',{name:/DEM profile line/}).click();
  await page.getByRole('button',{name:'Browse terrain tools',exact:true}).click();
- await page.getByLabel('Terrain tools').getByRole('button',{name:'Elevation profile',exact:true}).click();
+ await page.getByLabel('Terrain tools',{exact:true}).getByRole('button',{name:'Elevation profile',exact:true}).click();
  await page.getByRole('button',{name:'Run terrain operation'}).click();
  await visual();
  const chart=page.getByRole('img',{name:'Interactive elevation profile'});
@@ -262,7 +262,7 @@ with tempfile.TemporaryDirectory() as directory:
  await page.getByRole('button',{name:'Browse terrain tools',exact:true}).click();
  await page.getByLabel('Terrain tool group').selectOption('Engineering');
  await page.getByRole('button',{name:'Browse terrain tools',exact:true}).click();
- await page.getByLabel('Terrain tools').getByRole('button',{name:'Cross sections',exact:true}).click();
+ await page.getByLabel('Terrain tools',{exact:true}).getByRole('button',{name:'Cross sections',exact:true}).click();
  await page.getByRole('button',{name:'Run terrain operation'}).click();
  await visual();
  await expect(page.getByRole('button',{name:'All sections CSV'})).toBeVisible();

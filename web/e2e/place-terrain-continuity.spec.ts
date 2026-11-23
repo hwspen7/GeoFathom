@@ -68,7 +68,7 @@ test('Draw profile line keeps CMH selected before and after Finish, until explic
  const toolbar=page.getByLabel('Survey toolbar');
  await activateWorkspaceModule(page,'Terrain');
  await page.getByRole('button',{name:'Browse terrain tools',exact:true}).click();
- await page.getByLabel('Terrain tools').getByRole('button',{name:'Elevation profile',exact:true}).click();
+ await page.getByLabel('Terrain tools',{exact:true}).getByRole('button',{name:'Elevation profile',exact:true}).click();
  await page.getByRole('button',{name:'Draw profile line',exact:true}).click();
  await expect(page.locator('.results .result.active')).toHaveCount(1);
  await openProjectDrawer(page,'search');
@@ -122,7 +122,7 @@ test('Cancel stops an independent profile drawing without discarding CMH',async(
  await search(page,cmh);
  await activateWorkspaceModule(page,'Terrain');
  await page.getByRole('button',{name:'Browse terrain tools',exact:true}).click();
- await page.getByLabel('Terrain tools').getByRole('button',{name:'Elevation profile',exact:true}).click();
+ await page.getByLabel('Terrain tools',{exact:true}).getByRole('button',{name:'Elevation profile',exact:true}).click();
  await page.getByRole('button',{name:'Draw profile line',exact:true}).click();
  await page.getByLabel('Survey toolbar').getByRole('button',{name:'Cancel drawing',exact:true}).click();
  await expect(page.getByText('Drawing cancelled. Retained locations are unchanged.')).toBeVisible();
@@ -256,7 +256,7 @@ test('Hong Kong airport area uses global DEM provider and stays within enlarged 
  await expect(page.getByLabel('Public DEM resolution').locator('option[value="10"]')).toBeDisabled();
  await expect(page.getByLabel('DEM download target')).toContainText('Selected geometry');
  await expect(page.getByRole('button',{name:'Auto-fit DEM resolution'})).toContainText('30 m');
- await expect(page.getByText('USGS 3DEP is not a global data source.',{exact:false})).toBeVisible();
+ await expect(page.getByLabel('DEM source coverage',{exact:true})).toContainText('Copernicus global');
  await expect(page.getByText(/8-million-cell.*budget/)).toHaveCount(0);
  await openProjectDrawer(page,'search');
  await expect(page.getByLabel('Pinned places').getByRole('button',{name:'Select pinned Hong Kong airport study area'})).toBeVisible();

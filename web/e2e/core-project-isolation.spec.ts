@@ -32,7 +32,7 @@ test('project switch clears selected saved geometry and cannot undo into another
     await expect(page.getByLabel('Project and layers',{exact:true})).toBeVisible();
   });
   await test.step('Switch project while a map note is pending',async()=>{
-    await page.getByLabel('Map note text').fill('Do not put this in another project');
+    await page.getByLabel('Map note text',{exact:true}).fill('Do not put this in another project');
     await page.getByLabel('Place map note').click();
     await select.selectOption(second);
   });

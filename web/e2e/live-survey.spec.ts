@@ -24,6 +24,7 @@ test('toolbar offers live area, exact dimensions and basemap switching',async({p
  await openProjectDrawer(page,'layers');
  await page.getByLabel('Basemap',{exact:true}).selectOption('satellite');
  await expect(label).toHaveText(exact!);
+ await expect(label).toHaveCSS('background-color','rgba(0, 0, 0, 0)');
  await page.getByLabel('Basemap',{exact:true}).selectOption('blank');
  await expect(label).toHaveText(exact!);
  await expect(label).toHaveCSS('background-color','rgba(0, 0, 0, 0)');
