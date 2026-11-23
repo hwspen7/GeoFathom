@@ -282,3 +282,32 @@ def test_greedy_coverage_retains_known_cell_when_unselected_candidate_is_unknown
     second_known=np.zeros((1,3),bool)
     indices,gains,visible=greedy_coverage([first,second],[first_known,second_known],1)
     assert indices==[0] and gains==[3] and int(visible.sum())==3
+
+
+
+def test_quadratic_engineering_surface_exact_volume_and_bounding_maximum_grade():
+    z=np.full((5,5),100.)
+    valid=np.ones_like(z,bool)
+    diff,metrics=design_surface(z,valid,2.,2.,100.,
+        max_grade=.1,curvature_east=.01,curvature_north=.02)
+    assert metrics["cut_m3"]==pytest.approx(0,abs=1e-9)
+    assert metrics["fill_m3"]==pytest.approx(12,abs=1e-9)
+    assert metrics["design_bounding_max_grade"]==pytest.approx(np.hypot(.04,.08))
+    assert diff[2,2]==0
+    with pytest.raises(RasterError,match="maximum grade"):
+        design_surface(z,valid,2.,2.,100.,max_grade=.08,
+            curvature_east=.01,curvature_north=.02)
+    valid[0,0]=False
+    diff,metrics=design_surface(z,valid,2.,2.,100.,max_grade=.1,
+        curvature_east=.01,curvature_north=.02)
+    assert np.isnan(diff[0,0])
+    assert metrics["fill_m3"]<12
+
+
+def test_quadratic_design_is_exposed_in_cutfill_real_geotiff(real_dem):
+    path,polygon,_,_,_=real_dem
+    result=run_terrain(path,polygon,"cutfill_map",reference=120.,
+        design_curvature_east=.00001,design_curvature_north=.00001,design_max_grade=.3)
+    assert result["algorithm_options"]["design_curvature_east_per_m"]==pytest.approx(.00001)
+    assert result["metrics"]["design_bounding_max_grade"]<=.3
+    assert result["metrics"]["cut_m3"]>=0 and result["metrics"]["fill_m3"]>=0
