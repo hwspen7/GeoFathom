@@ -1535,7 +1535,7 @@ export default function App() {
           <section id="tools-survey" hidden={activeTool!=='tools-survey'} className="panel-section">
             <div className="section-heading"><Pencil size={16} /><span>Survey & geometry editor</span><span className="section-pill">Precision</span></div>
             <SurveyTools
-              toolbarTarget={toolbarTarget} busy={busy} locked={selectedLocked}
+              toolbarTarget={activeTool==='tools-survey'&&showTools?toolbarTarget:null} busy={busy} locked={selectedLocked}
               edgeMoving={edgeMoving} onEdgeMove={active=>{
                 setEdgeMoving(active);setEditing(active);setMoving(false);setLinked(false);
                 setDrawingMode(null);setVertices([]);setTraceMode(false);setPromptMode(null);
