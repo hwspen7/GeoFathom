@@ -50,6 +50,7 @@ test('professional spatial QA detects overlap and prints a valid real PDF',async
     .locator('summary').click();
   await page.getByLabel('Run topology QA').click();
   await expect(page.getByLabel('Topology QA results')).toContainText('overlap');
+  await expect(page.getByLabel('Results monitor').getByLabel('Topology QA results')).toBeVisible();
   const api=await page.request.post(API+'/projects/'+id+'/quality/topology',{data:{
     study_area:rectangle(0,22,.04,.04),minimum_area_m2:1,
   }});

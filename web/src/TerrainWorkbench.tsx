@@ -605,7 +605,7 @@ export default function TerrainWorkbench(p:Props){
          <small>Requested output spacing or pixel size does not establish native DEM accuracy.</small>
        </div>
      </details>}
-     {selected&&comparableRuns.length>0&&<div className="terrain-run-comparison">
+     {selected&&comparableRuns.length>0&&<details className="terrain-run-comparison" aria-label="Compare terrain runs"><summary>Compare</summary>
        <label>Compare historical result
          <select aria-label="Compare terrain run" value={comparison?.id??''}
            onChange={e=>setCompareRecordId(e.target.value)}>
@@ -625,9 +625,9 @@ export default function TerrainWorkbench(p:Props){
            {comparisons.map(m=><div key={m.key}><span>{names[m.key]??m.key.replaceAll('_',' ')}</span>
              <strong>{m.delta>0?'+':''}{fmt(m.delta)}</strong></div>)}
          </div>
-         {!comparisons.length&&<small>No common comparable physical statistics.</small>}
+         {!comparisons.length&&<small>No comparable metrics</small>}
        </>}
-     </div>}
+     </details>}
      {slope&&<><div className="terrain-metrics">
        <div><span>Elevation range</span><strong>{fmt(slope.elevation_min_m)}–{fmt(slope.elevation_max_m)} m</strong></div>
        <div><span>Mean elevation</span><strong>{fmt(slope.elevation_mean_m)} m</strong></div>

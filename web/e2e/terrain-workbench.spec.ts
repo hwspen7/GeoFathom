@@ -58,6 +58,7 @@ with tempfile.TemporaryDirectory() as directory:
  await tools.getByRole('button',{name:'Slope / aspect',exact:true}).click();
  await page.getByRole('button',{name:'Run terrain operation'}).click();
  await expect(page.getByRole('img',{name:'Slope (degrees)'})).toBeVisible();
+ await expect(page.getByLabel('Results monitor').getByLabel('Terrain results')).toBeVisible();
  await tools.getByRole('button',{name:'Elevation distribution',exact:true}).click();
  await page.getByRole('button',{name:'Run terrain operation'}).click();
  await expect(page.getByRole('img',{name:'Elevation distribution and cumulative area'})).toBeVisible();
