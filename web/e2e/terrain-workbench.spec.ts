@@ -236,9 +236,14 @@ with tempfile.TemporaryDirectory() as directory:
  await visual();
  const chart=page.getByRole('img',{name:'Interactive elevation profile'});
  await expect(chart).toBeVisible();await chart.hover();
+ await expect(page.getByLabel('Terrain sample location',{exact:true})).toHaveCount(1);
  await page.getByRole('button',{name:'Gradient',exact:true}).click();
  await expect(page.getByRole('img',{name:'Longitudinal profile grade'})).toBeVisible();
  await page.getByRole('button',{name:'Analysis',exact:true}).click();
+ // Switching figures leaves the SVG and clears its transient hover marker.
+ // Re-enter the restored profile to exercise chart-to-map linking again.
+ await expect(chart).toBeVisible();
+ await chart.hover();
  await expect(page.getByLabel('Terrain sample location')).toHaveCount(1);
  await details();
  await expect(page.getByLabel('Terrain run provenance')).toBeVisible();
