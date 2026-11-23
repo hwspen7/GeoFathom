@@ -263,3 +263,22 @@ def test_external_upstream_inflow_is_explicit_grid_aligned_and_unit_checked(real
     with pytest.raises(RasterError,match="only for D-infinity"):
         run_terrain(path,polygon,"flow_accumulation",flow_routing_method="d8",
             external_inflow_path=source)
+
+
+
+def test_dinfinity_routes_to_single_valid_cardinal_neighbour_without_corner_cutting():
+    z=np.array([[np.nan,9.,np.nan],[np.nan,8.,np.nan],[np.nan,7.,np.nan]])
+    valid=np.isfinite(z)
+    acc,angle=dinfinity_accumulation(z,valid,1,1)
+    assert acc[2,1]==pytest.approx(3)
+    assert np.isnan(acc[2,0]) and np.isnan(acc[2,2])
+    assert angle[0,1]==pytest.approx(3*np.pi/2)
+
+
+def test_greedy_coverage_retains_known_cell_when_unselected_candidate_is_unknown():
+    first=np.array([[1,1,1]],bool)
+    first_known=np.ones((1,3),bool)
+    second=np.array([[0,0,0]],bool)
+    second_known=np.zeros((1,3),bool)
+    indices,gains,visible=greedy_coverage([first,second],[first_known,second_known],1)
+    assert indices==[0] and gains==[3] and int(visible.sum())==3
