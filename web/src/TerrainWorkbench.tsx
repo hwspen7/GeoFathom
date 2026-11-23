@@ -179,9 +179,9 @@ export default function TerrainWorkbench(p:Props){
    dem_difference:['elevation_change_mean_m','comparison_coverage_pct','elevation_change_rmse_m'],
  };
  const priority=preferredMetricKeys[result?.operation??'']??[];
- const featuredMetrics=priority.length
-   ?metricEntries.filter(([key])=>priority.includes(key)).slice(0,4)
-   :metricEntries.filter(([key])=>!['dataset_overlap_pct','valid_grid_pct','product_valid_cells'].includes(key)).slice(0,4);
+ const preferred=metricEntries.filter(([key])=>priority.includes(key));
+ const featuredMetrics=(preferred.length?preferred:metricEntries.filter(([key])=>
+   !['dataset_overlap_pct','valid_grid_pct','product_valid_cells'].includes(key))).slice(0,4);
  const shownKeys=new Set(featuredMetrics.map(([key])=>key));
  const additionalMetrics=metricEntries.filter(([key])=>!shownKeys.has(key));
  const activeProfileSamples=profile?.samples??null;
@@ -608,9 +608,10 @@ export default function TerrainWorkbench(p:Props){
 </div>}
    {(result||slope||profile)&&<ResultPane expanded={expanded} onClose={()=>setExpanded(false)}>
      <div id="terrain-result-content" role="tabpanel" aria-label={resultTab[0].toUpperCase()+resultTab.slice(1)+' terrain result'} className="terrain-tab-content">
-     <div className="section-heading">{selected?.title} <span><button onClick={()=>{setResultTab('visual');setExpanded(true);}}>{expanded?'Close expanded':'Expand'}</button> <button onClick={exportResult} title="Export result data">Export</button></span></div>
+     <div className="section-heading">{selected?.title} <span><button onClick={()=>{if(expanded)setExpanded(false);else{setResultTab('visual');setExpanded(true);}}}>{expanded?'Close expanded':'Expand'}</button> <button onClick={exportResult} title="Export result data">Export</button></span></div>
      {inputsChanged&&<small role="status" className="discovery-error">Inputs changed since this run</small>}
-     {resultTab==='details'&&<>     {selected&&<details className="terrain-run-provenance" aria-label="Terrain run provenance">
+     {resultTab==='details'&&<>
+     {selected&&<details className="terrain-run-provenance" aria-label="Terrain run provenance">
        <summary>Source · {selected.id.slice(0,8)}</summary>
        <div className="terrain-source-details">
          <div>Operation: {selected.title}</div>
@@ -746,7 +747,8 @@ export default function TerrainWorkbench(p:Props){
  </div>;
  return <>
  <div className="terrain-workbench professional-panel">
-   <div className="terrain-source">
+   <section className="terrain-source terrain-step" aria-label="DEM input">
+     <header className="terrain-step-heading"><span>01</span><strong>Elevation source</strong></header>
      <label>Elevation layer<select aria-label="DEM elevation layer" value={dem?.id??''}
        disabled={fetching||importing}
        onChange={e=>{
@@ -796,9 +798,12 @@ export default function TerrainWorkbench(p:Props){
        <button disabled={!p.connected||!fetchArea||!!budget?.warning||fetching||importing} title="Download the explicitly displayed area, not a previous selection" onClick={()=>void fetchDEM()}>{fetching?'Fetching…':'Fetch DEM'}</button>
        {fetching&&<button aria-label="Cancel DEM download" onClick={()=>{sourceIntent.current++;fetchAbort.current?.abort();setInfo('Cancelling the previous download…');}}>Cancel</button>}
      </div>
-     {sourceInfo&&<small className="compact-notice" title="Copernicus is DSM; 3DEP is bare-earth DEM. Requested grid size is not native resolution.">{sourceInfo}</small>}
-     {!supportsUSGS&&fetchArea&&<small className="compact-notice">USGS 3DEP is not a global data source. For local 1–3 m elevation, import a georeferenced DEM supplied by an authorized regional provider.</small>}
-     {dem&&<small className="compact-notice" title={dem.provenance}>{dem.width} × {dem.height} · {dem.crs} · elevation m · {describeTerrainBounds(dem.bbox)}</small>}
+     {(sourceInfo||dem||!supportsUSGS&&fetchArea)&&<details className="terrain-source-metadata">
+       <summary>Source info</summary>
+       {sourceInfo&&<small className="compact-notice" title="Copernicus DSM / USGS bare-earth DEM">{sourceInfo}</small>}
+       {!supportsUSGS&&fetchArea&&<small className="compact-notice">Global coverage: Copernicus. Regional DEMs may offer finer native resolution.</small>}
+       {dem&&<small className="compact-notice" title={dem.provenance}>{dem.width} × {dem.height} · {dem.crs} · elevation m · {describeTerrainBounds(dem.bbox)}</small>}
+     </details>
      {dem&&<details className="terrain-dem-tools"><summary>DEM processing · Clip / Resample / Mosaic</summary>
        <div className="professional-form">
          <label>Operation<select aria-label="DEM processing operation" value={demProcessMode} onChange={e=>setDemProcessMode(e.target.value as DEMProcessMode)}>
@@ -819,7 +824,9 @@ export default function TerrainWorkbench(p:Props){
      {mapMismatch&&<small className="discovery-error" role="status">Selected DEM is outside the current map. Choose a local source or use Fit explicitly.</small>}
      {sourceMismatch&&<small className="discovery-error" role="status">Selected analysis shape is not completely covered by this DEM. Select a matching source.</small>}
      {dem&&!/Copernicus DEM GLO-|USGS 3DEP Bare Earth DEM/.test(dem.provenance)&&<label className="gis-check"><input aria-label="Confirm DEM meter elevations" type="checkbox" checked={verticalConfirmed} onChange={e=>setVerticalConfirmed(e.target.checked)}/> Confirm single-band meter elevations</label>}
-   </div>
+   </section>
+   <section className="terrain-step terrain-analysis-step" aria-label="Terrain analysis tools">
+     <header className="terrain-step-heading"><span>02</span><strong>Analysis</strong></header>
    <WorkspaceToolShelf category={category} categories={categories} tools={modes}
     selected={operation} onCategory={name=>{
       setCategory(name);setOperation(null);setLive(false);setPickEnd(false);
@@ -893,6 +900,7 @@ export default function TerrainWorkbench(p:Props){
      {dem&&!verified&&<small className="compact-notice">Confirm elevation units before analysis</small>}
      {!parametersValid&&<small className="discovery-error">Check numeric parameters</small>}
    </div>}
+   </section>
    {info&&<p className="project-info">{info}</p>}{error&&<p className="discovery-error" role="alert">{error}</p>}
  </div>
  {p.resultsTarget?(p.active?createPortal(monitor,p.resultsTarget):null):monitor}
