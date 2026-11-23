@@ -84,9 +84,9 @@ const categories:Record<string,Operation[]>={
  Engineering:['profile','cross_sections','volume','cutfill_map','suitability','least_cost'],
 };
 const units:Record<string,string>={cut_m3:'m³',fill_m3:'m³',net_cut_m3:'m³',covered_grid_area_m2:'m²',reference_elevation_m:'m',
- contour_lines:'',contour_levels:'',product_valid_cells:'',observer_count:'',visible_by_all_cells:'',channel_cells:'',max_stream_order:'',mfd_exponent:'',stream_threshold_cells:'',flat_cells:'',directional_cells:'',route_cells:'',dataset_overlap_pct:'%',valid_grid_pct:'%',comparison_coverage_pct:'%',interval_m:'m',visible_cells:'',visible_grid_area_m2:'m²',unknown_cells:'',upstream_cells:'',upstream_grid_area_m2:'m²',elevation_change_mean_m:'m',elevation_change_min_m:'m',elevation_change_max_m:'m',elevation_change_rmse_m:'m',elevation_change_mae_m:'m',raised_volume_m3:'m³',lowered_volume_m3:'m³',net_elevation_volume_m3:'m³',maximum_fill_depth_m:'m',total_fill_depth_m:'m',conditioning_fill_volume_m3:'m³',minimum_m:'m',maximum_m:'m',mean_m:'m',median_m:'m',stddev_m:'m',p10_m:'m',p90_m:'m',relief_m:'m',circular_mean_aspect_deg:'°'};
+ contour_lines:'',contour_levels:'',product_valid_cells:'',product_p10:'',product_p50:'',product_p90:'',product_std:'',observer_count:'',visible_by_all_cells:'',channel_cells:'',max_stream_order:'',mfd_exponent:'',stream_threshold_cells:'',flat_cells:'',directional_cells:'',route_cells:'',dataset_overlap_pct:'%',valid_grid_pct:'%',comparison_coverage_pct:'%',interval_m:'m',visible_cells:'',visible_grid_area_m2:'m²',unknown_cells:'',upstream_cells:'',upstream_grid_area_m2:'m²',elevation_change_mean_m:'m',elevation_change_min_m:'m',elevation_change_max_m:'m',elevation_change_rmse_m:'m',elevation_change_mae_m:'m',raised_volume_m3:'m³',lowered_volume_m3:'m³',net_elevation_volume_m3:'m³',maximum_fill_depth_m:'m',total_fill_depth_m:'m',conditioning_fill_volume_m3:'m³',minimum_m:'m',maximum_m:'m',mean_m:'m',median_m:'m',stddev_m:'m',p10_m:'m',p90_m:'m',relief_m:'m',circular_mean_aspect_deg:'°'};
 const names:Record<string,string>={cut_m3:'Cut',fill_m3:'Fill',net_cut_m3:'Net cut',covered_grid_area_m2:'Grid area',reference_elevation_m:'Reference',
- contour_lines:'Contour paths',contour_levels:'Elevation levels',dataset_overlap_pct:'DEM footprint coverage',valid_grid_pct:'Valid grid coverage',interval_m:'Interval',visible_cells:'Visible cells',visible_grid_area_m2:'Visible area',unknown_cells:'Unknown cells',
+ contour_lines:'Contour paths',contour_levels:'Elevation levels',product_p10:'10th percentile',product_p50:'Median',product_p90:'90th percentile',product_std:'Standard deviation',dataset_overlap_pct:'DEM footprint coverage',valid_grid_pct:'Valid grid coverage',interval_m:'Interval',visible_cells:'Visible cells',visible_grid_area_m2:'Visible area',unknown_cells:'Unknown cells',
  observer_count:'Observers',visible_by_all_cells:'Visible from all observers',
  visible_any_known_cells:'Visible from at least one confirmed observer',
  channel_cells:'Channel cells',max_stream_order:'Maximum Strahler order',mfd_exponent:'MFD slope exponent',stream_threshold_cells:'Stream threshold',
@@ -129,6 +129,8 @@ export default function TerrainWorkbench(p:Props){
  const [processResolution,setProcessResolution]=useState('30'),[processSampling,setProcessSampling]=useState<'nearest'|'bilinear'|'average'>('bilinear');
  const [maxSlope,setMaxSlope]=useState('30'),[minElevation,setMinElevation]=useState('-12000'),[maxElevation,setMaxElevation]=useState('12000'),[maxTri,setMaxTri]=useState('100');
  const [streamCells,setStreamCells]=useState('100'),[azimuth,setAzimuth]=useState('315'),[altitude,setAltitude]=useState('45');
+ const [gradientMethod,setGradientMethod]=useState<'horn'|'zevenbergen_thorne'>('horn');
+ const [slopeClasses,setSlopeClasses]=useState<'standard'|'detailed'|'broad'>('standard');
  const [fillSinks,setFillSinks]=useState(true),[considerCurvature,setConsiderCurvature]=useState(true),[refractionCoeff,setRefractionCoeff]=useState('0.13');
  const [sectionSpacing,setSectionSpacing]=useState('50'),[sectionWidth,setSectionWidth]=useState('20'),[drape,setDrape]=useState(false),[expanded,setExpanded]=useState(false);
  const [pickEnd,setPickEnd]=useState(false);
@@ -177,8 +179,8 @@ export default function TerrainWorkbench(p:Props){
  // Show operation-critical metrics first; keep all scientific fields in More.
  const metricEntries=Object.entries(result?.metrics??{});
  const preferredMetricKeys:Record<string,string[]>={
-   elevation:['product_min','product_max','product_mean'],
-   slope_map:['product_min','product_max','product_mean'],
+   elevation:['product_min','product_max','product_p50','product_p90'],
+   slope_map:['product_mean','product_p50','product_p90','product_std'],
    aspect_map:['circular_mean_aspect_deg','flat_cells','directional_cells'],
    contours:['contour_levels','contour_lines','interval_m'],
    hillshade:['product_min','product_max','product_mean'],
@@ -282,7 +284,7 @@ export default function TerrainWorkbench(p:Props){
    maxSlope,minElevation,maxElevation,maxTri,streamCells,
    azimuth,altitude,sectionSpacing,sectionWidth,fillSinks,
    considerCurvature,refractionCoeff,comparisonId,observerPoints,drape,
-   textureImageId:p.imageRaster?.id??null,
+   textureImageId:p.imageRaster?.id??null,gradientMethod,slopeClasses,
  });
  // Only edits to the actual operation inputs invalidate a scientific run.
  const inputKey=JSON.stringify([dem?.id,analysisGeometry,operation,scientificParameters]);
@@ -354,7 +356,8 @@ export default function TerrainWorkbench(p:Props){
        observer_height:Number(height),target_height:Number(target),end_point:operation==='least_cost'?[Number(endLon),Number(endLat)]:null,
        max_slope:Number(maxSlope),min_elevation:Number(minElevation),max_elevation:Number(maxElevation),max_tri:Number(maxTri),stream_cells:Number(streamCells),azimuth:Number(azimuth),altitude:Number(altitude),section_spacing:Number(sectionSpacing),section_width:Number(sectionWidth),fill_sinks:fillSinks,consider_curvature:considerCurvature,refraction_coeff:Number(refractionCoeff),comparison_image_id:operation==='dem_difference'?comparisonId:null,
         observer_points:operation==='viewshed_multi'?observerPoints.map(([x,y])=>[Number(x),Number(y)] as [number,number]):null,
-        texture_image_id:operation==='mesh'&&drape&&p.imageRaster&&p.imageRaster.bands>=3?p.imageRaster.id:null},controller.signal);
+        texture_image_id:operation==='mesh'&&drape&&p.imageRaster&&p.imageRaster.bands>=3?p.imageRaster.id:null,
+         gradient_method:gradientMethod,slope_classes:slopeClasses},controller.signal);
      if(ticket!==sequence.current||controller.signal.aborted)return;
      // Commit scientific data before reporting a completed run. An immediate
      // reload or project switch must never race a pending cache write.
@@ -642,6 +645,7 @@ export default function TerrainWorkbench(p:Props){
        <summary>Source · {selected.id.slice(0,8)}</summary>
        <div className="terrain-source-details">
          <div>Operation: {selected.title}</div>
+          {selected.parameters&&Object.keys(selected.parameters).length>0&&<div>Algorithm parameters: {JSON.stringify(selected.parameters)}</div>}
          <div>Run: {new Date(selected.createdAt).toLocaleString()} · ID {selected.id}</div>
          <div>Input DEM: {selected.source.name}</div>
          <div>Source ID: {selected.source.id}</div>
@@ -707,14 +711,14 @@ export default function TerrainWorkbench(p:Props){
        <div><span>Samples</span><strong>{profile.samples.length}</strong></div>
      </div>}
      {result&&<>
-       {resultTab==='overview'&&<div className="terrain-metrics terrain-key-metrics">{featuredMetrics.map(([k,v])=><div key={k}><span>{names[k]??k.replaceAll('_',' ')}</span><strong>{fmt(v)} {units[k]??(['product_min','product_max','product_mean'].includes(k)?(
+       {resultTab==='overview'&&<div className="terrain-metrics terrain-key-metrics">{featuredMetrics.map(([k,v])=><div key={k}><span>{names[k]??k.replaceAll('_',' ')}</span><strong>{fmt(v)} {units[k]??(['product_min','product_max','product_mean','product_std','product_p10','product_p50','product_p90'].includes(k)?(
           ['elevation','tpi','tri','cutfill_map','dem_difference'].includes(result.operation)?'m':
           ['slope_map','aspect_map'].includes(result.operation)?'°':
           result.operation==='flow_accumulation'?'cells':
            ['curvature','plan_curvature','profile_curvature'].includes(result.operation)?'m⁻¹':''):'')}</strong></div>)}</div>}
        {resultTab==='details'&&!!additionalMetrics.length&&<details className="terrain-metric-details" aria-label="Additional terrain metrics">
          <summary>More metrics · {additionalMetrics.length}</summary>
-       <div className="terrain-metrics">{additionalMetrics.map(([k,v])=><div key={k}><span>{names[k]??k.replaceAll('_',' ')}</span><strong>{fmt(v)} {units[k]??(['product_min','product_max','product_mean'].includes(k)?(
+       <div className="terrain-metrics">{additionalMetrics.map(([k,v])=><div key={k}><span>{names[k]??k.replaceAll('_',' ')}</span><strong>{fmt(v)} {units[k]??(['product_min','product_max','product_mean','product_std','product_p10','product_p50','product_p90'].includes(k)?(
           ['elevation','tpi','tri','cutfill_map','dem_difference'].includes(result.operation)?'m':
           ['slope_map','aspect_map'].includes(result.operation)?'°':
           result.operation==='flow_accumulation'?'cells':
