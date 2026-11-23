@@ -16,6 +16,8 @@ export interface TerrainParameterForm {
  considerCurvature:boolean;refractionCoeff:string;comparisonId:string;
  observerPoints:[string,string][];drape:boolean;textureImageId:string|null;
  gradientMethod:'horn'|'zevenbergen_thorne';slopeClasses:'standard'|'detailed'|'broad';
+ neighborhoodRadius:string;viewshedDistance:string;viewshedAzimuth:string;
+ viewshedWidth:string;routeModel:'surface'|'distance'|'gentle';meshSamples:string;
 }
 
 export function terrainParametersForOperation(
@@ -41,6 +43,9 @@ export function terrainParametersForOperation(
    params.observer_height_m=Number(form.height);
    params.target_height_m=Number(form.target);
    params.consider_curvature=form.considerCurvature;
+   params.maximum_distance_m=Number(form.viewshedDistance);
+   params.view_azimuth_deg=Number(form.viewshedAzimuth);
+   params.view_width_deg=Number(form.viewshedWidth);
    if(form.considerCurvature)
     params.refraction_coefficient=Number(form.refractionCoeff);
    break;
@@ -50,6 +55,9 @@ export function terrainParametersForOperation(
    params.observer_height_m=Number(form.height);
    params.target_height_m=Number(form.target);
    params.consider_curvature=form.considerCurvature;
+   params.maximum_distance_m=Number(form.viewshedDistance);
+   params.view_azimuth_deg=Number(form.viewshedAzimuth);
+   params.view_width_deg=Number(form.viewshedWidth);
    if(form.considerCurvature)
     params.refraction_coefficient=Number(form.refractionCoeff);
    break;
@@ -59,6 +67,7 @@ export function terrainParametersForOperation(
    params.end_longitude=Number(form.endLon);
    params.end_latitude=Number(form.endLat);
    params.max_slope_deg=Number(form.maxSlope);
+   params.route_model=form.routeModel;
    break;
   case 'watershed':
    params.observer_longitude=Number(form.lon);
@@ -96,6 +105,7 @@ export function terrainParametersForOperation(
    params.comparison_image_id=form.comparisonId||null;
    break;
   case 'mesh':
+   params.mesh_samples=Number(form.meshSamples);
    params.drape=form.drape;
    if(form.drape&&form.textureImageId)
     params.texture_image_id=form.textureImageId;
@@ -105,6 +115,8 @@ export function terrainParametersForOperation(
    // slope, elevation, aspect, derivatives, distribution and so forth.
    break;
  }
+ if(operation==='tri'||operation==='tpi')
+  params.neighborhood_radius_cells=Number(form.neighborhoodRadius);
  // Method selections are scientific inputs, not display-only settings.
  if(['slope_map','aspect_map','hillshade','suitability','curvature',
      'plan_curvature','profile_curvature'].includes(operation))

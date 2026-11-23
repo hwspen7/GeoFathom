@@ -8,6 +8,8 @@ const base:TerrainParameterForm={
  fillSinks:true,considerCurvature:true,refractionCoeff:'0.13',
  comparisonId:'',observerPoints:[['',''],['','']],drape:false,
  textureImageId:null,gradientMethod:'horn',slopeClasses:'standard',
+ neighborhoodRadius:'1',viewshedDistance:'0',viewshedAzimuth:'0',
+ viewshedWidth:'360',routeModel:'surface',meshSamples:'256',
 };
 describe('scientific operation-specific input manifests',()=>{
  it('does not invent a zero-degree observer for a contour experiment',()=>{
@@ -50,6 +52,12 @@ describe('scientific operation-specific input manifests',()=>{
    gradient_method:'zevenbergen_thorne',slope_classes:'detailed'});
   expect(terrainParametersForOperation('aspect_map',changed)).toEqual({
    gradient_method:'zevenbergen_thorne'});
+  expect(terrainParametersForOperation('tpi',changed)).toEqual({neighborhood_radius_cells:1});
+  expect(terrainParametersForOperation('mesh',changed)).toEqual({mesh_samples:256,drape:false});
+  expect(terrainParametersForOperation('least_cost',{...changed,routeModel:'gentle'}))
+   .toMatchObject({route_model:'gentle'});
+  expect(terrainParametersForOperation('visibility',{...changed,lon:'-83',lat:'40',viewshedWidth:'120'}))
+   .toMatchObject({maximum_distance_m:0,view_width_deg:120,view_azimuth_deg:0});
   expect(terrainParametersForOperation('contours',changed))
    .toEqual(terrainParametersForOperation('contours',base));
  });
