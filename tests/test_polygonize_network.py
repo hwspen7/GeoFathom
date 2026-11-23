@@ -93,3 +93,29 @@ def test_network_endpoint_rejects_unknown_types_and_unbounded_coordinates():
         polygonize_network([{"type":"GeometryCollection","geometries":[]}])
     with pytest.raises(GeometryError,match="WGS84"):
         polygonize_network([edge([190,0],[191,1])])
+
+
+
+def test_polygonize_api_returns_exact_measurements_and_rejects_invalid_payloads():
+    from fastapi.testclient import TestClient
+    from core.main import app
+    client=TestClient(app)
+    response=client.post("/edit/polygonize",json={
+        "geometries":three_adjacent_areas(),"tolerance_m":1,
+        "minimum_area_m2":1.0,"max_faces":300,
+    })
+    assert response.status_code==200,response.text
+    body=response.json()
+    assert body["count"]==3
+    assert all(len(face["label_anchor"])==2 for face in body["faces"])
+    assert sum(face["measurement"]["area_m2"] for face in body["faces"])==pytest.approx(body["area_m2"])
+    malformed=client.post("/edit/polygonize",json={
+        "geometries":three_adjacent_areas(),"tolerance_m":25,
+    })
+    assert malformed.status_code==422
+    bogus=client.post("/edit/polygonize",json={
+        "geometries":[edge([181,0],[182,0])],
+    })
+    assert bogus.status_code==422
+    missing=client.post("/edit/polygonize",json={"geometries":[]})
+    assert missing.status_code==422
