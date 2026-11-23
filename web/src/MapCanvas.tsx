@@ -654,6 +654,23 @@ export default function MapCanvas({
             return;
           }
         }
+        if(state.vertices.length){
+          const last=map.project(state.vertices[state.vertices.length-1] as maplibregl.LngLatLike);
+          // Ignore accidental duplicate taps at the currently active node.
+          if(Math.hypot(last.x-event.point.x,last.y-event.point.y)<=6)return;
+          if(state.drawingMode==='polygon'||state.drawingMode==='hole'){
+            // Existing non-start nodes may be shared with OTHER features via
+            // snapping, but not visited twice within one simple polygon ring.
+            const repeated=state.vertices.slice(1,-1).some(position=>{
+              const pixel=map.project(position as maplibregl.LngLatLike);
+              return Math.hypot(pixel.x-event.point.x,pixel.y-event.point.y)<=8;
+            });
+            if(repeated){
+              state.onEditingError('A polygon cannot reuse an intermediate vertex. Click the green start node to close.');
+              return;
+            }
+          }
+        }
         state.onMapClick(snapAt(coordinates(event), null));
       }
       else if (state.editing&&!state.moving&&!state.edgeMoving&&!state.selectedLocked&&state.selected){
