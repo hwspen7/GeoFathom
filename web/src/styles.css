@@ -1801,3 +1801,28 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .desktop-gis .terrain-method-settings[open]{display:grid;gap:6px}
 .desktop-gis .terrain-validation-grid{font-size:11px;display:grid;gap:5px;overflow-wrap:anywhere}
 .desktop-gis .terrain-validation-grid small{display:block;line-height:1.4}
+
+/* THEME: single fixed basemap control. Never put a second map-format picker in a panel. */
+
+.desktop-gis .gis-toolbar .gis-quick-basemap,
+.desktop-gis .gis-quick-basemap{
+ display:inline-flex!important;flex:0 0 auto;align-items:center;gap:7px;
+ margin-left:auto;padding:0 9px!important;
+ border:1px solid #d6e3ed!important;border-radius:7px!important;
+ background:#fff;color:#48677a;
+ height:32px;min-height:32px;max-height:32px;overflow:visible;
+}
+.desktop-gis .gis-quick-basemap select{
+ appearance:auto;min-width:180px;max-width:235px;width:clamp(180px,16vw,235px);
+ height:30px;padding:2px 3px;background:transparent;border:0;outline-offset:2px;
+ font-family:inherit;font-size:12px;color:#28485d;cursor:pointer;
+}
+.desktop-gis .gis-quick-basemap .gis-basemap-health{
+ display:inline-flex;align-items:center;justify-content:center;width:13px;
+ flex:none;color:#269368;font-size:9px;white-space:nowrap;
+}
+.desktop-gis .gis-quick-basemap .gis-basemap-health:first-letter{color:inherit}
+@media(max-width:1080px){
+ .desktop-gis .gis-quick-basemap{gap:3px;padding:0 5px!important}
+ .desktop-gis .gis-quick-basemap select{width:160px;min-width:130px;font-size:11px}
+}

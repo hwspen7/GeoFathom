@@ -13,7 +13,7 @@ import {
 import MapCanvas, { type FocusPoint } from './MapCanvas';
 import BoundaryEditor from './BoundaryEditor';
 import {loadDisplay,saveDisplay,areaText,distanceText,type AreaUnit} from './displaySettings';
-import {BASEMAPS,customBasemap,defaultCustom,preferredSatellite,mapTilerImagery,type BasemapId,type CustomBasemap} from './basemaps';
+import {BASEMAPS,BASEMAP_GROUPS,basemapAvailable,customBasemap,defaultCustom,mapTilerImagery,type BasemapId,type CustomBasemap} from './basemaps';
 import {ScratchHistory} from './scratchHistory';
 import {addRaster,changeRaster,selectDEM,hideDEMs,type RasterLayerView} from './rasterLayers';
 import {terrainContainsCenter,terrainGeometryBounds,terrainRasterFitsStudyArea} from './terrainSource';
@@ -1153,7 +1153,7 @@ export default function App() {
               <option value="auto">Automatic</option><option value="light">Light lines</option><option value="dark">Dark lines</option></select></label>
             <label>Selection fill <input aria-label="Selection fill opacity" type="range" min="0" max=".7" step=".02" value={display.fill} onChange={e=>setDisplay(old=>({...old,fill:Number(e.target.value)}))}/></label>
             <div className="section-heading">Imagery sources</div>
-            <form className="professional-form" onSubmit={event=>{event.preventDefault();try{setCustom(mapTilerImagery(mapTilerKey));setBasemap('custom');setTileError('');setMapTilerKey('');}catch(e){setTileError(String(e));}}}>
+            <form className="professional-form" onSubmit={event=>{event.preventDefault();try{setCustom(mapTilerImagery(mapTilerKey));setTileError('');setMapTilerKey('');setMessage('HD imagery connected. Choose Licensed HD under Map type.');}catch(e){setTileError(String(e));}}}>
               <input type="password" autoComplete="off" aria-label="MapTiler browser API key" placeholder="MapTiler key (licensed)" value={mapTilerKey} onChange={e=>setMapTilerKey(e.target.value)}/>
               <button disabled={!mapTilerKey.trim()}>Connect global HD imagery</button>
             </form>
@@ -1161,7 +1161,7 @@ export default function App() {
                 <summary>Connect high-resolution imagery</summary>
                 <form className="professional-form" onSubmit={event=>{
                   event.preventDefault();setTileError('');
-                  try{setCustom(customBasemap(tileURL,tileCredit,tileZoom));setBasemap('custom');}
+                  try{setCustom(customBasemap(tileURL,tileCredit,tileZoom));setMessage('Custom tiles connected. Select Licensed HD under Map type.');}
                   catch(failure){setTileError(failure instanceof Error?failure.message:'Invalid tile settings.');}
                 }}>
                   <input aria-label="Licensed XYZ tile URL" placeholder="https://…/{z}/{x}/{y}.jpg" value={tileURL} onChange={e=>setTileURL(e.target.value)} required/>
@@ -1206,11 +1206,20 @@ export default function App() {
           <button disabled={!geometry} onClick={deselect} title="Clear selection without deleting saved features"><RotateCcw size={14}/> Deselect</button>
         </div>
         <div className="gis-survey-commands" ref={setToolbarTarget}/>
-        <div className="gis-quick-basemap" aria-label="Quick basemap tools">
-          <button aria-pressed={basemap==='street'} onClick={()=>setBasemap('street')}>Street</button>
-          <button aria-pressed={['sentinel','satellite','custom'].includes(basemap)} onClick={()=>setBasemap(preferredSatellite(viewport,Boolean(custom)))}>Satellite</button>
-          <button aria-pressed={basemap==='topo'||basemap==='relief'} onClick={()=>setBasemap('topo')}>Terrain (US)</button>
-        </div>
+        <label className="gis-quick-basemap" aria-label="Basemap picker">
+          <Globe2 size={15} aria-hidden="true"/>
+          <select aria-label="Map type" value={basemap}
+            title={BASEMAPS.find(item=>item.id===basemap)?.note??mapStatus}
+            onChange={event=>setBasemap(event.target.value as BasemapId)}>
+            {BASEMAP_GROUPS.map(group=><optgroup key={group.category} label={group.label}>
+              {BASEMAPS.filter(item=>item.category===group.category).map(item=>
+                <option key={item.id} value={item.id} disabled={!basemapAvailable(item,custom)}>
+                  {item.name}
+                </option>)}
+            </optgroup>)}
+          </select>
+          <span className="gis-basemap-health" title={mapStatus} aria-label="Basemap status">{mapStatus.startsWith('Imagery unavailable')?'!':'●'}</span>
+        </label>
       </div>
       <div className="gis-body">
         {expandedDock&&<div className="workspace-dock-backdrop" role="presentation" onClick={()=>setExpandedDock(null)}/>}
@@ -1347,11 +1356,7 @@ export default function App() {
 
             </section>
             <section className="panel-section gis-basemaps" hidden={drawerTab!=='layers'}>
-              <div className="section-heading"><Globe2 size={15}/><span>Basemap</span></div>
-              <select aria-label="Basemap" value={basemap} onChange={event=>setBasemap(event.target.value as BasemapId)}>
-                {BASEMAPS.map(item=><option key={item.id} value={item.id} disabled={item.id==='custom'&&!custom}>{item.name}</option>)}
-              </select>
-              <small role="status" className="basemap-status">{mapStatus}</small>
+              <div className="section-heading"><Layers3 size={15}/><span>Map overlays</span></div>
               {(terrainFeatures.length+terrainRasters.length)>0&&<label className="gis-check"><input aria-label="Terrain result layer" type="checkbox" checked={terrainVisible} onChange={e=>setTerrainVisible(e.target.checked)}/> Terrain result · {terrainFeatures.length+terrainRasters.length}</label>}
               {rasterLayers.map(layer=><div key={layer.asset.id} className="raster-layer-row">
                 <label className="gis-check"><input aria-label={'Show raster '+layer.asset.name} type="checkbox" checked={layer.visible}
