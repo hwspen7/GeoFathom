@@ -131,3 +131,147 @@ def test_ogc_invalid_service_payloads_are_not_inserted(monkeypatch):
         "west":-84,"south":39,"east":-82,"north":41})
     assert r.status_code==422
     assert c.get(root+"/features").json()["total"]==0
+
+
+@pytest.mark.parametrize("field,value",[
+    ("service","not-a-service"),("title",""),
+    ("title","x"*101),("layer_name","spaces not allowed"),
+    ("tile_matrix_set","invalid !"),("attribution","x"*241),
+])
+def test_source_rejects_invalid_admin_configuration(field,value):
+    root=make()
+    payload={"service":"wms","title":"Remote source",
+             "base_url":"https://maps.example.org/ows",
+             "layer_name":"sample","attribution":"public",
+             "tile_matrix_set":"GoogleMapsCompatible"}
+    payload[field]=value
+    denied=c.post(root+"/ogc",json=payload,headers={
+        "X-GeoFathom-Admin-Token":"administrator-proof"})
+    assert denied.status_code==422
+    assert c.get(root+"/ogc").json()["sources"]==[]
+
+
+@pytest.mark.parametrize("url",[
+    "https://localhost/ows","https://metadata.google.internal/ows",
+    "https://tenant.local/ows","https://192.168.1.50/ows",
+    "https://10.0.0.1/ows","https://maps.example.org:8443/ows",
+])
+def test_ogc_allowlist_cannot_override_private_network_rules(monkeypatch,url):
+    from urllib.parse import urlsplit
+    monkeypatch.setenv("GEOFATHOM_OGC_ALLOW_HOSTS",urlsplit(url).hostname)
+    with pytest.raises(ogc.OGCError):
+        ogc._verify_url(url)
+
+
+def test_allowlist_is_rechecked_after_saved_source_creation(monkeypatch):
+    root=make();uid=source(root).json()["id"]
+    monkeypatch.setenv("GEOFATHOM_OGC_ALLOW_HOSTS","unrelated.example.org")
+    assert c.get(root+"/ogc/"+uid+"/capabilities").status_code==422
+    assert len(c.get(root+"/ogc").json()["sources"])==1
+
+
+def test_ogc_api_collections_are_parsed_and_bounded(monkeypatch):
+    root=make();uid=source(root,service="ogc_features",
+                           url="https://maps.example.org",name="roads").json()["id"]
+    observed=[]
+    def fake(url,params,max_bytes=5_000_000):
+        observed.append((url,params,max_bytes))
+        return json.dumps({"collections":[
+            {"id":"roads","title":"Public roads"},
+            {"id":"water"}, {"id":34},{"title":"no identifier"},
+            "not a mapping"]}).encode(),"application/json"
+    monkeypatch.setattr(ogc,"_fetch",fake)
+    result=c.get(root+"/ogc/"+uid+"/capabilities")
+    assert result.status_code==200,result.text
+    assert result.json()["collections"]==[
+        {"id":"roads","title":"Public roads"},{"id":"water","title":"water"}]
+    assert observed==[("https://maps.example.org/collections",{"f":"json"},1_000_000)]
+    monkeypatch.setattr(ogc,"_fetch",
+        lambda *args,**kwargs:(b"unparseable json","application/json"))
+    assert c.get(root+"/ogc/"+uid+"/capabilities").status_code==422
+
+
+def test_invalid_capabilities_xml_is_rejected_without_polluting_project(monkeypatch):
+    root=make();uid=source(root).json()["id"]
+    monkeypatch.setattr(ogc,"_fetch",
+        lambda *args,**kwargs:(b"<capabilities>","application/xml"))
+    assert c.get(root+"/ogc/"+uid+"/capabilities").status_code==422
+    assert c.get(root+"/features").json()["total"]==0
+
+
+@pytest.mark.parametrize("payload",[
+    {"type":"FeatureCollection","features":{}},
+    {"type":"FeatureCollection","features":[{"type":"Other","properties":{}}]},
+    {"type":"FeatureCollection","features":[{"type":"Feature","properties":[]}]},
+    {"type":"FeatureCollection","features":[
+        {"type":"Feature","geometry":{"type":"Point","coordinates":[0,0]},
+         "properties":{}}]*3},
+])
+def test_invalid_wfs_feature_collections_are_rejected(monkeypatch,payload):
+    root=make();uid=source(root,service="wfs").json()["id"]
+    monkeypatch.setattr(ogc,"_fetch",
+        lambda *args,**kwargs:(json.dumps(payload).encode(),"application/json"))
+    response=c.get(root+"/ogc/"+uid+"/features",params={
+        "west":-84,"south":39,"east":-82,"north":41,"limit":2})
+    assert response.status_code==422,response.text
+    assert c.get(root+"/features").json()["total"]==0
+
+
+def test_wfs_feature_properties_are_sanitized_without_mutating_source(monkeypatch):
+    root=make();uid=source(root,service="wfs").json()["id"]
+    fields={"numeric":12,"floating":2.5,"present":True,"null":None,
+            "private":["not exposed"],"too_long_"+"x"*100:"short"}
+    item={"type":"Feature","id":"x"*102,
+          "geometry":{"type":"Point","coordinates":[-83,40]},
+          "properties":fields}
+    monkeypatch.setattr(ogc,"_fetch",
+        lambda *args,**kwargs:(json.dumps({"type":"FeatureCollection",
+             "features":[item]}).encode(),"application/json"))
+    response=c.get(root+"/ogc/"+uid+"/features",params={
+        "west":-84,"south":39,"east":-82,"north":41,"limit":1})
+    assert response.status_code==200,response.text
+    body=response.json()
+    assert body["truncated"] is True
+    feature=body["features"][0]
+    assert len(feature["id"])==100
+    assert "private" not in feature["properties"]
+    assert feature["properties"]["numeric"]==12
+    assert feature["properties"]["null"] is None
+    assert all(len(key)<=64 for key in feature["properties"])
+
+
+@pytest.mark.parametrize("data,expected",[
+    (b"not a real image",422),(b"\\xff\\xd8\\xffjpeg-body",200)
+])
+def test_tile_proxy_validates_encoded_image_magic(monkeypatch,data,expected):
+    root=make();uid=source(root,service="wms").json()["id"]
+    monkeypatch.setattr(ogc,"_fetch",lambda *args,**kwargs:(data,"application/octet-stream"))
+    response=c.get(root+"/ogc/"+uid+"/tiles/2/1/1")
+    assert response.status_code==expected
+    if expected==200:assert response.headers["content-type"]=="image/jpeg"
+
+
+def test_ogc_network_request_bounds_redirects_http_status_and_transport(monkeypatch):
+    import httpx
+    original=httpx.Client
+    observed=[]
+    def send(request):
+        observed.append((str(request.url),request.headers["user-agent"]))
+        action=request.url.params.get("probe")
+        if action=="status":return httpx.Response(503)
+        if action=="big":return httpx.Response(200,content=b"123456789")
+        if action=="timeout":raise httpx.ConnectTimeout("Provider timed out.")
+        return httpx.Response(200,content=b"PNG",headers={"content-type":"image/png"})
+    transport=httpx.MockTransport(send)
+    monkeypatch.setattr(ogc.httpx,"Client",
+        lambda *args,**kwargs:original(transport=transport,**kwargs))
+    path="https://maps.example.org/ows"
+    assert ogc._fetch(path,{"probe":"normal"})==(b"PNG","image/png")
+    with pytest.raises(ogc.OGCError,match="HTTP 503"):
+        ogc._fetch(path,{"probe":"status"})
+    with pytest.raises(ogc.OGCError,match="size limit"):
+        ogc._fetch(path,{"probe":"big"},max_bytes=4)
+    with pytest.raises(ogc.OGCError,match="network"):
+        ogc._fetch(path,{"probe":"timeout"})
+    assert len(observed)==4
+    assert all(label=="GeoFathom-OGC/1.0" for _,label in observed)
