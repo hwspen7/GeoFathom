@@ -68,7 +68,7 @@ function dataProps(){
  return {
   projectId:'project-1',workspace:null,viewport:[0,0,1,1] as [number,number,number,number],
   geometry,network:polygonized,networkNotice:'One face',sourceCount:2,connected:true,
-  onRebuild:vi.fn(async()=>{}),onStoreAreas:vi.fn(),
+  onRebuild:vi.fn(async()=>{}),onStoreAreas:vi.fn(),onSelectArea:vi.fn(),
   onRefresh:vi.fn(),onTiles:vi.fn(),onPreview:vi.fn(),onPage:vi.fn(),
   onRasterAdded:vi.fn(),onOpenLayers:vi.fn(),
   vectorSources:[{id:'other',name:'Parcel B',geometry:{
@@ -105,6 +105,8 @@ describe('Data and Export independent fixed workbenches',()=>{
   fireEvent.click(screen.getByRole('button',{name:'Detect enclosed areas'}));
   await waitFor(()=>expect(props.onRebuild).toHaveBeenCalledWith(2.5,.01));
   expect(screen.getAllByText(/1.23 km²/).length).toBeGreaterThan(0);
+  fireEvent.click(screen.getByRole('button',{name:'Select enclosed area Area 1'}));
+  expect(props.onSelectArea).toHaveBeenCalledWith('area-1');
   fireEvent.click(screen.getByRole('button',{name:'Keep areas locally'}));
   expect(props.onStoreAreas).toHaveBeenCalledWith([face]);
   fireEvent.click(screen.getByRole('button',{name:'Save areas to project'}));
