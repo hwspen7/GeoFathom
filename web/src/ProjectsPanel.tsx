@@ -31,13 +31,14 @@ interface Props {
   onProjectSwitch?:(id:string|null,created:boolean)=>void;
   extraFeatures:WorkspaceFeature[];
   toolbarTarget?:HTMLElement|null;
+  toolbarActionsTarget?:HTMLElement|null;
   treeTarget?:HTMLElement|null;
 }
 
 export default function ProjectsPanel({
   geometry, featureName, featureSource, featureProperties, selectedFeatureId,
   splitParts, refreshToken, onOpen, onWorkspace, onPlaceAnnotation, onFeatureDeleted,
-  extraFeatures,onSavedDraft,onProjectSwitch,toolbarTarget,treeTarget,
+  extraFeatures,onSavedDraft,onProjectSwitch,toolbarTarget,toolbarActionsTarget,treeTarget,
 }: Props) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [listRetry,setListRetry]=useState(0);
@@ -389,6 +390,17 @@ export default function ProjectsPanel({
     });
   }
 
+  const projectActions=(
+    <div className="project-actions">
+      <button data-project-save onClick={() => void save()}
+        disabled={busy || !workspace || !geometry || locked || Boolean(!current && activeLayer?.locked)}>
+        <Save size={14}/> {current ? 'Update feature' : 'Save selected'}
+      </button>
+      <button onClick={() => void exportJson()} disabled={busy}>
+        <Download size={14}/> Export project
+      </button>
+    </div>
+  );
   const projectSelector=(
     <select aria-label="Active project" value={selected} disabled={busy}
             onFocus={()=>{void refreshProjectList();}}
@@ -612,14 +624,7 @@ export default function ProjectsPanel({
               onChange={event => setLayerName(event.target.value)} maxLength={100}/>
             <button type="submit" disabled={busy || !workspace || !layerName.trim()}><Plus size={14}/></button>
           </form>
-          <div className="project-actions">
-            <button data-project-save onClick={() => void save()} disabled={busy || !workspace || !geometry || locked || Boolean(!current && activeLayer?.locked)}>
-              <Save size={14}/> {current ? 'Update feature' : 'Save selected'}
-            </button>
-            <button onClick={() => void exportJson()} disabled={busy}>
-              <Download size={14}/> Export
-            </button>
-          </div>
+          {toolbarActionsTarget?createPortal(projectActions,toolbarActionsTarget):projectActions}
           {splitParts.length > 1 && (
             <button className="project-split-save" disabled={busy || !workspace || Boolean(activeLayer?.locked)}
               onClick={() => void saveSplit()}>Save all {splitParts.length} split pieces</button>

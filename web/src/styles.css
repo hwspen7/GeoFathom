@@ -801,3 +801,13 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 @media(max-width:740px){
  .desktop-gis .gis-active-project{max-width:115px;min-width:75px}
 }
+
+
+/* Project-specific Save/Export are accessible from the single top toolbar;
+   editing in hidden project drawers never hides the active save control. */
+.desktop-gis .gis-project-actions{display:flex;align-items:center;flex:none}
+.desktop-gis .gis-project-actions .project-actions{margin:0;gap:4px}
+.desktop-gis .gis-project-actions .project-actions button{width:auto;flex:none;min-height:29px;white-space:nowrap;padding:5px 8px;font-size:11px}
+@media(max-width:1300px){
+ .desktop-gis .gis-project-actions .project-actions button:last-child{display:none}
+}

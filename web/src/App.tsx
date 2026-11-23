@@ -119,6 +119,7 @@ export default function App() {
   const [showTools,setShowTools]=useState(true);
   const [resultsTarget,setResultsTarget]=useState<HTMLDivElement|null>(null);
   const [projectToolbarTarget,setProjectToolbarTarget]=useState<HTMLDivElement|null>(null);
+  const [projectActionsTarget,setProjectActionsTarget]=useState<HTMLDivElement|null>(null);
   const [objectTreeTarget,setObjectTreeTarget]=useState<HTMLDivElement|null>(null);
   const [shortcutHelp,setShortcutHelp]=useState(false);
   const [commandOpen,setCommandOpen]=useState(false);
@@ -1055,6 +1056,7 @@ export default function App() {
           <button disabled={!geometry} onClick={exportGeoJSON} title="Export selected geometry as GeoJSON"><Download size={14}/> Export GeoJSON</button>
           <button disabled={!geometry} onClick={deselect} title="Clear selection without deleting saved features"><RotateCcw size={14}/> Deselect</button>
         </div>
+        <div className="gis-project-actions" ref={setProjectActionsTarget}/>
         <div className="gis-survey-commands" ref={setToolbarTarget}/>
         <div className="gis-quick-basemap" aria-label="Quick basemap tools">
           <button aria-pressed={basemap==='street'} onClick={()=>setBasemap('street')}>Street</button>
@@ -1069,7 +1071,7 @@ export default function App() {
           <section className="panel-section">
             <div className="section-heading"><Layers3 size={16} /><span>Projects</span></div>
             {!capabilities&&connectionError&&<div className="discovery-error" role="alert">{connectionError} <button onClick={()=>setConnectionRetry(v=>v+1)}>Reconnect</button></div>}
-            <ProjectsPanel toolbarTarget={projectToolbarTarget} treeTarget={objectTreeTarget}
+            <ProjectsPanel toolbarTarget={projectToolbarTarget} toolbarActionsTarget={projectActionsTarget} treeTarget={objectTreeTarget}
               geometry={busy || preview || pendingShared || drawingMode ? null : geometry}
               featureName={scratch.find(f=>f.id===scratchId)?.name||selectedPlace?.name||'Custom boundary'}
               featureSource={geometrySource || selectedPlace?.source || 'User drawn'}
