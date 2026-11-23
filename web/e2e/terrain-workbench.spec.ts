@@ -218,6 +218,7 @@ with tempfile.TemporaryDirectory() as directory:
  await expect(page.getByRole('img',{name:'Earthwork volume (m³)'})).toBeVisible();
  await page.getByRole('button',{name:'Browse terrain tools',exact:true}).click();
  await tools.getByRole('button',{name:'3D terrain',exact:true}).click();
+ await page.getByLabel('3D mesh sampling budget').selectOption('128');
  await page.getByRole('button',{name:'Run terrain operation'}).click();
  await visual();
  const meshCanvas=page.getByLabel('Interactive 3D terrain preview');
@@ -234,6 +235,10 @@ with tempfile.TemporaryDirectory() as directory:
  const obj=await objEvent;expect(readFileSync((await obj.path())!,'utf8')).toMatch(/\nf \d+ \d+ \d+/);
  await page.getByRole('button',{name:'Browse terrain tools',exact:true}).click();
  await tools.getByRole('button',{name:'Viewshed',exact:true}).click();
+ await page.getByText('Viewing sector and range').click();
+ await page.getByLabel('Viewshed maximum distance').fill('2000');
+ await page.getByLabel('Viewshed facing azimuth').fill('45');
+ await page.getByLabel('Viewshed horizontal field of view').fill('180');
  await page.getByRole('button',{name:'Pick observer',exact:true}).click();
  const bounds=(await map.boundingBox())!;
  await page.mouse.click(bounds.x+bounds.width/2,bounds.y+bounds.height/2);
@@ -241,6 +246,9 @@ with tempfile.TemporaryDirectory() as directory:
  await page.getByRole('button',{name:'Run terrain operation'}).click();
  await visual();
  await expect(page.getByRole('img',{name:'Visibility (cells)'})).toBeVisible();
+ await details();
+ await expect(page.getByLabel('Scientific validation status')).toContainText('not performed');
+ await visual();
  await page.getByRole('button',{name:'Browse terrain tools',exact:true}).click();
  await tools.getByRole('button',{name:'Watershed (D8)',exact:true}).click();
  await page.getByRole('button',{name:'Area center',exact:true}).click();

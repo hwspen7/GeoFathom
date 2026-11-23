@@ -132,6 +132,12 @@ export default function TerrainWorkbench(p:Props){
  const [gradientMethod,setGradientMethod]=useState<'horn'|'zevenbergen_thorne'>('horn');
  const [slopeClasses,setSlopeClasses]=useState<'standard'|'detailed'|'broad'>('standard');
  const [mfdExponent,setMfdExponent]=useState('1.1');
+ const [neighborhoodRadius,setNeighborhoodRadius]=useState('1');
+ const [viewshedDistance,setViewshedDistance]=useState('0');
+ const [viewshedAzimuth,setViewshedAzimuth]=useState('0');
+ const [viewshedWidth,setViewshedWidth]=useState('360');
+ const [routeModel,setRouteModel]=useState<'surface'|'distance'|'gentle'>('surface');
+ const [meshSamples,setMeshSamples]=useState('256');
  const [fillSinks,setFillSinks]=useState(true),[considerCurvature,setConsiderCurvature]=useState(true),[refractionCoeff,setRefractionCoeff]=useState('0.13');
  const [sectionSpacing,setSectionSpacing]=useState('50'),[sectionWidth,setSectionWidth]=useState('20'),[drape,setDrape]=useState(false),[expanded,setExpanded]=useState(false);
  const [pickEnd,setPickEnd]=useState(false);
@@ -284,7 +290,10 @@ export default function TerrainWorkbench(p:Props){
    (!needsPoint||validNumber(lon,-180,180)&&validNumber(lat,-90,90))&&
    (operation!=='flow_accumulation_mfd'||validNumber(mfdExponent,.5,8))&&
    (!['visibility','viewshed_multi'].includes(operation??'')||!considerCurvature||validNumber(refractionCoeff,0,.5))&&
-   (!['visibility','viewshed_multi'].includes(operation??'')||validNumber(height,0,1000)&&validNumber(target,0,1000));
+   (!['visibility','viewshed_multi'].includes(operation??'')||validNumber(height,0,1000)&&validNumber(target,0,1000)&&
+     validNumber(viewshedDistance,0,10000)&&validNumber(viewshedAzimuth,0,360)&&validNumber(viewshedWidth,.01,360))&&
+   (!['tri','tpi'].includes(operation??'')||validNumber(neighborhoodRadius,1,4)&&Number.isInteger(Number(neighborhoodRadius)))&&
+   (operation!=='mesh'||validNumber(meshSamples,64,512)&&Number.isInteger(Number(meshSamples)));
  const canRun=operation!==null&&p.connected&&resultCacheReady&&verified&&!!correctShape&&!sourceMismatch&&!mapMismatch&&parametersValid;
  useEffect(()=>{latest.current.onProfileSamples?.(activeProfileSamples??[]);},[activeProfileSamples]);
  const scientificParameters=terrainParametersForOperation(operation,{
@@ -293,6 +302,8 @@ export default function TerrainWorkbench(p:Props){
    azimuth,altitude,sectionSpacing,sectionWidth,fillSinks,mfdExponent,
    considerCurvature,refractionCoeff,comparisonId,observerPoints,drape,
    textureImageId:p.imageRaster?.id??null,gradientMethod,slopeClasses,
+   neighborhoodRadius,viewshedDistance,viewshedAzimuth,viewshedWidth,
+   routeModel,meshSamples,
  });
  // Only edits to the actual operation inputs invalidate a scientific run.
  const inputKey=JSON.stringify([dem?.id,analysisGeometry,operation,scientificParameters]);
@@ -365,7 +376,11 @@ export default function TerrainWorkbench(p:Props){
        max_slope:Number(maxSlope),min_elevation:Number(minElevation),max_elevation:Number(maxElevation),max_tri:Number(maxTri),stream_cells:Number(streamCells),azimuth:Number(azimuth),altitude:Number(altitude),section_spacing:Number(sectionSpacing),section_width:Number(sectionWidth),fill_sinks:fillSinks,consider_curvature:considerCurvature,refraction_coeff:Number(refractionCoeff),comparison_image_id:operation==='dem_difference'?comparisonId:null,
         observer_points:operation==='viewshed_multi'?observerPoints.map(([x,y])=>[Number(x),Number(y)] as [number,number]):null,
         texture_image_id:operation==='mesh'&&drape&&p.imageRaster&&p.imageRaster.bands>=3?p.imageRaster.id:null,
-         gradient_method:gradientMethod,slope_classes:slopeClasses,mfd_exponent:Number(mfdExponent)},controller.signal);
+         gradient_method:gradientMethod,slope_classes:slopeClasses,mfd_exponent:Number(mfdExponent),
+         neighborhood_radius:Number(neighborhoodRadius),
+         max_distance_m:Number(viewshedDistance),view_azimuth:Number(viewshedAzimuth),
+         view_width:Number(viewshedWidth),route_model:routeModel,
+         mesh_samples:Number(meshSamples)},controller.signal);
      if(ticket!==sequence.current||controller.signal.aborted)return;
      // Commit scientific data before reporting a completed run. An immediate
      // reload or project switch must never race a pending cache write.
@@ -792,7 +807,22 @@ export default function TerrainWorkbench(p:Props){
            {fmt(result.valid_cells-result.raster.valid_cells)} boundary cells excluded by the 3 × 3 slope calculation.
            Source DEM coverage and calculated-slope coverage are different measures.
          </small>}
-       {resultTab==='details'&&<details className="terrain-result-quality" aria-label="Terrain method and quality">
+       {resultTab==='details'&&result.quality&&
+          <details className="terrain-result-quality" aria-label="Scientific validation status">
+            <summary>Scientific validation · {result.quality.status.replaceAll('_',' ')}</summary>
+            <div className="terrain-validation-grid">
+              <div>Reference comparison: {result.quality.reference_validation.replaceAll('_',' ')}</div>
+              <div>Uncertainty: {result.quality.uncertainty.replaceAll('_',' ')}</div>
+              <div>Source overlap: {result.quality.source_overlap_pct.toFixed(2)}%</div>
+              <div>Valid study cells: {result.quality.valid_study_cell_pct.toFixed(2)}%</div>
+              {result.quality.derivative_coverage_pct!==null&&
+                <div>Derived product coverage: {result.quality.derivative_coverage_pct.toFixed(2)}%</div>}
+              <div>Area measurement: {result.quality.area_basis.replaceAll('_',' ')}</div>
+              {result.quality.flags.map(flag=><small key={flag} className="compact-notice">
+                {flag.replaceAll('_',' ')}</small>)}
+            </div>
+          </details>}
+        {resultTab==='details'&&<details className="terrain-result-quality" aria-label="Terrain method and quality">
          <summary>Quality · {result.valid_cells} DEM cells
            {Number.isFinite(result.metrics.dataset_overlap_pct)
              ?' · '+fmt(result.metrics.dataset_overlap_pct)+'% study-area overlap':''}
@@ -954,7 +984,15 @@ export default function TerrainWorkbench(p:Props){
      {operation==='dem_difference'&&<label>Reference DEM<select aria-label="Reference comparison DEM" value={comparisonId} onChange={e=>setComparisonId(e.target.value)}><option value="">Select second DEM</option>{assets.filter(a=>a.bands===1&&a.id!==dem?.id).map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>}
      {(operation==='volume'||operation==='cutfill_map')&&<label>Reference elevation (m)<input aria-label="Reference elevation" type="number" step="any" value={reference} onChange={e=>setReference(e.target.value)}/></label>}
      {operation==='cross_sections'&&<div className="area-fields"><label>Station spacing (m)<input type="number" value={sectionSpacing} onChange={e=>setSectionSpacing(e.target.value)}/></label><label>Half-width (m)<input type="number" value={sectionWidth} onChange={e=>setSectionWidth(e.target.value)}/></label></div>}
-     {operation==='mesh'&&p.imageRaster&&p.imageRaster.bands>=3&&<label className="gis-check"><input type="checkbox" checked={drape} onChange={e=>setDrape(e.target.checked)}/> Drape selected RGB imagery</label>}
+     {operation==='mesh'&&<label>3D mesh detail
+        <select aria-label="3D mesh sampling budget" value={meshSamples} onChange={e=>setMeshSamples(e.target.value)}>
+          <option value="64">Preview · 64 samples/axis</option>
+          <option value="128">Balanced · 128 samples/axis</option>
+          <option value="256">Detailed · 256 samples/axis</option>
+          <option value="512">High detail · 512 samples/axis</option>
+        </select>
+      </label>}
+      {operation==='mesh'&&p.imageRaster&&p.imageRaster.bands>=3&&<label className="gis-check"><input type="checkbox" checked={drape} onChange={e=>setDrape(e.target.checked)}/> Drape selected RGB imagery</label>}
      {['slope_map','aspect_map','hillshade','suitability','curvature','plan_curvature','profile_curvature'].includes(operation)&&
         <label>Gradient algorithm
           <select aria-label="Terrain gradient algorithm" value={gradientMethod}
@@ -971,6 +1009,15 @@ export default function TerrainWorkbench(p:Props){
           <option value="broad">Broad · 4 classes</option>
         </select>
       </label>}
+      {['tri','tpi'].includes(operation)&&<label>Terrain neighborhood
+        <select aria-label="Terrain neighborhood radius" value={neighborhoodRadius}
+          onChange={e=>setNeighborhoodRadius(e.target.value)}>
+          <option value="1">3 × 3 · local</option>
+          <option value="2">5 × 5 · intermediate</option>
+          <option value="3">7 × 7 · regional</option>
+          <option value="4">9 × 9 · broad</option>
+        </select>
+      </label>}
       {operation==='hillshade'&&<div className="area-fields"><label>Sun azimuth (°)<input type="number" value={azimuth} onChange={e=>setAzimuth(e.target.value)}/></label><label>Sun altitude (°)<input type="number" value={altitude} onChange={e=>setAltitude(e.target.value)}/></label></div>}
      {operation==='flow_accumulation_mfd'&&<label>MFD convergence exponent
        <input aria-label="MFD routing exponent" type="number" min="0.5" max="8" step="0.1"
@@ -979,8 +1026,33 @@ export default function TerrainWorkbench(p:Props){
      </label>}
      {(operation==='streams'||operation==='stream_order')&&<label>Minimum upstream cells<input type="number" min="1" step="1" value={streamCells} onChange={e=>setStreamCells(e.target.value)}/></label>}
      {['flow_direction','flow_accumulation','flow_accumulation_mfd','streams','stream_order','watershed'].includes(operation)&&<label className="gis-check"><input aria-label="Condition drainage DEM" type="checkbox" checked={fillSinks} onChange={e=>setFillSinks(e.target.checked)}/> Fill depressions and route flat cells</label>}
-     {(operation==='visibility'||operation==='viewshed_multi')&&<><label className="gis-check"><input aria-label="Consider Earth curvature" type="checkbox" checked={considerCurvature} onChange={e=>setConsiderCurvature(e.target.checked)}/> Earth curvature and atmospheric refraction</label>{considerCurvature&&<label>Refraction coefficient<input aria-label="Terrain refraction coefficient" type="number" min="0" max="0.5" step="0.01" value={refractionCoeff} onChange={e=>setRefractionCoeff(e.target.value)}/></label>}</>}
-     {(operation==='suitability'||operation==='least_cost')&&<label>Maximum slope (°)<input type="number" value={maxSlope} onChange={e=>setMaxSlope(e.target.value)}/></label>}
+     {['visibility','viewshed_multi'].includes(operation)&&<details className="terrain-method-settings">
+        <summary>Viewing sector and range</summary>
+        <label>Maximum distance (m, 0 = all)
+          <input aria-label="Viewshed maximum distance" type="number" min="0" max="10000"
+            value={viewshedDistance} onChange={e=>setViewshedDistance(e.target.value)}/>
+        </label>
+        <div className="area-fields">
+          <label>Facing azimuth (°)
+            <input aria-label="Viewshed facing azimuth" type="number" min="0" max="360"
+              value={viewshedAzimuth} onChange={e=>setViewshedAzimuth(e.target.value)}/>
+          </label>
+          <label>Field of view (°)
+            <input aria-label="Viewshed horizontal field of view" type="number" min="0.01" max="360"
+              value={viewshedWidth} onChange={e=>setViewshedWidth(e.target.value)}/>
+          </label>
+        </div>
+      </details>}
+      {(operation==='visibility'||operation==='viewshed_multi')&&<><label className="gis-check"><input aria-label="Consider Earth curvature" type="checkbox" checked={considerCurvature} onChange={e=>setConsiderCurvature(e.target.checked)}/> Earth curvature and atmospheric refraction</label>{considerCurvature&&<label>Refraction coefficient<input aria-label="Terrain refraction coefficient" type="number" min="0" max="0.5" step="0.01" value={refractionCoeff} onChange={e=>setRefractionCoeff(e.target.value)}/></label>}</>}
+     {operation==='least_cost'&&<label>Routing cost model
+        <select aria-label="Terrain routing cost model" value={routeModel}
+          onChange={e=>setRouteModel(e.target.value as 'surface'|'distance'|'gentle')}>
+          <option value="surface">3D surface length + slope penalty</option>
+          <option value="distance">Shortest planar distance</option>
+          <option value="gentle">Stronger gradient avoidance</option>
+        </select>
+      </label>}
+      {(operation==='suitability'||operation==='least_cost')&&<label>Maximum slope (°)<input type="number" value={maxSlope} onChange={e=>setMaxSlope(e.target.value)}/></label>}
      {operation==='suitability'&&<><div className="area-fields"><label>Min elevation (m)<input type="number" value={minElevation} onChange={e=>setMinElevation(e.target.value)}/></label><label>Max elevation (m)<input type="number" value={maxElevation} onChange={e=>setMaxElevation(e.target.value)}/></label></div><label>Maximum TRI (m)<input type="number" value={maxTri} onChange={e=>setMaxTri(e.target.value)}/></label></>}
      {needsPoint&&<>
        <div className="survey-action-bar"><button className={p.picking?'active':''} disabled={!area} onClick={()=>{setPickEnd(false);p.onPick();}}>{p.picking?'Click map…':operation==='visibility'?'Pick observer':operation==='least_cost'?'Pick route start':'Pick outlet'}</button>

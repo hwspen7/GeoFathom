@@ -1792,3 +1792,12 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .desktop-gis .terrain-parameter-grid strong{
   color:#33586c;font-weight:600;text-align:right;overflow-wrap:anywhere;
 }
+
+/* Terrain multi-model analysis and explicit validation metadata. */
+.desktop-gis .terrain-method-settings,.desktop-gis .terrain-validation-grid{
+  border:1px solid #dfe9f0;border-radius:6px;padding:7px 9px;margin:4px 0;background:#f9fbfc;
+}
+.desktop-gis .terrain-method-settings>summary{font-size:11px;font-weight:600;cursor:pointer;color:#446579}
+.desktop-gis .terrain-method-settings[open]{display:grid;gap:6px}
+.desktop-gis .terrain-validation-grid{font-size:11px;display:grid;gap:5px;overflow-wrap:anywhere}
+.desktop-gis .terrain-validation-grid small{display:block;line-height:1.4}
