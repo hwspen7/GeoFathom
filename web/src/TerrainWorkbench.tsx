@@ -149,6 +149,7 @@ export default function TerrainWorkbench(p:Props){
    return()=>{current=false;};
  },[p.projectId]);
  const [selectedRecord,setSelectedRecord]=useState<string|null>(null);
+ const [historyFocus,setHistoryFocus]=useState('');
  const [compareRecordId,setCompareRecordId]=useState('');
  const selected=records.find(r=>r.id===selectedRecord);
  const result=selected?.advanced??null,slope=selected?.slope??null,profile=selected?.profile??null;
@@ -493,47 +494,68 @@ export default function TerrainWorkbench(p:Props){
  }
  const monitor=<div className="terrain-monitor-content">
    {!!records.length&&<section className="terrain-run-list" aria-label="Analysis result layers">
-     <div className="section-heading">Analysis results · {records.length}</div>
-     {records.map(record=><div key={record.id} className={'scratch-row '+(selectedRecord===record.id?'active':'')}>
-       <input type="checkbox" aria-label={'Show '+record.title+' '+record.id} checked={record.visible} disabled={!record.advanced?.features.length&&!record.advanced?.raster}
-         onChange={e=>setRecords(old=>old.map(r=>r.id===record.id?{...r,visible:e.target.checked}:r))}/>
-       <button title={record.source.name} onClick={()=>{setSelectedRecord(record.id);setInfo('');latest.current.onHover(null);}}>{record.title} · {new Date(record.createdAt).toLocaleTimeString()}</button>
-       <button aria-label={'Remove result '+record.title} onClick={()=>{
-          setRecords(old=>old.filter(r=>r.id!==record.id));
-          void deleteTerrainResult(p.projectId,record.id).catch(error=>{
-            if(alive.current)setResultCacheError(error instanceof Error?error.message:'Unable to delete cached result.');
-          });
-          if(selectedRecord===record.id)setSelectedRecord(null);
-        }}>×</button>
-     </div>)}
+     <div className="terrain-run-selector">
+       <label>Result
+         <select aria-label="Choose terrain result" value={selectedRecord??''} onChange={e=>{
+           setSelectedRecord(e.target.value||null);setInfo('');latest.current.onHover(null);
+         }}>
+           <option value="">Choose result · {records.length}</option>
+           {[...records].reverse().map(r=><option value={r.id} key={r.id}>
+             {r.title} · {new Date(r.createdAt).toLocaleTimeString()}
+           </option>)}
+         </select>
+       </label>
+     </div>
+     <details className="terrain-layer-manager">
+       <summary>Layers · {records.length}</summary>
+       <div className="terrain-result-layer-list">
+         {[...records].reverse().map(record=><div key={record.id} className={'scratch-row '+(selectedRecord===record.id?'active':'')}>
+           <input type="checkbox" aria-label={'Show '+record.title+' '+record.id}
+             checked={record.visible} disabled={!record.advanced?.features.length&&!record.advanced?.raster}
+             onChange={e=>setRecords(old=>old.map(r=>r.id===record.id?{...r,visible:e.target.checked}:r))}/>
+           <button title={record.source.name} onClick={()=>{setSelectedRecord(record.id);setInfo('');latest.current.onHover(null);}}>
+             {record.title} · {new Date(record.createdAt).toLocaleTimeString()}</button>
+           <button aria-label={'Remove result '+record.title} onClick={()=>{
+             setRecords(old=>old.filter(r=>r.id!==record.id));
+             void deleteTerrainResult(p.projectId,record.id).catch(error=>{
+               if(alive.current)setResultCacheError(error instanceof Error?error.message:'Unable to delete cached result.');
+             });
+             if(selectedRecord===record.id)setSelectedRecord(null);
+           }}>×</button>
+         </div>)}
+       </div>
+     </details>
    </section>}
    {resultCacheError&&<small role="alert" className="discovery-error">
      Result cache: {resultCacheError} Export active results before leaving this page.
    </small>}
-   <details className="terrain-run-provenance" aria-label="Local terrain run history">
-     <summary>Local run history · {runHistory.length} metadata versions</summary>
-     <small className="compact-notice">Project-scoped run receipts and cached scientific results. Results can be reopened in this browser after reload, but clearing browser data or switching devices removes the local cache. Export GeoTIFF and analysis data for durable archival.</small>
-
-     {historyStorageError&&<small className="discovery-error" role="alert">Browser storage unavailable; export run history now.</small>}
-     <div className="survey-action-bar">
-       <button disabled={!runHistory.length} onClick={()=>{
+   {runHistory.length>0&&<details className="terrain-run-provenance terrain-history" aria-label="Local terrain run history">
+     <summary>History · {runHistory.length}</summary>
+     {historyStorageError&&<small role="alert">History storage unavailable</small>}
+     <div className="terrain-history-actions">
+       <select aria-label="Select terrain run metadata" value={historyFocus} onChange={e=>setHistoryFocus(e.target.value)}>
+         <option value="">Choose history</option>
+         {runHistory.map(item=><option key={item.id} value={item.id}>
+           {item.operation} · {new Date(item.createdAt).toLocaleTimeString()} · {item.id.slice(0,8)}
+         </option>)}
+       </select>
+       <button disabled={!historyFocus} aria-label="Remove selected history receipt"
+         title="Remove metadata receipt only" onClick={()=>{
+           setRunHistory(old=>old.filter(item=>item.id!==historyFocus));setHistoryFocus('');
+         }}>Remove</button>
+       <button aria-label="Export terrain run history" onClick={()=>{
          const url=URL.createObjectURL(new Blob([JSON.stringify(runHistory,null,2)],{type:'application/json'}));
          const a=document.createElement('a');a.href=url;a.download='terrain-run-history.json';
          document.body.appendChild(a);a.click();a.remove();
          window.setTimeout(()=>URL.revokeObjectURL(url),1000);
-       }}>Export run metadata</button>
+       }}>Export history</button>
      </div>
-     {runHistory.slice(0,12).map(item=><div className="scratch-row" key={item.id}>
-       <span title={item.sourceName+' · '+item.sourceId}>{item.operation} · {item.sourceName} · {new Date(item.createdAt).toLocaleTimeString()} · {item.id.slice(0,8)}</span>
-       <button aria-label={'Remove history '+item.id.slice(0,8)} title="Remove metadata receipt only"
-         onClick={()=>setRunHistory(old=>old.filter(r=>r.id!==item.id))}>×</button>
-     </div>)}
-   </details>
+   </details>}
    {(result||slope||profile)&&<ResultPane expanded={expanded} onClose={()=>setExpanded(false)}>
      <div className="section-heading">{selected?.title} <span><button onClick={()=>setExpanded(!expanded)}>{expanded?'Close expanded':'Expand'}</button> <button onClick={exportResult} title="Export result data">Export</button></span></div>
-     <small className="compact-notice">{selected?.source.name}{inputsChanged?' · previous inputs':''}</small>
+     {inputsChanged&&<small role="status" className="discovery-error">Inputs changed since this run</small>}
      {selected&&<details className="terrain-run-provenance" aria-label="Terrain run provenance">
-       <summary>Source & run details · {selected.id.slice(0,8)}</summary>
+       <summary>Source · {selected.id.slice(0,8)}</summary>
        <div className="terrain-source-details">
          <div>Operation: {selected.title}</div>
          <div>Run: {new Date(selected.createdAt).toLocaleString()} · ID {selected.id}</div>
@@ -627,7 +649,7 @@ export default function TerrainWorkbench(p:Props){
            Source DEM coverage and calculated-slope coverage are different measures.
          </small>}
        <details className="terrain-result-quality" aria-label="Terrain method and quality">
-         <summary>Method and quality · {result.valid_cells} valid DEM cells
+         <summary>Quality · {result.valid_cells} DEM cells
            {Number.isFinite(result.metrics.dataset_overlap_pct)
              ?' · '+fmt(result.metrics.dataset_overlap_pct)+'% study-area overlap':''}
            {Number.isFinite(result.metrics.valid_grid_pct)
