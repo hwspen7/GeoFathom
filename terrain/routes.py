@@ -218,3 +218,16 @@ async def research_verify(request:Request,body:ResearchArchiveInput):
         return await run_cancelable(request,verify_research_bundle,raw)
     except (RasterError,ValueError,binascii.Error) as error:
         raise HTTPException(status_code=422,detail=str(error)) from error
+
+
+@router.post("/research/replay")
+async def research_replay(request:Request,body:ResearchArchiveInput):
+    """Recompute every archived research raster from the included aligned inputs."""
+    import base64
+    import binascii
+    from .research import replay_research_bundle
+    try:
+        raw=base64.b64decode(body.archive_base64,validate=True)
+        return await run_cancelable(request,replay_research_bundle,raw)
+    except (RasterError,ValueError,binascii.Error) as error:
+        raise HTTPException(status_code=422,detail=str(error)) from error
