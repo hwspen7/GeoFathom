@@ -980,7 +980,20 @@ export interface TerrainRaster {png:string;geotiff:string;corners:[[number,numbe
 export interface TerrainRasterLayer {id:string;title:string;raster:TerrainRaster;opacity:number;resampling:'nearest'|'linear'}
 export interface TerrainDistributionBin {lower_m:number;upper_m:number;cells:number;area_m2:number;cumulative_pct:number}
 export interface TerrainLOD {tile_cells:number;levels:number[];transport:string;tiles:Array<{lod_step:number;row_start:number;col_start:number;rows:number;cols:number;bounds_cell:number[];row_indices:number[];col_indices:number[];heights:Array<number|null>}>}
-export interface TerrainMesh {rows:number;cols:number;dx_m:number;dy_m:number;heights:Array<number|null>;origin_xy?:[number,number];source_crs?:string;texture?:{png:string;coverage_pct:number};lod?:TerrainLOD}
+export interface TerrainMesh {rows:number;cols:number;dx_m:number;dy_m:number;heights:Array<number|null>;origin_xy?:[number,number];source_crs?:string;texture?:{png:string;coverage_pct:number};lod?:TerrainLOD;source_grid_rows?:number;source_grid_cols?:number;source_sampling_step?:number}
+export interface StreamedTerrainTile {
+  source_crs:string;grid_rows:number;grid_cols:number;grid_cell_width_m:number;grid_cell_height_m:number;
+  grid_origin_xy:[number,number];level:number;tile_row:number;tile_col:number;
+  row_indices:number[];col_indices:number[];rows:number;cols:number;
+  heights:Array<number|null>;valid_quads:boolean[];nodata_policy:string;source_elevation_unit:string;
+}
+export function fetchTerrainMeshTile(body:{
+  image_id:string;geometry:GeoJSON.Geometry;level:1|2|4|8|16|32|64;
+  tile_row:number;tile_col:number;tile_cells?:32;
+},signal?:AbortSignal):Promise<StreamedTerrainTile>{
+  return request('/terrain/mesh/tile',{method:'POST',signal,
+    headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+}
 export interface AdvancedTerrainResult {
   operation:TerrainOperation;source_crs:string;source_vertical_datum?:string|null;valid_cells:number;missing_cells:number;
   cell_area_m2:number;metrics:Record<string,number>;warning:string;
