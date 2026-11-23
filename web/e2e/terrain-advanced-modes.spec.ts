@@ -88,8 +88,11 @@ test('advanced surface families retain distinct real results and scientific expo
    .toHaveCount(oldCount+1,{timeout:15000});
   await expect(page.getByLabel('Terrain results')).toBeVisible();
   // Match literal operation titles without treating punctuation as regex.
+  // The title button carries source provenance. The separate "Remove
+  // result ..." button also has the operation name in its accessible label,
+  // and must not make the selection ambiguous.
   await expect(page.getByLabel('Analysis result layers')
-    .getByRole('button',{name:title,exact:false})).toBeVisible();
+    .locator('.scratch-row > button[title]').filter({hasText:title})).toBeVisible();
  };
  for(const name of [
   'Elevation map','Aspect map','Ruggedness (TRI)','Position (TPI)',
