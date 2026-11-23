@@ -2,6 +2,7 @@
 
 import asyncio
 from threading import Event
+from typing import Literal
 from fastapi import APIRouter,HTTPException,Request,Header
 from pydantic import BaseModel,Field
 from starlette.concurrency import run_in_threadpool
@@ -119,6 +120,8 @@ class AdvancedTerrainInput(BaseModel):
     refraction_coeff:float=Field(default=0.13,ge=0,le=0.5)
     comparison_image_id:str|None=None
     observer_points:list[tuple[float,float]]|None=Field(default=None,min_length=2,max_length=4)
+    gradient_method:Literal['horn','zevenbergen_thorne']='horn'
+    slope_classes:Literal['standard','detailed','broad']='standard'
 
 @router.post("/advanced")
 async def advanced(request:Request,body:AdvancedTerrainInput):
@@ -130,6 +133,6 @@ async def advanced(request:Request,body:AdvancedTerrainInput):
             body.section_spacing,body.section_width,raster(body.texture_image_id) if body.texture_image_id and body.operation=='mesh' else None,
             body.fill_sinks,body.consider_curvature,body.refraction_coeff,
             raster(body.comparison_image_id) if body.operation=="dem_difference" and body.comparison_image_id else None,
-            body.observer_points)
+            body.observer_points,body.gradient_method,body.slope_classes)
     except (GeometryError,RasterError,ValueError,OverflowError) as error:
         raise HTTPException(status_code=422,detail=str(error)) from error
