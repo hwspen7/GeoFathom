@@ -267,3 +267,34 @@ def test_multi_viewshed_rejects_unusable_observer_inputs(dem):
     with pytest.raises(RasterError,match="valid selected DEM cell"):
         run_terrain(path,polygon,"viewshed_multi",
                     observer_points=[point,(0.,0.)])
+
+
+def test_multi_observer_count_api_and_request_validation(dem,tmp_path,monkeypatch):
+    from shutil import copyfile
+    from fastapi.testclient import TestClient
+    from core.main import app
+    from imagery.store import store_upload
+    path,polygon=dem
+    root=tmp_path/"multi-catalog"
+    monkeypatch.setenv("GEOFATHOM_IMAGERY_DIR",str(root))
+    copied=tmp_path/"visibility-api.tif"
+    copyfile(path,copied)
+    image=store_upload(copied,"visibility-api.tif")
+    t=Transformer.from_crs("EPSG:32617","EPSG:4326",always_xy=True)
+    a=t.transform(500035,4499965)
+    b=t.transform(500165,4499835)
+    client=TestClient(app)
+    request={"image_id":image["id"],"geometry":polygon,
+             "operation":"viewshed_multi","observer_points":[a,b]}
+    response=client.post("/terrain/advanced",json=request)
+    assert response.status_code==200,response.text
+    body=response.json()
+    assert body["raster"]["unit"]=="observer_count"
+    assert body["metrics"]["observer_count"]==2
+    assert body["source_crs"]=="EPSG:32617"
+    too_few=client.post("/terrain/advanced",json={
+        **request,"observer_points":[a]})
+    assert too_few.status_code==422
+    too_many=client.post("/terrain/advanced",json={
+        **request,"observer_points":[a,b,a,b,a]})
+    assert too_many.status_code==422

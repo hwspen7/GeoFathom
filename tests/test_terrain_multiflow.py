@@ -116,3 +116,28 @@ def test_stream_order_high_threshold_is_explicit_error(projected_dem):
     path,polygon=projected_dem
     with pytest.raises(RasterError,match="No channel cells"):
         run_terrain(path,polygon,"stream_order",stream_cells=1000000)
+
+
+def test_hydrology_products_are_reachable_through_advanced_api(projected_dem,tmp_path,monkeypatch):
+    from shutil import copyfile
+    from fastapi.testclient import TestClient
+    from core.main import app
+    from imagery.store import store_upload
+    path,polygon=projected_dem
+    root=tmp_path/"hydro-catalog"
+    monkeypatch.setenv("GEOFATHOM_IMAGERY_DIR",str(root))
+    copied=tmp_path/"hydro-api.tif"
+    copyfile(path,copied)
+    image=store_upload(copied,"hydro-api.tif")
+    client=TestClient(app)
+    for operation,unit in (("flow_accumulation_mfd","cell_equivalents"),
+                           ("stream_order","Strahler_order")):
+        response=client.post("/terrain/advanced",json={
+            "image_id":image["id"],"geometry":polygon,"operation":operation,
+            "stream_cells":2,"fill_sinks":True,
+        })
+        assert response.status_code==200,response.text
+        product=response.json()
+        assert product["raster"]["unit"]==unit
+        assert product["source_crs"]=="EPSG:32617"
+        assert product["metrics"]["product_valid_cells"]>0
