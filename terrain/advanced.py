@@ -487,8 +487,10 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
         # polygon. Unknown rays stay NoData rather than becoming invisible.
         if point is not None:
             raise RasterError("Use observer_points, not point, for multi-observer visibility.")
-        if not isinstance(observer_points,(list,tuple)) or not 2<=len(observer_points)<=4:
-            raise RasterError("Multi-observer visibility requires 2–4 observer points.")
+        if not isinstance(observer_points,(list,tuple)) or not 2<=len(observer_points)<=(12 if optimize_observers else 4):
+            raise RasterError("Multi-observer visibility requires 2–4 sites, or 2–12 optimisation candidates.")
+        if optimize_observers>len(observer_points):
+            raise RasterError("Optimal observer count cannot exceed the available candidates.")
         origins=[_origin(observer,crs,affine,valid) for observer in observer_points]
         if len(set(origins))!=len(origins):
             raise RasterError("Multi-observer points must occupy distinct DEM cells.")
@@ -499,15 +501,30 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
             for r,c in origins)
         if total_steps>100_000_000:
             raise RasterError("Multi-observer visibility exceeds 100 million ray samples; reduce the area.")
+        cached=None
+        if optimize_observers:
+            from .p1_science import greedy_coverage
+            cached=[_visibility(z,valid,origin,affine,observer_height,target_height,cancel,
+                consider_curvature,refraction_coeff,max_distance_m,view_azimuth,view_width,
+                blocking_surface,blocking_valid) for origin in origins]
+            indices,gains,_=greedy_coverage([pair[0] for pair in cached],
+                [pair[1] for pair in cached],optimize_observers,cancel)
+            result["selection"]={"selected_candidate_indices":indices,
+                                 "marginal_visible_cells":gains,
+                                 "total_candidate_sites":len(origins)}
+            origins=[origins[i] for i in indices]
+            cached=[cached[i] for i in indices]
         count=np.zeros(z.shape,dtype=np.uint8)
         fully_known=valid.copy()
         population=np.zeros(z.shape,dtype=bool)
-        for origin in origins:
+        for index,origin in enumerate(origins):
             checkpoint(cancel)
             population |= _visibility_scope(valid,origin,affine,max_distance_m,view_azimuth,view_width)
-            visible,available=_visibility(z,valid,origin,affine,
-                observer_height,target_height,cancel,consider_curvature,
-                refraction_coeff,max_distance_m,view_azimuth,view_width)
+            visible,available=(cached[index] if cached is not None else
+                _visibility(z,valid,origin,affine,
+                    observer_height,target_height,cancel,consider_curvature,
+                    refraction_coeff,max_distance_m,view_azimuth,view_width,
+                    blocking_surface,blocking_valid))
             count+=visible.astype(np.uint8)
             # A count of zero or one is not exact if ANY observer's ray
             # crosses NoData. Mark such pixels unknown rather than
@@ -528,6 +545,8 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
                                           "Visible from any observer",cancel)
         result["metrics"]={
             "observer_count":len(origins),
+            "candidate_site_count":len(observer_points),
+            "optimized_site_count":optimize_observers,
             "visible_cells":int(fully_visible.sum()),
             "visible_any_known_cells":int(union.sum()),
             "visible_by_all_cells":int((count==len(origins)).sum()),
@@ -546,7 +565,9 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
             "rays are known; NoData means one or more rays are unknown. "
             "The vector union includes any positively observed cells even "
             "when other observer rays are unknown. "
-            "Terrain/DSM only, without independently verified buildings. "+
+            ("Supplied co-registered DSM obstructs rays; missing DSM cells remain unknown. " if dsm_path else
+             "Bare DEM only; buildings and vegetation are not evaluated. ")+
+            ("Greedy selection maximises incremental known-cell coverage, not a global optimum. " if optimize_observers else "")+
             "Outside-sector/range cells are excluded from raster counts and coverage denominators.")
     elif operation=="watershed":
         origin=_origin(point,crs,affine,valid)
