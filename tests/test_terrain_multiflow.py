@@ -141,3 +141,18 @@ def test_hydrology_products_are_reachable_through_advanced_api(projected_dem,tmp
         assert product["raster"]["unit"]==unit
         assert product["source_crs"]=="EPSG:32617"
         assert product["metrics"]["product_valid_cells"]>0
+
+
+def test_mfd_exponent_is_a_real_model_choice_and_recorded_in_output(projected_dem):
+    z=np.array([[10.,8.,7.],[8.,4.,2.],[7.,2.,0.]])
+    valid=np.ones(z.shape,bool)
+    broad=mfd_accumulation(z,valid,10,10,exponent=.5)
+    concentrated=mfd_accumulation(z,valid,10,10,exponent=6)
+    assert np.nanmax(np.abs(broad-concentrated))>1e-3
+    assert broad[-1,-1]==pytest.approx(9)
+    assert concentrated[-1,-1]==pytest.approx(9)
+    path,polygon=projected_dem
+    result=run_terrain(path,polygon,"flow_accumulation_mfd",mfd_exponent=2.5)
+    assert result["metrics"]["mfd_exponent"]==pytest.approx(2.5)
+    assert result["algorithm_options"]["mfd_exponent"]==pytest.approx(2.5)
+    assert "2.5" in result["warning"]
