@@ -326,3 +326,32 @@ def test_multi_viewshed_partial_ray_never_becomes_false_aggregate_visibility(dem
     # The raster must not claim a count when any observer ray is blocked
     # by unknown data. Confirm there is genuine NoData in the result.
     assert np.isnan(sampled).any()
+
+
+def test_gradient_and_class_options_propagate_through_real_terrain_run(dem):
+    import base64
+    from rasterio.io import MemoryFile
+    path,polygon=dem
+    standard=run_terrain(path,polygon,"slope_map",
+                         gradient_method="horn",slope_classes="standard")
+    alternative=run_terrain(path,polygon,"slope_map",
+                            gradient_method="zevenbergen_thorne",
+                            slope_classes="detailed")
+    assert standard["algorithm_options"]["gradient_method"]=="horn"
+    assert alternative["algorithm_options"]["slope_classes"]=="detailed"
+    assert len(standard["raster"]["legend"])==6
+    assert len(alternative["raster"]["legend"])==8
+    assert alternative["metrics"]["product_p10"]==pytest.approx(
+        standard["metrics"]["product_p10"])
+    assert alternative["metrics"]["product_p50"]==pytest.approx(
+        standard["metrics"]["product_p50"])
+    assert alternative["metrics"]["product_p90"]==pytest.approx(
+        standard["metrics"]["product_p90"])
+    assert alternative["metrics"]["product_std"]>=0.
+    # Display classification cannot overwrite source-grade float32 pixels.
+    with MemoryFile(base64.b64decode(alternative["raster"]["geotiff"])) as mem:
+        with mem.open() as source:
+            heights=source.read(1)
+            assert source.crs.to_epsg()==32617
+            assert np.nanmedian(heights)==pytest.approx(
+                alternative["metrics"]["product_p50"],rel=1e-6)
