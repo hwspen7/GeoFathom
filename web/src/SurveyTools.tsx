@@ -123,11 +123,11 @@ export default function SurveyTools({
       )}
       {mode&&sketchError&&<div className="survey-sketch-alert" role="alert">{sketchError}</div>}
       <div className="survey-action-bar">
-        <button title="Edit vertices (E)" disabled={!geometry||locked||busy} className={editing && !moving && !edgeMoving ? 'active' : ''}
+        <button title="Edit vertices (E)" disabled={!geometry||locked||busy||Boolean(mode)} className={editing && !moving && !edgeMoving ? 'active' : ''}
           onClick={() => onEdit(!editing || moving || edgeMoving, false)}><Pencil size={14}/> Vertices</button>
-        <button title="Move whole shape (M)" disabled={!geometry||locked||busy} className={moving ? 'active' : ''}
+        <button title="Move whole shape (M)" disabled={!geometry||locked||busy||Boolean(mode)} className={moving ? 'active' : ''}
           onClick={() => onEdit(!moving, !moving)}><MousePointer2 size={14}/> Move</button>
-        {onEdgeMove&&<button title="Drag a segment midpoint to move both endpoints (B)" disabled={!geometry||locked||busy||geometry.type==='Point'} className={edgeMoving?'active':''}
+        {onEdgeMove&&<button title="Drag a segment midpoint to move both endpoints (B)" disabled={!geometry||locked||busy||Boolean(mode)||geometry.type==='Point'} className={edgeMoving?'active':''}
           onClick={()=>onEdgeMove(!edgeMoving)}><Ruler size={14}/> Edge</button>}
         <button title="Snap to nearby vertices" className={snapping ? 'active' : ''}
           onClick={() => onSnapping(!snapping)}>Snap {snapping ? 'ON' : 'OFF'}</button>
@@ -187,9 +187,9 @@ export default function SurveyTools({
             <option key={feature.id} value={feature.id}>{feature.name}</option>)}
         </select>
         <div className="survey-action-bar">
-          <button disabled={!geometry || !reference} onClick={() => onOverlay('union',reference)}>Union</button>
-          <button disabled={!geometry || !reference} onClick={() => onOverlay('difference',reference)}>Subtract</button>
-          <button disabled={!geometry || !reference} onClick={() => onOverlay('intersection',reference)}>Intersect</button>
+          <button disabled={!geometry || !reference||Boolean(mode)||busy} onClick={() => onOverlay('union',reference)}>Union</button>
+          <button disabled={!geometry || !reference||Boolean(mode)||busy} onClick={() => onOverlay('difference',reference)}>Subtract</button>
+          <button disabled={!geometry || !reference||Boolean(mode)||busy} onClick={() => onOverlay('intersection',reference)}>Intersect</button>
         </div>
       </div>
     </div>
