@@ -78,6 +78,7 @@ export default function ExportWorkbench(p:Props){
   }).catch(e=>{if(live)setError(String(e));});},700);
   return ()=>{live=false;window.clearTimeout(timer);};
  },[job,p.projectId]);
+ useEffect(()=>{setFields(null);},[scope,layer,p.selected]);
  const count=scope==='selection'?Number(Boolean(p.selected)):
   scope==='local'?p.scratch.length:scope==='areas'?p.faces.length:
   preview?.count??(p.workspace?.total??0);
@@ -151,7 +152,7 @@ export default function ExportWorkbench(p:Props){
      });
     }else throw Error('This format requires a saved project.');
    }
-   if(epoch.current===generation)setMessage(background&&savedScope?'Export queued. The artifact will be available when complete.':'Export generated: '+format.toUpperCase()+'.');
+   if(epoch.current===generation)setMessage(background&&savedScope&&vectorFormat?'Export queued. The artifact will be available when complete.':'Export generated: '+format.toUpperCase()+'.');
   }catch(e){if(epoch.current===generation)setError(e instanceof Error?e.message:String(e));}
   finally{if(epoch.current===generation)setBusy(false);}
  }

@@ -126,6 +126,11 @@ def _xml_features(blob):
             if len(types)!=1 or next(iter(types)) not in {'Point','LineString','Polygon'}:raise VectorIOError('Mixed KML collections require separate layers.')
             return {'type':'Multi'+parts[0]['type'],'coordinates':[p['coordinates'] for p in parts]}
         raise VectorIOError('Unsupported KML geometry.')
+    def gpoint(node):
+        result=[float(node.attrib['lon']),float(node.attrib['lat'])]
+        elevation=next((n for n in node if local(n)=='ele'),None)
+        if elevation is not None:result.append(float(elevation.text))
+        return result
     for node in root.iter():
         if local(node) not in {'Placemark','wpt','trk','rte'}:continue
         encoded=node.find('.//{'+_GF+'}properties')
@@ -134,11 +139,11 @@ def _xml_features(blob):
         kind=local(node)
         if kind=='Placemark':
             geom=kgeom(next(n for n in node if local(n) in {'Point','LineString','Polygon','MultiGeometry'}))
-        elif kind=='wpt':geom={'type':'Point','coordinates':[float(node.attrib['lon']),float(node.attrib['lat'])]}
+        elif kind=='wpt':geom={'type':'Point','coordinates':gpoint(node)}
         else:
-            segments=[[[float(p.attrib['lon']),float(p.attrib['lat'])] for p in segment if local(p) in {'trkpt','rtept'}]
+            segments=[[gpoint(p) for p in segment if local(p) in {'trkpt','rtept'}]
                       for segment in node if local(segment)=='trkseg'] if kind=='trk' else [
-                      [[float(p.attrib['lon']),float(p.attrib['lat'])] for p in node if local(p)=='rtept']]
+                      [gpoint(p) for p in node if local(p)=='rtept']]
             multiple=node.find('.//{'+_GF+'}geometry_type')
             geom={'type':'MultiLineString','coordinates':segments} if len(segments)>1 or (multiple is not None and multiple.text=='MultiLineString') else {'type':'LineString','coordinates':segments[0]}
         layer=node.find('.//{'+_GF+'}layer')
@@ -340,7 +345,7 @@ def _columns(features,short=False):
         arrays.append(array);masks.append(mask)
     return fields,names,arrays,masks
 
-def write_vector(collection,format_name,target_crs='EPSG:4326',fields=None,precision=None,progress=None):
+def prepare_vector(collection,target_crs='EPSG:4326',fields=None,precision=None,progress=None):
     progress=progress or (lambda _:None)
     features=collection.get('features',[])
     if not features:raise VectorIOError('There are no features to export.')
@@ -360,7 +365,12 @@ def write_vector(collection,format_name,target_crs='EPSG:4326',fields=None,preci
             geom={**geom,'coordinates':rounded(geom['coordinates'])}
             if not shape(geom).is_valid or shape(geom).is_empty:raise VectorIOError('Selected precision collapses or invalidates a geometry; increase precision.')
         prepared.append({'type':'Feature','geometry':geom,'properties':props,**({'geofathom_layer':f['geofathom_layer']} if f.get('geofathom_layer') else {})})
-    export_warnings(features,format_name,target_crs)
+    return prepared
+
+def write_vector(collection,format_name,target_crs='EPSG:4326',fields=None,precision=None,progress=None):
+    features=collection.get('features',[])
+    prepared=prepare_vector(collection,target_crs,fields,precision,progress)
+    export_warnings(prepared,format_name,target_crs)
     if format_name=='report':
         return dumps({'schema':'geofathom.export-report.v2','feature_count':len(features),
             'coordinate_system':'EPSG:4326','measurements':[{'id':f.get('id'),'name':f.get('properties',{}).get('name','Unnamed'),
@@ -402,35 +412,46 @@ def write_vector(collection,format_name,target_crs='EPSG:4326',fields=None,preci
                 for key,value in props.items():ET.SubElement(ET.SubElement(ext,'Data',name=key),'value').text=value if isinstance(value,str) else dumps(value)
             elif geom['type']=='Point':
                 node=ET.SubElement(document,'wpt',lon=str(geom['coordinates'][0]),lat=str(geom['coordinates'][1]));ext=ET.SubElement(node,'extensions')
+                if len(geom['coordinates'])==3:ET.SubElement(node,'ele').text=str(geom['coordinates'][2])
             else:
                 node=ET.SubElement(document,'trk')
                 for path in [geom['coordinates']] if geom['type']=='LineString' else geom['coordinates']:
                     segment=ET.SubElement(node,'trkseg')
-                    for point in path:ET.SubElement(segment,'trkpt',lon=str(point[0]),lat=str(point[1]))
+                    for point in path:
+                        waypoint=ET.SubElement(segment,'trkpt',lon=str(point[0]),lat=str(point[1]))
+                        if len(point)==3:ET.SubElement(waypoint,'ele').text=str(point[2])
                 ext=ET.SubElement(node,'extensions');ET.SubElement(ext,'{'+_GF+'}geometry_type').text=geom['type']
             name_node=ET.Element('name');name_node.text=str(props.get('name','Feature'));node.insert(0,name_node)
             desc_node=ET.Element('description' if format_name=='kml' else 'desc');desc_node.text=str(props.get('source',''));node.insert(1,desc_node)
             if format_name=='kml':kgeom(node,geom)
             if f.get('geofathom_layer'):ET.SubElement(ext,'{'+_GF+'}layer').text=f['geofathom_layer']
             ET.SubElement(ext,'{'+_GF+'}properties').text=dumps(props)
-            if format_name=='gpx' and geom['type']!='Point':node.remove(ext);node.insert(2,ext)
+            if format_name=='gpx':
+                node.remove(ext)
+                if geom['type']=='Point':
+                    elevation=node.find('ele')
+                    if elevation is not None:node.remove(elevation);node.insert(0,elevation)
+                    node.append(ext)
+                else:node.insert(2,ext)
         return ET.tostring(root,encoding='utf-8',xml_declaration=True),'application/vnd.google-earth.kml+xml' if format_name=='kml' else 'application/gpx+xml','geofathom.'+format_name
     if format_name not in {'gpkg','shapefile'}:raise VectorIOError('Unsupported vector export format.')
     groups={}
     for f in prepared:
-        family=f['geometry']['type'] if f['geometry']['type'] in {'Point','MultiPoint'} else f['geometry']['type'].replace('Multi','')
-        groups.setdefault((f.get('geofathom_layer','features'),family),[]).append(f)
+        family=f['geometry']['type'] if format_name=='gpkg' or f['geometry']['type'] in {'Point','MultiPoint'} else f['geometry']['type'].replace('Multi','')
+        groups.setdefault((f.get('geofathom_layer','features'),family,shape(f['geometry']).has_z),[]).append(f)
     with tempfile.TemporaryDirectory(prefix='geofathom-export-') as temp:
         root=Path(temp);output=root/'geofathom.gpkg';manifest={'schema':'geofathom.shapefile.v1','layers':{},'checksums':{}}
-        for index,((source_layer,family),items) in enumerate(groups.items()):
+        for index,((source_layer,family,has_z),items) in enumerate(groups.items()):
             layer=(re.sub(r'[^a-zA-Z0-9_]','_',str(source_layer))[:40] or 'features')+'_'+family.lower()+'_'+str(index);short=format_name=='shapefile'
             original,names,arrays,masks=_columns(items,short)
             if not short:
                 names.append('_gf_json');arrays.append(np.array([dumps(f['properties']) for f in items],dtype=object));masks.append(np.zeros(len(items),dtype=bool))
             target=root/(layer+'.shp') if short else output
+            output_type=family if not short else ('Multi'+family if any(f['geometry']['type'].startswith('Multi') for f in items) and family not in {'Point','MultiPoint'} else family)
+            if has_z:output_type+=' Z'
             pyogrio.raw.write(target,np.array([shapely.to_wkb(shape(f['geometry'])) for f in items],dtype=object),arrays,names,
                 field_mask=masks,driver='ESRI Shapefile' if short else 'GPKG',layer=layer,crs=target_crs,encoding='UTF-8',
-                geometry_type='Unknown' if not short else ('Multi'+family if any(f['geometry']['type'].startswith('Multi') for f in items) and family not in {'Point','MultiPoint'} else family),
+                geometry_type=output_type,
                 layer_metadata=None if short else {'GEOFATHOM_JSON':'_gf_json','GEOFATHOM_FIELDS':dumps(dict(zip(names[:-1],original)))})
             if short:manifest['layers'][layer]={'fields':dict(zip(names,original)),'properties':[f['properties'] for f in items]}
         if format_name=='gpkg':return output.read_bytes(),'application/geopackage+sqlite3','geofathom.gpkg'

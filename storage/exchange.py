@@ -11,7 +11,7 @@ from shapely.ops import unary_union
 from geometry.measure import measure_geometry
 from .database import _connect,_required_project,_record_feature,_now,database_path,StorageError
 from .workspace import _schema,_default,_layer
-from .vectorio import MAX_FEATURES,MAX_BYTES,VectorIOError,read_vector,inspect_vector,field_schema,dumps,write_vector,export_warnings
+from .vectorio import MAX_FEATURES,MAX_BYTES,VectorIOError,read_vector,inspect_vector,field_schema,dumps,write_vector,export_warnings,prepare_vector
 
 def stage_root(project_id):
     return database_path().parent/'exchange'/hashlib.sha256(project_id.encode()).hexdigest()
@@ -84,15 +84,15 @@ def commit_import(project_id,plans,target_layer=None,separate_layers=True,cancel
                         from jobs.leases import LEASE_SECONDS
                         c.execute('UPDATE gis_jobs SET lease_expires=? WHERE id=? AND lease_owner=?',(time.time()+LEASE_SECONDS,uid,_ACTIVE_OWNER.get()))
                         c.execute('UPDATE gis_job_slots SET expires=? WHERE owner=?',(time.time()+LEASE_SECONDS,_ACTIVE_OWNER.get()))
-                key=(plan['name'],item.get('source_layer','Imported'))
+                key=(plan.get('file_id',plan['name']),item.get('source_layer','Imported'))
                 if target_layer:layer=target_layer
                 elif not separate_layers:layer=default
                 else:
                     if key not in assignments:
                         if c.execute('SELECT count(*) FROM geo_layers WHERE project_id=?',(project_id,)).fetchone()[0]>=100:raise StorageError('A project supports at most 100 layers.')
                         layer=str(uuid4());assignments[key]=layer
-                        name=(Path(key[0]).stem+' · '+str(key[1]))[:100]
-                        c.execute('INSERT INTO geo_layers VALUES(?,?,?,?,?,?,?,?)',(layer,project_id,name,'#2563eb',1,0,len(assignments),_now()))
+                        name=(Path(plan['name']).stem+' · '+str(key[1]))[:100]
+                        c.execute('INSERT INTO geo_layers VALUES(?,?,?,?,?,?,?,?)',(layer,project_id,name,'#2563eb',1,0,c.execute('SELECT COALESCE(MAX(z_index),0)+1 FROM geo_layers WHERE project_id=?',(project_id,)).fetchone()[0],_now()))
                     layer=assignments[key]
                 record=_record_feature(c,project_id,item['geometry'],item['name'],item['source'],item['properties'])
                 vertices+=record['measurement']['coordinate_count']
@@ -118,7 +118,7 @@ def execute_import(project_id,payload,progress,cancelled):
             cancelled();options=selections.get(file['id'],{}).get('options',{})
             parsed=read_vector(file['name'],(path/file['id']).read_bytes(),options,
                 progress=lambda fraction:progress((index+fraction)/len(files)*.85))
-            plans.append({**parsed,'name':file['name']})
+            plans.append({**parsed,'name':file['name'],'file_id':file['id']})
         progress(.9)
         def finalize(result,c):
             report=put_artifact(project_id,dumps(result).encode(),'geofathom-import-report.json','application/json',cleanup=False)
@@ -194,11 +194,12 @@ def export_collection(project_id,options):
 
 def preflight(project_id,options):
     collection=export_collection(project_id,options)
+    prepared=prepare_vector(collection,options.get('target_crs','EPSG:4326'),options.get('fields'),options.get('precision'))
     fields=options.get('fields')
     if fields is not None and (len(set(fields))!=len(fields) or set(fields)-{f['name'] for f in field_schema(collection['features'])}):raise VectorIOError('Requested export fields are duplicated or missing.')
     return {'count':len(collection['features']),'schema':field_schema(collection['features']),
         'geometry_types':sorted({f['geometry']['type'] for f in collection['features']}),
-        'warnings':export_warnings(collection['features'],options['format'],options.get('target_crs','EPSG:4326')),
+        'warnings':export_warnings(prepared,options['format'],options.get('target_crs','EPSG:4326')),
         'target_crs':options.get('target_crs','EPSG:4326')}
 
 def perform_export(project_id,options):

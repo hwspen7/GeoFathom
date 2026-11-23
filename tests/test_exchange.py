@@ -313,3 +313,19 @@ def test_gpkg_external_native_column_edits_take_precedence(tmp_path):
     assert result[0]['properties']['nested']=={'a':[2]}
     assert result[0]['properties']['huge']==2**60+1
     assert result[1]['properties']['huge'] is None
+
+@pytest.mark.parametrize('fmt,extension',[('geojson','geojson'),('gpkg','gpkg'),('shapefile','zip'),('kml','kml'),('gpx','gpx')])
+def test_altitude_is_preserved_without_vertical_reprojection(fmt,extension):
+    one=feature();one['geometry']['coordinates'].append(123.25)
+    line={'type':'Feature','geometry':{'type':'LineString','coordinates':[[-83,40,5],[-82.9,40.1,10]]},'properties':{'name':'3D line'}}
+    binary,_,_=write_vector(collection(one,line),fmt)
+    features=read_vector('height.'+extension,binary)['features']
+    assert next(f for f in features if f['name']=='Site 0')['geometry']['coordinates']==pytest.approx([-83,40,123.25])
+    assert list(next(f for f in features if f['name']=='3D line')['geometry']['coordinates'][1])==[-82.9,40.1,10]
+
+def test_export_preflight_rejects_geometry_collapsing_precision():
+    pid=project()
+    poly={'type':'Feature','properties':{},'geometry':{'type':'Polygon','coordinates':[[[0,0],[.0001,0],[.0001,.0001],[0,0]]]}}
+    response=client.post(root(pid)+'/vector/export/preflight',json={'format':'geojson','precision':0,'collection':collection(poly)})
+    assert response.status_code==422,response.text
+    assert 'precision' in response.text

@@ -58,10 +58,10 @@ def _progress(fraction):
     uid=_ACTIVE_JOB.get()
     if uid is None:
         return
-    if _cancel_marker(uid).exists():raise RuntimeError("GIS operation cancelled.")
     state=_ACTIVE_PROGRESS.get()
     if state is None:
         return
+    if _cancel_marker(uid).exists():raise RuntimeError("GIS operation cancelled.")
     completed=max(10,min(95,10+int(80*float(fraction))))
     now=time.monotonic()
     # Check cancellation every 0.2 seconds or every 5% progression, rather
