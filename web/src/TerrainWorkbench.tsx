@@ -1,4 +1,5 @@
 import {useEffect,useMemo,useRef,useState,type ChangeEvent} from 'react';
+import {createPortal} from 'react-dom';
 import {Mountain} from 'lucide-react';
 import {advancedTerrain,saveFeatureBatch,analyzeTerrain,terrainProfile,listImagery,uploadImagery,fetchPublicDEM,prepareDEM,type DEMProcessMode,type TerrainMesh,type TerrainOperation,type RasterAsset,type TerrainRasterLayer} from './api';
 import {ProfilePlot,MetricBars,ElevationDistribution,AspectRose,SectionPlot,ResultPane} from './TerrainCharts';
@@ -93,6 +94,7 @@ const names:Record<string,string>={cut_m3:'Cut',fill_m3:'Fill',net_cut_m3:'Net c
 const fmt=(n:number)=>n.toLocaleString('en-US',{maximumFractionDigits:2});
 interface Props{
  projectId:string|null;geometry:GeoJSON.Geometry|null;profileGeometry?:GeoJSON.LineString|null;raster:RasterAsset|null;imageRaster?:RasterAsset|null;active:boolean;connected:boolean;
+ resultsTarget?:HTMLElement|null;
  viewport:[number,number,number,number]|null;
  localImport:boolean;refreshToken:number;origin:Position|null;picking:boolean;
  onSelectRaster:(r:RasterAsset|null)=>void;onDraw:(line:boolean)=>void;onClearProfile?:()=>void;onUseExtent:()=>void;onPick:()=>void;
@@ -489,156 +491,7 @@ export default function TerrainWorkbench(p:Props){
    document.body.appendChild(link);link.click();link.remove();
    window.setTimeout(()=>URL.revokeObjectURL(url),1000);
  }
- return <div className="terrain-workbench professional-panel">
-   <div className="terrain-source">
-     <label>Elevation layer<select aria-label="DEM elevation layer" value={dem?.id??''}
-       disabled={fetching||importing}
-       onChange={e=>{
-         sourceIntent.current++;
-         if(!e.target.value){p.onSelectRaster(null);setSourceInfo('');return;}
-         const found=assets.find(item=>item.id===e.target.value)??(dem?.id===e.target.value?dem:null);
-         if(found)p.onSelectRaster(found);
-       }}>
-       <option value="">Select DEM</option>
-       {[...assets,...(dem&&!assets.some(a=>a.id===dem.id)?[dem]:[])].map(asset=><option key={asset.id} value={asset.id}>{asset.name}</option>)}
-     </select></label>
-     {!p.localImport&&<details className="access-settings"><summary>Import access</summary><input type="password" aria-label="DEM import token" value={token} onChange={e=>setToken(e.target.value)}/></details>}
-     <label className="raster-upload" title="Single-band DEM GeoTIFF, projected in meters, with meter elevations"><Mountain size={14}/> {importing?'Importing…':'Import DEM'}
-       <input type="file" aria-label="Import DEM" accept=".tif,.tiff" disabled={importing||fetching||!p.connected} onChange={e=>void importDEM(e)}/></label>
-     <label>Download area <select aria-label="DEM fetch area" value={fetchScope} onChange={e=>{setFetchChoice(e.target.value as FetchScope);setInfo('');}}>
-       <option value="viewport">Current map view</option><option value="selection" disabled={!selectedGeometry}>Selected geometry</option>
-     </select></label>
-     {selectedGeometry&&<div className="survey-action-bar">
-       <button onClick={()=>{setFetchChoice('selection');setInfo('DEM will use the selected geometry bounds, not the previous map view.');}}>Use selected area</button>
-       {p.onFitSelectedArea&&<button onClick={()=>{setFetchChoice('selection');p.onFitSelectedArea?.();}}>Fit selected area</button>}
-     </div>}
-     <small className="compact-notice" aria-label="DEM download target">
-       {fetchArea?(fetchScope==='viewport'?'Current map · ':'Selected geometry · ')+describeTerrainBounds(fetchArea):'No valid download area'}
-       {budget?' · ~'+budget.approximateCells.toLocaleString()+' grid cells':''}
-     </small>
-     {budget?.warning&&<small role="alert" className="discovery-error">{budget.warning}</small>}
-     {fetchArea&&<div className="survey-action-bar">
-       <button aria-label="Auto-fit DEM resolution" disabled={!recommendedResolution||fetching}
-         onClick={()=>{if(!recommendedResolution)return;setResolution(recommendedResolution);
-           setInfo('Finest supported output grid fitting this study area: '+recommendedResolution+
-             ' m. This does not guarantee native source accuracy.');}}>
-         Auto resolution{recommendedResolution?' · '+recommendedResolution+' m':''}
-       </button>
-       <small className="compact-notice">
-         Up to 8M cells, 4096 px/side · {supportsUSGS?'USGS 3DEP / Copernicus':'Copernicus global'}
-       </small>
-     </div>}
-     <div className="area-fields">
-       <select aria-label="Public DEM resolution" value={resolution}
-          onChange={e=>setResolution(Number(e.target.value) as 1|3|10|30|90)}>
-          <option value={30}>GLO-30 · 30 m</option>
-          <option value={90}>GLO-90 · 90 m</option>
-          <option value={10} disabled={!supportedResolutions.includes(10)}>USGS 3DEP · 10 m grid</option>
-          <option value={3} disabled={!supportedResolutions.includes(3)}>USGS 3DEP · 3 m grid</option>
-          <option value={1} disabled={!supportedResolutions.includes(1)}>USGS 3DEP · 1 m grid</option>
-        </select>
-       <button disabled={!p.connected||!fetchArea||!!budget?.warning||fetching||importing} title="Download the explicitly displayed area, not a previous selection" onClick={()=>void fetchDEM()}>{fetching?'Fetching…':'Fetch DEM'}</button>
-       {fetching&&<button aria-label="Cancel DEM download" onClick={()=>{sourceIntent.current++;fetchAbort.current?.abort();setInfo('Cancelling the previous download…');}}>Cancel</button>}
-     </div>
-     {sourceInfo&&<small className="compact-notice" title="Copernicus is DSM; 3DEP is bare-earth DEM. Requested grid size is not native resolution.">{sourceInfo}</small>}
-     {!supportsUSGS&&fetchArea&&<small className="compact-notice">USGS 3DEP is not a global data source. For local 1–3 m elevation, import a georeferenced DEM supplied by an authorized regional provider.</small>}
-     {dem&&<small className="compact-notice" title={dem.provenance}>{dem.width} × {dem.height} · {dem.crs} · elevation m · {describeTerrainBounds(dem.bbox)}</small>}
-     {dem&&<details className="terrain-dem-tools"><summary>DEM processing · Clip / Resample / Mosaic</summary>
-       <div className="professional-form">
-         <label>Operation<select aria-label="DEM processing operation" value={demProcessMode} onChange={e=>setDemProcessMode(e.target.value as DEMProcessMode)}>
-           <option value="clip">Clip selected polygon</option><option value="resample">Resample source</option><option value="mosaic">Mosaic two DEMs</option>
-         </select></label>
-         {demProcessMode==='mosaic'&&<label>Second DEM<select aria-label="DEM mosaic second source" value={processSecond} onChange={e=>setProcessSecond(e.target.value)}>
-           <option value="">Choose second DEM</option>{assets.filter(a=>a.bands===1&&a.id!==dem.id).map(a=><option key={a.id} value={a.id}>{a.name}</option>)}
-         </select></label>}
-         <label>Output grid (m)<input aria-label="DEM processing resolution" type="number" min="1" max="1000" step="any" value={processResolution} onChange={e=>setProcessResolution(e.target.value)}/></label>
-         <label>Sampling<select aria-label="DEM processing sampling" value={processSampling} onChange={e=>setProcessSampling(e.target.value as 'nearest'|'bilinear'|'average')}>
-           <option value="bilinear">Bilinear</option><option value="nearest">Nearest</option><option value="average">Area-weighted average (coarsen)</option>
-         </select></label>
-         <button disabled={!p.connected||fetching||importing||demProcessMode==='clip'&&!['Polygon','MultiPolygon'].includes(p.geometry?.type??'')||demProcessMode==='mosaic'&&(!processSecond||processSecond===dem.id)}
-           onClick={()=>void processDEM()}>{importing?'Processing…':'Create processed DEM'}</button>
-         <small className="compact-notice">Processing changes the output grid, not the native input resolution or vertical datum.</small>
-       </div>
-     </details>}
-     {mapMismatch&&<small className="discovery-error" role="status">Selected DEM is outside the current map. Choose a local source or use Fit explicitly.</small>}
-     {sourceMismatch&&<small className="discovery-error" role="status">Selected analysis shape is not completely covered by this DEM. Select a matching source.</small>}
-     {dem&&!/Copernicus DEM GLO-|USGS 3DEP Bare Earth DEM/.test(dem.provenance)&&<label className="gis-check"><input aria-label="Confirm DEM meter elevations" type="checkbox" checked={verticalConfirmed} onChange={e=>setVerticalConfirmed(e.target.checked)}/> Confirm single-band meter elevations</label>}
-   </div>
-   <WorkspaceToolShelf category={category} categories={categories} tools={modes}
-    selected={operation} onCategory={name=>{
-      setCategory(name);setOperation(null);setLive(false);setPickEnd(false);
-    }} onSelect={value=>{setOperation(value);if(value===null)setLive(false);}}/>
-   {operation&&<div className="professional-form">
-     <div className="survey-action-bar">
-       <button onClick={()=>p.onDraw(lineOperation)}>{lineOperation?'Draw profile line':'Draw study area'}</button>
-       {lineOperation&&p.profileGeometry&&<button onClick={p.onClearProfile}>Remove profile line</button>}
-       {!lineOperation&&<button disabled={!dem} aria-pressed={p.extentMode} onClick={p.onUseExtent}>DEM extent</button>}
-       {p.extentMode&&<button onClick={p.onUseSelection}>Use selection</button>}
-     </div>
-     <small className="compact-notice">{correctShape?(lineOperation?'✓ Independent profile line':p.extentMode?'✓ DEM footprint':'✓ Geometry selected'):lineOperation?'Draw a profile line; the selected area stays on the map':'Select or draw a polygon'}</small>
-     {operation==='contours'&&<label>Interval (m)<input aria-label="Contour interval" type="number" min=".01" step="any" value={interval} onChange={e=>setInterval(e.target.value)}/></label>}
-     {operation==='dem_difference'&&<label>Reference DEM<select aria-label="Reference comparison DEM" value={comparisonId} onChange={e=>setComparisonId(e.target.value)}><option value="">Select second DEM</option>{assets.filter(a=>a.bands===1&&a.id!==dem?.id).map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>}
-     {(operation==='volume'||operation==='cutfill_map')&&<label>Reference elevation (m)<input aria-label="Reference elevation" type="number" step="any" value={reference} onChange={e=>setReference(e.target.value)}/></label>}
-     {operation==='cross_sections'&&<div className="area-fields"><label>Station spacing (m)<input type="number" value={sectionSpacing} onChange={e=>setSectionSpacing(e.target.value)}/></label><label>Half-width (m)<input type="number" value={sectionWidth} onChange={e=>setSectionWidth(e.target.value)}/></label></div>}
-     {operation==='mesh'&&p.imageRaster&&p.imageRaster.bands>=3&&<label className="gis-check"><input type="checkbox" checked={drape} onChange={e=>setDrape(e.target.checked)}/> Drape selected RGB imagery</label>}
-     {operation==='hillshade'&&<div className="area-fields"><label>Sun azimuth (°)<input type="number" value={azimuth} onChange={e=>setAzimuth(e.target.value)}/></label><label>Sun altitude (°)<input type="number" value={altitude} onChange={e=>setAltitude(e.target.value)}/></label></div>}
-     {(operation==='streams'||operation==='stream_order')&&<label>Minimum upstream cells<input type="number" min="1" step="1" value={streamCells} onChange={e=>setStreamCells(e.target.value)}/></label>}
-     {['flow_direction','flow_accumulation','flow_accumulation_mfd','streams','stream_order','watershed'].includes(operation)&&<label className="gis-check"><input aria-label="Condition drainage DEM" type="checkbox" checked={fillSinks} onChange={e=>setFillSinks(e.target.checked)}/> Fill depressions and route flat cells</label>}
-     {(operation==='visibility'||operation==='viewshed_multi')&&<><label className="gis-check"><input aria-label="Consider Earth curvature" type="checkbox" checked={considerCurvature} onChange={e=>setConsiderCurvature(e.target.checked)}/> Earth curvature and atmospheric refraction</label>{considerCurvature&&<label>Refraction coefficient<input aria-label="Terrain refraction coefficient" type="number" min="0" max="0.5" step="0.01" value={refractionCoeff} onChange={e=>setRefractionCoeff(e.target.value)}/></label>}</>}
-     {(operation==='suitability'||operation==='least_cost')&&<label>Maximum slope (°)<input type="number" value={maxSlope} onChange={e=>setMaxSlope(e.target.value)}/></label>}
-     {operation==='suitability'&&<><div className="area-fields"><label>Min elevation (m)<input type="number" value={minElevation} onChange={e=>setMinElevation(e.target.value)}/></label><label>Max elevation (m)<input type="number" value={maxElevation} onChange={e=>setMaxElevation(e.target.value)}/></label></div><label>Maximum TRI (m)<input type="number" value={maxTri} onChange={e=>setMaxTri(e.target.value)}/></label></>}
-     {needsPoint&&<>
-       <div className="survey-action-bar"><button className={p.picking?'active':''} disabled={!area} onClick={()=>{setPickEnd(false);p.onPick();}}>{p.picking?'Click map…':operation==='visibility'?'Pick observer':operation==='least_cost'?'Pick route start':'Pick outlet'}</button>
-       <button disabled={!area} onClick={()=>{const center=p.geometry&&measurementAnchor(p.geometry);if(center){setLon(String(center[0]));setLat(String(center[1]));}}}>Area center</button></div>
-       <div className="area-fields"><input aria-label="Terrain origin longitude" type="number" step="any" placeholder="Longitude" value={lon} onChange={e=>setLon(e.target.value)}/>
-       <input aria-label="Terrain origin latitude" type="number" step="any" placeholder="Latitude" value={lat} onChange={e=>setLat(e.target.value)}/></div>
-       {operation==='least_cost'&&<button disabled={!area||p.picking} onClick={()=>{setPickEnd(true);p.onPick();}}>Pick route end</button>}
-       {operation==='least_cost'&&<div className="area-fields"><input aria-label="Route end longitude" type="number" step="any" placeholder="End longitude" value={endLon} onChange={e=>setEndLon(e.target.value)}/><input aria-label="Route end latitude" type="number" step="any" placeholder="End latitude" value={endLat} onChange={e=>setEndLat(e.target.value)}/></div>}
-       {operation==='visibility'&&<div className="area-fields"><label>Observer (m)<input aria-label="Observer height" type="number" min="0" value={height} onChange={e=>setHeight(e.target.value)}/></label>
-       <label>Target (m)<input aria-label="Target height" type="number" min="0" value={target} onChange={e=>setTarget(e.target.value)}/></label></div>}
-     </>}
-     {operation==='viewshed_multi'&&<div className="terrain-multi-observers">
-      <div className="section-heading">Observers · {observerPoints.length}</div>
-      <small className="compact-notice">Specify 2–4 points in WGS84. Each must occupy a distinct valid DEM cell. The study area stays selected.</small>
-      <div className="terrain-observer-grid">
-        {observerPoints.map(([x,y],index)=><div className="terrain-observer-row" key={index}>
-          <label>Observer {index+1} longitude
-            <input type="number" step="any" aria-label={`Observer ${index+1} longitude`}
-              value={x} onChange={e=>setObserverPoints(old=>old.map((p,i)=>i===index?[e.target.value,p[1]]:p))}/></label>
-          <label>Latitude
-            <input type="number" step="any" aria-label={`Observer ${index+1} latitude`}
-              value={y} onChange={e=>setObserverPoints(old=>old.map((p,i)=>i===index?[p[0],e.target.value]:p))}/></label>
-          <button type="button" aria-label={`Clear observer ${index+1}`}
-            onClick={()=>setObserverPoints(old=>old.map((p,i)=>i===index?['','']:p))}>Clear</button>
-        </div>)}
-      </div>
-      <div className="survey-action-bar">
-        <button disabled={!area||p.picking} onClick={()=>p.onPick()}>Pick next observer on map</button>
-        <button disabled={observerPoints.length>=4}
-          onClick={()=>setObserverPoints(old=>old.length<4?[...old,['','']]:old)}>Add observer</button>
-        <button disabled={observerPoints.length<=2}
-          onClick={()=>setObserverPoints(old=>old.length>2?old.slice(0,-1):old)}>Remove last</button>
-      </div>
-      <div className="area-fields">
-        <label>Observer height (m)<input aria-label="Multi observer height" type="number" min="0" max="1000"
-          value={height} onChange={e=>setHeight(e.target.value)}/></label>
-        <label>Target height (m)<input aria-label="Multi target height" type="number" min="0" max="1000"
-          value={target} onChange={e=>setTarget(e.target.value)}/></label>
-      </div>
-      {!multiObserversValid&&<small className="discovery-error">
-        Enter 2–4 different valid longitude/latitude pairs.
-      </small>}
-    </div>}
-    <div className="terrain-run-row"><button className="primary-tool" disabled={!canRun||busy} onClick={()=>void run()}>{busy?'Calculating…':'Run terrain operation'}</button>
-       {busy&&<button onClick={()=>{setLive(false);cancelAnalysis();setInfo('Analysis request cancelled.');}}>Cancel</button>}
-       <label><input aria-label="Live terrain updates" type="checkbox" checked={live} onChange={e=>setLive(e.target.checked)}/> Live</label></div>
-     {!p.connected&&<small className="compact-notice">API offline</small>}
-     {!dem&&<small className="compact-notice">DEM required</small>}
-     {sourceMismatch&&<small className="discovery-error">Selected analysis area is not fully covered by the DEM</small>}
-     {mapMismatch&&<small className="discovery-error">Run blocked: the selected DEM is outside the visible map. Use the raster Fit control or fetch new data.</small>}
-     {dem&&!verified&&<small className="compact-notice">Confirm elevation units before analysis</small>}
-     {!parametersValid&&<small className="discovery-error">Check numeric parameters</small>}
-   </div>}
+ const monitor=<div className="terrain-monitor-content">
    {!!records.length&&<section className="terrain-run-list" aria-label="Analysis result layers">
      <div className="section-heading">Analysis results · {records.length}</div>
      {records.map(record=><div key={record.id} className={'scratch-row '+(selectedRecord===record.id?'active':'')}>
@@ -788,6 +641,161 @@ export default function TerrainWorkbench(p:Props){
          <button onClick={()=>setRecords(old=>old.map(r=>r.id===selectedRecord?{...r,visible:true}:r))}>Show on map</button><button onClick={()=>setRecords(old=>old.map(r=>r.id===selectedRecord?{...r,visible:false}:r))}>Hide</button></div>}
      </>}
    </ResultPane>}
-   {info&&<p className="project-info">{info}</p>}{error&&<p className="discovery-error" role="alert">{error}</p>}
+
  </div>;
+ return <>
+ <div className="terrain-workbench professional-panel">
+   <div className="terrain-source">
+     <label>Elevation layer<select aria-label="DEM elevation layer" value={dem?.id??''}
+       disabled={fetching||importing}
+       onChange={e=>{
+         sourceIntent.current++;
+         if(!e.target.value){p.onSelectRaster(null);setSourceInfo('');return;}
+         const found=assets.find(item=>item.id===e.target.value)??(dem?.id===e.target.value?dem:null);
+         if(found)p.onSelectRaster(found);
+       }}>
+       <option value="">Select DEM</option>
+       {[...assets,...(dem&&!assets.some(a=>a.id===dem.id)?[dem]:[])].map(asset=><option key={asset.id} value={asset.id}>{asset.name}</option>)}
+     </select></label>
+     {!p.localImport&&<details className="access-settings"><summary>Import access</summary><input type="password" aria-label="DEM import token" value={token} onChange={e=>setToken(e.target.value)}/></details>}
+     <label className="raster-upload" title="Single-band DEM GeoTIFF, projected in meters, with meter elevations"><Mountain size={14}/> {importing?'Importing…':'Import DEM'}
+       <input type="file" aria-label="Import DEM" accept=".tif,.tiff" disabled={importing||fetching||!p.connected} onChange={e=>void importDEM(e)}/></label>
+     <label>Download area <select aria-label="DEM fetch area" value={fetchScope} onChange={e=>{setFetchChoice(e.target.value as FetchScope);setInfo('');}}>
+       <option value="viewport">Current map view</option><option value="selection" disabled={!selectedGeometry}>Selected geometry</option>
+     </select></label>
+     {selectedGeometry&&<div className="survey-action-bar">
+       <button onClick={()=>{setFetchChoice('selection');setInfo('DEM will use the selected geometry bounds, not the previous map view.');}}>Use selected area</button>
+       {p.onFitSelectedArea&&<button onClick={()=>{setFetchChoice('selection');p.onFitSelectedArea?.();}}>Fit selected area</button>}
+     </div>}
+     <small className="compact-notice" aria-label="DEM download target">
+       {fetchArea?(fetchScope==='viewport'?'Current map · ':'Selected geometry · ')+describeTerrainBounds(fetchArea):'No valid download area'}
+       {budget?' · ~'+budget.approximateCells.toLocaleString()+' grid cells':''}
+     </small>
+     {budget?.warning&&<small role="alert" className="discovery-error">{budget.warning}</small>}
+     {fetchArea&&<div className="survey-action-bar">
+       <button aria-label="Auto-fit DEM resolution" disabled={!recommendedResolution||fetching}
+         onClick={()=>{if(!recommendedResolution)return;setResolution(recommendedResolution);
+           setInfo('Finest supported output grid fitting this study area: '+recommendedResolution+
+             ' m. This does not guarantee native source accuracy.');}}>
+         Auto resolution{recommendedResolution?' · '+recommendedResolution+' m':''}
+       </button>
+       <small className="compact-notice">
+         Up to 8M cells, 4096 px/side · {supportsUSGS?'USGS 3DEP / Copernicus':'Copernicus global'}
+       </small>
+     </div>}
+     <div className="area-fields">
+       <select aria-label="Public DEM resolution" value={resolution}
+          onChange={e=>setResolution(Number(e.target.value) as 1|3|10|30|90)}>
+          <option value={30}>GLO-30 · 30 m</option>
+          <option value={90}>GLO-90 · 90 m</option>
+          <option value={10} disabled={!supportedResolutions.includes(10)}>USGS 3DEP · 10 m grid</option>
+          <option value={3} disabled={!supportedResolutions.includes(3)}>USGS 3DEP · 3 m grid</option>
+          <option value={1} disabled={!supportedResolutions.includes(1)}>USGS 3DEP · 1 m grid</option>
+        </select>
+       <button disabled={!p.connected||!fetchArea||!!budget?.warning||fetching||importing} title="Download the explicitly displayed area, not a previous selection" onClick={()=>void fetchDEM()}>{fetching?'Fetching…':'Fetch DEM'}</button>
+       {fetching&&<button aria-label="Cancel DEM download" onClick={()=>{sourceIntent.current++;fetchAbort.current?.abort();setInfo('Cancelling the previous download…');}}>Cancel</button>}
+     </div>
+     {sourceInfo&&<small className="compact-notice" title="Copernicus is DSM; 3DEP is bare-earth DEM. Requested grid size is not native resolution.">{sourceInfo}</small>}
+     {!supportsUSGS&&fetchArea&&<small className="compact-notice">USGS 3DEP is not a global data source. For local 1–3 m elevation, import a georeferenced DEM supplied by an authorized regional provider.</small>}
+     {dem&&<small className="compact-notice" title={dem.provenance}>{dem.width} × {dem.height} · {dem.crs} · elevation m · {describeTerrainBounds(dem.bbox)}</small>}
+     {dem&&<details className="terrain-dem-tools"><summary>DEM processing · Clip / Resample / Mosaic</summary>
+       <div className="professional-form">
+         <label>Operation<select aria-label="DEM processing operation" value={demProcessMode} onChange={e=>setDemProcessMode(e.target.value as DEMProcessMode)}>
+           <option value="clip">Clip selected polygon</option><option value="resample">Resample source</option><option value="mosaic">Mosaic two DEMs</option>
+         </select></label>
+         {demProcessMode==='mosaic'&&<label>Second DEM<select aria-label="DEM mosaic second source" value={processSecond} onChange={e=>setProcessSecond(e.target.value)}>
+           <option value="">Choose second DEM</option>{assets.filter(a=>a.bands===1&&a.id!==dem.id).map(a=><option key={a.id} value={a.id}>{a.name}</option>)}
+         </select></label>}
+         <label>Output grid (m)<input aria-label="DEM processing resolution" type="number" min="1" max="1000" step="any" value={processResolution} onChange={e=>setProcessResolution(e.target.value)}/></label>
+         <label>Sampling<select aria-label="DEM processing sampling" value={processSampling} onChange={e=>setProcessSampling(e.target.value as 'nearest'|'bilinear'|'average')}>
+           <option value="bilinear">Bilinear</option><option value="nearest">Nearest</option><option value="average">Area-weighted average (coarsen)</option>
+         </select></label>
+         <button disabled={!p.connected||fetching||importing||demProcessMode==='clip'&&!['Polygon','MultiPolygon'].includes(p.geometry?.type??'')||demProcessMode==='mosaic'&&(!processSecond||processSecond===dem.id)}
+           onClick={()=>void processDEM()}>{importing?'Processing…':'Create processed DEM'}</button>
+         <small className="compact-notice">Processing changes the output grid, not the native input resolution or vertical datum.</small>
+       </div>
+     </details>}
+     {mapMismatch&&<small className="discovery-error" role="status">Selected DEM is outside the current map. Choose a local source or use Fit explicitly.</small>}
+     {sourceMismatch&&<small className="discovery-error" role="status">Selected analysis shape is not completely covered by this DEM. Select a matching source.</small>}
+     {dem&&!/Copernicus DEM GLO-|USGS 3DEP Bare Earth DEM/.test(dem.provenance)&&<label className="gis-check"><input aria-label="Confirm DEM meter elevations" type="checkbox" checked={verticalConfirmed} onChange={e=>setVerticalConfirmed(e.target.checked)}/> Confirm single-band meter elevations</label>}
+   </div>
+   <WorkspaceToolShelf category={category} categories={categories} tools={modes}
+    selected={operation} onCategory={name=>{
+      setCategory(name);setOperation(null);setLive(false);setPickEnd(false);
+    }} onSelect={value=>{setOperation(value);if(value===null)setLive(false);}}/>
+   {operation&&<div className="professional-form">
+     <div className="survey-action-bar">
+       <button onClick={()=>p.onDraw(lineOperation)}>{lineOperation?'Draw profile line':'Draw study area'}</button>
+       {lineOperation&&p.profileGeometry&&<button onClick={p.onClearProfile}>Remove profile line</button>}
+       {!lineOperation&&<button disabled={!dem} aria-pressed={p.extentMode} onClick={p.onUseExtent}>DEM extent</button>}
+       {p.extentMode&&<button onClick={p.onUseSelection}>Use selection</button>}
+     </div>
+     <small className="compact-notice">{correctShape?(lineOperation?'✓ Independent profile line':p.extentMode?'✓ DEM footprint':'✓ Geometry selected'):lineOperation?'Draw a profile line; the selected area stays on the map':'Select or draw a polygon'}</small>
+     {operation==='contours'&&<label>Interval (m)<input aria-label="Contour interval" type="number" min=".01" step="any" value={interval} onChange={e=>setInterval(e.target.value)}/></label>}
+     {operation==='dem_difference'&&<label>Reference DEM<select aria-label="Reference comparison DEM" value={comparisonId} onChange={e=>setComparisonId(e.target.value)}><option value="">Select second DEM</option>{assets.filter(a=>a.bands===1&&a.id!==dem?.id).map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>}
+     {(operation==='volume'||operation==='cutfill_map')&&<label>Reference elevation (m)<input aria-label="Reference elevation" type="number" step="any" value={reference} onChange={e=>setReference(e.target.value)}/></label>}
+     {operation==='cross_sections'&&<div className="area-fields"><label>Station spacing (m)<input type="number" value={sectionSpacing} onChange={e=>setSectionSpacing(e.target.value)}/></label><label>Half-width (m)<input type="number" value={sectionWidth} onChange={e=>setSectionWidth(e.target.value)}/></label></div>}
+     {operation==='mesh'&&p.imageRaster&&p.imageRaster.bands>=3&&<label className="gis-check"><input type="checkbox" checked={drape} onChange={e=>setDrape(e.target.checked)}/> Drape selected RGB imagery</label>}
+     {operation==='hillshade'&&<div className="area-fields"><label>Sun azimuth (°)<input type="number" value={azimuth} onChange={e=>setAzimuth(e.target.value)}/></label><label>Sun altitude (°)<input type="number" value={altitude} onChange={e=>setAltitude(e.target.value)}/></label></div>}
+     {(operation==='streams'||operation==='stream_order')&&<label>Minimum upstream cells<input type="number" min="1" step="1" value={streamCells} onChange={e=>setStreamCells(e.target.value)}/></label>}
+     {['flow_direction','flow_accumulation','flow_accumulation_mfd','streams','stream_order','watershed'].includes(operation)&&<label className="gis-check"><input aria-label="Condition drainage DEM" type="checkbox" checked={fillSinks} onChange={e=>setFillSinks(e.target.checked)}/> Fill depressions and route flat cells</label>}
+     {(operation==='visibility'||operation==='viewshed_multi')&&<><label className="gis-check"><input aria-label="Consider Earth curvature" type="checkbox" checked={considerCurvature} onChange={e=>setConsiderCurvature(e.target.checked)}/> Earth curvature and atmospheric refraction</label>{considerCurvature&&<label>Refraction coefficient<input aria-label="Terrain refraction coefficient" type="number" min="0" max="0.5" step="0.01" value={refractionCoeff} onChange={e=>setRefractionCoeff(e.target.value)}/></label>}</>}
+     {(operation==='suitability'||operation==='least_cost')&&<label>Maximum slope (°)<input type="number" value={maxSlope} onChange={e=>setMaxSlope(e.target.value)}/></label>}
+     {operation==='suitability'&&<><div className="area-fields"><label>Min elevation (m)<input type="number" value={minElevation} onChange={e=>setMinElevation(e.target.value)}/></label><label>Max elevation (m)<input type="number" value={maxElevation} onChange={e=>setMaxElevation(e.target.value)}/></label></div><label>Maximum TRI (m)<input type="number" value={maxTri} onChange={e=>setMaxTri(e.target.value)}/></label></>}
+     {needsPoint&&<>
+       <div className="survey-action-bar"><button className={p.picking?'active':''} disabled={!area} onClick={()=>{setPickEnd(false);p.onPick();}}>{p.picking?'Click map…':operation==='visibility'?'Pick observer':operation==='least_cost'?'Pick route start':'Pick outlet'}</button>
+       <button disabled={!area} onClick={()=>{const center=p.geometry&&measurementAnchor(p.geometry);if(center){setLon(String(center[0]));setLat(String(center[1]));}}}>Area center</button></div>
+       <div className="area-fields"><input aria-label="Terrain origin longitude" type="number" step="any" placeholder="Longitude" value={lon} onChange={e=>setLon(e.target.value)}/>
+       <input aria-label="Terrain origin latitude" type="number" step="any" placeholder="Latitude" value={lat} onChange={e=>setLat(e.target.value)}/></div>
+       {operation==='least_cost'&&<button disabled={!area||p.picking} onClick={()=>{setPickEnd(true);p.onPick();}}>Pick route end</button>}
+       {operation==='least_cost'&&<div className="area-fields"><input aria-label="Route end longitude" type="number" step="any" placeholder="End longitude" value={endLon} onChange={e=>setEndLon(e.target.value)}/><input aria-label="Route end latitude" type="number" step="any" placeholder="End latitude" value={endLat} onChange={e=>setEndLat(e.target.value)}/></div>}
+       {operation==='visibility'&&<div className="area-fields"><label>Observer (m)<input aria-label="Observer height" type="number" min="0" value={height} onChange={e=>setHeight(e.target.value)}/></label>
+       <label>Target (m)<input aria-label="Target height" type="number" min="0" value={target} onChange={e=>setTarget(e.target.value)}/></label></div>}
+     </>}
+     {operation==='viewshed_multi'&&<div className="terrain-multi-observers">
+      <div className="section-heading">Observers · {observerPoints.length}</div>
+      <small className="compact-notice">Specify 2–4 points in WGS84. Each must occupy a distinct valid DEM cell. The study area stays selected.</small>
+      <div className="terrain-observer-grid">
+        {observerPoints.map(([x,y],index)=><div className="terrain-observer-row" key={index}>
+          <label>Observer {index+1} longitude
+            <input type="number" step="any" aria-label={`Observer ${index+1} longitude`}
+              value={x} onChange={e=>setObserverPoints(old=>old.map((p,i)=>i===index?[e.target.value,p[1]]:p))}/></label>
+          <label>Latitude
+            <input type="number" step="any" aria-label={`Observer ${index+1} latitude`}
+              value={y} onChange={e=>setObserverPoints(old=>old.map((p,i)=>i===index?[p[0],e.target.value]:p))}/></label>
+          <button type="button" aria-label={`Clear observer ${index+1}`}
+            onClick={()=>setObserverPoints(old=>old.map((p,i)=>i===index?['','']:p))}>Clear</button>
+        </div>)}
+      </div>
+      <div className="survey-action-bar">
+        <button disabled={!area||p.picking} onClick={()=>p.onPick()}>Pick next observer on map</button>
+        <button disabled={observerPoints.length>=4}
+          onClick={()=>setObserverPoints(old=>old.length<4?[...old,['','']]:old)}>Add observer</button>
+        <button disabled={observerPoints.length<=2}
+          onClick={()=>setObserverPoints(old=>old.length>2?old.slice(0,-1):old)}>Remove last</button>
+      </div>
+      <div className="area-fields">
+        <label>Observer height (m)<input aria-label="Multi observer height" type="number" min="0" max="1000"
+          value={height} onChange={e=>setHeight(e.target.value)}/></label>
+        <label>Target height (m)<input aria-label="Multi target height" type="number" min="0" max="1000"
+          value={target} onChange={e=>setTarget(e.target.value)}/></label>
+      </div>
+      {!multiObserversValid&&<small className="discovery-error">
+        Enter 2–4 different valid longitude/latitude pairs.
+      </small>}
+    </div>}
+    <div className="terrain-run-row"><button className="primary-tool" disabled={!canRun||busy} onClick={()=>void run()}>{busy?'Calculating…':'Run terrain operation'}</button>
+       {busy&&<button onClick={()=>{setLive(false);cancelAnalysis();setInfo('Analysis request cancelled.');}}>Cancel</button>}
+       <label><input aria-label="Live terrain updates" type="checkbox" checked={live} onChange={e=>setLive(e.target.checked)}/> Live</label></div>
+     {!p.connected&&<small className="compact-notice">API offline</small>}
+     {!dem&&<small className="compact-notice">DEM required</small>}
+     {sourceMismatch&&<small className="discovery-error">Selected analysis area is not fully covered by the DEM</small>}
+     {mapMismatch&&<small className="discovery-error">Run blocked: the selected DEM is outside the visible map. Use the raster Fit control or fetch new data.</small>}
+     {dem&&!verified&&<small className="compact-notice">Confirm elevation units before analysis</small>}
+     {!parametersValid&&<small className="discovery-error">Check numeric parameters</small>}
+   </div>}
+   {info&&<p className="project-info">{info}</p>}{error&&<p className="discovery-error" role="alert">{error}</p>}
+ </div>
+ {p.resultsTarget?(p.active?createPortal(monitor,p.resultsTarget):null):monitor}
+ </>;
 }

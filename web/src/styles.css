@@ -697,3 +697,44 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .terrain-result-quality>summary{color:#445e70;cursor:pointer;line-height:1.35}
 .terrain-result-quality>p{margin:6px 0;white-space:normal;color:#5c6470;max-height:170px;overflow:auto}
 .terrain-result-quality>small{display:block;color:#667d8b;font-size:10px}
+
+
+/* Two-dock research workspace: operations | map | result monitor.
+   Project/layer management opens from the top bar; it is not a third fixed
+   sidebar and never shrinks the map. Preserve independent scroll regions. */
+.desktop-gis .gis-body{position:relative;isolation:isolate}
+.desktop-gis .gis-project-drawer{
+  position:absolute;left:0;top:0;bottom:0;z-index:24;
+  width:min(370px,calc(100vw - 24px))!important;min-width:0;
+  max-width:min(420px,calc(100vw - 24px));
+  box-shadow:6px 0 18px #14273425;
+  border-right:1px solid #b8c6ce;
+}
+.desktop-gis .gis-operations{order:0;border-left:0;border-right:1px solid #c8cfd5}
+.desktop-gis .gis-body>.workspace-dock-resize[aria-label="Resize project tree"]{order:1}
+.desktop-gis .gis-body>.main{order:2;min-width:240px;min-height:0}
+.desktop-gis .gis-body>.workspace-dock-resize[aria-label="Resize inspector"]{order:3}
+.desktop-gis .gis-results-monitor{order:4;min-width:260px;max-width:min(42vw,540px);
+  flex:none;display:flex;flex-direction:column;min-height:0;background:#f9fafb;border-left:1px solid #c8cfd5}
+.desktop-gis .gis-results-monitor .sidebar-scroll{flex:1;min-height:0;overflow:auto;padding:5px 11px 15px}
+.workspace-monitor-empty{padding:14px 5px;color:#758593;font-size:12px}
+.desktop-gis .gis-operations .sidebar-scroll{padding:0 11px 18px}
+.desktop-gis .gis-operations .results-summary{display:none}
+.desktop-gis .gis-results-monitor .results-summary{border:0;padding:6px 0}
+.desktop-gis .gis-results-monitor .results-summary .analysis-card{padding:0;border:0;background:transparent}
+.desktop-gis .terrain-monitor-content{display:flex;flex-direction:column;gap:5px;min-width:0}
+.desktop-gis .gis-results-monitor .terrain-output{margin-top:0}
+.desktop-gis .gis-results-monitor .terrain-run-list{max-height:none;overflow:visible}
+.desktop-gis .gis-results-monitor .terrain-run-provenance{max-width:100%;min-width:0}
+.desktop-gis .gis-results-monitor .terrain-source-details{overflow-wrap:anywhere}
+.desktop-gis .gis-results-monitor .terrain-profile-chart img{max-height:140px}
+@media(max-width:850px){
+ .desktop-gis .gis-operations{width:240px!important;min-width:210px;max-width:42vw}
+ .desktop-gis .gis-results-monitor{width:280px!important;min-width:220px;max-width:43vw}
+ .desktop-gis .gis-project-drawer{position:absolute}
+}
+@media(max-width:620px){
+ .desktop-gis .gis-operations{position:absolute;left:0;top:0;bottom:0;z-index:9;max-width:80vw;box-shadow:2px 0 10px #0003}
+ .desktop-gis .gis-results-monitor{width:min(295px,47vw)!important;min-width:165px;max-width:47vw}
+ .desktop-gis .gis-body>.main{min-width:0}
+}

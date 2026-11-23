@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
+import {createPortal} from 'react-dom';
 import {
   ArrowRight, Compass, Download, Globe2, Layers3, MapPin,
   Pencil, RotateCcw, Search, Send, Sparkles,
@@ -116,6 +117,7 @@ export default function App() {
   const [mapStatus,setMapStatus]=useState('Loading map');
   const [toolbarTarget,setToolbarTarget]=useState<HTMLDivElement|null>(null);
   const [showTools,setShowTools]=useState(true);
+  const [resultsTarget,setResultsTarget]=useState<HTMLDivElement|null>(null);
   const [shortcutHelp,setShortcutHelp]=useState(false);
   const [commandOpen,setCommandOpen]=useState(false);
   const [contextMenu,setContextMenu]=useState<{x:number;y:number}|null>(null);
@@ -127,13 +129,13 @@ export default function App() {
   const [terrainProfileLine,setTerrainProfileLine]=useState<GeoJSON.LineString|null>(null);
   const [terrainLineDrawing,setTerrainLineDrawing]=useState(false);
   const [terrainVisible,setTerrainVisible]=useState(true);
-  const [showLayers,setShowLayers]=useState(true);
-  const [leftDockWidth,setLeftDockWidth]=useState(()=>readDockWidth('project',265));
-  const [rightDockWidth,setRightDockWidth]=useState(()=>readDockWidth('inspector',320));
+  const [showLayers,setShowLayers]=useState(false);
+  const [leftDockWidth,setLeftDockWidth]=useState(()=>readDockWidth('results',340));
+  const [rightDockWidth,setRightDockWidth]=useState(()=>readDockWidth('operations',320));
   useEffect(()=>{
     try{
-      localStorage.setItem('geofathom-dock-width:project',String(leftDockWidth));
-      localStorage.setItem('geofathom-dock-width:inspector',String(rightDockWidth));
+      localStorage.setItem('geofathom-dock-width:results',String(leftDockWidth));
+      localStorage.setItem('geofathom-dock-width:operations',String(rightDockWidth));
     }catch{/* Preferences never block a research session. */}
   },[leftDockWidth,rightDockWidth]);
   const [terrainPicking,setTerrainPicking]=useState(false);
@@ -977,7 +979,7 @@ export default function App() {
       shortcut:'Ctrl S',disabled:!geometry||busy,run:saveSelection},
     {id:'map:layers',label:showLayers?'Hide object tree':'Show object tree',
       group:'View',run:()=>setShowLayers(v=>!v)},
-    {id:'map:inspector',label:showTools?'Hide inspector':'Show inspector',
+    {id:'map:inspector',label:showTools?'Hide operations':'Show operations',
       group:'View',run:()=>setShowTools(v=>!v)},
     {id:'map:help',label:'Keyboard shortcuts',group:'Help',
       shortcut:'?',run:()=>setShortcutHelp(true)},
@@ -1039,8 +1041,8 @@ export default function App() {
           <Search size={14}/> <span>Commands</span><kbd>Ctrl K</kbd>
         </button>
         <button className="gis-shortcut-help" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts" onClick={()=>setShortcutHelp(true)}>?</button>
-        <button className="gis-inspector-toggle" aria-pressed={showLayers} onClick={()=>setShowLayers(v=>!v)}>Layers</button>
-        <button className="gis-inspector-toggle" aria-pressed={showTools} onClick={()=>setShowTools(v=>!v)}>Inspector</button>
+        <button className="gis-inspector-toggle" aria-label="Toggle project and layers" aria-expanded={showLayers} aria-pressed={showLayers} onClick={()=>setShowLayers(v=>!v)}>Project</button>
+        <button className="gis-inspector-toggle" aria-label="Toggle operations" aria-pressed={showTools} onClick={()=>setShowTools(v=>!v)}>Tools</button>
         <button className="gis-connection" title={connectionError||'Check backend connection'} onClick={()=>setConnectionRetry(v=>v+1)}>{capabilities?<Wifi size={14}/>:<WifiOff size={14}/>} {capabilities?'Connected':'Reconnect API'}</button>
       </header>
       <div className="gis-toolbar" aria-label="Survey toolbar">
@@ -1056,7 +1058,7 @@ export default function App() {
         </div>
       </div>
       <div className="gis-body">
-        <aside className="sidebar gis-layers" hidden={!showLayers} style={{width:leftDockWidth}}>
+        <aside className="sidebar gis-layers gis-project-drawer" hidden={!showLayers} aria-label="Project and layers" style={{width:Math.min(420,Math.max(300,leftDockWidth))}}>
           <WorkspaceDockHeading><Layers3 size={15}/> Project / Layers</WorkspaceDockHeading>
           <div className="sidebar-scroll">
           <section className="panel-section">
@@ -1238,8 +1240,6 @@ export default function App() {
 
           </div>
         </aside>
-        {showLayers&&<WorkspaceDockResizer side="left" width={leftDockWidth}
-          onChange={setLeftDockWidth}/>}
         <main className="main">
         <div className="map-wrap">
           <MapCanvas
@@ -1470,13 +1470,11 @@ export default function App() {
         </div>
 
         </main>
-        {showTools&&<WorkspaceDockResizer side="right" width={rightDockWidth}
-          onChange={setRightDockWidth}/>}
-        <aside className="gis-inspector" hidden={!showTools} style={{width:rightDockWidth}}>
-          <WorkspaceDockHeading><Compass size={15}/> Inspector</WorkspaceDockHeading>
+        <aside className="gis-inspector gis-operations" hidden={!showTools} style={{width:rightDockWidth}} aria-label="Operations">
+          <WorkspaceDockHeading><Compass size={15}/> Tools</WorkspaceDockHeading>
           <div className="sidebar-scroll">
-          <section className="panel-section results-summary">
-            <div className="section-heading"><Compass size={16} /><span>Analysis</span></div>
+          {resultsTarget&&createPortal(<section className="panel-section results-summary">
+            <div className="section-heading"><Compass size={16} /><span>Selection</span></div>
             <div className="analysis-card">
               
               {measurement && !preview && (
@@ -1550,7 +1548,7 @@ export default function App() {
                 <button onClick={deselect}><RotateCcw size={15} /> Deselect</button>
               </div>
             </div>
-          </section>
+          </section>,resultsTarget)}
 
           <section id="tools-survey" hidden={activeTool!=='tools-survey'} className="panel-section">
             <div className="section-heading"><Pencil size={16} /><span>Survey & geometry editor</span><span className="section-pill">Precision</span></div>
@@ -1750,6 +1748,7 @@ export default function App() {
           <section id="tools-terrain" hidden={activeTool!=='tools-terrain'} className="panel-section">
             <div className="section-heading"><Layers3 size={16}/><span>Terrain analysis</span></div>
             <TerrainWorkbench key={'terrain-'+(activeProjectId??'no-project')} projectId={activeProjectId}
+              resultsTarget={resultsTarget}
               active={activeTool==='tools-terrain'&&showTools}
               geometry={preview||drawingMode&&!terrainLineDrawing?null:extentMode?extentGeometry:geometry}
               profileGeometry={terrainProfileLine} raster={demLayer} imageRaster={imageLayer} viewport={viewport}
@@ -1888,6 +1887,14 @@ export default function App() {
 
 
             <div hidden={activeTool!=='tools-services'}><ApiAccessPanel/></div>
+          </div>
+        </aside>
+        {showTools&&<WorkspaceDockResizer side="left" width={rightDockWidth} onChange={setRightDockWidth}/>}
+        <WorkspaceDockResizer side="right" width={leftDockWidth} onChange={setLeftDockWidth}/>
+        <aside className="gis-results-monitor" aria-label="Results monitor" style={{width:leftDockWidth}}>
+          <WorkspaceDockHeading><Layers3 size={15}/> Results</WorkspaceDockHeading>
+          <div className="sidebar-scroll" ref={setResultsTarget}>
+            {!measurement&&activeTool!=='tools-terrain'&&<div className="workspace-monitor-empty">No selection</div>}
           </div>
         </aside>
       </div>
