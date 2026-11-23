@@ -102,3 +102,17 @@ test('survey buttons bind to operations and required geometry prerequisites',asy
   await expect(toolbar.getByRole('button',{name:'Cut hole',exact:true})).toHaveAttribute('aria-pressed','true');
   await toolbar.getByRole('button',{name:'Cancel drawing'}).click();
 });
+
+test('Line drawing closed at its starting node produces an area with exact measurement',async({page})=>{
+ const toolbar=page.getByLabel('Survey toolbar');
+ await toolbar.getByRole('button',{name:'Line',exact:true}).click();
+ const p=await positions(page);
+ for(const [x,y] of [p.a,p.b,p.c,p.d])await page.mouse.click(x,y);
+ await expect(toolbar.getByText('4 pts')).toBeVisible();
+ await page.mouse.click(p.a[0]+4,p.a[1]+2);
+ await expect(page.getByText(/Closed line converted to a measured region/)).toBeVisible();
+ await expect(toolbar.getByRole('button',{name:'Line',exact:true})).toHaveAttribute('aria-pressed','false');
+ const dimensions=page.getByLabel('Live map dimensions');
+ await expect(dimensions.locator('.map-dimension-total')).toContainText(/km²|m²|ha/);
+ await expect(dimensions.locator('.map-dimension-total')).not.toContainText('~ ');
+});

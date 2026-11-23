@@ -1,5 +1,5 @@
 import {describe,expect,it} from 'vitest';
-import {sketchAddError,sketchFinishError,canPreviewClosedSketch,sketchSegmentsIntersect} from './sketch';
+import {sketchAddError,sketchFinishError,canPreviewClosedSketch,sketchSegmentsIntersect,closedLineAsPolygon} from './sketch';
 import {drawingPreview,type Position} from './editing';
 
 const a:[number,number]=[0,0],b:[number,number]=[2,0],
@@ -56,5 +56,23 @@ describe('professional polygon drawing contract',()=>{
   expect(sketchFinishError('circle',[a,b])).toBeNull();
   expect(sketchFinishError('hole',square)).toBeNull();
   expect(sketchFinishError('rectangle',square)).toMatch(/Maximum/);
+ });
+});
+
+describe('closed line sketch becomes a real area feature',()=>{
+ it('converts first-node closure into a simple closed Polygon suitable for measurement',()=>{
+  const area=closedLineAsPolygon([a,b,c,d,a]);
+  expect(area?.type).toBe('Polygon');
+  expect(area?.coordinates[0]).toEqual([a,b,c,d,a]);
+  const measured=area?drawingPreview('polygon',area.coordinates[0].slice(0,-1) as Position[]):null;
+  expect(measured?.type).toBe('Polygon');
+ });
+ it('leaves genuinely open line drawings as LineString candidates',()=>{
+  expect(closedLineAsPolygon([a,b,c,d])).toBeNull();
+  expect(closedLineAsPolygon([a,b,c])).toBeNull();
+ });
+ it('rejects self-intersecting closed paths instead of falsifying an area',()=>{
+  expect(()=>closedLineAsPolygon([a,c,b,d,a])).toThrow(/Cannot form enclosed region/);
+  expect(()=>closedLineAsPolygon([a,b,[0,1],b,a])).toThrow(/Cannot form enclosed region/);
  });
 });
