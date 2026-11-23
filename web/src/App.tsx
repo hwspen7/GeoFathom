@@ -221,6 +221,8 @@ export default function App() {
   const [externalFeatures,setExternalFeatures]=useState<GeoJSON.Geometry[]>([]);
   const [networkAreas,setNetworkAreas]=useState<NetworkPolygonization|null>(null);
   const [networkNotice,setNetworkNotice]=useState('');
+  const [networkPage,setNetworkPage]=useState(0);
+  useEffect(()=>setNetworkPage(0),[networkAreas?.count,networkAreas?.area_m2]);
   const networkTicket=useRef(0);
   const networkTolerance=useRef(1);
   const networkMinimumArea=useRef(.01);
@@ -1177,17 +1179,7 @@ export default function App() {
           <summary aria-label="File actions">File</summary>
           <div className="gis-header-popover" aria-label="Unified save and export actions">
             <div className="gis-project-actions" ref={setProjectActionsTarget}/>
-            <button type="button" disabled={!geometry} onClick={exportGeoJSON}>Selection GeoJSON</button>
-            <button type="button" disabled={!scratch.length} onClick={()=>{
-              const collection:GeoJSON.FeatureCollection={type:'FeatureCollection',
-                features:scratch.map(f=>({type:'Feature',geometry:f.geometry,
-                  properties:{name:f.name,measurement:f.measurement}}))};
-              const url=URL.createObjectURL(new Blob([JSON.stringify(collection)],
-                {type:'application/geo+json'}));
-              const link=document.createElement('a');link.href=url;
-              link.download='geofathom-local-drawings.geojson';link.click();
-              window.setTimeout(()=>URL.revokeObjectURL(url),1000);
-            }}>Local drawings GeoJSON</button>
+            <button type="button" onClick={()=>revealPanel('tools-export')}>Open Export module</button>
             <div className="gis-terrain-export-action" ref={setTerrainExportTarget}/>
           </div>
         </details>
@@ -1413,6 +1405,7 @@ export default function App() {
         <div className="map-wrap">
           <MapCanvas
             selected={geometry} drawingMode={drawingMode} vertices={vertices}
+            networkFaces={!drawingMode?(networkAreas?.faces??[]):[]}
             terrainPicking={terrainPicking}
             terrainMarker={showTools&&activeTool==='tools-terrain'?
               (terrainHover??(terrainProfileMapIndex!==null?terrainProfileSamples[terrainProfileMapIndex]?.coordinate??null:null)??terrainOrigin):null}
@@ -1631,6 +1624,7 @@ export default function App() {
                   {item.labels&&<small>Labels</small>}
                 </div>
               ))}
+              {!!networkAreas?.count&&<div className="map-legend-item"><span className="legend-swatch" style={{background:'#238d89'}}/><span>Enclosed areas · {networkAreas.count}</span></div>}
               {scratch.some(f=>f.visible)&&<div className="map-legend-item"><span className="legend-swatch" style={{background:'#168047'}}/><span>Local drawings · {scratch.filter(f=>f.visible).length}</span></div>}
               {rasterLayers.filter(l=>l.visible).map(l=><div key={l.asset.id} className="map-legend-item"><span className="legend-swatch" style={{background:'#a8adb0'}}/><span>{l.kind==='dem'?'DEM':'Raster'} · {l.asset.name}</span></div>)}
               {terrainVisible&&(terrainFeatures.length+terrainRasters.length)>0&&<div className="map-legend-item"><span className="legend-swatch" style={{background:'#d7b65e'}}/><span>Terrain results · {terrainFeatures.length+terrainRasters.length}</span></div>}
@@ -1680,7 +1674,27 @@ export default function App() {
             </details>}
 
           </details>
-          {resultsTarget&&activeTool!=='tools-terrain'&&(geometry||measurement||preview)&&createPortal(<section className="panel-section results-summary">
+          {resultsTarget&&['tools-survey','tools-services'].includes(activeTool)&&
+            (networkAreas?.count??0)>0&&createPortal(
+            <section className="panel-section data-network-results" aria-label="Independent enclosed areas">
+              <div className="data-metric-band">
+                <div><small>Enclosed areas</small><strong>{networkAreas!.count}</strong></div>
+                <div><small>Combined area</small><strong>{areaText(networkAreas!.area_m2,areaUnit)}</strong></div>
+              </div>
+              {networkAreas!.faces.slice(networkPage*4,(networkPage+1)*4).map(face=>
+                <div className="data-network-result-row" key={face.id}>
+                  <strong>{face.name}</strong>
+                  <span>{areaText(face.measurement.area_m2??0,areaUnit)}</span>
+                  <small>{distanceText(face.measurement.perimeter_m??0,display.distance)} perimeter</small>
+                </div>)}
+              {networkAreas!.count>4&&<div className="gis-record-pager">
+                <button disabled={networkPage===0} onClick={()=>setNetworkPage(v=>v-1)}>Previous</button>
+                <span>{networkPage+1}/{Math.ceil(networkAreas!.count/4)}</span>
+                <button disabled={(networkPage+1)*4>=networkAreas!.count}
+                  onClick={()=>setNetworkPage(v=>v+1)}>Next</button>
+              </div>}
+            </section>,resultsTarget)}
+          {resultsTarget&&activeTool!=='tools-terrain'&&!(activeTool==='tools-survey'&&(networkAreas?.count??0)>1)&&(geometry||measurement||preview)&&createPortal(<section className="panel-section results-summary">
             <div className="section-heading"><Compass size={16} /><span>Selection</span></div>
             <div className="analysis-card">
               
@@ -2046,17 +2060,31 @@ export default function App() {
           </section>
 
           <section id="tools-services" hidden={activeTool!=='tools-services'} className="panel-section">
-            <div className="section-heading"><Layers3 size={16}/><span>OGC, indexed stores & background jobs</span></div>
-            <DataServicesPanel
-              key={activeProjectId ?? 'no-project'}
-              projectId={activeProjectId}
-              viewport={viewport}
-              drawnGeometry={geometry}
+            <DataWorkbench
+              projectId={activeProjectId} workspace={projectWorkspace}
+              geometry={geometry} viewport={viewport} connected={Boolean(capabilities)}
+              network={networkAreas} networkNotice={networkNotice}
+              sourceCount={networkSources.length}
+              onRebuild={rebuildNetwork} onStoreAreas={keepNetworkAreas}
+              onOpenLayers={()=>{setDrawerTab('layers');setShowLayers(true);}}
               onTiles={value=>{if(projectCurrent())setExternalTiles(value);}}
               onPreview={value=>{if(projectCurrent())setExternalFeatures(value);}}
               onPage={value=>{if(projectCurrent())setPagedFeatures(value);}}
               onRefresh={()=>setRefreshToken(value=>value+1)}
+              onRasterAdded={asset=>{
+                // Imported GeoTIFF becomes a selectable managed DEM source.
+                setDemLayer(asset);setRasterLayers(old=>selectDEM(old,asset));
+                setMessage('Raster added to the active map.');
+              }}
             />
+          </section>
+
+          <section id="tools-export" hidden={activeTool!=='tools-export'} className="panel-section">
+            <ExportWorkbench
+              projectId={activeProjectId} workspace={projectWorkspace}
+              selected={geometry} measurement={measurement}
+              scratch={scratch} faces={networkAreas?.faces??[]}
+              terrainRasters={terrainRasters} viewport={viewport}/>
           </section>
 
 
