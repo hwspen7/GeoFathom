@@ -24,7 +24,7 @@ const jsonSave=(name:string,value:unknown)=>
  */
 const csvCell=(value:unknown)=>{
  let content=String(value??'');
- if(typeof value==='string'&&/^[\\s\\uFEFF]*[=+\\-@]/.test(content))
+ if(typeof value==='string'&&/^[\s\uFEFF]*[=+\-@]/.test(content))
   content="'"+content;
  return '"'+content.replace(/"/g,'""')+'"';
 };
