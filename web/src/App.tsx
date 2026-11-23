@@ -21,7 +21,7 @@ import {PIN_LIMIT,readPinnedPlaces,writePinnedPlaces,pinPlace,unpinPlace,visible
 import {studyParcels,suggestedParcel,parcelAt} from './studyArea';
 import {localMeasurement,localShape,readScratch,writeScratch,SCRATCH_LIMIT,OFFLINE_METHOD,type ScratchFeature} from './scratch';
 import SurveyTools from './SurveyTools';
-import {sketchAddError,sketchFinishError} from './sketch';
+import {sketchAddError,sketchFinishError,closedLineAsPolygon} from './sketch';
 import ProfessionalPanel from './ProfessionalPanel';
 import TerrainWorkbench from './TerrainWorkbench';
 import {WorkspaceModuleBar,WorkspaceCommandPalette,WorkspaceDockHeading,
@@ -270,11 +270,12 @@ export default function App() {
       if(['Polygon','MultiPolygon','LineString','MultiLineString'].includes(item.geometry.type))
         sources.push(item.geometry);
     }
-    if(geometry&&['Polygon','MultiPolygon','LineString','MultiLineString'].includes(geometry.type)&&
+    if(geometry&&featureProperties.source_type!=='polygonized_network'&&
+      ['Polygon','MultiPolygon','LineString','MultiLineString'].includes(geometry.type)&&
        !sources.some(item=>JSON.stringify(item)===JSON.stringify(geometry)))
       sources.push(geometry);
     return sources;
-  },[scratch,projectWorkspace,geometry]);
+  },[scratch,projectWorkspace,geometry,featureProperties.source_type]);
 
   async function rebuildNetwork(tolerance=networkTolerance.current,
                                 minArea=networkMinimumArea.current){
@@ -330,6 +331,29 @@ export default function App() {
     setMessage('Kept '+saved.length+' independent closed areas; the original lines are unchanged.');
   }
 
+
+  function activateNetworkFace(id:string){
+    const face=networkAreas?.faces.find(item=>item.id===id);
+    if(!face||drawingMode||busy)return;
+    // Real GEOS polygon and ellipsoidal measurement, retained locally only
+    // when the user selects the face; never rewrite connected source lines.
+    const existing=scratchHistory.current!.current.find(item=>
+      item.properties?.source_type==='polygonized_network'&&
+      JSON.stringify(item.geometry)===JSON.stringify(face.geometry));
+    if(!existing&&scratchHistory.current!.current.length>=SCRATCH_LIMIT){
+      setError('Local feature limit reached. Save or remove unused drawings before selecting an enclosed area.');
+      return;
+    }
+    const selected=existing??({
+      id:'scratch-'+crypto.randomUUID(),name:face.name,
+      geometry:structuredClone(face.geometry),measurement:face.measurement,
+      visible:true,source:'GEOS line-network polygonization',
+      properties:{...face.properties},
+    } satisfies ScratchFeature);
+    if(!existing)setScratch(old=>[...old,selected]);
+    selectScratch(selected,false);
+    setMessage(face.name+' · closed polygon selected with area and perimeter. Original lines preserved.');
+  }
 
   useEffect(()=>{setScratchStorageError(!writeScratch(scratchDocument.features,scratchDocument.scope));},[scratchDocument]);
   useEffect(()=>{setPinStorageError(!writePinnedPlaces(pins.scope,pins.places));},[pins]);
@@ -806,7 +830,8 @@ export default function App() {
         }
         result = constructed.geometry; measured = constructed.measurement;
       } else if (mode === 'line' || mode === 'split') {
-        result = { type: 'LineString', coordinates: points };
+        result = (mode==='line'?closedLineAsPolygon(points):null) ??
+          {type:'LineString',coordinates:points};
         measured = await measureGeometry(result);
       } else {
         const constructed = await constructGeometry({ mode: 'polygon', vertices:points });
@@ -840,11 +865,13 @@ export default function App() {
         timeline.current=new GeometryTimeline();
         setSelectedFeatureId(null);featureIdentity.current=null;setSelectedPlace(null);
         setGeometrySource(mode==='trace-along'?'Vector network tracing':'User drawn');
-        setFeatureProperties(mode==='trace-along'?{source_type:'vector_trace',method:'shortest connected path'}:{source_type:'user_drawn'});
+        setFeatureProperties(mode==='trace-along'?{source_type:'vector_trace',method:'shortest connected path'}:
+          mode==='line'&&result.type==='Polygon'?{source_type:'user_drawn_region',method:'closed_line'}:{source_type:'user_drawn'});
       }
       if(mode!=='split'&&(!selectedFeatureId||mode!=='hole'))storeScratch(result,measured,mode==='hole'?scratchId:null,
         mode==='hole'?undefined:{source:mode==='trace-along'?'Vector network tracing':'User drawn',
-          properties:mode==='trace-along'?{source_type:'vector_trace',method:'shortest connected path'}:{source_type:'user_drawn'}});
+          properties:mode==='trace-along'?{source_type:'vector_trace',method:'shortest connected path'}:
+            mode==='line'&&result.type==='Polygon'?{source_type:'user_drawn_region',method:'closed_line'}:{source_type:'user_drawn'}});
       setGeometry(result);
       lastValid.current = structuredClone(result);
       timeline.current.push(result);
@@ -853,20 +880,26 @@ export default function App() {
       setDrawingMode(null); setVertices([]);setVertexRedo([]); setPreview(null);
       setMessage(mode === 'split'
         ? 'Polygon divided into independent local features. Original saved features are unchanged.'
-        : 'Drawing completed and measured on the WGS84 ellipsoid.');
+        : mode==='line'&&result.type==='Polygon'?
+          'Closed line converted to a measured region. Area and perimeter are available.':
+          'Drawing completed and measured on the WGS84 ellipsoid.');
     } catch (failure) {
       if(sequence!==geometrySequence.current)return;
       if(backendUnavailable(failure)){
         try{
-          const local=localShape(mode,points);
+          const closed=mode==='line'?closedLineAsPolygon(points):null;
+          const local=closed?{geometry:closed,measurement:localMeasurement(closed)}:localShape(mode,points);
           if(local){
-            storeScratch(local.geometry,local.measurement,null,{source:'User drawn',properties:{source_type:'user_drawn'}});
+            const isRegion=mode==='line'&&local.geometry.type==='Polygon';
+            const properties=isRegion?{source_type:'user_drawn_region',method:'closed_line'}:{source_type:'user_drawn'};
+            storeScratch(local.geometry,local.measurement,null,{source:'User drawn',properties});
             setSelectedFeatureId(null);featureIdentity.current=null;setSelectedPlace(null);
-            setGeometrySource('User drawn');setFeatureProperties({source_type:'user_drawn'});
+            setGeometrySource('User drawn');setFeatureProperties(properties);
             setGeometry(local.geometry);setMeasurement(local.measurement);
             lastValid.current=structuredClone(local.geometry);timeline.current.push(local.geometry);
             setHistoryPulse(v=>v+1);setDrawingMode(null);setVertices([]);setVertexRedo([]);setPreview(null);
-            setError('');setMessage('Drawing completed locally · approximate measurement. Connect API for exact validation.');
+            setError('');setMessage(isRegion?'Closed line formed a locally measured region · approximate until API validation.':
+              'Drawing completed locally · approximate measurement. Connect API for exact validation.');
             return;
           }
         }catch(error){setError(error instanceof Error?error.message:String(error));return;}
@@ -1447,6 +1480,7 @@ export default function App() {
           <MapCanvas
             selected={geometry} drawingMode={drawingMode} vertices={vertices}
             networkFaces={!drawingMode?(networkAreas?.faces??[]):[]}
+            onSelectNetworkFace={activateNetworkFace}
             terrainPicking={terrainPicking}
             terrainMarker={showTools&&activeTool==='tools-terrain'?
               (terrainHover??(terrainProfileMapIndex!==null?terrainProfileSamples[terrainProfileMapIndex]?.coordinate??null:null)??terrainOrigin):null}
@@ -1514,7 +1548,10 @@ export default function App() {
             focus={focus} basemap={basemap} customBasemap={custom} onBasemapStatus={setMapStatus}
             measurement={preview?null:measurement} showMeasurements={showMeasurements} display={display}
             selectedFeatureId={selectedFeatureId??scratchId}
-            onFinishDrawing={()=>{void finishDrawing();}}
+            onFinishDrawing={(closeLine=false)=>{
+              const points=drawingVerticesRef.current;
+              void finishDrawing(closeLine&&drawingMode==='line'&&points.length>=3?[...points,points[0]]:points);
+            }}
             rasterLayers={rasterLayers} onRasterError={setError}
             traceMode={traceMode||promptMode!==null}
             promptPositive={positivePoints} promptNegative={negativePoints}
@@ -2119,6 +2156,7 @@ export default function App() {
               ]}
               onDerived={(next,_measured,name)=>{void commitGeometry(next,'Data · '+name,true);}}
               onRebuild={rebuildNetwork} onStoreAreas={keepNetworkAreas}
+              onSelectArea={activateNetworkFace}
               onOpenLayers={()=>{setDrawerTab('layers');setShowLayers(true);}}
               onTiles={value=>{if(projectCurrent())setExternalTiles(value);}}
               onPreview={value=>{if(projectCurrent())setExternalFeatures(value);}}

@@ -103,3 +103,12 @@ export function canPreviewClosedSketch(mode:ShapeMode,points:Position[]):boolean
   // Checking only the new closing edge keeps mousemove at O(n), not O(n²).
   return polygonMode(mode)&&sketchClosingError(points)===null;
 }
+
+/** A line ending at its first snapped node is a real, validated region. */
+export function closedLineAsPolygon(points:Position[]):GeoJSON.Polygon|null{
+ if(points.length<4||!same(points[0],points[points.length-1]))return null;
+ const ring=points.slice(0,-1);
+ const reason=sketchFinishError('polygon',ring);
+ if(reason)throw Error('Cannot form enclosed region: '+reason);
+ return {type:'Polygon',coordinates:[[...ring,ring[0]]]};
+}
