@@ -36,7 +36,7 @@ jobs:
           python benchmarks/terrain_reference.py --strict --output build/terrain-reference.json
       - name: Test P0 scientific invariants and edge cases
         run: |
-          python -m pytest -q tests/test_terrain_scope_p0.py tests/test_terrain_p0_scientific_invariants.py tests/test_terrain_professional.py tests/test_terrain_conditioning.py tests/test_terrain_gradient_unification.py tests/test_terrain_catalog.py
+          python -m pytest -q tests/test_terrain_projection_p0.py tests/test_terrain_scope_p0.py tests/test_terrain_p0_scientific_invariants.py tests/test_terrain_professional.py tests/test_terrain_conditioning.py tests/test_terrain_gradient_unification.py tests/test_terrain_catalog.py
       - name: Preserve numeric comparisons and failure evidence
         if: always()
         uses: actions/upload-artifact@v4
