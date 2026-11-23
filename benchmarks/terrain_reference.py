@@ -46,7 +46,7 @@ def gdaldem(cli, name, source, target, alg=None):
         raise RuntimeError(f"GDAL {name}/{alg} failed: {response.stderr[-1600:]}")
     with rasterio.open(target) as ds:
         result = ds.read(1, masked=True)
-        return np.asarray(result.filled(np.nan), dtype=np.float64)
+        return np.asarray(result.astype(np.float64).filled(np.nan), dtype=np.float64)
 
 
 def metrics(reference, computed, tolerance, label):
