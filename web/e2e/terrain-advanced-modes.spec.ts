@@ -94,6 +94,8 @@ test('advanced surface families retain distinct real results and scientific expo
   // The title button carries source provenance. The separate "Remove
   // result ..." button also has the operation name in its accessible label,
   // and must not make the selection ambiguous.
+  const manager=page.getByLabel('Analysis result layers').locator('.terrain-layer-manager');
+  if(await manager.getAttribute('open')===null)await manager.locator('summary').click();
   await expect(page.getByLabel('Analysis result layers')
     .locator('.scratch-row > button[title]').filter({hasText:title})).toBeVisible();
  };

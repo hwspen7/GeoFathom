@@ -45,6 +45,9 @@ with tempfile.TemporaryDirectory() as directory:
  await expect(page.getByLabel('DEM download target')).toContainText('Selected geometry');
  const terrainTab=page.getByRole('navigation',{name:'Workspace tools'}).getByRole('button',{name:'Terrain',exact:true});
  await expect(terrainTab).toHaveAttribute('aria-pressed','true');
+ await expect(page.getByLabel('Operations')).toBeVisible();
+ await expect(page.getByLabel('Results monitor')).toBeVisible();
+ await expect(page.getByRole('button',{name:'Toggle project and layers'})).toHaveAttribute('aria-expanded','false');
  await terrainTab.click();
  await expect(terrainTab).toHaveAttribute('aria-pressed','false');
  await terrainTab.click();
@@ -195,6 +198,7 @@ with tempfile.TemporaryDirectory() as directory:
  await page.reload();
  await page.getByRole('navigation',{name:'Workspace tools'}).getByRole('button',{name:'Terrain',exact:true}).click();
  const restored=page.getByLabel('Analysis result layers');
+ await restored.locator('.terrain-layer-manager summary').click();
  await expect(restored.getByRole('button',{name:/Cross sections ·/})).toBeVisible();
  await expect(restored.getByRole('button',{name:/Slope map ·/})).toBeVisible();
  await expect(map).toHaveAttribute('data-terrain-raster-count','0');

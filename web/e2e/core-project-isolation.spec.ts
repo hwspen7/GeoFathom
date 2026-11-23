@@ -1,4 +1,5 @@
 import {expect,test} from './coverage-fixture';
+import {openProjectDrawer} from './workspace-ui';
 const API='http://127.0.0.1:8000';
 const tile='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/ZecAAAAASUVORK5CYII=';
 
@@ -24,6 +25,7 @@ test('project switch clears selected saved geometry and cannot undo into another
   await select.selectOption(first);
   await page.getByRole('button',{name:new RegExp('Isolated parcel '+suffix)}).click();
   await expect(page.getByRole('button',{name:'Update feature'})).toBeEnabled();
+  await openProjectDrawer(page);
   await page.getByLabel('Map note text').fill('Do not put this in another project');
   await page.getByLabel('Place map note').click();
   await select.selectOption(second);

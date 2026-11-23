@@ -1,4 +1,5 @@
 import {test,expect} from './coverage-fixture';
+import {openProjectDrawer} from './workspace-ui';
 const tile=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/ZecAAAAASUVORK5CYII=','base64');
 test('offline drawing finishes, multiple local features remain selectable and reload',async({page})=>{
  await page.route('**/api/**',r=>r.fulfill({status:503,contentType:'application/json',body:'{"detail":"Backend offline"}'}));
@@ -20,6 +21,7 @@ test('offline drawing finishes, multiple local features remain selectable and re
  // The layer list and map legend both display the count; assert the legend explicitly.
  await expect(page.getByLabel('Map legend',{exact:true}).getByText('Local drawings · 2',{exact:true})).toBeVisible();
  await page.reload();
+ await openProjectDrawer(page);
  await expect(page.getByLabel('Local drawings').getByRole('button',{name:'Polygon 1',exact:true})).toBeVisible();
  await page.getByLabel('Local drawings').getByRole('button',{name:'Polygon 1',exact:true}).click();
  await expect(page.getByText('Selected Polygon 1',{exact:true})).toBeVisible();

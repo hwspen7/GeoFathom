@@ -1,4 +1,5 @@
 import {test,expect} from './coverage-fixture';
+import {openProjectDrawer} from './workspace-ui';
 const tile=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/ZecAAAAASUVORK5CYII=','base64');
 test('keyboard drawing, right-click completion, selection context and cancel',async({page})=>{
  await page.route('**/tile.openstreetmap.org/**',r=>r.fulfill({contentType:'image/png',body:tile}));
@@ -13,6 +14,7 @@ test('keyboard drawing, right-click completion, selection context and cancel',as
  for(const [a,b] of [[x,y],[x+d,y],[x+d,y+d],[x,y+d]])await page.mouse.click(a,b);
  await page.mouse.click(x+5,y+5,{button:'right'});
  await expect(toolbar.getByRole('button',{name:'Finish',exact:true})).toHaveCount(0);
+ await openProjectDrawer(page);
  await expect(page.getByLabel('Local drawings').getByRole('button',{name:'Polygon 1',exact:true})).toBeVisible();
  await page.mouse.click(x+d/2,y+d/2,{button:'right'});
  const menu=page.getByRole('menu',{name:'Map commands'});

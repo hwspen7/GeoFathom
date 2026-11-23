@@ -1,4 +1,5 @@
 import {test,expect} from './coverage-fixture';
+import {openProjectDrawer} from './workspace-ui';
 const tile=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/ZecAAAAASUVORK5CYII=','base64');
 test('satellite and licensed imagery actually request tiles',async({page})=>{
  await page.route('**/tile.openstreetmap.org/**',r=>r.fulfill({contentType:'image/png',body:tile}));
@@ -9,6 +10,7 @@ test('satellite and licensed imagery actually request tiles',async({page})=>{
  const loaded=page.waitForResponse(r=>r.url().includes('tiles.maps.eox.at')&&r.ok());
  await page.getByLabel('Quick basemap tools').getByRole('button',{name:'Satellite',exact:true}).click();
  await loaded;
+ await openProjectDrawer(page);
  await expect(page.getByLabel('Basemap',{exact:true})).toHaveValue('sentinel');
  await page.getByText('Settings',{exact:true}).click();
  await page.getByText('Connect high-resolution imagery',{exact:true}).click();
