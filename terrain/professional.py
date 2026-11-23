@@ -403,8 +403,14 @@ def _derived_surface_tiled(z,valid,dx,dy,operation,max_slope=30.,
                 product,tile_metrics=weighted_suitability(z[r0:r1,c0:c1],valid[r0:r1,c0:c1],
                     derived["slope_map"][crop],derived["tri"][crop],max_slope,
                     min_elevation,max_elevation,max_tri,suitability_weights,elevation_sigma_m)
-                qualified+=int(np.isfinite(product).sum())
-                suitable+=int((product>0).sum())
+                known=np.isfinite(product)
+                permitted=(known&(derived["slope_map"][crop]<=max_slope)&
+                    (derived["tri"][crop]<=max_tri)&
+                    (z[r0:r1,c0:c1]>=min_elevation)&(z[r0:r1,c0:c1]<=max_elevation))
+                qualified+=int(known.sum())
+                # A permitted cell can legitimately have zero weighted score;
+                # eligibility must not depend on the utility value.
+                suitable+=int(permitted.sum())
             elif operation=="suitability":
                 good=np.isfinite(derived["slope_map"][crop])
                 passed=(derived["slope_map"][crop]<=max_slope)
