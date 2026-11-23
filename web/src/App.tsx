@@ -21,6 +21,7 @@ import {PIN_LIMIT,readPinnedPlaces,writePinnedPlaces,pinPlace,unpinPlace,visible
 import {studyParcels,suggestedParcel,parcelAt} from './studyArea';
 import {localMeasurement,localShape,readScratch,writeScratch,SCRATCH_LIMIT,OFFLINE_METHOD,type ScratchFeature} from './scratch';
 import SurveyTools from './SurveyTools';
+import {sketchAddError,sketchFinishError} from './sketch';
 import ProfessionalPanel from './ProfessionalPanel';
 import TerrainWorkbench from './TerrainWorkbench';
 import {WorkspaceModuleBar,WorkspaceCommandPalette,WorkspaceDockHeading,
@@ -617,13 +618,20 @@ export default function App() {
     setEditing(false);setEdgeMoving(false);
     setMoving(false);
     setError('');
-    setMessage(next==='point'?'Click a location, then Finish.':
-      ['polygon','hole'].includes(next)?'Click corners, then Finish.':'Click start and end, then Finish.');
+    setMessage(next==='point'?'Click a location to create a point.':
+      ['polygon','hole'].includes(next)?
+        'Click vertices, then click the green first vertex, double-click or press Enter to close. Esc cancels; Backspace undoes.':
+        next==='line'||next==='split'?'Click vertices, then double-click or press Enter to finish.':
+        'Click the required points to complete the shape.');
   }
 
   async function finishDrawing(points:Position[]=vertices) {
     if (!drawingMode||busy) return;
     const mode = drawingMode;
+    // Reject self-crossings, degenerate rings and repeated non-closing nodes
+    // before calling GIS APIs or creating approximate offline geometry.
+    const sketchError=sketchFinishError(mode,points);
+    if(sketchError){setError(sketchError);return;}
     if(terrainLineDrawing){
       if(mode!=='line'||points.length<2){setError('Place at least two profile line points.');return;}
       const line:GeoJSON.LineString={type:'LineString',coordinates:points};
@@ -1481,11 +1489,19 @@ export default function App() {
             }}
             onViewportChange={setViewport}
             onMapClick={position => {
-              if(busy)return;
-              const max=drawingMode==='point'?1:['rectangle','circle','trace-along'].includes(drawingMode??'')?2:4000;
-              if(vertices.length>=max||(vertices.length&&vertices.at(-1)![0]===position[0]&&vertices.at(-1)![1]===position[1]))return;
-              const next=[...vertices,position];setVertices(next);
-              if(max<4000&&next.length===max)void finishDrawing(next);
+              if(busy||!drawingMode)return;
+              // The MapCanvas handles start-node pixel snapping and closure.
+              // Every other newly committed vertex must preserve simple-ring topology.
+              const reason=sketchAddError(drawingMode,vertices,position);
+              if(reason){
+                if(reason!=='Duplicate of the last point.')setError(reason);
+                return;
+              }
+              const next=[...vertices,position];
+              setVertices(next);setError('');
+              const complete=drawingMode==='point'?1:
+                ['rectangle','circle','trace-along'].includes(drawingMode)?2:4000;
+              if(complete<4000&&next.length===complete)void finishDrawing(next);
             }}
           />
           <div className="map-legend">
@@ -1643,8 +1659,18 @@ export default function App() {
               }}
               onSnapping={setSnapping}
               onAddPoint={point => {
-                if(drawingMode)setVertices(value=>value.length>=(drawingMode==='point'?1:['rectangle','circle','trace-along'].includes(drawingMode)?2:4000)?value:[...value,point]);
-                else void numericShape('point',{vertices:[point]});
+                if(drawingMode){
+                  if(['polygon','hole'].includes(drawingMode)&&vertices.length>=3&&
+                    point[0]===vertices[0][0]&&point[1]===vertices[0][1]){
+                    void finishDrawing();return;
+                  }
+                  const problem=sketchAddError(drawingMode,vertices,point);
+                  if(problem){setError(problem);return;}
+                  const next=[...vertices,point];setVertices(next);setError('');
+                  const complete=drawingMode==='point'?1:
+                    ['rectangle','circle','trace-along'].includes(drawingMode)?2:4000;
+                  if(complete<4000&&next.length===complete)void finishDrawing(next);
+                }else void numericShape('point',{vertices:[point]});
               }}
               onNumeric={(mode, body) => { void numericShape(mode, body); }}
               onOverlay={(mode, featureId) => { void combineWith(mode,featureId); }}
