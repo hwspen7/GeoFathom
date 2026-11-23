@@ -159,6 +159,26 @@ def _origin(point,crs,affine,valid):
         raise RasterError("Observer/outlet must fall in a valid selected DEM cell.")
     return r,c
 
+def _visibility_scope(valid,origin,affine,max_distance_m=0.,view_azimuth=0.,view_width=360.):
+    """A boolean study population, distinct from true/false visibility.
+
+    Outside-sector cells must not enter visibility denominators. An observer
+    cell always belongs to its own study population.
+    """
+    rows,cols=np.indices(valid.shape)
+    r0,c0=origin
+    dx,dy=abs(affine.a),abs(affine.e)
+    scope=valid.copy()
+    if max_distance_m>0:
+        scope &= np.hypot((rows-r0)*dy,(cols-c0)*dx)<=max_distance_m+1e-9
+    if view_width<360:
+        bearing=(np.degrees(np.arctan2((cols-c0)*dx,(r0-rows)*dy))+360)%360
+        delta=(bearing-view_azimuth+180)%360-180
+        scope &= np.abs(delta)<=view_width/2+1e-10
+    scope[r0,c0]=True
+    return scope
+
+
 def _visibility(z,valid,origin,affine,observer_height,target_height,cancel=None,
                 consider_curvature=False,refraction_coeff=0.13,
                 max_distance_m=0.,view_azimuth=0.,view_width=360.):
@@ -178,18 +198,12 @@ def _visibility(z,valid,origin,affine,observer_height,target_height,cancel=None,
     eye=z[r0,c0]+observer_height
     # Batch rays by integer step count. This preserves the exact nearest-cell
     # ray sampling / nodata semantics while bounding temporary arrays.
-    rows,cols=np.nonzero(valid)
-    # Azimuth is clockwise from grid north. Pixels outside the requested
-    # sector are known to be outside the observation model, not NoData rays.
-    included=np.ones(rows.shape,bool)
-    if max_distance_m>0:
-        included &= np.hypot((rows-r0)*dy_m,(cols-c0)*dx_m)<=max_distance_m+1e-9
-    if view_width<360:
-        bearing=(np.degrees(np.arctan2((cols-c0)*dx_m,(r0-rows)*dy_m))+360)%360
-        delta=(bearing-view_azimuth+180)%360-180
-        included &= np.abs(delta)<=view_width/2+1e-10
-    known[rows[~included],cols[~included]]=True
-    rows,cols=rows[included],cols[included]
+    # Preserve the low-level known-ray contract while exposing the actual
+    # eligible population separately to callers. Outside-scope is neither
+    # a failed line of sight nor an unknown/missing DEM pixel.
+    scope=_visibility_scope(valid,origin,affine,max_distance_m,view_azimuth,view_width)
+    known[valid&~scope]=True
+    rows,cols=np.nonzero(scope)
     distances=np.maximum(np.abs(rows-r0),np.abs(cols-c0))
     if int(distances.sum())>100_000_000:
         raise RasterError("Visibility exceeds 100 million ray samples; reduce the area or use a coarser DEM.")
@@ -409,12 +423,19 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
         origin=_origin(point,crs,affine,valid)
         seen,known=_visibility(z,valid,origin,affine,observer_height,target_height,cancel,
                                consider_curvature,refraction_coeff,max_distance_m,view_azimuth,view_width)
+        scope=_visibility_scope(valid,origin,affine,max_distance_m,view_azimuth,view_width)
         result["features"]=_mask_features(seen,affine,crs,"Visible terrain",cancel)
-        result["metrics"]={"visible_cells":int(seen.sum()),"visible_grid_area_m2":int(seen.sum())*cell,"unknown_cells":int((valid&~known).sum()),
+        eligible=int(scope.sum());known_eligible=int((scope&known).sum())
+        result["metrics"]={"visible_cells":int(seen.sum()),"visible_grid_area_m2":int(seen.sum())*cell,
+            "eligible_cells":eligible,"out_of_scope_cells":int((valid&~scope).sum()),
+            "known_eligible_cells":known_eligible,
+            "visibility_pct_of_known_eligible":100*int(seen.sum())/max(1,known_eligible),
+            "unknown_cells":int((scope&~known).sum()),
             "maximum_distance_m":max_distance_m,"view_azimuth_deg":view_azimuth,
             "view_width_deg":view_width}
         result["warning"]=("Local cell-center visibility with Earth curvature and configurable atmospheric refraction. "
-                           if consider_curvature else "Local planar cell-center visibility; curvature and refraction disabled. ")+"Buildings/vegetation depend on the input DEM/DSM; NoData along rays is unknown."
+                           if consider_curvature else "Local planar cell-center visibility; curvature and refraction disabled. ")+"Buildings/vegetation depend on the input DEM/DSM; NoData along rays is unknown. "+
+                            "Cells outside the chosen viewing sector or range are not part of visibility statistics."
     elif operation=="viewshed_multi":
         # A count raster preserves observer overlap, not merely the union
         # polygon. Unknown rays stay NoData rather than becoming invisible.
@@ -434,8 +455,10 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
             raise RasterError("Multi-observer visibility exceeds 100 million ray samples; reduce the area.")
         count=np.zeros(z.shape,dtype=np.uint8)
         fully_known=valid.copy()
+        population=np.zeros(z.shape,dtype=bool)
         for origin in origins:
             checkpoint(cancel)
+            population |= _visibility_scope(valid,origin,affine,max_distance_m,view_azimuth,view_width)
             visible,available=_visibility(z,valid,origin,affine,
                 observer_height,target_height,cancel,consider_curvature,
                 refraction_coeff,max_distance_m,view_azimuth,view_width)
@@ -448,9 +471,12 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
         # Chart categories must be mutually exclusive. Partial but positive
         # sightings remain available as vector geometry, while the strict
         # raster/count metrics refer only to pixels known for ALL observers.
-        fully_visible=union&fully_known
+        fully_visible=union&fully_known&population
+        # Pixels outside every observer's configured sector/range are NoData
+        # in the count raster, not a misleading "zero observers" result.
+        scoped_known=fully_known&population
         result["raster"]=raster_product(
-            np.where(fully_known,count.astype(float),np.nan),
+            np.where(scoped_known,count.astype(float),np.nan),
             "viewshed_multi",affine,crs,cancel,source_datum=source_datum)
         result["features"]=_mask_features(union,affine,crs,
                                           "Visible from any observer",cancel)
@@ -460,7 +486,11 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
             "visible_any_known_cells":int(union.sum()),
             "visible_by_all_cells":int((count==len(origins)).sum()),
             "visible_grid_area_m2":int(fully_visible.sum())*cell,
-            "unknown_cells":int((valid&~fully_known).sum()),
+            "unknown_cells":int((population&~fully_known).sum()),
+            "eligible_cells":int(population.sum()),
+            "out_of_scope_cells":int((valid&~population).sum()),
+            "known_eligible_cells":int(scoped_known.sum()),
+            "visibility_pct_of_known_eligible":100*int(fully_visible.sum())/max(1,int(scoped_known.sum())),
             "maximum_distance_m":max_distance_m,"view_azimuth_deg":view_azimuth,
             "view_width_deg":view_width,
         }
@@ -470,7 +500,8 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
             "rays are known; NoData means one or more rays are unknown. "
             "The vector union includes any positively observed cells even "
             "when other observer rays are unknown. "
-            "Terrain/DSM only, without independently verified buildings.")
+            "Terrain/DSM only, without independently verified buildings. "+
+            "Outside-sector/range cells are excluded from raster counts and coverage denominators.")
     elif operation=="watershed":
         origin=_origin(point,crs,affine,valid)
         mask=_watershed(flow_z,valid,origin,affine,cancel)
