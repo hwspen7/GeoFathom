@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import {createPortal} from 'react-dom';
 import {
-  ArrowRight, Compass, Download, Globe2, Layers3, MapPin,
+  ArrowRight, Compass, Download, Globe2, Layers3, MapPin, Maximize2, Minimize2,
   Pencil, RotateCcw, Search, Send, Sparkles,
   Wifi, WifiOff,
 } from 'lucide-react';
@@ -133,7 +133,15 @@ export default function App() {
   const [terrainVisible,setTerrainVisible]=useState(true);
   const [showLayers,setShowLayers]=useState(false);
   // Fixed-size workbench docks: map takes all remaining viewport width.
-  // No draggable splitters or stored widths; wheel/keyboard scrolling remains.
+  // No draggable splitters, scrolling side panels, or stored widths.
+  // Exceptional long controls open as an expanded workspace, not as a scrolling sidebar.
+  const [expandedDock,setExpandedDock]=useState<'operations'|'results'|null>(null);
+  useEffect(()=>{
+    if(!expandedDock)return;
+    const onKey=(event:KeyboardEvent)=>{if(event.key==='Escape')setExpandedDock(null);};
+    document.addEventListener('keydown',onKey);
+    return()=>document.removeEventListener('keydown',onKey);
+  },[expandedDock]);
   const [operationsFooterTarget,setOperationsFooterTarget]=useState<HTMLDivElement|null>(null);
   const [resultsFooterTarget,setResultsFooterTarget]=useState<HTMLDivElement|null>(null);
   const [terrainPicking,setTerrainPicking]=useState(false);
@@ -1063,6 +1071,7 @@ export default function App() {
         </div>
       </div>
       <div className="gis-body">
+        {expandedDock&&<div className="workspace-dock-backdrop" role="presentation" onClick={()=>setExpandedDock(null)}/>}
         <aside className="sidebar gis-layers gis-project-drawer" hidden={!showLayers} aria-label="Project and layers" style={{width:340}}>
           <WorkspaceDockHeading><Layers3 size={15}/> Project / Layers</WorkspaceDockHeading>
           <div className="sidebar-scroll">
@@ -1475,8 +1484,14 @@ export default function App() {
         </div>
 
         </main>
-        <aside className="gis-inspector gis-operations" hidden={!showTools} aria-label="Operations">
-          <WorkspaceDockHeading><Compass size={15}/> Tools</WorkspaceDockHeading>
+        <aside className={'gis-inspector gis-operations'+(expandedDock==='operations'?' workspace-dock-expanded':'')}
+          hidden={!showTools} aria-label="Operations">
+          <WorkspaceDockHeading actions={<button className="workspace-dock-expand-button"
+            aria-label={expandedDock==='operations'?'Close full operations view':'Open full operations view'}
+            title={expandedDock==='operations'?'Return to workspace':'Open larger workspace'}
+            onClick={()=>setExpandedDock(v=>v==='operations'?null:'operations')}>
+            {expandedDock==='operations'?<Minimize2 size={14}/>:<Maximize2 size={14}/>}
+          </button>}><Compass size={15}/> Tools</WorkspaceDockHeading>
           <div className="sidebar-scroll" tabIndex={0} aria-label="Operations scrolling region">
           <details className="workspace-objects" open>
             <summary>Objects</summary>
@@ -1888,8 +1903,13 @@ export default function App() {
           </div>
           <div className="workspace-fixed-footer" ref={setOperationsFooterTarget}/>
         </aside>
-        <aside className="gis-results-monitor" aria-label="Results monitor">
-          <WorkspaceDockHeading><Layers3 size={15}/> Results</WorkspaceDockHeading>
+        <aside className={'gis-results-monitor'+(expandedDock==='results'?' workspace-dock-expanded':'')} aria-label="Results monitor">
+          <WorkspaceDockHeading actions={<button className="workspace-dock-expand-button"
+            aria-label={expandedDock==='results'?'Close full results view':'Open full results view'}
+            title={expandedDock==='results'?'Return to workspace':'Open larger workspace'}
+            onClick={()=>setExpandedDock(v=>v==='results'?null:'results')}>
+            {expandedDock==='results'?<Minimize2 size={14}/>:<Maximize2 size={14}/>}
+          </button>}><Layers3 size={15}/> Results</WorkspaceDockHeading>
           <div className="sidebar-scroll" ref={setResultsTarget} tabIndex={0} aria-label="Results scrolling region">
             {!measurement&&activeTool==='tools-survey'&&<div className="workspace-monitor-empty">No selection</div>}
           </div>
