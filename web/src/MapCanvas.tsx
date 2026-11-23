@@ -1358,7 +1358,10 @@ export default function MapCanvas({
     if(g&&totals){
       const anchor=measurementAnchor(g);
       if(anchor){
-        if(totals.area_m2!==null)label(prefix+areaText(totals.area_m2,display.area)+'\n'+prefix+distanceText(totals.perimeter_m??0,display.distance)+' perimeter',anchor);
+        // Suppress the combined selection total once separate enclosed faces
+        // are available. Their independent labels take priority on the map.
+        if(totals.area_m2!==null&&(networkFaces.length<=1||Boolean(draft)))
+          label(prefix+areaText(totals.area_m2,display.area)+'\n'+prefix+distanceText(totals.perimeter_m??0,display.distance)+' perimeter',anchor);
         else if(totals.length_m!==null)label(prefix+distanceText(totals.length_m??0,display.distance)+' total',anchor);
         else if(g.type==='Point')label(anchor[0].toFixed(6)+'°, '+anchor[1].toFixed(6)+'°',anchor);
       }
