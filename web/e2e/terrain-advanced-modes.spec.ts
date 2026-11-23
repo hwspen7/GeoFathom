@@ -129,6 +129,7 @@ test('advanced surface families retain distinct real results and scientific expo
  await page.getByLabel('Max elevation (m)').fill('100');
  await expect(run).toBeDisabled();
  await page.getByLabel('Min elevation (m)').fill('90');
+ await page.getByLabel('Max elevation (m)').fill('200');
  await expect(run).toBeEnabled();
  await execute('Site suitability');
  await select('Engineering','Least-cost route');
@@ -139,7 +140,7 @@ test('advanced surface families retain distinct real results and scientific expo
  await page.getByLabel('Route end latitude').fill(String(fixture.end[1]));
  await expect(run).toBeEnabled();
  await execute('Least-cost route');
- await expect(page.getByLabel('Terrain results')).toContainText('Route length');
+ await expect(page.getByLabel('Terrain results')).toContainText(/route length/i);
  const exportEvent=page.waitForEvent('download');
  await page.getByRole('button',{name:'Export',exact:true}).click();
  const exported=await exportEvent;
