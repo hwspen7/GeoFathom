@@ -175,7 +175,11 @@ export default function TerrainWorkbench(p:Props){
      plot:<ProfileGradePlot samples={profile.samples}/>}] : []),
    ...(result?.raster?.legend?.length?[{id:'composition',label:'Composition',
      plot:<TerrainClassShare bins={result.raster.legend}/>},
-     {id:'cumulative',label:'Cumulative',plot:<TerrainCumulativeArea bins={result.raster.legend} cellAreaM2={result.cell_area_m2}/>}]:[]),
+     ...(['elevation','slope_map','hillshade','tri','tpi','curvature',
+          'plan_curvature','profile_curvature','flow_accumulation',
+          'flow_accumulation_mfd','stream_order','cutfill_map','dem_difference'].includes(result.operation)
+        ?[{id:'cumulative',label:'Cumulative',
+          plot:<TerrainCumulativeArea bins={result.raster.legend} cellAreaM2={result.cell_area_m2}/>}]:[])]:[]),
  ];
  const activeResearch=researchFigures.find(item=>item.id===figureView);
  // Show operation-critical metrics first; keep all scientific fields in More.
