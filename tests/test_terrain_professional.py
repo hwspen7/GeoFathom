@@ -128,3 +128,63 @@ def test_least_cost_rejects_steep_diagonal_slope_even_if_flat_side_is_free():
     valid=np.ones_like(z,bool)
     with pytest.raises(RasterError,match="No valid terrain route"):
         least_cost(z,valid,(0,0),(2,2),1,1,10)
+
+
+@pytest.mark.parametrize("operation,unit",[
+    ("elevation","m"),("dem_difference","m"),("cutfill_map","m"),
+    ("slope_map","degree"),("aspect_map","degree"),("hillshade","0..255"),
+    ("tri","m"),("tpi","m"),("curvature","1/m"),
+    ("plan_curvature","1/m"),("profile_curvature","1/m"),
+    ("flow_direction","D8_code"),("flow_accumulation","cells"),
+    ("streams","binary"),("suitability","binary"),("least_cost","binary"),
+])
+def test_derived_geotiff_value_units_are_not_mislabeled_as_elevation(operation,unit):
+    data=np.array([[1.,2.],[3.,np.nan]],dtype=float)
+    p=raster_product(data,operation,from_origin(500000,4500000,10,10),"EPSG:32617")
+    assert p["unit"]==unit
+    with MemoryFile(base64.b64decode(p["geotiff"])) as memory:
+        with memory.open() as raster:
+            assert raster.tags()["TERRAIN_UNIT"]==unit
+            assert raster.tags()["TERRAIN_OPERATION"]==operation
+            assert raster.tags()["TERRAIN_NODATA_POLICY"]=="NaN"
+            assert np.isnan(raster.nodata)
+            np.testing.assert_allclose(raster.read(1),data,equal_nan=True)
+
+
+@pytest.mark.parametrize("operation",[
+    "slope_map","aspect_map","hillshade","tri","tpi",
+    "curvature","plan_curvature","profile_curvature","suitability",
+])
+def test_halo_tiled_derivatives_match_full_window_with_nodata(operation):
+    from terrain.professional import _derived_surface_tiled
+    yy,xx=np.indices((547,523),dtype=float)
+    z=120+.1*yy+.2*xx+np.sin(yy/17)*10+np.cos(xx/19)*5
+    valid=np.ones(z.shape,dtype=bool)
+    valid[370:395,370:395]=False
+    valid[380,:90]=False
+    full=derivatives(z,valid,10,20)
+    result,metrics=_derived_surface_tiled(
+        z,valid,10,20,operation,
+        max_slope=35,min_elevation=100,max_elevation=260,max_tri=20,
+        azimuth=125,altitude=36,block=384)
+    if operation=="hillshade":
+        a,b=np.deg2rad([125,36])
+        east,south=full["east"],full["south"]
+        expected=255*np.clip((np.sin(b)-east*np.cos(b)*np.sin(a)
+                            +south*np.cos(b)*np.cos(a))/
+                            np.sqrt(1+east**2+south**2),0,1)
+    elif operation=="suitability":
+        good=np.isfinite(full["slope_map"])
+        passed=(full["slope_map"]<=35)&(z>=100)&(z<=260)&(full["tri"]<=20)
+        expected=np.where(good,passed.astype(float),np.nan)
+        assert metrics["suitable_area_m2"]==pytest.approx(
+            float((expected==1).sum()*200))
+        assert metrics["suitable_pct"]==pytest.approx(
+            float(100*(expected==1).sum()/good.sum()))
+    elif operation=="aspect_map":
+        expected=np.where(np.isfinite(full["slope_map"])&
+                          ~np.isfinite(full["aspect_map"]),-1,full["aspect_map"])
+    else:
+        expected=full[operation]
+    np.testing.assert_allclose(result,expected,rtol=0,atol=1e-10,equal_nan=True)
+    assert np.isnan(result[0]).all() and np.isnan(result[:,-1]).all()

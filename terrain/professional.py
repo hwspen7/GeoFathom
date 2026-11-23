@@ -26,6 +26,19 @@ SLOPE_COLORS = ("#dcebec","#96cbc8","#5eac9e","#ebc579","#d68e60","#a94946")
 DIRECTION_COLORS = ("#777777","#d94841","#d59635","#269d68","#285cb0",
                     "#853a9b","#999d39","#2caabb","#be709b")
 
+
+# The unit of a derived cell is not necessarily the vertical unit of its DEM.
+# Encode it in the downloaded GeoTIFF as well as in the API result.
+RASTER_UNITS = {
+    "elevation":"m", "dem_difference":"m", "cutfill_map":"m",
+    "slope_map":"degree", "aspect_map":"degree",
+    "hillshade":"0..255", "tri":"m", "tpi":"m",
+    "curvature":"1/m", "plan_curvature":"1/m",
+    "profile_curvature":"1/m", "flow_direction":"D8_code",
+    "flow_accumulation":"cells", "streams":"binary",
+    "suitability":"binary", "least_cost":"binary",
+}
+
 def derivatives(z, valid, dx, dy):
     """Horn gradients, Riley TRI, mean-neighbor TPI and Laplacian on complete windows."""
     if min(z.shape)<3:
@@ -207,7 +220,10 @@ def raster_product(values,operation,affine,crs,cancel=None):
         with memory.open(driver="GTiff",height=height,width=width,count=1,dtype="float32",
                          crs=crs,transform=affine,nodata=float("nan"),compress="deflate") as dst:
             dst.write(values.astype(np.float32),1)
-            dst.update_tags(TERRAIN_OPERATION=operation)
+            dst.update_tags(TERRAIN_OPERATION=operation,
+                            TERRAIN_UNIT=RASTER_UNITS[operation],
+                            TERRAIN_NODATA_POLICY="NaN",
+                            TERRAIN_GRID_BASIS="projected_cell_centers")
         tif=base64.b64encode(memory.read()).decode("ascii")
     bounds=array_bounds(height,width,affine)
     target,tw,th=calculate_default_transform(crs,"EPSG:3857",width,height,*bounds)
@@ -234,7 +250,74 @@ def raster_product(values,operation,affine,crs,cancel=None):
     checkpoint(cancel)
     return {"png":"data:image/png;base64,"+base64.b64encode(sink.getvalue()).decode("ascii"),
             "geotiff":tif,"corners":[[x,y] for x,y in zip(xs,ys)],"legend":legend,
-            "width":width,"height":height,"valid_cells":int(finite.sum())}
+            "width":width,"height":height,"valid_cells":int(finite.sum()),
+            "unit":RASTER_UNITS[operation]}
+
+def _derived_surface_tiled(z,valid,dx,dy,operation,max_slope=30.,
+                           min_elevation=-12000.,max_elevation=12000.,max_tri=100.,
+                           azimuth=315.,altitude=45.,cancel=None,block=384):
+    """One selected product from 3x3 halo tiles; no nine full-size rasters.
+
+    The existing Horn/curvature derivative is reused unchanged per tile.
+    Tile halos are not written to the output and NoData never interpolates.
+    """
+    if min(z.shape)<3:
+        raise RasterError("Terrain derivatives require a 3 × 3 grid.")
+    if operation=="hillshade" and not (0<=azimuth<=360 and 0<=altitude<=90):
+        raise RasterError("Invalid sun angles.")
+    if operation=="suitability" and not (
+        0<=max_slope<=90 and min_elevation<=max_elevation and max_tri>=0
+    ):
+        raise RasterError("Invalid suitability limits.")
+    output=np.full(z.shape,np.nan,dtype=np.float64)
+    qualified=0
+    suitable=0
+    if operation=="hillshade":
+        a,b=math.radians(azimuth),math.radians(altitude)
+    for r0 in range(1,z.shape[0]-1,block):
+        r1=min(z.shape[0]-1,r0+block)
+        for c0 in range(1,z.shape[1]-1,block):
+            checkpoint(cancel)
+            c1=min(z.shape[1]-1,c0+block)
+            # Exactly one pixel of neighboring data on each tile edge.
+            local_z=z[r0-1:r1+1,c0-1:c1+1]
+            local_valid=valid[r0-1:r1+1,c0-1:c1+1]
+            try:
+                derived=derivatives(local_z,local_valid,dx,dy)
+            except RasterError as error:
+                if str(error)=="No complete valid 3 × 3 terrain neighborhoods.":
+                    continue
+                raise
+            crop=(slice(1,-1),slice(1,-1))
+            if operation=="hillshade":
+                east,south=derived["east"][crop],derived["south"][crop]
+                product=255*np.clip(
+                    (math.sin(b)-east*math.cos(b)*math.sin(a)
+                     +south*math.cos(b)*math.cos(a))/
+                    np.sqrt(1+east**2+south**2),0,1)
+            elif operation=="suitability":
+                good=np.isfinite(derived["slope_map"][crop])
+                passed=(derived["slope_map"][crop]<=max_slope)
+                passed&=(z[r0:r1,c0:c1]>=min_elevation)
+                passed&=(z[r0:r1,c0:c1]<=max_elevation)
+                passed&=(derived["tri"][crop]<=max_tri)
+                product=np.where(good,passed.astype(float),np.nan)
+                qualified+=int(good.sum())
+                suitable+=int((good&passed).sum())
+            elif operation=="aspect_map":
+                product=np.where(
+                    np.isfinite(derived["slope_map"][crop])&
+                    ~np.isfinite(derived["aspect_map"][crop]),
+                    -1,derived["aspect_map"][crop])
+            else:
+                product=derived[operation][crop]
+            output[r0:r1,c0:c1]=product
+    metrics={}
+    if operation=="suitability" and qualified:
+        metrics={"suitable_area_m2":float(suitable*dx*dy),
+                 "suitable_pct":float(100*suitable/qualified)}
+    return output,metrics
+
 
 def surface(z,valid,affine,crs,operation,reference,point,end_point,max_slope,
             min_elevation,max_elevation,max_tri,stream_cells,azimuth,altitude,feature,origin,cancel=None):
@@ -281,23 +364,29 @@ def surface(z,valid,affine,crs,operation,reference,point,end_point,max_slope,
         features=[feature(line,crs,{"name":"Least-cost route","color":"#b74127"})]
         metrics={"route_length_m":float(line.length),"route_cost":cost,"route_cells":len(route)}
     else:
-        d=derivatives(z,valid,dx,dy);checkpoint(cancel)
-        if operation=="hillshade":
-            if not (0<=azimuth<=360 and 0<=altitude<=90):raise RasterError("Invalid sun angles.")
-            a,b=math.radians(azimuth),math.radians(altitude)
-            east,south=d["east"],d["south"]
-            values=255*np.clip((math.sin(b)-east*math.cos(b)*math.sin(a)+south*math.cos(b)*math.cos(a))/np.sqrt(1+east**2+south**2),0,1)
-        elif operation=="suitability":
-            if not (0<=max_slope<=90 and min_elevation<=max_elevation and max_tri>=0):
-                raise RasterError("Invalid suitability limits.")
-            good=np.isfinite(d["slope_map"])
-            passed=(d["slope_map"]<=max_slope)&(z>=min_elevation)&(z<=max_elevation)&(d["tri"]<=max_tri)
-            values=np.where(good,passed.astype(float),np.nan)
-            metrics={"suitable_area_m2":float((values==1).sum()*cell),
-                     "suitable_pct":float(100*(values==1).sum()/good.sum())}
-        elif operation=="aspect_map":
-            values=np.where(np.isfinite(d["slope_map"])&~np.isfinite(d["aspect_map"]),-1,d["aspect_map"])
-        else:values=d[operation]
+        # Large-area surfaces avoid keeping nine full-sized derived arrays.
+        if z.size>1_000_000:
+            values,metrics=_derived_surface_tiled(
+                z,valid,dx,dy,operation,max_slope,min_elevation,
+                max_elevation,max_tri,azimuth,altitude,cancel)
+        else:
+            d=derivatives(z,valid,dx,dy);checkpoint(cancel)
+            if operation=="hillshade":
+                if not (0<=azimuth<=360 and 0<=altitude<=90):raise RasterError("Invalid sun angles.")
+                a,b=math.radians(azimuth),math.radians(altitude)
+                east,south=d["east"],d["south"]
+                values=255*np.clip((math.sin(b)-east*math.cos(b)*math.sin(a)+south*math.cos(b)*math.cos(a))/np.sqrt(1+east**2+south**2),0,1)
+            elif operation=="suitability":
+                if not (0<=max_slope<=90 and min_elevation<=max_elevation and max_tri>=0):
+                    raise RasterError("Invalid suitability limits.")
+                good=np.isfinite(d["slope_map"])
+                passed=(d["slope_map"]<=max_slope)&(z>=min_elevation)&(z<=max_elevation)&(d["tri"]<=max_tri)
+                values=np.where(good,passed.astype(float),np.nan)
+                metrics={"suitable_area_m2":float((values==1).sum()*cell),
+                         "suitable_pct":float(100*(values==1).sum()/good.sum())}
+            elif operation=="aspect_map":
+                values=np.where(np.isfinite(d["slope_map"])&~np.isfinite(d["aspect_map"]),-1,d["aspect_map"])
+            else:values=d[operation]
     if not np.isfinite(values).any():raise RasterError("No valid cells for this terrain product.")
     product=raster_product(values,operation,affine,crs,cancel)
     if operation in {"flow_direction","streams","suitability","least_cost"}:
