@@ -369,6 +369,7 @@ def analyze_research(primary_path, geometry, criteria, options=None, cancel=None
         "score_min": float(score[valid].min()), "score_max": float(score[valid].max()),
         "score_mean": baseline_mean, "source_dem_footprint_overlap_pct": overlap}
     model = {"criteria": [{k: v for k, v in c.items()} for c in parsed],
+             "pairwise_comparisons": options.get("pairwise"),
              "weights": [float(v) for v in weights], "threshold": threshold,
              "sensitivity_fraction": sensitivity,
              "ahp": ahp, "uncertainty": uncertainty}
@@ -455,8 +456,9 @@ def checkpoint_accuracy(path, points, declared_datum=None, cancel=None):
             "nmad_m": float(1.4826 * np.median(np.abs(errors - median))),
             "absolute_error_p95_m": float(np.quantile(absolute, .95)),
             "minimum_error_m": float(errors.min()), "maximum_error_m": float(errors.max()),
-            "datum_verified": bool(declared_datum and datum),
-            "warning": "Checkpoint independence, land cover, measurement epoch and stated vertical datum require external verification; these descriptive errors are not certified accuracy."}
+            "datum_labels_match": bool(declared_datum and datum),
+            "datum_verified": False,
+            "warning": "A matching vertical datum name is metadata agreement, not geodetic verification. Checkpoint independence, land cover, measurement epoch and actual vertical control must be established externally; these descriptive errors are not certified accuracy."}
 
 
 def replay_research_bundle(data, cancel=None):
