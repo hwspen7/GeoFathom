@@ -24,7 +24,7 @@ test('keyboard drawing, right-click completion, selection context and cancel',as
  await page.keyboard.press('Escape');
  await expect(toolbar.getByRole('button',{name:'Move',exact:true})).not.toHaveClass(/active/);
  await page.keyboard.press('t');
- await page.getByRole('tab',{name:'Tools',exact:true}).click();
+ await page.getByRole('button',{name:'Browse terrain tools',exact:true}).click();
  await expect(page.getByLabel('Terrain tools')).toBeVisible();
  await page.getByRole('button',{name:'Keyboard shortcuts',exact:true}).click();
  await expect(page.getByRole('dialog',{name:'Keyboard shortcuts'})).toBeVisible();
