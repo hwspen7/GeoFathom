@@ -7,7 +7,7 @@ const base:TerrainParameterForm={
  azimuth:'315',altitude:'45',sectionSpacing:'50',sectionWidth:'20',
  fillSinks:true,considerCurvature:true,refractionCoeff:'0.13',
  comparisonId:'',observerPoints:[['',''],['','']],drape:false,
- textureImageId:null,
+ textureImageId:null,gradientMethod:'horn',slopeClasses:'standard',
 };
 describe('scientific operation-specific input manifests',()=>{
  it('does not invent a zero-degree observer for a contour experiment',()=>{
@@ -38,6 +38,18 @@ describe('scientific operation-specific input manifests',()=>{
   filled.observerPoints[0][0]='-83.1';
   expect(viewshed.observer_points).toEqual([
    [-83.001,40.01],[-83.02,40.015]]);
+ });
+ it('model and classification choices affect only relevant scientific run IDs',()=>{
+  const standard=terrainParametersForOperation('slope_map',base);
+  expect(standard).toEqual({gradient_method:'horn',slope_classes:'standard'});
+  const changed={...base,gradientMethod:'zevenbergen_thorne' as const,
+   slopeClasses:'detailed' as const};
+  expect(terrainParametersForOperation('slope_map',changed)).toEqual({
+   gradient_method:'zevenbergen_thorne',slope_classes:'detailed'});
+  expect(terrainParametersForOperation('aspect_map',changed)).toEqual({
+   gradient_method:'zevenbergen_thorne'});
+  expect(terrainParametersForOperation('contours',changed))
+   .toEqual(terrainParametersForOperation('contours',base));
  });
  it('records curvature refraction only when curvature is enabled',()=>{
   expect(terrainParametersForOperation('visibility',{
