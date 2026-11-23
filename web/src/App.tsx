@@ -796,6 +796,7 @@ export default function App() {
   }
 
   async function combineWith(mode: 'union' | 'difference' | 'intersection', featureId: string) {
+    if(drawingMode){setError('Finish or cancel the active sketch before combining features.');return;}
     const other = projectWorkspace?.features.find(item => item.id === featureId);
     if (!geometry || !other) return;
     const sequence=++geometrySequence.current;
