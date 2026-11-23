@@ -382,17 +382,20 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
         if total_steps>100_000_000:
             raise RasterError("Multi-observer visibility exceeds 100 million ray samples; reduce the area.")
         count=np.zeros(z.shape,dtype=np.uint8)
-        known=np.zeros(z.shape,dtype=bool)
+        fully_known=valid.copy()
         for origin in origins:
             checkpoint(cancel)
             visible,available=_visibility(z,valid,origin,affine,
                 observer_height,target_height,cancel,consider_curvature,
                 refraction_coeff)
             count+=visible.astype(np.uint8)
-            known|=available
+            # A count of zero or one is not exact if ANY observer's ray
+            # crosses NoData. Mark such pixels unknown rather than
+            # misrepresenting a partial count as total observer coverage.
+            fully_known &= available
         union=count>0
         result["raster"]=raster_product(
-            np.where(known,count.astype(float),np.nan),
+            np.where(fully_known,count.astype(float),np.nan),
             "viewshed_multi",affine,crs,cancel,source_datum=source_datum)
         result["features"]=_mask_features(union,affine,crs,
                                           "Visible from any observer",cancel)
@@ -401,12 +404,12 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
             "visible_cells":int(union.sum()),
             "visible_by_all_cells":int((count==len(origins)).sum()),
             "visible_grid_area_m2":int(union.sum())*cell,
-            "unknown_cells":int((valid&~known).sum()),
+            "unknown_cells":int((valid&~fully_known).sum()),
         }
         result["warning"]=(
             "Multi-observer cell-center viewshed: raster values count the "
-            "observers with unobstructed sightlines; zero means known but "
-            "unseen, NoData means visibility could not be determined. "
+            "observers with unobstructed sightlines only when all observer "
+            "rays are known; NoData means one or more rays are unknown. "
             "Terrain/DSM only, without independently verified buildings.")
     elif operation=="watershed":
         origin=_origin(point,crs,affine,valid)

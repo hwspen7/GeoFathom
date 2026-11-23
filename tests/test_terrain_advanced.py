@@ -237,7 +237,7 @@ def test_multi_observer_visibility_counts_and_nodata_match_single_ray_model(dem)
     second=_origin(observers[1],crs,affine,mask)
     visible_a,known_a=_visibility(values,mask,first,affine,1.7,0.)
     visible_b,known_b=_visibility(values,mask,second,affine,1.7,0.)
-    expected=np.where(known_a|known_b,
+    expected=np.where(known_a&known_b,
                       visible_a.astype(float)+visible_b.astype(float),np.nan)
     with MemoryFile(base64.b64decode(result["raster"]["geotiff"])) as mem:
         with mem.open() as dst:
@@ -249,7 +249,7 @@ def test_multi_observer_visibility_counts_and_nodata_match_single_ray_model(dem)
     assert result["metrics"]["visible_by_all_cells"]==int(np.count_nonzero(
         visible_a&visible_b))
     assert result["metrics"]["unknown_cells"]==int(np.count_nonzero(
-        mask&~(known_a|known_b)))
+        mask&~(known_a&known_b)))
 
 
 def test_multi_viewshed_rejects_unusable_observer_inputs(dem):
@@ -298,3 +298,23 @@ def test_multi_observer_count_api_and_request_validation(dem,tmp_path,monkeypatc
     too_many=client.post("/terrain/advanced",json={
         **request,"observer_points":[a,b,a,b,a]})
     assert too_many.status_code==422
+
+
+def test_multi_viewshed_partial_ray_never_becomes_false_aggregate_visibility(dem):
+    import base64
+    from rasterio.io import MemoryFile
+    path,polygon=dem
+    t=Transformer.from_crs("EPSG:32617","EPSG:4326",always_xy=True)
+    observers=[t.transform(500035,4499965),t.transform(500165,4499835)]
+    with rasterio.open(path,"r+") as source:
+        array=source.read(1)
+        array[10,10]=-9999
+        source.write(array,1)
+    result=run_terrain(path,polygon,"viewshed_multi",observer_points=observers)
+    assert result["metrics"]["unknown_cells"]>0
+    with MemoryFile(base64.b64decode(result["raster"]["geotiff"])) as mem:
+        with mem.open() as output:
+            sampled=output.read(1)
+    # The raster must not claim a count when any observer ray is blocked
+    # by unknown data. Confirm there is genuine NoData in the result.
+    assert np.isnan(sampled).any()
