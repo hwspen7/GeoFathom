@@ -196,9 +196,11 @@ function renderer(gl:WebGL2RenderingContext,mesh:TerrainMesh,redraw:()=>void){
   gl.deleteTexture(texture);gl.deleteProgram(program);}};
 }
 const initial:Camera={angle:-.6,tilt:.7,exaggeration:1,zoom:1.6,clip:1,wire:false,drape:true,panX:0,panY:0};
-export function GPUView({mesh,fallback}:{mesh:TerrainMesh;fallback:ReactNode}){
+export function GPUView({mesh,fallback,tileSource}:{mesh:TerrainMesh;fallback:ReactNode;
+ tileSource?:{image_id:string;geometry:GeoJSON.Geometry}}){
  const canvas=useRef<HTMLCanvasElement>(null),render=useRef<ReturnType<typeof renderer>|null>(null),drag=useRef<{x:number;y:number;pan:boolean}|null>(null);
  const [camera,setCamera]=useState(initial),[available,setAvailable]=useState(true);
+ const [tileStatus,setTileStatus]=useState('');
  const latest=useRef(camera);latest.current=camera;
  useEffect(()=>{
    const node=canvas.current;if(!node)return;
@@ -211,6 +213,37 @@ export function GPUView({mesh,fallback}:{mesh:TerrainMesh;fallback:ReactNode}){
    }catch{setAvailable(false);}
  },[mesh]);
  useEffect(()=>{render.current?.draw(camera);},[camera]);
+ useEffect(()=>{
+  const source=tileSource;
+  if(!available||!source||(mesh.source_sampling_step??1)<=1||!mesh.source_grid_rows)return;
+  const targets=terrainTileRequests(mesh,camera,24);
+  const controller=new AbortController();
+  let mounted=true;
+  const timer=window.setTimeout(()=>{
+   async function loadVisibleTiles(){
+    let fetched=0;
+    for(const item of targets){
+     if(!mounted||controller.signal.aborted)break;
+     if(render.current?.hasTile(item.level,item.tile_row,item.tile_col))continue;
+     const tile=await fetchTerrainMeshTile({image_id:source.image_id,
+      geometry:source.geometry,level:item.level,tile_row:item.tile_row,tile_col:item.tile_col},
+      controller.signal);
+     if(!mounted||controller.signal.aborted)break;
+     render.current?.uploadTile(tile);
+     render.current?.draw(latest.current);
+     fetched++;
+    }
+    if(mounted&&fetched>0)setTileStatus(
+      'Source-resolution DEM tiles streamed: '+fetched+' for current camera');
+   }
+   void loadVisibleTiles().catch(error=>{
+    if(mounted&&!controller.signal.aborted)setTileStatus(
+      error instanceof Error?'Tile loading: '+error.message:'DEM tile request failed.');
+   });
+  },180);
+  return()=>{mounted=false;window.clearTimeout(timer);controller.abort();};
+ },[mesh,available,tileSource?.image_id,tileSource?.geometry,
+    camera.zoom,camera.angle,camera.tilt,camera.panX,camera.panY,camera.clip]);
  if(!available)return <><small>WebGL2 unavailable · CPU preview</small>{fallback}</>;
  const update=(values:Partial<Camera>)=>setCamera(old=>({...old,...values}));
  function save(){const a=document.createElement('a'),url=URL.createObjectURL(new Blob([meshOBJ(mesh)],{type:'text/plain'}));a.href=url;a.download='terrain.obj';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
@@ -224,8 +257,10 @@ export function GPUView({mesh,fallback}:{mesh:TerrainMesh;fallback:ReactNode}){
    <label>Clip surface <input type="range" min=".05" max="1" step=".01" value={camera.clip} onChange={e=>update({clip:Number(e.target.value)})}/></label>
    <div className="survey-action-bar"><label><input type="checkbox" checked={camera.wire} onChange={e=>update({wire:e.target.checked})}/>Wireframe</label>
     {mesh.texture&&<label><input type="checkbox" checked={camera.drape} onChange={e=>update({drape:e.target.checked})}/>Imagery</label>}
-    <button onClick={()=>setCamera(initial)}>Reset view</button><button onClick={save}>OBJ</button></div>
-   {mesh.lod&&<small>Camera-adaptive mesh geometry · {mesh.lod.levels.join(' / ')} cell steps. LOD is preloaded, not network streamed.</small>}
+    <button onClick={()=>setCamera(initial)}>Reset view</button><button onClick={save}>OBJ (preview)</button></div>
+   {tileSource&&(mesh.source_sampling_step??1)>1?<small role="status">
+     Camera-driven streaming enabled · 32-cell source DEM tiles, bounded GPU cache. {tileStatus}
+   </small>:mesh.lod&&<small>Camera-adaptive preloaded mesh LOD · {mesh.lod.levels.join(' / ')} cell steps.</small>}
    {mesh.texture&&<small>RGB image coverage {mesh.texture.coverage_pct.toFixed(1)}%</small>}
  </div>;
 }
