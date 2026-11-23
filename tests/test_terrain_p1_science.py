@@ -238,3 +238,28 @@ def test_weighted_suitability_legacy_binary_classification_unchanged(real_dem):
         max_slope=30,min_elevation=100,max_elevation=145,max_tri=50)
     assert binary["raster"]["unit"]=="binary"
     assert len(binary["raster"]["legend"])==2
+
+
+
+def test_external_upstream_inflow_is_explicit_grid_aligned_and_unit_checked(real_dem,tmp_path):
+    path,polygon,_,affine,z=real_dem
+    inlet=np.zeros(z.shape,dtype=np.float32)
+    inlet[10,20]=12
+    source=tmp_path/"known-inlet.tif"
+    with rasterio.open(source,"w",driver="GTiff",height=25,width=25,count=1,
+         crs="EPSG:32617",transform=affine,dtype="float32",nodata=-9999) as dst:
+        dst.write(inlet,1)
+        dst.update_tags(TERRAIN_UNIT="cell_equivalents")
+    result=run_terrain(path,polygon,"flow_accumulation",flow_routing_method="dinf",
+        external_inflow_path=source)
+    assert result["metrics"]["external_inflow_total_cell_equivalents"]==pytest.approx(12)
+    assert "external_upstream_contribution_input_unverified" in result["quality"]["flags"]
+    assert result["algorithm_options"]["external_inflow_supplied"] is True
+    with rasterio.open(source,"r+") as dst:
+        dst.update_tags(TERRAIN_UNIT="m")
+    with pytest.raises(RasterError,match="TERRAIN_UNIT"):
+        run_terrain(path,polygon,"flow_accumulation",flow_routing_method="dinf",
+            external_inflow_path=source)
+    with pytest.raises(RasterError,match="only for D-infinity"):
+        run_terrain(path,polygon,"flow_accumulation",flow_routing_method="d8",
+            external_inflow_path=source)
