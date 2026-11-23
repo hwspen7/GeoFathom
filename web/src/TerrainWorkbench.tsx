@@ -782,7 +782,7 @@ export default function TerrainWorkbench(p:Props){
        <button onClick={()=>{setFetchChoice('selection');setInfo('DEM will use the selected geometry bounds, not the previous map view.');}}>Use selected area</button>
        {p.onFitSelectedArea&&<button onClick={()=>{setFetchChoice('selection');p.onFitSelectedArea?.();}}>Fit selected area</button>}
      </div>}
-     <small className="compact-notice" aria-label="DEM download target">
+     <small className="compact-notice" aria-label="DEM download target" title={fetchArea?describeTerrainBounds(fetchArea):'No valid download area'}>
        {fetchArea?(fetchScope==='viewport'?'Current map · ':'Selected geometry · ')+describeTerrainBounds(fetchArea):'No valid download area'}
        {budget?' · ~'+budget.approximateCells.toLocaleString()+' grid cells':''}
      </small>

@@ -1046,3 +1046,12 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .desktop-gis .terrain-result-tabs button:focus-visible{
   outline:2px solid #3984ae;outline-offset:-3px;position:relative;z-index:1;
 }
+
+
+/* One-line data target, not a paragraph of map coordinates. Full bounds
+   remain available via tooltip and from the underlying controlled source. */
+.desktop-gis .gis-operations [aria-label="DEM download target"]{
+  display:block;width:100%;white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis;font-variant-numeric:tabular-nums;
+}
+.desktop-gis .gis-operations .terrain-source>.survey-action-bar>.compact-notice{display:none}
