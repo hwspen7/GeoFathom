@@ -73,6 +73,15 @@ def metadata(path: Path) -> dict:
                 "corners": corners,
                 "bbox": bounds,
                 "resolution": [abs(src.transform.a), abs(src.transform.e)],
+                "resolution_unit": ("degree" if src.crs.is_geographic
+                                    else (src.crs.linear_units or "unknown")),
+                # Declared vertical references are metadata, not independent
+                # verification of survey control or vertical accuracy.
+                "vertical_unit": (src.units[0] or src.tags().get("VERTICAL_UNIT")
+                                  or None),
+                "vertical_datum": (src.tags().get("VERTICAL_DATUM")
+                                   or src.tags().get("VERTICAL_REFERENCE")
+                                   or None),
                 "acquired_at": src.tags().get("TIFFTAG_DATETIME")
                                or src.tags().get("ACQUISITION_DATE"),
                 "provenance": "User-supplied georeferenced GeoTIFF",

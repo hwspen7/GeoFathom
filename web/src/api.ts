@@ -291,6 +291,11 @@ export interface RasterAsset {
   corners: [[number, number], [number, number], [number, number], [number, number]];
   preview_url: string;
   acquired_at: string | null;
+  // These values are declared by the source file, never inferred from the
+  // requested output grid and never treated as verified geodetic control.
+  resolution_unit?: string;
+  vertical_unit?: string | null;
+  vertical_datum?: string | null;
   provenance: string;
 }
 
@@ -973,7 +978,7 @@ export interface TerrainRasterLayer {id:string;title:string;raster:TerrainRaster
 export interface TerrainDistributionBin {lower_m:number;upper_m:number;cells:number;area_m2:number;cumulative_pct:number}
 export interface TerrainMesh {rows:number;cols:number;dx_m:number;dy_m:number;heights:Array<number|null>;origin_xy?:[number,number];source_crs?:string;texture?:{png:string;coverage_pct:number}}
 export interface AdvancedTerrainResult {
-  operation:TerrainOperation;source_crs:string;valid_cells:number;missing_cells:number;
+  operation:TerrainOperation;source_crs:string;source_vertical_datum?:string|null;valid_cells:number;missing_cells:number;
   cell_area_m2:number;metrics:Record<string,number>;warning:string;
   features:Array<GeoJSON.Feature<GeoJSON.Geometry,Record<string,unknown>>>;mesh?:TerrainMesh;distribution?:TerrainDistributionBin[];raster?:TerrainRaster;sections?:{station_m:number;length_m:number;samples:{distance_m:number;offset_m:number;elevation_m:number|null;coordinate:[number,number]}[]}[];
 }

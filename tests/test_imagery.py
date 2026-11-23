@@ -239,3 +239,21 @@ def test_float_dem_preview_is_transparent_where_nodata_or_nan(tmp_path):
     # More than half of the source is NoData, yet the valid terrain still
     # retains full contrast instead of stretching around -9999 meters.
     assert int(rendered[22,20,0])-int(rendered[22,4,0])>200
+
+
+def test_raster_source_metadata_keeps_native_units_and_declared_datum(tmp_path):
+    path=tmp_path/"source-metadata.tif"
+    with rasterio.open(path,"w",driver="GTiff",width=8,height=8,
+                       count=1,dtype="float32",crs="EPSG:32617",
+                       transform=from_origin(500000,4500000,5,5)) as ds:
+        ds.write(np.ones((8,8),dtype=np.float32),1)
+        ds.update_tags(VERTICAL_UNIT="meter",VERTICAL_DATUM="NAVD88")
+    result=metadata(path)
+    assert result["resolution"]==[5.,5.]
+    assert result["resolution_unit"] in {"metre","meter"}
+    assert result["vertical_unit"]=="meter"
+    assert result["vertical_datum"]=="NAVD88"
+    assert result["acquired_at"] is None
+    with rasterio.open(path,"r+") as ds:
+        ds.update_tags(VERTICAL_DATUM="")
+    assert metadata(path)["vertical_datum"] is None
