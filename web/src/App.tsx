@@ -1742,7 +1742,6 @@ export default function App() {
           </section>
 
           <section id="tools-terrain" hidden={activeTool!=='tools-terrain'} className="panel-section">
-            <div className="section-heading"><Layers3 size={16}/><span>Terrain analysis</span></div>
             <TerrainWorkbench key={'terrain-'+(activeProjectId??'no-project')} projectId={activeProjectId}
               resultsTarget={resultsTarget}
               operationsFooterTarget={operationsFooterTarget}
