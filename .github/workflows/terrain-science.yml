@@ -27,7 +27,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends gdal-bin
-          gdaldem --version
+          gdalinfo --version
       - name: Install GeoFathom numerical dependencies
         run: python -m pip install -c requirements/linux.lock -e ".[dev]"
       - name: Run independent GDAL cross-implementation comparisons

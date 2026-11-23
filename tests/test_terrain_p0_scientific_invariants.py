@@ -166,16 +166,21 @@ def reference_line_of_sight(grid,valid,origin,target,observer_height,target_heig
         return True,True
     eye=grid[r0,c0]+observer_height
     endpoint=grid[r,c]+target_height
+    all_known=True
+    unobstructed=True
     for index in range(1,steps):
         fraction=index/steps
         rr=round(r0+(r-r0)*fraction)
         cc=round(c0+(c-c0)*fraction)
         if not valid[rr,cc]:
-            return False,False
+            all_known=False
+            continue
         line=eye+(endpoint-eye)*fraction
         if grid[rr,cc]>line+1e-8:
-            return False,True
-    return True,True
+            unobstructed=False
+    # Missing intermediate elevations are unknown even if another cell blocks
+    # the ray; no arbitrary order of blockers may conceal missing evidence.
+    return all_known and unobstructed,all_known
 
 
 def test_viewshed_agrees_with_independent_scalar_ray_visibility():

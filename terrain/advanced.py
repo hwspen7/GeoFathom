@@ -433,9 +433,12 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
             "unknown_cells":int((scope&~known).sum()),
             "maximum_distance_m":max_distance_m,"view_azimuth_deg":view_azimuth,
             "view_width_deg":view_width}
-        result["warning"]=("Local cell-center visibility with Earth curvature and configurable atmospheric refraction. "
-                           if consider_curvature else "Local planar cell-center visibility; curvature and refraction disabled. ")+"Buildings/vegetation depend on the input DEM/DSM; NoData along rays is unknown. "+
-                            "Cells outside the chosen viewing sector or range are not part of visibility statistics."
+        result["warning"]=(
+            ("Local cell-center visibility with Earth curvature and configurable atmospheric refraction. "
+             if consider_curvature else "Local planar cell-center visibility; curvature and refraction disabled. ")
+            + "Buildings/vegetation depend on the input DEM/DSM; NoData along rays is unknown. "
+            + "Cells outside the chosen viewing sector or range are not part of visibility statistics."
+        )
     elif operation=="viewshed_multi":
         # A count raster preserves observer overlap, not merely the union
         # polygon. Unknown rays stay NoData rather than becoming invisible.

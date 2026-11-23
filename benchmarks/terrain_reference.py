@@ -115,7 +115,7 @@ def main():
     cli = shutil.which("gdaldem")
     if cli is None:
         raise SystemExit("Independent GDAL benchmark requires gdaldem executable.")
-    version = subprocess.check_output([cli, "--version"], text=True).strip()
+    version = subprocess.check_output(["gdalinfo", "--version"], text=True).strip()
     with tempfile.TemporaryDirectory(prefix="geofathom-gdal-reference-") as tmp:
         folder = Path(tmp)
         results = evaluate(folder/"source.tif", folder, cli)
