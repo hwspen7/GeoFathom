@@ -87,6 +87,21 @@ def dinfinity_accumulation(z,valid,dx,dy,external_inflow=None,cancel=None):
                     slope=max(0.,-delta/distance)
                     if slope>best_slope:
                         best_slope=slope;best_angle=bearing;best_targets=((rr*w+cc,1.),)
+        if not best_targets:
+            # A masked boundary may leave a single valid downhill cardinal
+            # neighbor without any complete D-infinity triangular facet.
+            # Route to that valid neighbor rather than creating a false sink.
+            # Diagonal shortcuts through masked orthogonal cells stay illegal.
+            for dr,dc in _DIR:
+                rr,cc=r+dr,c+dc
+                if not (0<=rr<h and 0<=cc<w and valid[rr,cc]):continue
+                if dr and dc and not (valid[r,cc] and valid[rr,c]):continue
+                distance=math.hypot(dc*dx,dr*dy)
+                slope=(base-z[rr,cc])/distance
+                if slope>best_slope:
+                    best_slope=slope
+                    best_angle=math.atan2(-dr*dy,dc*dx)%(2*math.pi)
+                    best_targets=((rr*w+cc,1.),)
         if best_targets:
             angles[r,c]=best_angle
             for receiver,weight in best_targets:
@@ -176,7 +191,11 @@ def design_surface(z,valid,dx,dy,reference,east_grade=0.,north_grade=0.,
 
 
 def greedy_coverage(visible_masks,known_masks,max_sites,cancel=None):
-    """Deterministic greedy maximum coverage with a common known-cell universe."""
+    """Deterministic greedy maximum positive known-cell coverage.
+
+    A missing ray from an *unselected* candidate cannot erase a legitimately
+    visible cell from another candidate's optimization universe.
+    """
     if not visible_masks or len(visible_masks)!=len(known_masks) or not 1<=max_sites<=len(visible_masks):
         raise RasterError("Coverage optimization needs valid candidate observations.")
     shape=np.asarray(visible_masks[0]).shape
@@ -187,7 +206,7 @@ def greedy_coverage(visible_masks,known_masks,max_sites,cancel=None):
         if v.shape!=shape or k.shape!=shape or (v&~k).any():
             raise RasterError("Coverage masks must match and visible must imply known.")
         visible.append(v);known.append(k)
-    universe=np.logical_and.reduce(known)
+    universe=np.logical_or.reduce(known)
     selected=[];gains=[];union=np.zeros(shape,dtype=bool)
     remaining=list(range(len(visible)))
     for _ in range(max_sites):
