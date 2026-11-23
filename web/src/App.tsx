@@ -1698,7 +1698,7 @@ export default function App() {
                   onClick={()=>setNetworkPage(v=>v+1)}>Next</button>
               </div>}
             </section>,resultsTarget)}
-          {resultsTarget&&activeTool!=='tools-terrain'&&!(activeTool==='tools-survey'&&(networkAreas?.count??0)>1)&&(geometry||measurement||preview)&&createPortal(<section className="panel-section results-summary">
+          {resultsTarget&&activeTool!=='tools-terrain'&&!(['tools-survey','tools-services'].includes(activeTool)&&(networkAreas?.count??0)>1)&&(geometry||measurement||preview)&&createPortal(<section className="panel-section results-summary">
             <div className="section-heading"><Compass size={16} /><span>Selection</span></div>
             <div className="analysis-card">
               
