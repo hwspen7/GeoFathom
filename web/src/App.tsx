@@ -993,6 +993,9 @@ export default function App() {
         <div className="gis-brand"><Globe2 size={19}/> <strong>GeoFathom</strong></div>
         <WorkspaceModuleBar active={activeTool} open={showTools}
           onActivate={id=>{
+            // Project/search is a temporary drawer; changing workbenches
+            // returns its space to the active operation panel and map.
+            setShowLayers(false);
             if(id==='tools-terrain'&&activeTool===id&&showTools){
               if(drawingMode&&vertices.length){
                 setError('Finish or cancel the current drawing before closing Terrain.');return;
