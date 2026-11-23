@@ -6,7 +6,8 @@ import {GPUView} from './TerrainMeshView';
 import type {Position} from './editing';
 import {measurementAnchor} from './editing';
 import {terrainMetricDifferences,sameGeometryFootprint} from './terrainComparison';
-import {readTerrainRuns,writeTerrainRuns,insertTerrainRun,summarizeTerrainRun,type TerrainRunParameters} from './terrainRunRegistry';
+import {readTerrainRuns,writeTerrainRuns,insertTerrainRun,summarizeTerrainRun} from './terrainRunRegistry';
+import {terrainParametersForOperation} from './terrainRunParameters';
 import {loadTerrainResults,cacheTerrainResult,deleteTerrainResult,markTerrainResultSaved,type PersistedTerrainResult} from './terrainResultStore';
 import WorkspaceToolShelf from './WorkspaceToolShelf';
 import {terrainFetchBounds,terrainGeometryBounds,terrainFetchBudget,terrainBoundsOverlap,terrainRasterMatchesTarget,describeTerrainBounds,preferredTerrainFetchScope,terrainSupportsUSGS,recommendDEMResolution,availableDEMResolutions,type FetchScope,type TerrainBBox} from './terrainSource';
@@ -223,7 +224,15 @@ export default function TerrainWorkbench(p:Props){
    (!['visibility','viewshed_multi'].includes(operation??'')||validNumber(height,0,1000)&&validNumber(target,0,1000));
  const canRun=operation!==null&&p.connected&&resultCacheReady&&verified&&!!correctShape&&!sourceMismatch&&!mapMismatch&&parametersValid;
  useEffect(()=>{latest.current.onProfileSamples?.(activeProfileSamples??[]);},[activeProfileSamples]);
- const inputKey=JSON.stringify([dem?.id,analysisGeometry,operation,interval,reference,lon,lat,height,target,endLon,endLat,maxSlope,minElevation,maxElevation,maxTri,streamCells,azimuth,altitude,sectionSpacing,sectionWidth,fillSinks,considerCurvature,refractionCoeff,comparisonId,observerPoints,drape,drape?p.imageRaster?.id:null]);
+ const scientificParameters=terrainParametersForOperation(operation,{
+   interval,reference,lon,lat,height,target,endLon,endLat,
+   maxSlope,minElevation,maxElevation,maxTri,streamCells,
+   azimuth,altitude,sectionSpacing,sectionWidth,fillSinks,
+   considerCurvature,refractionCoeff,comparisonId,observerPoints,drape,
+   textureImageId:p.imageRaster?.id??null,
+ });
+ // Only edits to the actual operation inputs invalidate a scientific run.
+ const inputKey=JSON.stringify([dem?.id,analysisGeometry,operation,scientificParameters]);
  const inputsChanged=!!selected&&selected.inputKey!==inputKey;
  useEffect(()=>{
    setVerticalConfirmed(false);sourceIntent.current++;
@@ -279,23 +288,7 @@ export default function TerrainWorkbench(p:Props){
    // The request guard above excludes concurrent calculations.
    const controller=new AbortController();analysisRequest.current=controller;
    const ticket=++sequence.current;setBusy(true);setError('');setInfo('');
-     const parameters:TerrainRunParameters={
-       contour_interval_m:Number(interval),
-       reference_elevation_m:Number(reference),
-       observer_longitude:Number(lon),observer_latitude:Number(lat),
-       observer_height_m:Number(height),target_height_m:Number(target),
-       end_longitude:Number(endLon),end_latitude:Number(endLat),
-       max_slope_deg:Number(maxSlope),min_elevation_m:Number(minElevation),
-       max_elevation_m:Number(maxElevation),max_tri_m:Number(maxTri),
-       min_stream_cells:Number(streamCells),azimuth_deg:Number(azimuth),
-       altitude_deg:Number(altitude),section_spacing_m:Number(sectionSpacing),
-       section_half_width_m:Number(sectionWidth),
-       fill_sinks:fillSinks,consider_curvature:considerCurvature,
-       refraction_coefficient:Number(refractionCoeff),
-       comparison_image_id:operation==='dem_difference'?comparisonId:null,
-       observer_points:operation==='viewshed_multi'?observerPoints.map(
-         ([x,y])=>[Number(x),Number(y)]):[],
-     };
+   const parameters=structuredClone(scientificParameters);
    const record:TerrainRecord={id:crypto.randomUUID(),title:modes.find(m=>m.id===operation)!.title,
      operation,source:dem,geometry:structuredClone(analysisGeometry),inputKey,parameters,visible:true,opacity:.5,
      referenceSource:operation==='dem_difference'?assets.find(a=>a.id===comparisonId):undefined,
