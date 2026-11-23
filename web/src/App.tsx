@@ -1477,7 +1477,7 @@ export default function App() {
         </main>
         <aside className="gis-inspector gis-operations" hidden={!showTools} aria-label="Operations">
           <WorkspaceDockHeading><Compass size={15}/> Tools</WorkspaceDockHeading>
-          <div className="sidebar-scroll">
+          <div className="sidebar-scroll" tabIndex={0} aria-label="Operations scrolling region">
           <details className="workspace-objects" open>
             <summary>Objects</summary>
             <div ref={setObjectTreeTarget}/>
@@ -1890,7 +1890,7 @@ export default function App() {
         </aside>
         <aside className="gis-results-monitor" aria-label="Results monitor">
           <WorkspaceDockHeading><Layers3 size={15}/> Results</WorkspaceDockHeading>
-          <div className="sidebar-scroll" ref={setResultsTarget}>
+          <div className="sidebar-scroll" ref={setResultsTarget} tabIndex={0} aria-label="Results scrolling region">
             {!measurement&&activeTool==='tools-survey'&&<div className="workspace-monitor-empty">No selection</div>}
           </div>
           <div className="workspace-fixed-footer" ref={setResultsFooterTarget}/>

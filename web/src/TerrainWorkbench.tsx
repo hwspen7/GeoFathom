@@ -554,7 +554,19 @@ export default function TerrainWorkbench(p:Props){
    {resultCacheError&&<small role="alert" className="discovery-error">
      Result cache: {resultCacheError} Export active results before leaving this page.
    </small>}
-   {(records.length>0||runHistory.length>0)&&<nav className="terrain-result-tabs" role="tablist" aria-label="Terrain result views">
+   {(records.length>0||runHistory.length>0)&&<nav className="terrain-result-tabs" role="tablist"
+     aria-label="Terrain result views" onKeyDown={event=>{
+       const keys=['overview','visual','outputs','details'] as const;
+       const position=keys.indexOf(resultTab);
+       const next=event.key==='ArrowRight'?(position+1)%keys.length:
+         event.key==='ArrowLeft'?(position+keys.length-1)%keys.length:
+         event.key==='Home'?0:event.key==='End'?keys.length-1:-1;
+       if(next<0)return;
+       event.preventDefault();
+       setResultTab(keys[next]);
+       const items=event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]');
+       items[next]?.focus();
+     }}>
      {([
        ['overview','Overview'],['visual','Visual'],['outputs','Outputs'],['details','Details'],
      ] as const).map(([key,label])=><button key={key} type="button" role="tab"

@@ -1036,3 +1036,13 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 @media(max-width:880px){
   .desktop-gis .gis-results-monitor .terrain-key-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
+
+
+/* Invisible scrollbars must not make keyboard access ambiguous. */
+.desktop-gis .gis-operations .sidebar-scroll:focus-visible,
+.desktop-gis .gis-results-monitor .sidebar-scroll:focus-visible{
+  outline:2px solid #a5c9dd;outline-offset:-2px;
+}
+.desktop-gis .terrain-result-tabs button:focus-visible{
+  outline:2px solid #3984ae;outline-offset:-3px;position:relative;z-index:1;
+}
