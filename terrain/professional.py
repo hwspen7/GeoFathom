@@ -44,8 +44,10 @@ RASTER_UNITS = {
     "viewshed_multi":"observer_count",
 }
 
-def derivatives(z, valid, dx, dy):
-    """Horn gradients, Riley TRI, mean-neighbor TPI and Laplacian on complete windows."""
+def derivatives(z, valid, dx, dy, gradient_method="horn"):
+    """Horn or Zevenbergen-Thorne gradients, with identical NoData masking."""
+    if gradient_method not in {"horn","zevenbergen_thorne"}:
+        raise RasterError("Unsupported terrain gradient method.")
     if min(z.shape)<3:
         raise RasterError("Terrain derivatives require a 3 × 3 grid.")
     p=np.lib.stride_tricks.sliding_window_view(z,(3,3))
@@ -54,8 +56,14 @@ def derivatives(z, valid, dx, dy):
     if not good.any():
         raise RasterError("No complete valid 3 × 3 terrain neighborhoods.")
     c=p[:,:,1,1]
-    e=(p[:,:,0,2]+2*p[:,:,1,2]+p[:,:,2,2]-p[:,:,0,0]-2*p[:,:,1,0]-p[:,:,2,0])/(8*dx)
-    s=(p[:,:,2,0]+2*p[:,:,2,1]+p[:,:,2,2]-p[:,:,0,0]-2*p[:,:,0,1]-p[:,:,0,2])/(8*dy)
+    if gradient_method=="horn":
+        # Weighted differences from the full 3x3 neighborhood.
+        e=(p[:,:,0,2]+2*p[:,:,1,2]+p[:,:,2,2]-p[:,:,0,0]-2*p[:,:,1,0]-p[:,:,2,0])/(8*dx)
+        s=(p[:,:,2,0]+2*p[:,:,2,1]+p[:,:,2,2]-p[:,:,0,0]-2*p[:,:,0,1]-p[:,:,0,2])/(8*dy)
+    else:
+        # Zevenbergen-Thorne: cardinal-neighbor central differences.
+        e=(p[:,:,1,2]-p[:,:,1,0])/(2*dx)
+        s=(p[:,:,2,1]-p[:,:,0,1])/(2*dy)
     gradient=np.hypot(e,s)
     slope=np.degrees(np.arctan(gradient))
     aspect=np.degrees(np.arctan2(-e,s))%360
@@ -167,13 +175,18 @@ def circular_mean_degrees(angles):
 def _hex(value):
     return tuple(int(value[i:i+2],16) for i in (1,3,5))
 
-def classification(values,operation):
+def classification(values,operation,slope_classes="standard"):
     """Stable engineering classes for angles and categorical products."""
     finite=np.isfinite(values)
     if not finite.any():raise RasterError("No valid cells for this terrain product.")
     lo,hi=float(values[finite].min()),float(values[finite].max())
     if operation=="slope_map":
-        edges=[0,5,15,25,35,45,90];labels=["0–5°","5–15°","15–25°","25–35°","35–45°","45–90°"]
+        presets={"standard":[0,5,15,25,35,45,90],
+                 "detailed":[0,2,5,10,15,25,35,45,90],
+                 "broad":[0,10,25,45,90]}
+        if slope_classes not in presets:raise RasterError("Unsupported slope classification preset.")
+        edges=presets[slope_classes]
+        labels=[f"{a}–{b}°" for a,b in zip(edges,edges[1:])]
     elif operation=="aspect_map":
         labels=["N","NE","E","SE","S","SW","W","NW","Flat"]
         return np.where(finite,np.where(values<0,8,np.floor(((values+22.5)%360)/45)),-1).astype(np.int16),labels,(*COLORS,"#743a9b","#278577","#a6adb4")
@@ -236,13 +249,18 @@ def classification(values,operation):
         labels=[f"{a:.3g}–{b:.3g}" for a,b in zip(edges,edges[1:])]
     classes=np.full(values.shape,-1,dtype=np.int16)
     classes[finite]=np.digitize(values[finite],edges[1:-1])
-    return classes,labels,(("#222222","#555555","#888888","#aaaaaa","#dddddd","#ffffff") if operation=="hillshade" else SLOPE_COLORS if operation=="slope_map" else COLORS)[:len(labels)]
+    palette=(("#222222","#555555","#888888","#aaaaaa","#dddddd","#ffffff")
+             if operation=="hillshade" else
+             ("#eff8f5","#cde9dc","#a2d3c4","#75b9b1","#4f9f9a","#338987","#24706e","#18585c")
+             if operation=="slope_map" and slope_classes=="detailed" else
+             SLOPE_COLORS if operation=="slope_map" else COLORS)
+    return classes,labels,palette[:len(labels)]
 
 def raster_product(values,operation,affine,crs,cancel=None,
-                   source_datum=None,reference_datum=None):
+                   source_datum=None,reference_datum=None,slope_classes="standard"):
     """Export exact source-grid GeoTIFF and a Web Mercator map preview with alpha nodata."""
     checkpoint(cancel)
-    classes,labels,colors=classification(values,operation)
+    classes,labels,colors=classification(values,operation,slope_classes)
     finite=np.isfinite(values)
     legend=[{"label":label,"color":color,"cells":int((classes==i).sum())}
             for i,(label,color) in enumerate(zip(labels,colors))]
@@ -295,7 +313,7 @@ def raster_product(values,operation,affine,crs,cancel=None,
 
 def _derived_surface_tiled(z,valid,dx,dy,operation,max_slope=30.,
                            min_elevation=-12000.,max_elevation=12000.,max_tri=100.,
-                           azimuth=315.,altitude=45.,cancel=None,block=384):
+                           azimuth=315.,altitude=45.,cancel=None,block=384,gradient_method="horn"):
     """One selected product from 3x3 halo tiles; no nine full-size rasters.
 
     The existing Horn/curvature derivative is reused unchanged per tile.
@@ -323,7 +341,7 @@ def _derived_surface_tiled(z,valid,dx,dy,operation,max_slope=30.,
             local_z=z[r0-1:r1+1,c0-1:c1+1]
             local_valid=valid[r0-1:r1+1,c0-1:c1+1]
             try:
-                derived=derivatives(local_z,local_valid,dx,dy)
+                derived=derivatives(local_z,local_valid,dx,dy,gradient_method)
             except RasterError as error:
                 if str(error)=="No complete valid 3 × 3 terrain neighborhoods.":
                     continue
@@ -361,7 +379,7 @@ def _derived_surface_tiled(z,valid,dx,dy,operation,max_slope=30.,
 
 def surface(z,valid,affine,crs,operation,reference,point,end_point,max_slope,
             min_elevation,max_elevation,max_tri,stream_cells,azimuth,altitude,feature,origin,cancel=None,
-            source_datum=None):
+            source_datum=None,gradient_method="horn",slope_classes="standard"):
     """Return the exact source-grid derivative and product-specific statistics."""
     dx,dy=abs(affine.a),abs(affine.e);cell=dx*dy
     features=[];metrics={}
@@ -421,9 +439,9 @@ def surface(z,valid,affine,crs,operation,reference,point,end_point,max_slope,
         if z.size>1_000_000:
             values,metrics=_derived_surface_tiled(
                 z,valid,dx,dy,operation,max_slope,min_elevation,
-                max_elevation,max_tri,azimuth,altitude,cancel)
+                max_elevation,max_tri,azimuth,altitude,cancel,gradient_method=gradient_method)
         else:
-            d=derivatives(z,valid,dx,dy);checkpoint(cancel)
+            d=derivatives(z,valid,dx,dy,gradient_method);checkpoint(cancel)
             if operation=="hillshade":
                 if not (0<=azimuth<=360 and 0<=altitude<=90):raise RasterError("Invalid sun angles.")
                 a,b=math.radians(azimuth),math.radians(altitude)
@@ -441,7 +459,7 @@ def surface(z,valid,affine,crs,operation,reference,point,end_point,max_slope,
                 values=np.where(np.isfinite(d["slope_map"])&~np.isfinite(d["aspect_map"]),-1,d["aspect_map"])
             else:values=d[operation]
     if not np.isfinite(values).any():raise RasterError("No valid cells for this terrain product.")
-    product=raster_product(values,operation,affine,crs,cancel,source_datum=source_datum)
+    product=raster_product(values,operation,affine,crs,cancel,source_datum=source_datum,slope_classes=slope_classes)
     if operation in {"flow_direction","streams","suitability","least_cost"}:
         metrics["product_valid_cells"]=product["valid_cells"]
     elif operation=="aspect_map":
