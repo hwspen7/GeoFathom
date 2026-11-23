@@ -396,7 +396,12 @@ def analyze_research(primary_path, geometry, criteria, options=None, cancel=None
                                 "Input accuracy and spatial autocorrelation are not inferred.",
                                 "Original source files are SHA-256 referenced but not embedded."]}
     archive, manifest = _make_bundle(files, metadata)
+    # The map visualization is a projected preview of the same exact score
+    # grid; never reclassify fractional research scores as binary suitability.
+    from .professional import raster_product
+    preview = raster_product(score, "research_score", affine, crs, cancel)
     return {"schema": SCHEMA, "metrics": metrics, "model": model, "sources": source_details,
+            "preview_raster": preview,
             "sensitivity": sensitivity_results, "archive_base64": base64.b64encode(archive).decode("ascii"),
             "archive_sha256": sha256(archive).hexdigest(),
             "archive_manifest": manifest, "raster_names": list(outputs),
