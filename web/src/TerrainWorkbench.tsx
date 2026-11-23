@@ -803,7 +803,7 @@ export default function TerrainWorkbench(p:Props){
        {sourceInfo&&<small className="compact-notice" title="Copernicus DSM / USGS bare-earth DEM">{sourceInfo}</small>}
        {!supportsUSGS&&fetchArea&&<small className="compact-notice">Global coverage: Copernicus. Regional DEMs may offer finer native resolution.</small>}
        {dem&&<small className="compact-notice" title={dem.provenance}>{dem.width} × {dem.height} · {dem.crs} · elevation m · {describeTerrainBounds(dem.bbox)}</small>}
-     </details>
+     </details>}
      {dem&&<details className="terrain-dem-tools"><summary>DEM processing · Clip / Resample / Mosaic</summary>
        <div className="professional-form">
          <label>Operation<select aria-label="DEM processing operation" value={demProcessMode} onChange={e=>setDemProcessMode(e.target.value as DEMProcessMode)}>
