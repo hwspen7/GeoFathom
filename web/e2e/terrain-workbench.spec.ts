@@ -149,8 +149,9 @@ with tempfile.TemporaryDirectory() as directory:
  await expect(page.getByLabel('Slope edge cells explanation')).toContainText('boundary cells excluded');
  await page.getByLabel('Terrain class statistics').locator('summary').click();
  await expect(page.getByRole('table',{name:'Terrain class area statistics'}).locator('tbody tr')).toHaveCount(8);
- await expect(page.getByLabel('Terrain run provenance')).toContainText('"gradient_method":"zevenbergen_thorne"');
- await expect(page.getByLabel('Terrain run provenance')).toContainText('"slope_classes":"detailed"');
+ await expect(page.getByLabel('Terrain algorithm parameters')).toContainText('gradient method');
+ await expect(page.getByLabel('Terrain algorithm parameters')).toContainText('zevenbergen_thorne');
+ await expect(page.getByLabel('Terrain algorithm parameters')).toContainText('detailed');
  await visual();
  const opacity=page.getByLabel('Terrain raster opacity');
  await expect(opacity).toHaveValue('50');
