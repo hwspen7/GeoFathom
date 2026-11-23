@@ -31,3 +31,27 @@ describe('non-destructive OSU campus parcel selection',()=>{
   expect(studyParcels(area)[0].areaKm2).toBeGreaterThan(0);
  });
 });
+
+
+describe('parcel geometry governs study-area acquisition, not its envelope',()=>{
+ it('chooses a nearby real parcel when a distant concave parcel has an enclosing bounding box',()=>{
+  const disconnected:GeoJSON.MultiPolygon={type:'MultiPolygon',coordinates:[
+   [[[0,0],[10,0],[10,1],[1,1],[1,10],[0,10],[0,0]]],
+   [[[8.5,8.5],[9,8.5],[9,9],[8.5,9],[8.5,8.5]]],
+  ]};
+  // Neither polygon contains the search reference. The first polygon's
+  // bounding box contains it, but its actual land is several degrees away.
+  expect(suggestedParcel(disconnected,[8,8])).toBe(1);
+  expect(suggestedParcel(disconnected,[.5,5])).toBe(0);
+  expect(disconnected.coordinates).toHaveLength(2);
+ });
+ it('computes finite meter-scale parcel area without longitude cancellation',()=>{
+  const lon=-123.456789,lat=40.123456,step=.00001;
+  const tiny:GeoJSON.Polygon={type:'Polygon',coordinates:[[
+   [lon,lat],[lon+step,lat],[lon+step,lat+step],
+   [lon,lat+step],[lon,lat],
+  ]]};
+  const expected=(111320*step)**2*Math.cos(lat*Math.PI/180);
+  expect(studyParcels(tiny)[0].areaKm2*1e6).toBeCloseTo(expected,5);
+ });
+});
