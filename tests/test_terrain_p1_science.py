@@ -1,0 +1,197 @@
+"""P1 terrain scientific acceptance: independent analytic arrays and real GeoTIFF API."""
+import base64
+from threading import Event
+
+import numpy as np
+import pytest
+import rasterio
+from pyproj import Transformer
+from rasterio.io import MemoryFile
+from rasterio.transform import from_origin
+
+from imagery.raster import RasterError
+from terrain.advanced import run_terrain
+from terrain.cancellation import TerrainCancelled
+from terrain.p1_science import (
+    dinfinity_accumulation, quadratic_curvature, design_surface,
+    greedy_coverage, mesh_lod_tiles, breach_depressions,
+)
+
+
+def test_dinfinity_cardinal_plane_conserves_water_and_injected_external_area():
+    z=np.tile(np.arange(6.,0.,-1.),(5,1))
+    valid=np.ones(z.shape,bool)
+    acc,angle=dinfinity_accumulation(z,valid,10,20)
+    np.testing.assert_allclose(acc,np.tile(np.arange(1.,7.),(5,1)),atol=1e-12)
+    assert np.all(angle[:,:-1]==pytest.approx(0))
+    assert np.isnan(angle[:,-1]).all()
+    external=np.zeros_like(z);external[2,0]=14
+    out,_=dinfinity_accumulation(z,valid,10,20,external)
+    assert out[2,-1]==pytest.approx(20.,abs=1e-10)
+    assert float(acc[:,-1].sum())==pytest.approx(valid.sum())
+
+
+def test_dinfinity_strict_nodata_corner_and_invalid_upstream_sources():
+    z=np.array([[10.,np.nan],[np.nan,0.]])
+    valid=np.array([[True,False],[False,True]])
+    acc,angle=dinfinity_accumulation(z,valid,1,1)
+    assert acc[0,0]==acc[1,1]==1
+    assert np.isnan(acc[0,1]) and np.isnan(angle[0,0])
+    with pytest.raises(RasterError,match="External inflow"):
+        dinfinity_accumulation(z,valid,1,1,np.ones_like(z))
+    with pytest.raises(RasterError,match="positive"):
+        dinfinity_accumulation(z,valid,0,1)
+    with pytest.raises(RasterError,match="finite"):
+        dinfinity_accumulation(np.full((3,3),np.inf),np.ones((3,3),bool),1,1)
+
+
+def test_dinfinity_multiple_slopes_and_cancellation():
+    rows,cols=np.indices((7,7))
+    z=100.-rows-2*cols
+    acc,angles=dinfinity_accumulation(z,np.ones_like(z,bool),2,2)
+    assert np.isfinite(acc).all() and float(acc[-1,-1])==pytest.approx(49.)
+    assert np.nanmin(angles)>=0 and np.nanmax(angles)<2*np.pi
+    done=Event();done.set()
+    with pytest.raises(TerrainCancelled):
+        dinfinity_accumulation(z,np.ones_like(z,bool),2,2,cancel=done)
+
+
+@pytest.mark.parametrize("radius",[1,2,3,4])
+def test_quadratic_fitted_curvature_exact_analytic_surface(radius):
+    y,x=np.mgrid[-7:8,-7:8]
+    z=1000000.+.02*x*x+.03*y*y+.1*x-.2*y+.01*x*y
+    valid=np.ones(z.shape,bool)
+    curvature=quadratic_curvature(z,valid,1,1,radius,"curvature")
+    # d2z/dx2 + d2z/dy2 = 0.04 + 0.06 = 0.10 / m.
+    assert curvature[7,7]==pytest.approx(.1,abs=1e-8)
+    assert np.isnan(curvature[:radius]).all()
+    valid[7,8]=False
+    curvature=quadratic_curvature(z,valid,1,1,radius,"curvature")
+    assert np.isnan(curvature[7,7])
+
+
+def test_quadratic_curvature_flats_undefined_and_parameters_rejected():
+    z=np.ones((9,9))*100.
+    valid=np.ones_like(z,bool)
+    result=quadratic_curvature(z,valid,5,5,2,"curvature")
+    assert result[4,4]==pytest.approx(0,abs=1e-12)
+    with pytest.raises(RasterError,match="No complete"):
+        quadratic_curvature(z,valid,5,5,2,"profile_curvature")
+    with pytest.raises(RasterError,match="radius"):
+        quadratic_curvature(z,valid,5,5,5,"curvature")
+
+
+def test_design_grade_volume_uncertainty_and_nonmutation():
+    z=np.ones((3,3))*100.
+    copy=z.copy()
+    valid=np.ones_like(z,bool)
+    diff,metrics=design_surface(z,valid,2,2,100,.1,0.,sigma_z=.5,max_grade=.3)
+    assert metrics["cut_m3"]==pytest.approx(2.4)
+    assert metrics["fill_m3"]==pytest.approx(2.4)
+    assert metrics["net_cut_m3"]==pytest.approx(0)
+    assert metrics["net_volume_independent_sigma_m3"]==pytest.approx(6)
+    assert metrics["net_volume_correlated_sigma_m3"]==pytest.approx(18)
+    np.testing.assert_array_equal(z,copy)
+    assert diff[1,1]==0
+    with pytest.raises(RasterError,match="maximum grade"):
+        design_surface(z,valid,2,2,100,.3,.3,max_grade=.3)
+
+
+def test_greedy_coverage_maximizes_incremental_cells_and_excludes_unknown():
+    a=np.array([[1,1,0],[0,0,0]],bool)
+    b=np.array([[0,1,1],[0,0,0]],bool)
+    c=np.array([[0,0,0],[1,1,0]],bool)
+    known=np.ones((2,3),bool)
+    chosen,gains,coverage=greedy_coverage([a,b,c],[known]*3,2)
+    assert chosen==[0,2] and gains==[2,2]
+    assert int(coverage.sum())==4
+    with pytest.raises(RasterError,match="visible must imply known"):
+        greedy_coverage([a],[np.zeros_like(a)],1)
+
+
+def test_mesh_lod_tiles_have_exact_shared_vertices_and_nodata():
+    z=np.arange(65*65,dtype=float).reshape(65,65)
+    valid=np.ones_like(z,bool);valid[1,1]=False
+    tiles=mesh_lod_tiles(z,valid,1,2,tile_cells=32,levels=(1,2,4))
+    level1=[tile for tile in tiles if tile["lod_step"]==1]
+    assert len(level1)==4 and len(tiles)==6
+    north_west=next(tile for tile in level1 if tile["row_start"]==0 and tile["col_start"]==0)
+    north_east=next(tile for tile in level1 if tile["row_start"]==0 and tile["col_start"]==32)
+    assert north_west["col_indices"][-1]==north_east["col_indices"][0]==32
+    assert north_west["row_indices"]==north_east["row_indices"]
+    assert north_west["heights"][1*33+1] is None
+    coarse=next(tile for tile in tiles if tile["lod_step"]==2)
+    assert coarse["row_indices"][-1]==64 and coarse["col_indices"][-1]==64
+
+
+def test_breach_is_bounded_deterministic_and_preserves_source():
+    z=np.zeros((7,7),float)
+    z[1:6,1:6]=5
+    z[3,3]=1
+    valid=np.ones_like(z,bool)
+    result,report=breach_depressions(z,valid,1,1,max_cut_m=10)
+    assert report["breached_pits"]>=1 and report["unresolved_pits"]==0
+    assert report["breach_total_excavation_depth_m"]>0
+    assert result[3,3]==1 and z[3,3]==1
+    assert result.min()<=z.min()
+    with pytest.raises(RasterError,match="maximum excavation"):
+        breach_depressions(z,valid,1,1,max_cut_m=0)
+
+
+@pytest.fixture
+def real_dem(tmp_path):
+    z=(120.+.2*np.indices((25,25))[1]).astype(np.float32)
+    affine=from_origin(500000,4500000,10,10)
+    path=tmp_path/"p1-dem.tif"
+    with rasterio.open(path,"w",driver="GTiff",height=25,width=25,count=1,
+         crs="EPSG:32617",transform=affine,nodata=-9999,dtype="float32") as dst:
+        dst.write(z,1)
+    converter=Transformer.from_crs("EPSG:32617","EPSG:4326",always_xy=True)
+    corners=[(500020,4499980),(500230,4499980),(500230,4499770),
+             (500020,4499770),(500020,4499980)]
+    polygon={"type":"Polygon","coordinates":[[converter.transform(*p) for p in corners]]}
+    observers=[converter.transform(500045,4499955),
+               converter.transform(500205,4499795),
+               converter.transform(500045,4499795)]
+    return path,polygon,observers,affine,z
+
+
+def test_real_geotiff_dinfinity_curvature_grade_and_lod(real_dem):
+    path,polygon,_,_,_=real_dem
+    hydro=run_terrain(path,polygon,"flow_accumulation",flow_routing_method="dinf")
+    assert hydro["algorithm_options"]["flow_routing_method"]=="dinf"
+    assert hydro["raster"]["unit"]=="cells"
+    assert hydro["metrics"]["product_max"]>=2
+    curvature=run_terrain(path,polygon,"curvature",curvature_method="quadratic",curvature_radius=3)
+    assert curvature["algorithm_options"]["curvature_radius_cells"]==3
+    assert abs(curvature["metrics"]["product_mean"])<1e-5
+    volume=run_terrain(path,polygon,"volume",reference=120,
+        design_east_grade=.01,design_north_grade=0.,elevation_sigma_m=.5)
+    assert volume["metrics"]["net_volume_independent_sigma_m3"]>0
+    mesh=run_terrain(path,polygon,"mesh",mesh_lod=True)
+    assert mesh["mesh"]["lod"]["transport"]=="in_response_not_streamed"
+    assert mesh["metrics"]["mesh_lod_tile_count"]>0
+    with MemoryFile(base64.b64decode(curvature["raster"]["geotiff"])) as memory:
+        with memory.open() as source:
+            assert source.tags()["TERRAIN_OPERATION"]=="curvature"
+            assert source.nodata!=source.nodata # nan nodata
+
+
+def test_real_dsm_obstructions_and_greedy_multi_site_selection(real_dem,tmp_path):
+    path,polygon,points,affine,z=real_dem
+    baseline=run_terrain(path,polygon,"visibility",point=points[0])
+    dsm_path=tmp_path/"p1-dsm.tif"
+    dsm=z.copy();dsm[:,10]=1000
+    with rasterio.open(dsm_path,"w",driver="GTiff",width=25,height=25,count=1,
+         crs="EPSG:32617",transform=affine,dtype="float32",nodata=-9999) as dst:
+        dst.write(dsm,1)
+    obstructed=run_terrain(path,polygon,"visibility",point=points[0],dsm_path=dsm_path)
+    assert obstructed["metrics"]["visible_cells"]<baseline["metrics"]["visible_cells"]
+    assert obstructed["algorithm_options"]["dsm_source"] is True
+    chosen=run_terrain(path,polygon,"viewshed_multi",observer_points=points,
+        optimize_observers=2,dsm_path=dsm_path)
+    assert chosen["metrics"]["observer_count"]==2
+    assert chosen["metrics"]["candidate_site_count"]==3
+    assert len(chosen["selection"]["selected_candidate_indices"])==2
+    assert chosen["metrics"]["visible_cells"]>0
+    assert "greedy_coverage_not_global_optimum" in chosen["quality"]["flags"]
