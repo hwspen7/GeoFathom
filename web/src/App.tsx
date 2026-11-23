@@ -24,6 +24,7 @@ import ProfessionalPanel from './ProfessionalPanel';
 import TerrainWorkbench from './TerrainWorkbench';
 import {WorkspaceModuleBar,WorkspaceCommandPalette,WorkspaceDockHeading,
   WORKSPACE_MODULES,type WorkspaceCommand} from './WorkspaceChrome';
+import WorkspaceDockResizer,{readDockWidth} from './WorkspaceDockResizer';
 import GeometryAnalysis from './GeometryAnalysis';
 import SpatialToolsPanel from './SpatialToolsPanel';
 import CartographyProPanel from './CartographyProPanel';
@@ -127,6 +128,14 @@ export default function App() {
   const [terrainLineDrawing,setTerrainLineDrawing]=useState(false);
   const [terrainVisible,setTerrainVisible]=useState(true);
   const [showLayers,setShowLayers]=useState(true);
+  const [leftDockWidth,setLeftDockWidth]=useState(()=>readDockWidth('project',265));
+  const [rightDockWidth,setRightDockWidth]=useState(()=>readDockWidth('inspector',320));
+  useEffect(()=>{
+    try{
+      localStorage.setItem('geofathom-dock-width:project',String(leftDockWidth));
+      localStorage.setItem('geofathom-dock-width:inspector',String(rightDockWidth));
+    }catch{/* Preferences never block a research session. */}
+  },[leftDockWidth,rightDockWidth]);
   const [terrainPicking,setTerrainPicking]=useState(false);
   const [terrainOrigin,setTerrainOrigin]=useState<Position|null>(null);
   const [terrainHover,setTerrainHover]=useState<Position|null>(null);
@@ -1041,7 +1050,7 @@ export default function App() {
         </div>
       </div>
       <div className="gis-body">
-        <aside className="sidebar gis-layers" hidden={!showLayers}>
+        <aside className="sidebar gis-layers" hidden={!showLayers} style={{width:leftDockWidth}}>
           <WorkspaceDockHeading><Layers3 size={15}/> Project / Layers</WorkspaceDockHeading>
           <div className="sidebar-scroll">
           <section className="panel-section">
@@ -1223,6 +1232,8 @@ export default function App() {
 
           </div>
         </aside>
+        {showLayers&&<WorkspaceDockResizer side="left" width={leftDockWidth}
+          onChange={setLeftDockWidth}/>}
         <main className="main">
         <div className="map-wrap">
           <MapCanvas
@@ -1453,7 +1464,9 @@ export default function App() {
         </div>
 
         </main>
-        <aside className="gis-inspector" hidden={!showTools}>
+        {showTools&&<WorkspaceDockResizer side="right" width={rightDockWidth}
+          onChange={setRightDockWidth}/>}
+        <aside className="gis-inspector" hidden={!showTools} style={{width:rightDockWidth}}>
           <WorkspaceDockHeading><Compass size={15}/> Inspector</WorkspaceDockHeading>
           <div className="sidebar-scroll">
           <section className="panel-section results-summary">
