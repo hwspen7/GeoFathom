@@ -890,8 +890,8 @@ button:disabled { opacity: .45; cursor: not-allowed; }
   border-bottom:1px solid var(--gf-border);background:var(--gf-surface);
   color:#264258;font-size:12px;font-weight:750;letter-spacing:.025em;
 }
-.desktop-gis .gis-operations .panel-section{padding:0;border:0}
-.desktop-gis .gis-operations .panel-section>.section-heading:first-child{display:none}
+.desktop-gis .gis-operations #tools-terrain.panel-section{padding:0;border:0}
+.desktop-gis .gis-operations #tools-terrain.panel-section>.section-heading:first-child{display:none}
 .desktop-gis .gis-operations .terrain-workbench{padding:0;margin:0;min-width:0}
 .desktop-gis .gis-operations .terrain-step{display:flex;flex-direction:column;gap:9px;padding:13px 0 17px;border-bottom:1px solid var(--gf-border);min-width:0}
 .desktop-gis .gis-operations .terrain-source{margin:0}
