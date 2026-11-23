@@ -1,11 +1,13 @@
 import {useEffect,useRef,useState,type ChangeEvent} from 'react';
 import {importVectorFile,uploadImagery,saveFeatureBatch,
-  type NetworkPolygonization,type NetworkFace,type GeoWorkspace,type RasterAsset} from './api';
+ bufferGeometry,applyOverlay,transformProjectCoordinates,
+ type NetworkPolygonization,type NetworkFace,type GeoWorkspace,type RasterAsset,
+ type Measurement} from './api';
 import DataServicesPanel,{type ExternalTile} from './DataServicesPanel';
 import ApiAccessPanel from './ApiAccessPanel';
 
 type BBox=[number,number,number,number];
-type DataPage='import'|'areas'|'sources'|'database'|'jobs'|'access';
+type DataPage='import'|'areas'|'process'|'sources'|'system';
 interface Props{
  projectId:string|null;workspace:GeoWorkspace|null;viewport:BBox|null;
  geometry:GeoJSON.Geometry|null;network:NetworkPolygonization|null;
@@ -16,10 +18,20 @@ interface Props{
  onPage:(features:GeoWorkspace['features'])=>void;
  onRasterAdded:(asset:RasterAsset,kind:'dem'|'image')=>void;
  onOpenLayers:()=>void;
+ vectorSources:Array<{id:string;name:string;geometry:GeoJSON.Geometry}>;
+ onDerived:(geometry:GeoJSON.Geometry,measurement:Measurement,name:string)=>void;
 }
 const fmt=(v:number)=>v.toLocaleString('en-US',{maximumFractionDigits:2});
 export default function DataWorkbench(p:Props){
  const [page,setPage]=useState<DataPage>('areas');
+ const [systemView,setSystemView]=useState<'database'|'jobs'|'access'>('database');
+ const [operation,setOperation]=useState<'union'|'intersection'|'difference'|'buffer'|'reproject'>('union');
+ const [reference,setReference]=useState('');
+ const [bufferMeters,setBufferMeters]=useState('100');
+ const [longitude,setLongitude]=useState('');
+ const [latitude,setLatitude]=useState('');
+ const [targetCRS,setTargetCRS]=useState('EPSG:3857');
+ const [projected,setProjected]=useState<{crs:string;x:number;y:number}|null>(null);
  const [file,setFile]=useState<File|null>(null);
  const [kind,setKind]=useState<'vector'|'raster'>('vector');
  const [rasterKind,setRasterKind]=useState<'dem'|'image'>('dem');
@@ -80,8 +92,8 @@ export default function DataWorkbench(p:Props){
  }
  return <div className="data-workbench">
   <nav aria-label="Data operations" className="data-page-buttons">
-   {([['import','Import'],['areas','Areas'],['sources','Sources'],
-      ['database','Database'],['jobs','Jobs'],['access','Access']] as const).map(([key,name])=>
+   {([['import','Import'],['areas','Areas'],['process','Process'],
+      ['sources','Sources'],['system','System']] as const).map(([key,name])=>
       <button type="button" key={key} aria-pressed={page===key}
        onClick={()=>{setPage(key);setError('');}}>{name}</button>)}
   </nav>
@@ -157,15 +169,93 @@ export default function DataWorkbench(p:Props){
    </>}
    {p.networkNotice&&<small className="data-status">{p.networkNotice}</small>}
   </div>
-  <div className="data-page data-services-page" hidden={!['sources','database','jobs'].includes(page)}>
-   <DataServicesPanel key={p.projectId??'no-project'} view={
-    page==='sources'?'sources':page==='database'?'database':'jobs'}
+  <div className="data-page" hidden={page!=='process'}>
+   <label>Operation
+    <select aria-label="Data processing operation" value={operation}
+     onChange={e=>{setOperation(e.target.value as typeof operation);setProjected(null);}}>
+     <option value="union">Merge / union polygons</option>
+     <option value="intersection">Intersect polygons</option>
+     <option value="difference">Subtract polygon</option>
+     <option value="buffer">Geodesic buffer</option>
+     <option value="reproject">Convert coordinates</option>
+    </select>
+   </label>
+   {(['union','intersection','difference'].includes(operation))&&<label>Second polygon
+    <select aria-label="Processing reference feature" value={reference}
+     onChange={e=>setReference(e.target.value)}>
+     <option value="">Select another polygon</option>
+     {p.vectorSources.filter(item=>
+       (item.geometry.type==='Polygon'||item.geometry.type==='MultiPolygon')&&
+       JSON.stringify(item.geometry)!==JSON.stringify(p.geometry))
+       .map(item=><option value={item.id} key={item.id}>{item.name}</option>)}
+    </select>
+   </label>}
+   {operation==='buffer'&&<label>Distance (meters)
+    <input aria-label="Processing buffer distance" type="number" min=".001" max="100000"
+     value={bufferMeters} onChange={e=>setBufferMeters(e.target.value)}/>
+   </label>}
+   {operation==='reproject'&&<>
+    <div className="data-input-pair">
+     <label>Longitude<input aria-label="Source longitude" type="number" step="any"
+      value={longitude} onChange={e=>setLongitude(e.target.value)}/></label>
+     <label>Latitude<input aria-label="Source latitude" type="number" step="any"
+      value={latitude} onChange={e=>setLatitude(e.target.value)}/></label>
+    </div>
+    <label>Target CRS<input aria-label="Target EPSG" value={targetCRS}
+     onChange={e=>setTargetCRS(e.target.value)} placeholder="EPSG:3857"/></label>
+    {projected&&<div className="data-area-rows"><div>
+     <strong>{projected.crs}</strong><span>{fmt(projected.x)}, {fmt(projected.y)}</span>
+    </div></div>}
+   </>}
+   <button type="button" className="data-primary" disabled={busy||!p.connected||
+     (operation==='reproject'?!p.projectId:
+      !p.geometry||(['union','intersection','difference'].includes(operation)&&!reference))}
+    onClick={()=>void action(async()=>{
+      const current=p.projectId;
+      if(operation==='reproject'){
+       if(!p.projectId)throw Error('Select a project to use the CRS conversion service.');
+       if(!longitude.trim()||!latitude.trim()||
+          !Number.isFinite(Number(longitude))||!Number.isFinite(Number(latitude)))
+        throw Error('Enter valid geographic coordinates.');
+       if(Math.abs(Number(longitude))>180||Math.abs(Number(latitude))>90)
+        throw Error('Source WGS84 longitude/latitude is out of range.');
+       if(!/^EPSG:\d{3,6}$/i.test(targetCRS.trim()))
+        throw Error('Target CRS must be an EPSG code.');
+       const result=await transformProjectCoordinates(p.projectId,
+        [[Number(longitude),Number(latitude)]],targetCRS.toUpperCase());
+       if(latest.current!==current)return;
+       setProjected({crs:result.target,x:result.coordinates[0][0],y:result.coordinates[0][1]});
+       setStatus('Coordinate transformed. Source remains unchanged.');
+      }else{
+       if(!p.geometry)throw Error('Select a geometry to process.');
+       const result=operation==='buffer'?
+        await bufferGeometry(p.geometry,Number(bufferMeters)):
+        await applyOverlay(operation,p.geometry,
+         p.vectorSources.find(item=>item.id===reference)!.geometry);
+       if(latest.current!==current)return;
+       if(!result.geometry||!result.measurement)
+        throw Error('Operation returned no valid area.');
+       p.onDerived(result.geometry,result.measurement,operation+' derived feature');
+       setStatus('Created independent output; source geometries are unchanged.');
+      }
+    })}>{busy?'Processing…':'Run '+operation}</button>
+  </div>
+  <div className="data-page" hidden={page!=='system'}>
+   <label>System operation<select aria-label="Data system operation" value={systemView}
+    onChange={e=>setSystemView(e.target.value as typeof systemView)}>
+    <option value="database">Spatial index / PostGIS</option>
+    <option value="jobs">Background jobs</option>
+    <option value="access">API access</option>
+   </select></label>
+   <div hidden={systemView!=='access'}><ApiAccessPanel/></div>
+  </div>
+  <div className="data-page data-services-page" hidden={
+    !((page==='sources')||(page==='system'&&systemView!=='access'))}>
+   <DataServicesPanel key={p.projectId??'no-project'}
+    view={page==='sources'?'sources':systemView==='database'?'database':'jobs'}
     projectId={p.projectId} viewport={p.viewport} drawnGeometry={p.geometry}
     onTiles={p.onTiles} onPreview={p.onPreview} onPage={p.onPage}
     onRefresh={p.onRefresh}/>
-  </div>
-  <div className="data-page" hidden={page!=='access'}>
-   <ApiAccessPanel/>
   </div>
   {status&&<small className="project-info" role="status">{status}</small>}
   {error&&<small className="discovery-error" role="alert">{error}</small>}
