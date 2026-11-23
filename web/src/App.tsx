@@ -22,6 +22,8 @@ import {localMeasurement,localShape,readScratch,writeScratch,SCRATCH_LIMIT,OFFLI
 import SurveyTools from './SurveyTools';
 import ProfessionalPanel from './ProfessionalPanel';
 import TerrainWorkbench from './TerrainWorkbench';
+import {WorkspaceModuleBar,WorkspaceCommandPalette,WorkspaceDockHeading,
+  WORKSPACE_MODULES,type WorkspaceCommand} from './WorkspaceChrome';
 import GeometryAnalysis from './GeometryAnalysis';
 import SpatialToolsPanel from './SpatialToolsPanel';
 import CartographyProPanel from './CartographyProPanel';
@@ -114,6 +116,7 @@ export default function App() {
   const [toolbarTarget,setToolbarTarget]=useState<HTMLDivElement|null>(null);
   const [showTools,setShowTools]=useState(true);
   const [shortcutHelp,setShortcutHelp]=useState(false);
+  const [commandOpen,setCommandOpen]=useState(false);
   const [contextMenu,setContextMenu]=useState<{x:number;y:number}|null>(null);
   const [activeTool,setActiveTool]=useState('tools-survey');
   const [terrainFeatures,setTerrainFeatures]=useState<GeoJSON.Feature[]>([]);
@@ -883,9 +886,14 @@ export default function App() {
     function commands(event:KeyboardEvent){
       if(event.defaultPrevented||event.isComposing)return;
       const target=event.target;
-      if(event.key==='Escape'){
-        event.preventDefault();if(shortcutHelp){setShortcutHelp(false);return;}stopInteraction();return;
+      if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='k'){
+        event.preventDefault();setCommandOpen(v=>!v);return;
       }
+      if(event.key==='Escape'){
+        event.preventDefault();if(commandOpen){setCommandOpen(false);return;}
+        if(shortcutHelp){setShortcutHelp(false);return;}stopInteraction();return;
+      }
+      if(commandOpen)return;
       if(target instanceof HTMLElement&&(target.isContentEditable||target.closest('input,textarea,select,[contenteditable="true"]')))return;
       if(event.ctrlKey||event.metaKey){
         if(event.key.toLowerCase()==='s'){event.preventDefault();saveSelection();return;}
@@ -930,17 +938,49 @@ export default function App() {
     window.addEventListener('mousedown',outside);
     return()=>{window.removeEventListener('keydown',commands);window.removeEventListener('mousedown',outside);};
   });
+  // A single command registry powers Ctrl+K for every workbench. Commands
+  // invoke existing, revision-safe actions rather than duplicating GIS state.
+  const workspaceCommands:WorkspaceCommand[]=[
+    ...WORKSPACE_MODULES.map(module=>({
+      id:'module:'+module.id,label:module.label,group:'Workbenches',
+      description:module.description,run:()=>revealPanel(module.id),
+    })),
+    {id:'map:select',label:'Select / pan',group:'Map',
+      shortcut:'V',run:stopInteraction},
+    {id:'map:fit',label:'Fit selected area',group:'Map',shortcut:'F',
+      disabled:!geometry,run:fitSelection},
+    {id:'map:vertices',label:'Edit boundary vertices',group:'Geometry',
+      shortcut:'E',disabled:!geometry||selectedLocked||busy,
+      run:()=>editMode('vertices')},
+    {id:'map:polygon',label:'Draw study area polygon',group:'Geometry',
+      shortcut:'G',disabled:busy,run:()=>startDrawing('polygon')},
+    {id:'map:line',label:'Draw a line',group:'Geometry',
+      shortcut:'L',disabled:busy,run:()=>startDrawing('line')},
+    {id:'map:snapping',label:snapping?'Disable snapping':'Enable snapping',
+      group:'Geometry',shortcut:'S',run:()=>setSnapping(v=>!v)},
+    {id:'map:save',label:'Save / export selection',group:'File',
+      shortcut:'Ctrl S',disabled:!geometry||busy,run:saveSelection},
+    {id:'map:layers',label:showLayers?'Hide object tree':'Show object tree',
+      group:'View',run:()=>setShowLayers(v=>!v)},
+    {id:'map:inspector',label:showTools?'Hide inspector':'Show inspector',
+      group:'View',run:()=>setShowTools(v=>!v)},
+    {id:'map:help',label:'Keyboard shortcuts',group:'Help',
+      shortcut:'?',run:()=>setShortcutHelp(true)},
+  ];
   return (
     <div className="workspace desktop-gis">
       <header className="gis-header">
         <div className="gis-brand"><Globe2 size={19}/> <strong>GeoFathom</strong></div>
-        <nav aria-label="Workspace tools" className="gis-menu">
-          {([['Survey','tools-survey'],['GIS','tools-gis'],['Analysis','tools-spatial'],['Terrain','tools-terrain'],['Raster / AI','tools-raster'],['Cartography','tools-style'],['Data','tools-services'],['Assistant','tools-ai']] as const).map(([title,id])=>
-            <button key={id} aria-pressed={activeTool===id&&showTools} onClick={()=>{if(id==='tools-terrain'&&activeTool===id&&showTools){
-              if(drawingMode&&vertices.length){setError('Finish or cancel the current drawing before closing Terrain.');return;}
+        <WorkspaceModuleBar active={activeTool} open={showTools}
+          onActivate={id=>{
+            if(id==='tools-terrain'&&activeTool===id&&showTools){
+              if(drawingMode&&vertices.length){
+                setError('Finish or cancel the current drawing before closing Terrain.');return;
+              }
               setShowTools(false);setTerrainPicking(false);setTerrainHover(null);
-            }else revealPanel(id);}}>{title}</button>)}
-        </nav>
+            }else revealPanel(id);
+          }}/>
+
         <details className="gis-settings">
           <summary>Settings</summary>
           <div className="gis-settings-panel">
@@ -979,6 +1019,10 @@ export default function App() {
             <small aria-label="Build revision" className="compact-notice">Frontend revision {import.meta.env.VITE_GEOFATHOM_REVISION}</small>
           </div>
         </details>
+        <button className="gis-command-trigger" title="Search actions (Ctrl K)"
+          aria-label="Command search" onClick={()=>setCommandOpen(true)}>
+          <Search size={14}/> <span>Commands</span><kbd>Ctrl K</kbd>
+        </button>
         <button className="gis-shortcut-help" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts" onClick={()=>setShortcutHelp(true)}>?</button>
         <button className="gis-inspector-toggle" aria-pressed={showLayers} onClick={()=>setShowLayers(v=>!v)}>Layers</button>
         <button className="gis-inspector-toggle" aria-pressed={showTools} onClick={()=>setShowTools(v=>!v)}>Inspector</button>
@@ -998,7 +1042,7 @@ export default function App() {
       </div>
       <div className="gis-body">
         <aside className="sidebar gis-layers" hidden={!showLayers}>
-          <div className="dock-heading"><Layers3 size={15}/> Project / Layers</div>
+          <WorkspaceDockHeading><Layers3 size={15}/> Project / Layers</WorkspaceDockHeading>
           <div className="sidebar-scroll">
           <section className="panel-section">
             <div className="section-heading"><Layers3 size={16} /><span>Projects</span></div>
@@ -1410,7 +1454,7 @@ export default function App() {
 
         </main>
         <aside className="gis-inspector" hidden={!showTools}>
-          <div className="dock-heading"><Compass size={15}/> Inspector</div>
+          <WorkspaceDockHeading><Compass size={15}/> Inspector</WorkspaceDockHeading>
           <div className="sidebar-scroll">
           <section className="panel-section results-summary">
             <div className="section-heading"><Compass size={16} /><span>Analysis</span></div>
@@ -1847,10 +1891,13 @@ export default function App() {
             ['Edit vertices / edge / move','E / B / M'],['Finish drawing','Enter / double-click / right-click'],
             ['Remove last vertex','Backspace / Ctrl Z'],['Undo / redo','Ctrl Z / Ctrl Y'],['Delete edit vertex','Right-click vertex'],
             ['Insert vertex','Double-click edge'],['Context menu','Right-click map'],['Fit selection','F'],['Toggle snapping','S'],
-            ['Save or export','Ctrl S'],['Delete local drawing','Delete'],['Terrain tools','T'],['Help','?'],
+            ['Save or export','Ctrl S'],['Delete local drawing','Delete'],['Terrain tools','T'],
+            ['Command search','Ctrl K'],['Help','?'],
           ].map(([action,key])=><div key={action}><span>{action}</span><kbd>{key}</kbd></div>)}</div>
         </div>
       </div>}
+      <WorkspaceCommandPalette open={commandOpen}
+        commands={workspaceCommands} onClose={()=>setCommandOpen(false)}/>
       <footer className="gis-status" role="status">
         <span>{error?<span className="error">{error}</span>:busy?'Processing…':message}</span>
         <span>{drawingMode?'Draw · '+drawingMode:editing?(moving?'Move feature':edgeMoving?'Move edge':'Edit vertices'):'Select / pan'} · WGS84</span>

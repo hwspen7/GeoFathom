@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import {
-  Copy, Download, Eye, EyeOff, FolderOpen, History, Layers3, Lock,
+  Copy, Download, Eye, EyeOff, History, Layers3, Lock,
   LockOpen, MapPin, Plus, RotateCcw, Save,
 } from 'lucide-react';
 
@@ -12,6 +12,7 @@ import {
 } from './api';
 
 import {rememberProject,restoreProject,storedProject} from './projectSelection';
+import {WorkspaceFeatureTree} from './WorkspaceChrome';
 
 interface Props {
   geometry: GeoJSON.Geometry | null;
@@ -617,25 +618,11 @@ export default function ProjectsPanel({
               onClick={() => void saveSplit()}>Save all {splitParts.length} split pieces</button>
           )}
 
-          <div className="project-features">
-            {workspace?.features.map(item => {
-              const layer = workspace.layers.find(l => l.id === item.layer_id);
-              return (
-                <button key={item.id} disabled={!layer?.visible} onClick={() => onOpen(item)}
-                  className={selectedFeatureId === item.id ? 'active' : ''}>
-                  <FolderOpen size={14}/><span>{item.name}</span><small>r{item.revision}</small>
-                </button>
-              );
-            })}
-            {extraFeatures.filter(f=>!(workspace?.features??[]).some(x=>x.id===f.id))
-              .slice(0,60).map(item=><button key={item.id}
-              className={selectedFeatureId===item.id?'active':''}
-              onClick={()=>onOpen(item)}>
-                <FolderOpen size={14}/><span>{item.name}</span><small>r{item.revision}</small>
-              </button>)}
-            {!workspace?.features.length&&!extraFeatures.length &&
-              <p className="compact-notice">No saved features yet.</p>}
-          </div>
+          <WorkspaceFeatureTree
+            layers={workspace?.layers??[]}
+            features={[...(workspace?.features??[]),
+              ...extraFeatures.filter(f=>!(workspace?.features??[]).some(x=>x.id===f.id)).slice(0,60)]}
+            selectedId={selectedFeatureId} onOpen={onOpen}/>
 
           {current&&<details className="feature-inspector">
             <summary>Identify feature · properties & measurement</summary>
