@@ -352,3 +352,8 @@ def test_external_geopackage_nullable_int64_is_not_coerced_through_float(tmp_pat
     assert type(result[0]['properties']['external_id']) is int
     assert result[0]['properties']['external_id']==2**60+1
     assert result[1]['properties']['external_id'] is None
+
+def test_case_colliding_and_reserved_fields_receive_unique_external_aliases():
+    props={'field_3':'Legacy alias','field_3_0':'Existing alias','name':'Site','NAME':'Label','fid':17,'geom':'attribute','_gf_json':'user data','f00000003':'original'}
+    binary,_,_=write_vector(collection({'type':'Feature','geometry':feature()['geometry'],'properties':props}),'gpkg')
+    assert read_vector('aliases.gpkg',binary)['features'][0]['properties']==props

@@ -343,7 +343,9 @@ def _columns(features,short=False):
     fields=[f['name'] for f in field_schema(features)];used=set();names=[];arrays=[];masks=[]
     for index,field in enumerate(fields):
         name=('f'+str(index).zfill(8)) if short or field.lower() in {'fid','geom','geometry','_gf_json'} else field
-        if name.lower() in used: name='field_'+str(index)
+        suffix=0
+        while name.lower() in used:
+            name='field_'+str(index)+'_'+str(suffix);suffix+=1
         used.add(name.lower());names.append(name)
         values=[f.get('properties',{}).get(field) for f in features];nonnull=[v for v in values if v is not None]
         mask=np.array([v is None for v in values],dtype=bool)
