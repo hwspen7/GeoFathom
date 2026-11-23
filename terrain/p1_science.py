@@ -229,3 +229,86 @@ def mesh_lod_tiles(z,valid,dx,dy,tile_cells=32,levels=(1,2,4,8),cancel=None):
                     "row_indices":rows,"col_indices":cols,
                     "heights":[float(value) if ok else None for value,ok in zip(elevations.flat,mask.flat)]})
     return output
+
+
+def breach_depressions(z,valid,dx,dy,max_pits=64,max_cut_m=100.,cancel=None):
+    """Bounded least-excavation channel search from interior pits to a lower outlet.
+
+    Unlike priority-flood filling, excavation changes only a copied drainage
+    channel. The cost model is an approximate least-cut path, not an audited
+    earthworks optimization. A pit without a lower boundary outlet cannot be
+    breached inside the available DEM and is reported as unresolved.
+    """
+    z,valid=_validated(z,valid,dx,dy,262_144)
+    if not isinstance(max_pits,int) or not 1<=max_pits<=256 or not (
+        math.isfinite(max_cut_m) and max_cut_m>0):
+        raise RasterError("Invalid breach budget or maximum excavation depth.")
+    h,w=z.shape;result=z.copy()
+    outlets=np.zeros(z.shape,bool)
+    outlets[0,:]=valid[0,:];outlets[-1,:]=valid[-1,:]
+    outlets[:,0]=valid[:,0];outlets[:,-1]=valid[:,-1]
+    for r in range(1,h-1):
+        for c in range(1,w-1):
+            if valid[r,c] and any(not valid[r+dr,c+dc] for dr,dc in _DIR):
+                outlets[r,c]=True
+    # Work only on true interior sinks, not on unknown DEM boundaries.
+    pits=[]
+    for r in range(1,h-1):
+        for c in range(1,w-1):
+            if not valid[r,c] or outlets[r,c]:continue
+            neighbors=[]
+            for dr,dc in _DIR:
+                rr,cc=r+dr,c+dc
+                if valid[rr,cc] and (not(dr and dc) or (valid[r,cc] and valid[rr,c])):
+                    neighbors.append(result[rr,cc])
+            if neighbors and min(neighbors)>=result[r,c]:
+                pits.append((r,c))
+    if len(pits)>max_pits:
+        raise RasterError("Too many pits for bounded breaching; use priority-flood conditioning.")
+    cut_total=0.;max_cut=0.;carved=set();unresolved=0
+    for pit_r,pit_c in pits:
+        checkpoint(cancel)
+        start=pit_r*w+pit_c;start_z=float(result[pit_r,pit_c])
+        frontier=[(0.,0,start)];best={start:(0.,0)};parent={}
+        endpoint=None
+        # Search channels minimizing cut cost plus a small path-length penalty.
+        while frontier:
+            cost,steps,index=heappop(frontier)
+            if best.get(index)!=(cost,steps):continue
+            r,c=divmod(index,w)
+            if outlets[r,c] and result[r,c]<start_z:
+                endpoint=index;break
+            for dr,dc in _DIR:
+                rr,cc=r+dr,c+dc
+                if not(0<=rr<h and 0<=cc<w and valid[rr,cc]):continue
+                if dr and dc and not(valid[r,cc] and valid[rr,c]):continue
+                target=start_z-(steps+1)*1e-6
+                cut=max(0.,float(result[rr,cc])-target)
+                if cut>max_cut_m:continue
+                next_cost=cost+cut*math.hypot(dc*dx,dr*dy)+.001*math.hypot(dc*dx,dr*dy)
+                nxt=rr*w+cc;next_state=(next_cost,steps+1)
+                if nxt not in best or next_state<best[nxt]:
+                    best[nxt]=next_state;parent[nxt]=index
+                    heappush(frontier,(next_cost,steps+1,nxt))
+            if len(best)>262_144:break
+            if len(best)%2048==0:checkpoint(cancel)
+        if endpoint is None:
+            unresolved+=1;continue
+        path=[endpoint]
+        while path[-1]!=start:path.append(parent[path[-1]])
+        path.reverse()
+        previous=start_z
+        for j,index in enumerate(path[1:],1):
+            r,c=divmod(index,w)
+            desired=start_z+(float(result.flat[endpoint])-start_z)*j/(len(path)-1)
+            next_height=min(float(result[r,c]),desired,previous-1e-6)
+            difference=float(result[r,c])-next_height
+            cut_total+=difference;max_cut=max(max_cut,difference)
+            result[r,c]=next_height;previous=next_height;carved.add(index)
+    return result,{
+        "breached_pits":len(pits)-unresolved,
+        "unresolved_pits":unresolved,
+        "breach_carved_cells":len(carved),
+        "breach_total_excavation_depth_m":cut_total,
+        "breach_maximum_cut_m":max_cut,
+    }
