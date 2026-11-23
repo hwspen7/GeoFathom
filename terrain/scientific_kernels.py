@@ -1,4 +1,4 @@
-"""Scientific terrain analysis scientific terrain kernels: deterministic hydrology, fitted curvature,
+"""Scientific terrain kernels: deterministic hydrology, fitted curvature,
 grade-constrained design, coverage optimization, and seam-aligned 3-D LOD.
 
 All inputs are projected metric grids. The source DEM is never mutated; invalid

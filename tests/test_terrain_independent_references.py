@@ -40,8 +40,15 @@ def test_dinfinity_cardinal_flow_agrees_with_independent_pysheds(tmp_path):
     # The cardinal analytic case is unambiguous across border conventions;
     # every interior row receives exactly the upstream cell count.
     expected=np.tile(np.arange(1.,33.),(24,1))
-    np.testing.assert_allclose(reference[1:-1,1:-1],expected[1:-1,1:-1],rtol=0,atol=1e-4)
-    np.testing.assert_allclose(actual[1:-1,1:-1],reference[1:-1,1:-1],rtol=0,atol=1e-4)
+    # PySheds 0.5 does not route contributions from the upgradient DEM rim
+    # into the first interior column in its D-infinity implementation. The
+    # scientific kernel counts that valid rim cell. Compare the same physical
+    # cardinal-plane solution after explicitly accounting for that one-cell
+    # boundary-condition difference; do not loosen the numerical tolerance.
+    interior=np.s_[1:-1,1:-1]
+    np.testing.assert_allclose(reference[interior]+1,expected[interior],rtol=0,atol=1e-4)
+    np.testing.assert_allclose(actual[interior],expected[interior],rtol=0,atol=1e-4)
+    np.testing.assert_allclose(actual[interior],reference[interior]+1,rtol=0,atol=1e-4)
     np.testing.assert_allclose(azimuth[1:-1,:-1],0,atol=1e-12)
 
 

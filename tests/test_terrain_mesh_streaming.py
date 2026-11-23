@@ -64,7 +64,7 @@ def test_tile_budget_rejects_bad_level_or_coordinates(terrain_tile_dem,level,row
 def test_tile_route_matches_direct_reader_and_validates_requests(terrain_tile_dem,tmp_path,monkeypatch):
     from fastapi.testclient import TestClient
     from core.main import app
-    from imagery.store import store_upload
+    from imagery.store import image_file, store_upload
     path,polygon,_=terrain_tile_dem
     monkeypatch.setenv("GEOFATHOM_IMAGERY_DIR",str(tmp_path/"uploads"))
     image=store_upload(path,"mesh-lod-fixture.tif")
@@ -73,7 +73,8 @@ def test_tile_route_matches_direct_reader_and_validates_requests(terrain_tile_de
              "level":1,"tile_row":0,"tile_col":0}
     response=client.post("/terrain/mesh/tile",json=request)
     assert response.status_code==200,response.text
-    direct=stream_mesh_tile(path,polygon,1,0,0)
+    # Store_upload deliberately moves the temporary GeoTIFF into the managed library.
+    direct=stream_mesh_tile(image_file(image["id"]),polygon,1,0,0)
     assert response.json()["heights"]==direct["heights"]
     assert response.json()["valid_quads"]==direct["valid_quads"]
     bad=client.post("/terrain/mesh/tile",json={**request,"level":3})
