@@ -18,7 +18,16 @@ const fileSave=(filename:string,blob:Blob)=>{
 };
 const jsonSave=(name:string,value:unknown)=>
  fileSave(name,new Blob([JSON.stringify(value,null,2)],{type:'application/json'}));
-const csvCell=(value:unknown)=>'"'+String(value??'').replace(/"/g,'""')+'"';
+/** CSV imports may execute spreadsheet formulae even in quoted fields.
+ * Quote every cell and prefix potentially executable *text* with an apostrophe.
+ * Typed numeric measurements remain numeric, including legitimate negatives.
+ */
+const csvCell=(value:unknown)=>{
+ let content=String(value??'');
+ if(typeof value==='string'&&/^[\\s\\uFEFF]*[=+\\-@]/.test(content))
+  content="'"+content;
+ return '"'+content.replace(/"/g,'""')+'"';
+};
 function collectionFromScope(scope:ExportScope,p:Props):GeoJSON.FeatureCollection{
  const items:GeoJSON.Feature[]=
   scope==='selection'?(p.selected?[{type:'Feature',geometry:p.selected,
