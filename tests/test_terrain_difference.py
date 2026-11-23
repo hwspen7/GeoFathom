@@ -84,3 +84,25 @@ def test_dem_difference_records_metadata_quality_and_signed_cells(tmp_path):
     assert metrics['decreased_cells']==1
     assert metrics['unchanged_cells']==2
     assert metrics['net_elevation_volume_m3']==pytest.approx(0)
+
+
+def test_dem_difference_warning_exposes_partial_reference_coverage(tmp_path):
+    from pyproj import Transformer
+    from terrain.advanced import run_terrain
+    affine=from_origin(500000,4500000,10,10)
+    primary=tmp_path/"primary.tif"
+    reference=tmp_path/"partial.tif"
+    make_dem(primary,np.full((10,10),100.),affine)
+    values=np.full((10,10),90.)
+    values[:,5:]=-9999.
+    make_dem(reference,values,affine)
+    conv=Transformer.from_crs("EPSG:32617","EPSG:4326",always_xy=True)
+    ring=[conv.transform(x,y) for x,y in [
+        (500000,4500000),(500100,4500000),
+        (500100,4499900),(500000,4499900),(500000,4500000)]]
+    result=run_terrain(primary,{"type":"Polygon","coordinates":[ring]},
+                       "dem_difference",comparison_path=reference)
+    coverage=result["metrics"]["comparison_coverage_pct"]
+    assert coverage==pytest.approx(50.,abs=1)
+    assert f"{coverage:.1f}%" in result["warning"]
+    assert "exclude uncovered cells" in result["warning"]

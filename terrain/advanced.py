@@ -292,6 +292,13 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
                            if result["metrics"]["datum_labels_match"] else
                            "Primary minus comparison DEM, bilinearly aligned on the primary grid. "
                            "At least one vertical datum label is missing: change estimates are unverified. ")
+        # Difference volumes are only meaningful over the intersection:
+        # make partial reference coverage explicit in the scientific result.
+        overlap=result["metrics"]["comparison_coverage_pct"]
+        if overlap<99.9:
+            result["warning"]+=(
+                f" Only {overlap:.1f}% of valid primary grid cells have matching "
+                "reference elevations; differences and volumes exclude uncovered cells.")
     elif operation=="contours":
         result["features"]=_contours(z,valid,affine,crs,boundary,interval,cancel)
         result["metrics"]={"contour_lines":sum(f["properties"]["contour_path_count"] for f in result["features"]),

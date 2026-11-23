@@ -82,8 +82,8 @@ def metadata(path: Path) -> dict:
         raise RasterError("File cannot be opened as a GeoTIFF.") from error
 
 
-def _rgb(data: np.ndarray) -> np.ndarray:
-    """Convert one or three raster bands to RGB uint8 with bounded scaling."""
+def _rgb(data: np.ndarray, valid: np.ndarray | None = None) -> np.ndarray:
+    """Convert one or three raster bands to RGB, excluding NoData from stretching."""
     if data.shape[0] == 1:
         data = np.repeat(data, 3, axis=0)
     if data.dtype == np.uint8:
@@ -93,7 +93,10 @@ def _rgb(data: np.ndarray) -> np.ndarray:
     converted = np.zeros(data.shape, dtype=np.uint8)
     for band in range(3):
         values = data[band].astype(np.float32)
-        finite = values[np.isfinite(values)]
+        pixels=np.isfinite(values)
+        if valid is not None:
+            pixels &= valid
+        finite = values[pixels]
         if finite.size == 0:
             continue
         low, high = np.percentile(finite, [2, 98])
@@ -113,9 +116,16 @@ def preview_png(path: Path) -> bytes:
             indexes,
             out_shape=(len(indexes), height, width),
             resampling=Resampling.bilinear,
+            masked=True,
         )
+    # NoData and NaNs must remain transparent in the map overlay, never
+    # appear as low terrain; ignore them when stretching 16/32-bit values.
+    valid=(~np.ma.getmaskarray(data).any(axis=0)
+           & np.isfinite(data.data).all(axis=0))
+    rgba=np.dstack((_rgb(data.filled(0),valid=valid),
+                    valid.astype(np.uint8)*255))
     output = BytesIO()
-    Image.fromarray(_rgb(data), "RGB").save(output, format="PNG")
+    Image.fromarray(rgba,"RGBA").save(output, format="PNG")
     return output.getvalue()
 
 
