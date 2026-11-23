@@ -590,13 +590,21 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
             "origin_xy":list(affine*(.5,.5)),"source_crs":str(crs),
             "dx_m":abs(affine.a)*step,"dy_m":abs(affine.e)*step,
             "heights":[float(v) if ok else None for v,ok in zip(heights.flat,mask.flat)]}
+        if mesh_lod:
+            from .p1_science import mesh_lod_tiles
+            tiles=mesh_lod_tiles(heights,mask,abs(affine.a)*step,abs(affine.e)*step,
+                                 tile_cells=32,levels=(1,2,4),cancel=cancel)
+            result["mesh"]["lod"]={"tile_cells":32,"levels":[1,2,4],"tiles":tiles,
+                                   "transport":"in_response_not_streamed"}
         if texture_path is not None:
             from .texture import mesh_texture
             result["mesh"]["texture"]=mesh_texture(texture_path,affine,crs,heights.shape[0],heights.shape[1],step,cancel)
         result["metrics"]={"minimum_m":float(z[valid].min()),"maximum_m":float(z[valid].max()),
             "mesh_vertices":int(mask.sum()),"mesh_sampling_step":int(step),
             "mesh_grid_coverage_pct":100*float(mask.sum())/max(1,mask.size)}
-        result["warning"]="Interactive 3D elevation preview sampled from the DEM; gaps represent nodata."
+        if mesh_lod:
+            result["metrics"]["mesh_lod_tile_count"]=len(tiles)
+        result["warning"]="Interactive 3D elevation preview sampled from the DEM; gaps represent nodata. LOD pyramid is transport-ready but not camera-streamed."
     if conditioned is not None:
         result["metrics"].update(conditioned)
         if "total_fill_depth_m" in conditioned:
@@ -621,10 +629,18 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
         flags.append("projected_grid_distance_bias_gt_half_percent")
     if operation in {"watershed","flow_accumulation","flow_accumulation_mfd","streams","stream_order"}:
         flags.append("upstream_outside_grid_not_evaluated")
+    if dsm_path is not None and operation in {"visibility","viewshed_multi"}:
+        flags.append("dsm_source_unverified")
+    if optimize_observers and operation=="viewshed_multi":
+        flags.append("greedy_coverage_not_global_optimum")
+    if operation in {"volume","cutfill_map"} and elevation_sigma_m>0:
+        flags.append("vertical_uncertainty_input_assumed_not_measured")
+    if operation=="mesh" and mesh_lod:
+        flags.append("lod_tiles_not_streamed")
     result["quality"]={
         "status":"provisional_not_independently_verified",
         "reference_validation":"not_performed",
-        "uncertainty":"not_quantified",
+        "uncertainty":("assumption_based_elevation_sigma" if operation in {"volume","cutfill_map"} and elevation_sigma_m>0 else "not_quantified"),
         "source_overlap_pct":float(coverage),
         "valid_study_cell_pct":float(result["metrics"]["valid_grid_pct"]),
         "derivative_coverage_pct":float(100*result["raster"]["valid_cells"]/max(1,result["valid_cells"])) if "raster" in result else None,
