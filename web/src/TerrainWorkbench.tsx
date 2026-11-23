@@ -783,7 +783,7 @@ export default function TerrainWorkbench(p:Props){
        <div><span>Samples</span><strong>{profile.samples.length}</strong></div>
      </div>}
      {result&&<>
-       {resultTab==='overview'&&result.selection&&<small className="compact-notice">Selected candidate positions: {result.selection.selected_candidate_indices.map(i=>i+1).join(', ')} · marginal visible cells: {result.selection.marginal_visible_cells.join(', ')}</small>}
+       {resultTab==='overview'&&result.selection&&<small className="compact-notice">Selected candidate positions: {result.selection.selected_candidate_indices.map(i=>i+1).join(', ')} · marginal visible cells: {result.selection.marginal_visible_cells.join(', ')}{result.selection.optimizer&&` · exact optimum within candidates · ${result.selection.optimizer.combinations_checked} combinations checked` }</small>}
        {resultTab==='overview'&&<div className="terrain-metrics terrain-key-metrics">{featuredMetrics.map(([k,v])=><div key={k}><span>{names[k]??k.replaceAll('_',' ')}</span><strong>{fmt(v)} {units[k]??(['product_min','product_max','product_mean','product_std','product_p10','product_p50','product_p90'].includes(k)?(
           ['elevation','tpi','tri','cutfill_map','dem_difference'].includes(result.operation)?'m':
           ['slope_map','aspect_map'].includes(result.operation)?'°':
@@ -1206,7 +1206,7 @@ export default function TerrainWorkbench(p:Props){
      </>}
      {operation==='viewshed_multi'&&<div className="terrain-multi-observers">
       <div className="section-heading">Observers · {observerPoints.length}</div>
-      <small className="compact-notice">Specify {Number(optimizeObservers)>0?'2–12 candidate':'2–4'} WGS84 positions in distinct valid DEM cells. Optimization uses greedy known-cell coverage, not a global optimum.</small>
+      <small className="compact-notice">Specify {Number(optimizeObservers)>0?'2–12 candidate':'2–4'} WGS84 positions in distinct valid DEM cells. Optimization exhaustively checks all candidate combinations (up to 12 choose 4) for maximum positively observed coverage.</small>
       <div className="terrain-observer-grid">
         {observerPoints.map(([x,y],index)=><div className="terrain-observer-row" key={index}>
           <label>Observer {index+1} longitude
