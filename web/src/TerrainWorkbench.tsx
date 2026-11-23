@@ -147,6 +147,7 @@ export default function TerrainWorkbench(p:Props){
  const [designEastGrade,setDesignEastGrade]=useState('0'),[designNorthGrade,setDesignNorthGrade]=useState('0');
  const [designMaxGrade,setDesignMaxGrade]=useState('0.3'),[elevationSigma,setElevationSigma]=useState('0');
  const [dsmImageId,setDsmImageId]=useState(''),[optimizeObservers,setOptimizeObservers]=useState('0');
+ const [externalInflowImageId,setExternalInflowImageId]=useState('');
  const [meshLod,setMeshLod]=useState(false);
  const [suitabilityModel,setSuitabilityModel]=useState<'binary'|'weighted'>('binary');
  const [suitabilitySlopeWeight,setSuitabilitySlopeWeight]=useState('0.5');
@@ -298,6 +299,7 @@ export default function TerrainWorkbench(p:Props){
      validNumber(elevationSigma,0,10000))&&
    (!['curvature','plan_curvature','profile_curvature'].includes(operation??'')||curvatureMethod!=='quadratic'||validNumber(curvatureRadius,1,4)&&Number.isInteger(Number(curvatureRadius)))&&
    (!['visibility','viewshed_multi'].includes(operation??'')||!dsmImageId||assets.some(a=>a.id===dsmImageId&&a.bands===1&&a.id!==dem?.id))&&
+   (operation!=='flow_accumulation'||!externalInflowImageId||flowRoutingMethod==='dinf'&&assets.some(a=>a.id===externalInflowImageId&&a.bands===1&&a.id!==dem?.id))&&
    (operation!=='cross_sections'||validNumber(sectionSpacing,1,10000)&&validNumber(sectionWidth,1,2000))&&
    (operation!=='contours'||validNumber(interval,.01,1e6))&&
    (operation!=='dem_difference'||!!comparisonId&&comparisonId!==dem?.id&&assets.some(a=>a.id===comparisonId&&a.bands===1))&&
@@ -327,7 +329,7 @@ export default function TerrainWorkbench(p:Props){
    routeModel,meshSamples,streamOrderScheme,hillshadeMode,
    flowRoutingMethod,depressionMethod,curvatureMethod,curvatureRadius,
    designEastGrade,designNorthGrade,designMaxGrade,elevationSigma,
-   dsmImageId,optimizeObservers,meshLod,
+   dsmImageId,optimizeObservers,meshLod,externalInflowImageId,
    suitabilityModel,suitabilitySlopeWeight,suitabilityTriWeight,suitabilityElevationWeight,
  });
  // Only edits to the actual operation inputs invalidate a scientific run.
@@ -414,7 +416,8 @@ export default function TerrainWorkbench(p:Props){
          dsm_image_id:['visibility','viewshed_multi'].includes(operation)?dsmImageId||null:null,
          mesh_lod:operation==='mesh'&&meshLod,
          suitability_model:suitabilityModel,
-         suitability_weights:[Number(suitabilitySlopeWeight),Number(suitabilityTriWeight),Number(suitabilityElevationWeight)]},controller.signal);
+         suitability_weights:[Number(suitabilitySlopeWeight),Number(suitabilityTriWeight),Number(suitabilityElevationWeight)],
+         external_inflow_image_id:operation==='flow_accumulation'&&flowRoutingMethod==='dinf'?externalInflowImageId||null:null},controller.signal);
      if(ticket!==sequence.current||controller.signal.aborted)return;
      // Commit scientific data before reporting a completed run. An immediate
      // reload or project switch must never race a pending cache write.
@@ -1095,6 +1098,13 @@ export default function TerrainWorkbench(p:Props){
          <option value="d8">D8 · one downslope receiver</option>
          <option value="dinf">D∞ · triangular-facet split</option>
        </select>
+     </label>}
+     {operation==='flow_accumulation'&&flowRoutingMethod==='dinf'&&<label>External upstream inflow (optional)
+       <select aria-label="External contributing area raster" value={externalInflowImageId} onChange={e=>setExternalInflowImageId(e.target.value)}>
+         <option value="">None · unknown off-grid catchments excluded</option>
+         {assets.filter(a=>a.bands===1&&a.id!==dem?.id).map(a=><option key={a.id} value={a.id}>{a.name}</option>)}
+       </select>
+       <small className="compact-notice">Requires a grid-aligned GeoTIFF explicitly tagged TERRAIN_UNIT=cells or cell_equivalents, with zeros outside known inlet cells.</small>
      </label>}
      {operation==='flow_accumulation_mfd'&&<label>MFD convergence exponent
        <input aria-label="MFD routing exponent" type="number" min="0.5" max="8" step="0.1"
