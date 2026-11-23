@@ -9,6 +9,7 @@ on:
       - 'terrain/**'
       - 'tests/test_terrain_*'
       - 'benchmarks/terrain_reference.py'
+      - 'scripts/terrain_p0_gate.py'
       - '.github/workflows/terrain-science.yml'
   pull_request:
     branches: [main]
@@ -36,12 +37,24 @@ jobs:
           python benchmarks/terrain_reference.py --strict --output build/terrain-reference.json
       - name: Test P0 scientific invariants and edge cases
         run: |
-          python -m pytest -q tests/test_terrain_p0_all_operations.py tests/test_terrain_projection_p0.py tests/test_terrain_scope_p0.py tests/test_terrain_p0_scientific_invariants.py tests/test_terrain_professional.py tests/test_terrain_conditioning.py tests/test_terrain_gradient_unification.py tests/test_terrain_catalog.py
+          python -m pytest -q --junitxml=build/terrain-p0-tests.xml tests/test_terrain_p0_all_operations.py tests/test_terrain_projection_p0.py tests/test_terrain_scope_p0.py tests/test_terrain_p0_scientific_invariants.py tests/test_terrain_professional.py tests/test_terrain_conditioning.py tests/test_terrain_gradient_unification.py tests/test_terrain_catalog.py
+      - name: Enforce >=95 P0 synthetic numerical score for every Terrain operation
+        run: |
+          python scripts/terrain_p0_gate.py --junit build/terrain-p0-tests.xml --reference build/terrain-reference.json --output build/terrain-p0-matrix.json
+          python - <<'PY'
+          import json
+          data=json.load(open("build/terrain-p0-matrix.json"))
+          print(f"## P0 synthetic numerical acceptance: {data['operations_meeting_threshold']}/28 >=95",file=open("/tmp/terrain-summary","w"))
+          print(f"Minimum benchmark score: {data['minimum_score']}/100")
+          PY
       - name: Preserve numeric comparisons and failure evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: terrain-scientific-reference
-          path: build/terrain-reference.json
+          path: |
+            build/terrain-reference.json
+            build/terrain-p0-tests.xml
+            build/terrain-p0-matrix.json
           if-no-files-found: warn
           retention-days: 30
