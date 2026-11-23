@@ -4,7 +4,7 @@ import asyncio
 from threading import Event
 from typing import Literal
 from fastapi import APIRouter,HTTPException,Request,Header
-from pydantic import BaseModel,Field
+from pydantic import BaseModel,Field,model_validator
 from starlette.concurrency import run_in_threadpool
 
 from imagery.raster import RasterError
@@ -152,6 +152,14 @@ class AdvancedTerrainInput(BaseModel):
     suitability_model:Literal['binary','weighted']='binary'
     suitability_weights:tuple[float,float,float]=(0.5,0.25,0.25)
     external_inflow_image_id:str|None=None
+
+    @model_validator(mode="after")
+    def check_p1_candidate_bounds(self):
+        if self.observer_points and len(self.observer_points)>4 and not self.optimize_observers:
+            raise ValueError("More than four candidate observers requires enabled site optimization.")
+        if self.observer_points and self.optimize_observers>len(self.observer_points):
+            raise ValueError("Cannot optimize more observation sites than candidates.")
+        return self
 
 @router.post("/advanced")
 async def advanced(request:Request,body:AdvancedTerrainInput):
