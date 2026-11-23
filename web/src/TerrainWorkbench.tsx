@@ -997,7 +997,7 @@ export default function TerrainWorkbench(p:Props){
      <TerrainResearchWorkbench dem={dem} geometry={p.geometry} assets={assets}
        connected={p.connected}/>
    </section>
-   {info&&<p className="project-info">{info}</p>}{error&&<p className="discovery-error" role="alert">{error}</p>
+   {info&&<p className="project-info">{info}</p>}{error&&<p className="discovery-error" role="alert">{error}</p>}
  </div>
  {p.resultsTarget?(p.active?createPortal(monitor,p.resultsTarget):null):monitor}
  {p.operationsFooterTarget?(p.active&&runActions?createPortal(runActions,p.operationsFooterTarget):null):null}
