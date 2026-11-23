@@ -37,7 +37,7 @@ it('computes exact class area, percent and cumulative totals with nodata exclude
  expect(rows.map(r=>r.sharePct)).toEqual([75,25,0]);
  expect(rows.map(r=>r.cumulativePct)).toEqual([75,100,100]);
  expect(rows.map(r=>r.areaM2)).toEqual([300,100,0]);
- expect(terrainClassesCsv(classes,100).split('\\n')).toHaveLength(5);
+ expect(terrainClassesCsv(classes,100).split('\n')).toHaveLength(5);
  const empty=terrainClassStatistics([{label:'empty',color:'#ffffff',cells:0}],100);
  expect(empty[0].cumulativePct).toBe(0);
 });
