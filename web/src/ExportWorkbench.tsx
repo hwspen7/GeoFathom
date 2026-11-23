@@ -101,7 +101,7 @@ export default function ExportWorkbench(p:Props){
        'source','measurement_method'];
      const lines=[headers.map(csvCell).join(',')];
      for(const f of featureCollection.features){
-      const props=f.properties??{};
+      const props:Record<string,unknown>=f.properties??{};
       const values=[props.name,f.geometry.type,props.area_m2,
         props.perimeter_m,props.length_m,props.source,
         props.measurement_method??props.method];
@@ -115,7 +115,8 @@ export default function ExportWorkbench(p:Props){
        area_m2:f.properties?.area_m2??null,
        perimeter_m:f.properties?.perimeter_m??null,
        length_m:f.properties?.length_m??null,
-       method:f.properties?.measurement_method??f.properties?.method??null,
+       method:(f.properties as Record<string,unknown>)?.measurement_method??
+        (f.properties as Record<string,unknown>)?.method??null,
      }));
      jsonSave('geofathom-'+scope+'-report.json',{
       schema:'geofathom.export-report.v1',created_utc:new Date().toISOString(),
