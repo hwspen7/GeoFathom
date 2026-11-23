@@ -23,8 +23,8 @@ for(const width of [1280,1600])test('Data and Export are independent fixed top m
  await page.getByRole('button',{name:'Add source'}).click();
  await expect(page.getByLabel('New OGC service type')).toBeVisible();
  await activateWorkspaceModule(page,'Export');
- await expect(page.getByLabel('Export scope')).toBeVisible();
- await expect(page.getByLabel('Export format')).toBeVisible();
+ await expect(page.getByLabel('Export scope',{exact:true})).toBeVisible();
+ await expect(page.getByLabel('Export format',{exact:true})).toBeVisible();
  await expect(page.getByRole('button',{name:'Export GEOJSON'})).toBeDisabled();
  await expectWorkspaceModule(page,'Export');
 });

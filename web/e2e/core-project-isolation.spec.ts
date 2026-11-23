@@ -24,19 +24,28 @@ test('project switch clears selected saved geometry and cannot undo into another
   await expect(select.locator('option[value="'+first+'"]')).toHaveCount(1);
   await select.selectOption(first);
   await page.getByRole('button',{name:new RegExp('Isolated parcel '+suffix)}).click();
-  await openFileMenu(page);
-  await expect(page.getByRole('button',{name:'Update feature'})).toBeEnabled();
-  await openProjectDrawer(page);
-  await page.getByLabel('Map note text').fill('Do not put this in another project');
-  await page.getByLabel('Place map note').click();
-  await select.selectOption(second);
-  await expect(page.getByText('No saved features yet.')).toBeVisible();
-  await expect(page.getByRole('button',{name:'Save selected'})).toBeDisabled();
-  await expect(page.getByRole('button',{name:'Undo',exact:true})).toBeDisabled();
-  await expect(page.getByRole('button',{name:'Redo',exact:true})).toBeDisabled();
-  await expect(page.getByRole('button',{name:'Update feature'})).toHaveCount(0);
-  const workspace=await page.request.get(API+'/projects/'+second+'/workspace');
-  expect((await workspace.json()).total).toBe(0);
+  await test.step('Open project controls after File without overlapping menus',async()=>{
+    await openFileMenu(page);
+    await expect(page.getByRole('button',{name:'Update feature'})).toBeEnabled();
+    await openProjectDrawer(page);
+    await expect(page.locator('.gis-file-menu[open]')).toHaveCount(0);
+    await expect(page.getByLabel('Project and layers',{exact:true})).toBeVisible();
+  });
+  await test.step('Switch project while a map note is pending',async()=>{
+    await page.getByLabel('Map note text').fill('Do not put this in another project');
+    await page.getByLabel('Place map note').click();
+    await select.selectOption(second);
+  });
+  await test.step('Destination has no selected geometry, undo history or saved note',async()=>{
+    await expect(page.getByText('No saved features yet.')).toBeVisible();
+    await openFileMenu(page);
+    await expect(page.getByRole('button',{name:'Save selected'})).toBeDisabled();
+    await expect(page.getByRole('button',{name:'Undo',exact:true})).toBeDisabled();
+    await expect(page.getByRole('button',{name:'Redo',exact:true})).toBeDisabled();
+    await expect(page.getByRole('button',{name:'Update feature'})).toHaveCount(0);
+    const workspace=await page.request.get(API+'/projects/'+second+'/workspace');
+    expect((await workspace.json()).total).toBe(0);
+  });
   await select.selectOption(first);
   await expect(page.getByRole('button',{name:new RegExp('Isolated parcel '+suffix)})).toBeVisible();
 });

@@ -1132,7 +1132,8 @@ export default function App() {
         <WorkspaceModuleBar active={activeTool} open={true}
           onActivate={id=>revealPanel(id)}/>
 
-        <details className="gis-settings">
+        {/* Native details grouping prevents header popovers from covering each other. */}
+        <details className="gis-settings" name="gis-header-menu">
           <summary>Settings</summary>
           <div className="gis-settings-panel">
             <div className="section-heading">Display</div>
@@ -1175,7 +1176,7 @@ export default function App() {
           <Search size={14}/> <span>Commands</span><kbd>Ctrl K</kbd>
         </button>
         <div className="gis-active-project" ref={setProjectToolbarTarget} aria-label="Active workspace"/>
-        <details className="gis-header-menu gis-workspace-menu">
+        <details className="gis-header-menu gis-workspace-menu" name="gis-header-menu">
           <summary aria-label="Workspace menu">Workspace</summary>
           <div className="gis-header-popover">
             <button type="button" aria-expanded={showLayers} onClick={()=>{setDrawerTab('project');setShowLayers(v=>!v);}}>Project / Layers</button>
@@ -1183,7 +1184,7 @@ export default function App() {
             <button type="button" onClick={()=>setShortcutHelp(true)}>Shortcuts</button>
           </div>
         </details>
-        <details className="gis-header-menu gis-file-menu">
+        <details className="gis-header-menu gis-file-menu" name="gis-header-menu">
           <summary aria-label="File actions">File</summary>
           <div className="gis-header-popover" aria-label="Unified save and export actions">
             <div className="gis-project-actions" ref={setProjectActionsTarget}/>
