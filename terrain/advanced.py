@@ -306,7 +306,8 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
                 flow_routing_method="d8",depression_method="fill",curvature_method="finite_difference",curvature_radius=2,
                 design_east_grade=0.,design_north_grade=0.,design_max_grade=.3,elevation_sigma_m=0.,
                 optimize_observers=0,dsm_path=None,mesh_lod=False,
-                suitability_model="binary",suitability_weights=(.5,.25,.25),external_inflow_path=None,cancel=None):
+                suitability_model="binary",suitability_weights=(.5,.25,.25),external_inflow_path=None,
+                design_curvature_east=0.,design_curvature_cross=0.,design_curvature_north=0.,cancel=None):
     checkpoint(cancel)
     if gradient_method not in {"horn","zevenbergen_thorne"}:
         raise RasterError("Unsupported terrain gradient method.")
@@ -408,6 +409,9 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
                              "curvature_method":curvature_method if operation in {"curvature","plan_curvature","profile_curvature"} else None,
                              "curvature_radius_cells":curvature_radius if operation in {"curvature","plan_curvature","profile_curvature"} else None,
                              "design_east_grade":design_east_grade if operation in {"volume","cutfill_map"} else None,
+                             "design_curvature_east_per_m":design_curvature_east if operation in {"volume","cutfill_map"} else None,
+                             "design_curvature_cross_per_m":design_curvature_cross if operation in {"volume","cutfill_map"} else None,
+                             "design_curvature_north_per_m":design_curvature_north if operation in {"volume","cutfill_map"} else None,
                              "design_north_grade":design_north_grade if operation in {"volume","cutfill_map"} else None,
                              "design_max_grade":design_max_grade if operation in {"volume","cutfill_map"} else None,
                              "elevation_sigma_m":elevation_sigma_m if operation in {"volume","cutfill_map"} else None,
@@ -430,7 +434,9 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
             flow_routing_method=flow_routing_method,curvature_method=curvature_method,curvature_radius=curvature_radius,
             design_east_grade=design_east_grade,design_north_grade=design_north_grade,
             design_max_grade=design_max_grade,elevation_sigma_m=elevation_sigma_m,
-            suitability_model=suitability_model,suitability_weights=suitability_weights,external_inflow=external_inflow)
+            suitability_model=suitability_model,suitability_weights=suitability_weights,external_inflow=external_inflow,
+            design_curvature_east=design_curvature_east,design_curvature_cross=design_curvature_cross,
+            design_curvature_north=design_curvature_north)
         result["warning"]="Projected source-grid product; nodata and incomplete neighborhoods excluded. Unconditioned D8 terminates at sinks/flats; suitability and path costs are screening estimates, not engineering certification."
         if operation=="flow_accumulation" and external_inflow is not None:
             result["warning"]=("D-infinity routing includes explicitly supplied external contributing-area cell equivalents on matching valid DEM cells. "
@@ -501,9 +507,10 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
         if not math.isfinite(reference):raise RasterError("Reference elevation must be finite.")
         from .p1_science import design_surface
         _,design_metrics=design_surface(z,valid,abs(affine.a),abs(affine.e),reference,
-            design_east_grade,design_north_grade,elevation_sigma_m,design_max_grade)
+            design_east_grade,design_north_grade,elevation_sigma_m,design_max_grade,
+            design_curvature_east,design_curvature_cross,design_curvature_north)
         result["metrics"]={**design_metrics,"reference_elevation_m":reference}
-        result["warning"]="Projected cell-center cut/fill against the declared grade-constrained design plane; NoData excluded. Uncertainty bounds assume the supplied one-sigma vertical error and independent versus fully correlated cell errors; not survey-certified."
+        result["warning"]="Projected cell-center cut/fill against the declared grade-constrained quadratic design surface; the maximum grade is conservatively checked across the full grid rectangle. NoData excluded. Uncertainty bounds assume the supplied one-sigma vertical error and independent versus fully correlated cell errors; not survey-certified."
     elif operation=="visibility":
         origin=_origin(point,crs,affine,valid)
         seen,known=_visibility(z,valid,origin,affine,observer_height,target_height,cancel,
