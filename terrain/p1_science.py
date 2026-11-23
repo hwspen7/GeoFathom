@@ -28,7 +28,7 @@ def _validated(z,valid,dx,dy,budget=1_000_000):
     return z,valid
 
 
-def dinfinity_accumulation(z,valid,dx,dy,external_inflow=None,cancel=None):
+def dinfinity_accumulation(z,valid,dx,dy,external_inflow=None,cancel=None,compiled=True):
     """Tarboton eight triangular facets, at most two downhill recipients.
 
     Flow direction is the facet's steepest descent, angle CCW from east.
@@ -56,6 +56,12 @@ def dinfinity_accumulation(z,valid,dx,dy,external_inflow=None,cancel=None):
         a2=math.atan2(y2,x2)%(2*math.pi)
         facets.append((dr1,dc1,dr2,dc2,x1,y1,x2,y2,determinant,a1,a2,
                        (a2-a1)%(2*math.pi),math.hypot(x1,y1),math.hypot(x2,y2)))
+    if compiled:
+        # Same deterministic physics as the Python reference below; execute
+        # its scalar routing in LLVM-native batches for production DEM sizes.
+        from .numba_dinf import accelerate_dinfinity
+        accelerate_dinfinity(z,valid,acc,angles,nodes,facets,_DIR,checkpoint,cancel)
+        return acc,angles
     for k,index in enumerate(nodes):
         if k%1024==0:checkpoint(cancel)
         r,c=divmod(int(index),w);base=z[r,c]
