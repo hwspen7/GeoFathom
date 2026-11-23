@@ -59,3 +59,14 @@ def test_dem_profile_and_geo_coordinate_policy(dem):
     meta=store_upload(renamed,"dem.tif")
     r=client.post("/terrain/analyze",json={"image_id":meta["id"],"geometry":poly})
     assert r.status_code==200,r.text
+
+    # API metadata must never claim feet while returning meter elevations.
+    profile=client.post("/terrain/profile",json={
+        "image_id":meta["id"],"geometry":line,"samples":20,"vertical_unit":"meter"})
+    assert profile.status_code==200,profile.text
+    assert profile.json()["vertical_unit"]=="meter"
+    for endpoint,region in (("/terrain/profile",line),("/terrain/analyze",poly)):
+        rejected=client.post(endpoint,json={
+            "image_id":meta["id"],"geometry":region,"vertical_unit":"foot"})
+        assert rejected.status_code==422,rejected.text
+        assert "meters only" in rejected.json()["detail"]
