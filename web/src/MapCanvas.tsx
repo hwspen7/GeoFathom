@@ -14,7 +14,7 @@ import {areaText,distanceText,mapPalette,type DisplaySettings} from './displaySe
 import {drawingPreview,measurementAnchor,approximateMeasurement,geodesicDrag as edgeDistance} from './editing';
 import { featureLabel } from './labels';
 import type { ExternalTile } from './DataServicesPanel';
-import type { Measurement,LayerStyle,TerrainRasterLayer } from './api';
+import type { Measurement,LayerStyle,TerrainRasterLayer,NetworkFace } from './api';
 import {
   addVertex, moveVertex, removeVertex, translateSpherical, geodesicDrag, pathsOf,
   verticesOf,moveEdge, type GeometryPath, type Position, type ShapeMode,
@@ -43,6 +43,7 @@ export interface MapLayerFeature {
 
 interface Props {
   selected: GeoJSON.Geometry | null;
+  networkFaces?:NetworkFace[];
   drawingMode: ShapeMode;
   vertices: Position[];
   focus: FocusPoint | null;
@@ -132,6 +133,7 @@ function featureCollection(
   selectedFeatureId:string|null=null,
   pinnedPlaces:Array<{id:string;geometry:GeoJSON.Geometry}>=[],
   selectedBoundaryNode:GeometryPath|null=null,
+  networkFaces:NetworkFace[]=[],
 ): GeoJSON.FeatureCollection {
   const features: GeoJSON.Feature[] = [];
   // Retained reference locations cannot be implicitly removed by tool switches.
@@ -193,6 +195,12 @@ function featureCollection(
     features.push({
       type: 'Feature', properties: { role: 'candidate', color: '#9d8b4a' }, geometry,
     });
+  }
+  // Independent, measurable closed network faces are overlays, not source edits.
+  for(const face of networkFaces.slice(0,300)){
+    features.push({type:'Feature',geometry:face.geometry,
+      properties:{role:'network-face',id:face.id,color:'#238d89',
+        fillOpacity:.10,lineWidth:1.35}});
   }
   if (selected) {
     // A retained selection is contextual while sketching a new feature.
@@ -282,7 +290,7 @@ type Drag = {
 };
 
 export default function MapCanvas({
-  selected,drawingMode,vertices,focus,basemap,customBasemap,onBasemapStatus,measurement,showMeasurements,display,selectedFeatureId,rasterLayers,onRasterError,onMapClick,onFinishDrawing,
+  selected,drawingMode,vertices,networkFaces=[],focus,basemap,customBasemap,onBasemapStatus,measurement,showMeasurements,display,selectedFeatureId,rasterLayers,onRasterError,onMapClick,onFinishDrawing,
   terrainPicking,terrainMarker,profileSamples=[],onProfileCursor,terrainResults,terrainRasters,terrainFetchTarget,onTerrainPick,onContextMenu,onEditingError,
   onViewportChange, discovered, traceMode, onTraceClick,
   editing, moving,edgeMoving, snapping, selectedLocked, layerFeatures,
@@ -307,12 +315,12 @@ export default function MapCanvas({
   const renderRef = useRef({
     selected,vertices,drawingMode,discovered,layerFeatures,editing,
     promptPositive,promptNegative,promptBox,selectedIds,qualityIssues,cursor,selectedFeatureId,
-    pinnedPlaces,selectedBoundaryNode,
+    pinnedPlaces,selectedBoundaryNode,networkFaces,
   });
   renderRef.current={
     selected,vertices,drawingMode,discovered,layerFeatures,editing,
     promptPositive,promptNegative,promptBox,selectedIds,qualityIssues,cursor,selectedFeatureId,
-    pinnedPlaces,selectedBoundaryNode,
+    pinnedPlaces,selectedBoundaryNode,networkFaces,
   };
   const drag = useRef<Drag | null>(null);
   const selectionDrag=useRef<{start:Position;end:Position}|null>(null);
@@ -349,7 +357,7 @@ export default function MapCanvas({
           const p=map.project(point as maplibregl.LngLatLike);
           const shifted=map.unproject([p.x+dx,p.y+dy]);
           return [shifted.lng,shifted.lat];
-        },view.cursor,view.selectedFeatureId,view.pinnedPlaces,view.selectedBoundaryNode,
+        },view.cursor,view.selectedFeatureId,view.pinnedPlaces,view.selectedBoundaryNode,view.networkFaces,
       ));
     };
     map.on('zoomend',refreshZoomLabels);
@@ -1061,7 +1069,7 @@ export default function MapCanvas({
         const p=map.project(point as maplibregl.LngLatLike);
         const shifted=map.unproject([p.x+dx,p.y+dy]);
         return [shifted.lng,shifted.lat];
-      },cursor,selectedFeatureId,pinnedPlaces,selectedBoundaryNode);
+      },cursor,selectedFeatureId,pinnedPlaces,selectedBoundaryNode,networkFaces);
     // New geometry is not yet on screen. Invalidate the projection receipts
     // before sending setData to MapLibre's asynchronous GeoJSON worker.
     if(container.current&&import.meta.env.DEV){
@@ -1077,7 +1085,7 @@ export default function MapCanvas({
     }
     if (!drag.current) spatialSnap.current=null;
   }, [selected, vertices, drawingMode, discovered, layerFeatures, editing,
-      promptPositive,promptNegative,promptBox,selectedIds,qualityIssues,ready,cursor,selectedFeatureId,pinnedPlaces,selectedBoundaryNode]);
+      promptPositive,promptNegative,promptBox,selectedIds,qualityIssues,ready,cursor,selectedFeatureId,pinnedPlaces,selectedBoundaryNode,networkFaces]);
 
   useEffect(()=>{
     const map=mapRef.current;
@@ -1324,9 +1332,9 @@ export default function MapCanvas({
     overlay.replaceChildren();
     const draft=drawingPreview(drawingMode,vertices,cursor);
     const g=draft??selected;
-    if(!showMeasurements||!g)return;
-    const exact=!draft&&measurement?.method!==OFFLINE_METHOD?measurement:null;
-    const totals=exact??approximateMeasurement(g);
+    if(!showMeasurements||(!g&&!networkFaces.length))return;
+    const exact=g&&!draft&&measurement?.method!==OFFLINE_METHOD?measurement:null;
+    const totals=g?(exact??approximateMeasurement(g)):null;
     const prefix=exact?'':'~ ';
     const palette=mapPalette(basemap,display.contrast);
     overlay.style.setProperty('--dimension-text',palette.text);overlay.style.setProperty('--dimension-halo',palette.halo);
@@ -1336,20 +1344,33 @@ export default function MapCanvas({
       node.className=b?'map-edge-value':'map-dimension-total';
       node.textContent=text;overlay!.appendChild(node);labels.push({a,b,node});
     }
-    const anchor=measurementAnchor(g);
-    if(anchor){
-      if(totals.area_m2!==null)label(prefix+areaText(totals.area_m2,display.area)+'\n'+prefix+distanceText(totals.perimeter_m??0,display.distance)+' perimeter',anchor);
-      else if(totals.length_m!==null)label(prefix+distanceText(totals.length_m,display.distance)+' total',anchor);
-      else if(g.type==='Point')label(anchor[0].toFixed(6)+'°, '+anchor[1].toFixed(6)+'°',anchor);
+    // Region labels use a guaranteed interior point produced by GEOS;
+    // their values come from the server's ellipsoidal measurement, never
+    // from the map viewport or a bounding-box estimate.
+    for(const face of networkFaces.slice(0,50)){
+      const m=face.measurement;
+      const before=labels.length;
+      label(face.name+' · '+areaText(m.area_m2??0,display.area)+'\n'+
+        distanceText(m.perimeter_m??0,display.distance)+' perimeter',
+        face.label_anchor);
+      labels[before].node.classList.add('map-face-dimension');
     }
-    let index=0;
-    for(const path of pathsOf(g)){
-      for(let i=1;i<path.length&&index<48;i++,index++){
-        const a=path[i-1],b=path[i];
-        const value=exact?.edge_lengths_m?.[index];
-        label((value===undefined?'~ ':'')+distanceText(value??edgeDistance(a,b).distance_m,display.distance),a,b);
+    if(g&&totals){
+      const anchor=measurementAnchor(g);
+      if(anchor){
+        if(totals.area_m2!==null)label(prefix+areaText(totals.area_m2,display.area)+'\n'+prefix+distanceText(totals.perimeter_m??0,display.distance)+' perimeter',anchor);
+        else if(totals.length_m!==null)label(prefix+distanceText(totals.length_m??0,display.distance)+' total',anchor);
+        else if(g.type==='Point')label(anchor[0].toFixed(6)+'°, '+anchor[1].toFixed(6)+'°',anchor);
       }
-      if(index>=48)break;
+      let index=0;
+      for(const path of pathsOf(g)){
+        for(let i=1;i<path.length&&index<48;i++,index++){
+          const a=path[i-1],b=path[i];
+          const value=exact?.edge_lengths_m?.[index];
+          label((value===undefined?'~ ':'')+distanceText(value??edgeDistance(a,b).distance_m,display.distance),a,b);
+        }
+        if(index>=48)break;
+      }
     }
     const layout=()=>{
       const placed:Array<{left:number;right:number;top:number;bottom:number}>=[];
@@ -1371,7 +1392,7 @@ export default function MapCanvas({
     };
     layout();map.on('render',layout);
     return ()=>{map.off('render',layout);overlay.replaceChildren();};
-  },[ready,selected,drawingMode,vertices,cursor,measurement,showMeasurements,display,basemap]);
+  },[ready,selected,drawingMode,vertices,cursor,measurement,showMeasurements,display,basemap,networkFaces]);
 
   return <>
     <div aria-label="Interactive geospatial map" data-label-layer-ready={ready ? "true" : "false"} className="map-canvas" ref={container}/>
