@@ -85,7 +85,7 @@ test('advanced surface families retain distinct real results and scientific expo
   else await expect(run).toBeDisabled();
  };
  const execute=async(title:string)=>{
-  const choices=page.getByLabel('Choose terrain result').locator('option');
+  const choices=page.locator('select[aria-label="Choose terrain result"] option[value]:not([value=""])');
   const oldCount=await choices.count();
   await run.click();
   await expect(choices).toHaveCount(oldCount+1,{timeout:15000});

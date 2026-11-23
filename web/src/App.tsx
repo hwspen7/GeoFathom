@@ -1501,7 +1501,7 @@ export default function App() {
             </details>}
 
           </details>
-          {resultsTarget&&(geometry||measurement||preview)&&createPortal(<section className="panel-section results-summary">
+          {resultsTarget&&activeTool!=='tools-terrain'&&(geometry||measurement||preview)&&createPortal(<section className="panel-section results-summary">
             <div className="section-heading"><Compass size={16} /><span>Selection</span></div>
             <div className="analysis-card">
               

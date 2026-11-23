@@ -583,29 +583,6 @@ export default function TerrainWorkbench(p:Props){
      </details>
 
    </section>}
-   {resultTab==='details'&&<div className="terrain-research-history">{runHistory.length>0&&<details className="terrain-run-provenance terrain-history" aria-label="Local terrain run history">
-     <summary>History · {runHistory.length}</summary>
-     {historyStorageError&&<small role="alert">History storage unavailable</small>}
-     <div className="terrain-history-actions">
-       <select aria-label="Select terrain run metadata" value={historyFocus} onChange={e=>setHistoryFocus(e.target.value)}>
-         <option value="">Choose history</option>
-         {runHistory.map(item=><option key={item.id} value={item.id}>
-           {item.operation} · {new Date(item.createdAt).toLocaleTimeString()} · {item.id.slice(0,8)}
-         </option>)}
-       </select>
-       <button disabled={!historyFocus} aria-label="Remove selected history receipt"
-         title="Remove metadata receipt only" onClick={()=>{
-           setRunHistory(old=>old.filter(item=>item.id!==historyFocus));setHistoryFocus('');
-         }}>Remove</button>
-       <button aria-label="Export terrain run history" onClick={()=>{
-         const url=URL.createObjectURL(new Blob([JSON.stringify(runHistory,null,2)],{type:'application/json'}));
-         const a=document.createElement('a');a.href=url;a.download='terrain-run-history.json';
-         document.body.appendChild(a);a.click();a.remove();
-         window.setTimeout(()=>URL.revokeObjectURL(url),1000);
-       }}>Export history</button>
-     </div>
-   </details>}
-</div>}
    {(result||slope||profile)&&<ResultPane expanded={expanded} onClose={()=>setExpanded(false)}>
      <div id="terrain-result-content" role="tabpanel" aria-label={resultTab[0].toUpperCase()+resultTab.slice(1)+' terrain result'} className="terrain-tab-content">
      <div className="section-heading">{selected?.title} <span><button onClick={()=>{if(expanded)setExpanded(false);else{setResultTab('visual');setExpanded(true);}}}>{expanded?'Close expanded':'Expand'}</button> <button onClick={exportResult} title="Export result data">Export</button></span></div>
@@ -743,6 +720,29 @@ export default function TerrainWorkbench(p:Props){
      </>}
      </div>
    </ResultPane>}
+   {resultTab==='details'&&<div className="terrain-research-history">{runHistory.length>0&&<details className="terrain-run-provenance terrain-history" aria-label="Local terrain run history">
+     <summary>History · {runHistory.length}</summary>
+     {historyStorageError&&<small role="alert">History storage unavailable</small>}
+     <div className="terrain-history-actions">
+       <select aria-label="Select terrain run metadata" value={historyFocus} onChange={e=>setHistoryFocus(e.target.value)}>
+         <option value="">Choose history</option>
+         {runHistory.map(item=><option key={item.id} value={item.id}>
+           {item.operation} · {new Date(item.createdAt).toLocaleTimeString()} · {item.id.slice(0,8)}
+         </option>)}
+       </select>
+       <button disabled={!historyFocus} aria-label="Remove selected history receipt"
+         title="Remove metadata receipt only" onClick={()=>{
+           setRunHistory(old=>old.filter(item=>item.id!==historyFocus));setHistoryFocus('');
+         }}>Remove</button>
+       <button aria-label="Export terrain run history" onClick={()=>{
+         const url=URL.createObjectURL(new Blob([JSON.stringify(runHistory,null,2)],{type:'application/json'}));
+         const a=document.createElement('a');a.href=url;a.download='terrain-run-history.json';
+         document.body.appendChild(a);a.click();a.remove();
+         window.setTimeout(()=>URL.revokeObjectURL(url),1000);
+       }}>Export history</button>
+     </div>
+   </details>}
+</div>}
 
  </div>;
  return <>
