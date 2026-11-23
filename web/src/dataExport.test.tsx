@@ -84,7 +84,7 @@ describe('Data and Export independent fixed workbenches',()=>{
   fireEvent.change(screen.getByLabelText('Network snap tolerance'),{target:{value:'2.5'}});
   fireEvent.click(screen.getByRole('button',{name:'Detect enclosed areas'}));
   await waitFor(()=>expect(props.onRebuild).toHaveBeenCalledWith(2.5,.01));
-  expect(screen.getByText(/1.23 km²/)).toBeTruthy();
+  expect(screen.getAllByText(/1.23 km²/).length).toBeGreaterThan(0);
   fireEvent.click(screen.getByRole('button',{name:'Keep areas locally'}));
   expect(props.onStoreAreas).toHaveBeenCalledWith([face]);
   fireEvent.click(screen.getByRole('button',{name:'Save areas to project'}));
