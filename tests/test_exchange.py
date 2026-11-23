@@ -342,3 +342,13 @@ def test_gpkg_import_closes_native_attribute_connections_before_temp_cleanup(mon
     assert connections
     for connection in connections:
         with pytest.raises(sqlite3.ProgrammingError,match='closed'):connection.execute('SELECT 1')
+
+def test_external_geopackage_nullable_int64_is_not_coerced_through_float(tmp_path):
+    path=tmp_path/'native.gpkg'
+    pyogrio.raw.write(path,np.array([shapely.to_wkb(shapely.Point(-83,40)),shapely.to_wkb(shapely.Point(-82,40))],dtype=object),
+        [np.array([2**60+1,0],dtype=np.int64)],['external_id'],field_mask=[np.array([False,True])],
+        driver='GPKG',crs='EPSG:4326',geometry_type='Point')
+    result=read_vector('native.gpkg',path.read_bytes())['features']
+    assert type(result[0]['properties']['external_id']) is int
+    assert result[0]['properties']['external_id']==2**60+1
+    assert result[1]['properties']['external_id'] is None

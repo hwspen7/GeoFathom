@@ -181,13 +181,15 @@ def _raw_layers(paths,manifest,options):
             metadata=pyogrio.read_info(layer['_path'],layer=layer['_layer']).get('layer_metadata') or {}
             encoded_column=metadata.get('GEOFATHOM_JSON',encoded_column)
             native_rows={}
+            subtypes=pyogrio.read_info(layer['_path'],layer=layer['_layer']).get('ogr_subtypes',[])
             field_map=json.loads(metadata.get('GEOFATHOM_FIELDS','{}'))
-            if encoded_column and layer['_path'].suffix=='.gpkg' and field_map:
+            if layer['_path'].suffix.lower()=='.gpkg':
                 def quote(value):return '"'+str(value).replace('"','""')+'"'
                 fid=pyogrio.read_info(layer['_path'],layer=layer['_layer'])['fid_column']
                 with closing(sqlite3.connect(layer['_path'].resolve().as_uri()+'?mode=ro',uri=True)) as sql:
                     sql.row_factory=sqlite3.Row
-                    query='SELECT * FROM '+quote(layer['_layer'])+' WHERE '+quote(fid)+' IN ('+','.join('?' for _ in fids)+')'
+                    selected=[fid,*[str(field) for field in meta.get('fields',[])]]
+                    query='SELECT '+','.join(quote(column) for column in selected)+' FROM '+quote(layer['_layer'])+' WHERE '+quote(fid)+' IN ('+','.join('?' for _ in fids)+')'
                     native_rows={r[fid]:dict(r) for r in sql.execute(query,[int(v) for v in fids])}
             for i,wkb in enumerate(geoms):
                 props={}
@@ -196,12 +198,18 @@ def _raw_layers(paths,manifest,options):
                     if isinstance(value,np.generic):value=value.item()
                     if isinstance(value,float) and not math.isfinite(value):value=None
                     props[str(field)]=value if value is None or isinstance(value,(str,int,float,bool)) else str(value)
+                if int(fids[i]) in native_rows:
+                    native=native_rows[int(fids[i])]
+                    props={key:native.get(key,value) for key,value in props.items()}
+                    for field,subtype in zip(meta.get('fields',[]),subtypes):
+                        if subtype=='OFSTBoolean' and props.get(str(field)) is not None:props[str(field)]=bool(props[str(field)])
                 if encoded_column and encoded_column in props:
                     encoded=json.loads(props[encoded_column])
                     native=native_rows.get(int(fids[i]),props)
                     # Preserve exact originals only while native columns agree.
                     # External GIS edits take precedence over the typed companion.
                     for column,original in field_map.items():
+                        if column not in native:encoded.pop(original,None);continue
                         value=native.get(column);previous=encoded.get(original)
                         expected=dumps(previous) if previous is not None and isinstance(value,str) and not isinstance(previous,str) else previous
                         if value!=expected:
