@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import {createPortal} from 'react-dom';
 import {
   ArrowRight, Compass, Globe2, Layers3, MapPin, Maximize2, Minimize2,
@@ -29,7 +29,9 @@ import {WorkspaceModuleBar,WorkspaceCommandPalette,WorkspaceDockHeading,
 import GeometryAnalysis from './GeometryAnalysis';
 import SpatialToolsPanel from './SpatialToolsPanel';
 import CartographyProPanel from './CartographyProPanel';
-import DataServicesPanel, {type ExternalTile} from './DataServicesPanel';
+import type {ExternalTile} from './DataServicesPanel';
+import DataWorkbench from './DataWorkbench';
+import ExportWorkbench from './ExportWorkbench';
 import { featureColor, legendEntries, DEFAULT_LAYER_STYLE } from './labels';
 import ImageCorrectionPanel, { type PromptMode } from './ImageCorrectionPanel';
 import {
@@ -48,6 +50,7 @@ import {
   previewTopology, refineRaster, traceExisting, traceImagery,
   updateProjectFeature,
   type SharedTopologyPreview, type RasterAsset, type TerrainRasterLayer,
+  polygonizeNetwork,type NetworkPolygonization,type NetworkFace,
 } from './api';
 
 const number = (value: number, digits = 2) =>
@@ -216,6 +219,11 @@ export default function App() {
   const [labelMoveMode,setLabelMoveMode]=useState(false);
   const [externalTiles,setExternalTiles]=useState<ExternalTile[]>([]);
   const [externalFeatures,setExternalFeatures]=useState<GeoJSON.Geometry[]>([]);
+  const [networkAreas,setNetworkAreas]=useState<NetworkPolygonization|null>(null);
+  const [networkNotice,setNetworkNotice]=useState('');
+  const networkTicket=useRef(0);
+  const networkTolerance=useRef(1);
+  const networkMinimumArea=useRef(.01);
   const [pagedFeatures,setPagedFeatures]=useState<WorkspaceFeature[]>([]);
   const [linked,setLinked] = useState(false);
   const [pendingShared,setPendingShared] = useState<{
@@ -243,6 +251,77 @@ export default function App() {
     pagedFeatures.find(item => item.id === selectedFeatureId);
   const selectedLocked = Boolean(selectedSaved &&
     projectWorkspace?.layers.find(layer => layer.id === selectedSaved.layer_id)?.locked);
+
+  // Source geometries remain authoritative. A polygonized face is a derived
+  // overlay, never automatically inserted back into its source network.
+  const networkSources=useMemo(()=>{
+    const sources:GeoJSON.Geometry[]=[];
+    for(const item of scratch){
+      if(item.visible&&item.properties?.source_type!=='polygonized_network'&&
+         ['Polygon','MultiPolygon','LineString','MultiLineString'].includes(item.geometry.type))
+        sources.push(item.geometry);
+    }
+    for(const item of projectWorkspace?.features??[]){
+      if(item.properties?.source_type==='polygonized_network')continue;
+      if(!projectWorkspace?.layers.find(layer=>layer.id===item.layer_id)?.visible)continue;
+      if(['Polygon','MultiPolygon','LineString','MultiLineString'].includes(item.geometry.type))
+        sources.push(item.geometry);
+    }
+    if(geometry&&['Polygon','MultiPolygon','LineString','MultiLineString'].includes(geometry.type)&&
+       !sources.some(item=>JSON.stringify(item)===JSON.stringify(geometry)))
+      sources.push(geometry);
+    return sources;
+  },[scratch,projectWorkspace,geometry]);
+
+  async function rebuildNetwork(tolerance=networkTolerance.current,
+                                minArea=networkMinimumArea.current){
+    networkTolerance.current=tolerance;networkMinimumArea.current=minArea;
+    const ticket=++networkTicket.current;
+    if(networkSources.length===0){setNetworkAreas(null);setNetworkNotice('Draw connected lines first.');return;}
+    if(networkSources.length>300){
+      setNetworkAreas(null);setNetworkNotice('Network exceeds the 300-source limit. Subdivide it.');
+      return;
+    }
+    try{
+      const result=await polygonizeNetwork(networkSources,tolerance,minArea);
+      if(ticket!==networkTicket.current)return;
+      setNetworkAreas(result);
+      setNetworkNotice(result.count?
+        result.count+' independently measured enclosed area'+(result.count===1?'':'s')+'.':
+        'No enclosed areas yet. Join line endpoints or increase the snap tolerance.');
+    }catch(error){
+      if(ticket!==networkTicket.current)return;
+      setNetworkAreas(null);
+      setNetworkNotice(error instanceof Error?error.message:String(error));
+      throw error;
+    }
+  }
+  useEffect(()=>{
+    // Rebuild on committed vector edits; never run while actively drawing,
+    // and cancel stale derived areas after project/source changes.
+    networkTicket.current++;
+    if(drawingMode||!capabilities||!networkSources.length){
+      setNetworkAreas(null);
+      return;
+    }
+    const timer=window.setTimeout(()=>{void rebuildNetwork().catch(()=>{});},300);
+    return()=>window.clearTimeout(timer);
+  },[networkSources,drawingMode,capabilities,activeProjectId]);
+
+  function keepNetworkAreas(faces:NetworkFace[]){
+    if(!faces.length)return;
+    if(scratchHistory.current!.current.length+faces.length>SCRATCH_LIMIT){
+      setError('Too many local drawings. Save or delete sources before keeping enclosed areas.');return;
+    }
+    const saved=faces.map(face=>({
+      id:'scratch-'+crypto.randomUUID(),name:face.name,
+      geometry:structuredClone(face.geometry),measurement:face.measurement,visible:true,
+      source:'GEOS line-network polygonization',properties:{...face.properties},
+    } satisfies ScratchFeature));
+    setScratch(old=>[...old,...saved]);
+    setMessage('Kept '+saved.length+' independent closed areas; the original lines are unchanged.');
+  }
+
 
   useEffect(()=>{setScratchStorageError(!writeScratch(scratchDocument.features,scratchDocument.scope));},[scratchDocument]);
   useEffect(()=>{setPinStorageError(!writePinnedPlaces(pins.scope,pins.places));},[pins]);
