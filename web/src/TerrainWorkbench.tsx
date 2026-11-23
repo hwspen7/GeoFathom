@@ -154,7 +154,7 @@ export default function TerrainWorkbench(p:Props){
    return()=>{current=false;};
  },[p.projectId]);
  const [selectedRecord,setSelectedRecord]=useState<string|null>(null);
- const [resultTab,setResultTab]=useState<'overview'|'visual'|'outputs'|'details'>('overview');
+ const [resultTab,setResultTab]=useState<'overview'|'visual'|'details'>('overview');
  const [figureView,setFigureView]=useState('analysis');
  useEffect(()=>{setResultTab('overview');setFigureView('analysis');setExpanded(false);},[selectedRecord]);
  const [historyFocus,setHistoryFocus]=useState('');
@@ -581,7 +581,7 @@ export default function TerrainWorkbench(p:Props){
    </small>}
    {(records.length>0||runHistory.length>0)&&<nav className="terrain-result-tabs" role="tablist"
      aria-label="Terrain result views" onKeyDown={event=>{
-       const keys=['overview','visual','outputs','details'] as const;
+       const keys=['overview','visual','details'] as const;
        const position=keys.indexOf(resultTab);
        const next=event.key==='ArrowRight'?(position+1)%keys.length:
          event.key==='ArrowLeft'?(position+keys.length-1)%keys.length:
@@ -593,12 +593,12 @@ export default function TerrainWorkbench(p:Props){
        items[next]?.focus();
      }}>
      {([
-       ['overview','Overview'],['visual','Visual'],['outputs','Outputs'],['details','Details'],
+       ['overview','Overview'],['visual','Figures'],['details','Data'],
      ] as const).map(([key,label])=><button key={key} type="button" role="tab"
        aria-selected={resultTab===key} aria-controls="terrain-result-content"
        onClick={()=>setResultTab(key)}>{label}</button>)}
    </nav>}
-   {resultTab==='outputs'&&<section className="terrain-outputs-list" aria-label="Terrain output layers">
+   {resultTab==='details'&&<section className="terrain-outputs-list" aria-label="Terrain output layers">
      <details className="terrain-layer-manager">
        <summary>Layers · {records.length}</summary>
        <div className="terrain-result-layer-list">
@@ -762,7 +762,7 @@ export default function TerrainWorkbench(p:Props){
          <small>Output units: {result.raster?.unit??'See metric labels'}
            · Declared vertical datum: {selected?.source.vertical_datum??'Unknown'}</small>
        </details>}
-       {resultTab==='outputs'&&<div className="terrain-output-downloads">
+       {resultTab==='details'&&<div className="terrain-output-downloads">
          {result.raster&&<button onClick={()=>{const a=document.createElement('a');const data=Uint8Array.from(atob(result.raster!.geotiff),c=>c.charCodeAt(0));const url=URL.createObjectURL(new Blob([data],{type:'image/tiff'}));a.href=url;a.download=result.operation+'.tif';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}}>GeoTIFF</button>}
          {result.features.length>0&&<small>{result.features.length} vector features</small>}
        </div>}
@@ -791,27 +791,46 @@ export default function TerrainWorkbench(p:Props){
  </div>;
  return <>
  <div className="terrain-workbench professional-panel">
-   <nav className="terrain-workflow-tabs" role="tablist" aria-label="Terrain controls">
-     {([
-       ['source','Source'],['tools','Tools'],['setup','Parameters'],['process','Process'],
-     ] as const).map(([key,title])=><button type="button" key={key} role="tab"
-       aria-selected={leftTab===key} aria-controls={'terrain-panel-'+key}
-       disabled={key==='setup'&&!operation||key==='process'&&!dem}
-       onClick={()=>setLeftTab(key)}>{title}</button>)}
-   </nav>
+   <div className="terrain-linked-controls" aria-label="Terrain analysis inputs">
+     <div className="terrain-linked-row">
+       <label className="terrain-linked-select">DEM
+         <select aria-label="DEM elevation layer" value={dem?.id??''} disabled={fetching||importing}
+           onChange={e=>{
+             sourceIntent.current++;
+             if(!e.target.value){p.onSelectRaster(null);setSourceInfo('');return;}
+             const found=assets.find(item=>item.id===e.target.value)??(dem?.id===e.target.value?dem:null);
+             if(found)p.onSelectRaster(found);
+           }}>
+           <option value="">Select elevation source</option>
+           {[...assets,...(dem&&!assets.some(a=>a.id===dem.id)?[dem]:[])].map(asset=>
+             <option key={asset.id} value={asset.id}>{asset.name}</option>)}
+         </select>
+       </label>
+       <button className={leftTab==='source'?'terrain-linked-active':''} type="button"
+         aria-label="Get DEM" aria-pressed={leftTab==='source'} onClick={()=>setLeftTab('source')}>Get DEM</button>
+     </div>
+     <div className="terrain-linked-row">
+       <label className="terrain-linked-select">Analysis
+         <select aria-label="Choose terrain analysis" value={operation??''}
+           onChange={e=>{
+             const value=e.target.value as Operation|'';
+             setOperation(value||null);setLive(false);setPickEnd(false);
+             setLeftTab(value?'setup':'tools');
+           }}>
+           <option value="">Choose an analysis</option>
+           {modes.map(item=><option key={item.id} value={item.id}>{item.title}</option>)}
+         </select>
+       </label>
+       <button className={leftTab==='tools'?'terrain-linked-active':''} type="button"
+         aria-label="Browse terrain tools" aria-pressed={leftTab==='tools'}
+         onClick={()=>setLeftTab('tools')}>Browse</button>
+       <button type="button" disabled={!dem}
+         aria-label="Process DEM" aria-pressed={leftTab==='process'}
+         onClick={()=>setLeftTab('process')}>Prepare</button>
+     </div>
+   </div>
    <section id="terrain-panel-source" className="terrain-source terrain-step terrain-control-page"
-     role="tabpanel" aria-label="Source settings" hidden={leftTab!=='source'}>
-     <label>Elevation layer<select aria-label="DEM elevation layer" value={dem?.id??''}
-       disabled={fetching||importing}
-       onChange={e=>{
-         sourceIntent.current++;
-         if(!e.target.value){p.onSelectRaster(null);setSourceInfo('');return;}
-         const found=assets.find(item=>item.id===e.target.value)??(dem?.id===e.target.value?dem:null);
-         if(found)p.onSelectRaster(found);
-       }}>
-       <option value="">Select DEM</option>
-       {[...assets,...(dem&&!assets.some(a=>a.id===dem.id)?[dem]:[])].map(asset=><option key={asset.id} value={asset.id}>{asset.name}</option>)}
-     </select></label>
+     role="region" aria-label="Source settings" hidden={leftTab!=='source'}>
      {!p.localImport&&<details className="access-settings"><summary>Import access</summary><input type="password" aria-label="DEM import token" value={token} onChange={e=>setToken(e.target.value)}/></details>}
      <label className="raster-upload" title="Single-band DEM GeoTIFF, projected in meters, with meter elevations"><Mountain size={14}/> {importing?'Importing…':'Import DEM'}
        <input type="file" aria-label="Import DEM" accept=".tif,.tiff" disabled={importing||fetching||!p.connected} onChange={e=>void importDEM(e)}/></label>
@@ -861,7 +880,7 @@ export default function TerrainWorkbench(p:Props){
      {dem&&!/Copernicus DEM GLO-|USGS 3DEP Bare Earth DEM/.test(dem.provenance)&&<label className="gis-check"><input aria-label="Confirm DEM meter elevations" type="checkbox" checked={verticalConfirmed} onChange={e=>setVerticalConfirmed(e.target.checked)}/> Confirm single-band meter elevations</label>}
    </section>
    <section id="terrain-panel-tools" className="terrain-step terrain-analysis-step terrain-control-page"
-     role="tabpanel" aria-label="Terrain tools page" hidden={leftTab!=='tools'}>
+     role="region" aria-label="Terrain tools page" hidden={leftTab!=='tools'}>
    <WorkspaceToolShelf category={category} categories={categories} tools={modes}
     selected={operation} onCategory={name=>{
       setCategory(name);setOperation(null);setLive(false);setPickEnd(false);
@@ -872,10 +891,9 @@ export default function TerrainWorkbench(p:Props){
     }}/>
    </section>
    <section id="terrain-panel-setup" className="terrain-step terrain-setup-page terrain-control-page"
-     role="tabpanel" aria-label="Terrain parameters page" hidden={leftTab!=='setup'}>
-     <div className="terrain-setup-heading">
-       <strong>{modes.find(m=>m.id===operation)?.title??'Parameters'}</strong>
-       <button type="button" onClick={()=>setLeftTab('tools')}>Change tool</button>
+     role="region" aria-label="Terrain parameters page" hidden={leftTab!=='setup'}>
+     <div className="terrain-setup-heading"><strong>{modes.find(m=>m.id===operation)?.title??'Analysis settings'}</strong>
+       <button type="button" onClick={()=>setLeftTab('tools')}>Browse tools</button>
      </div>
    {operation&&<div className="professional-form">
      <div className="survey-action-bar">
@@ -948,7 +966,7 @@ export default function TerrainWorkbench(p:Props){
    </div>}
    </section>
    <section id="terrain-panel-process" className="terrain-step terrain-process-page terrain-control-page"
-     role="tabpanel" aria-label="DEM processing page" hidden={leftTab!=='process'}>
+     role="region" aria-label="DEM processing page" hidden={leftTab!=='process'}>
      {dem?<><div className="terrain-setup-heading"><strong>DEM processing</strong></div>
      {dem&&<div className="terrain-dem-process-form">
        <div className="professional-form">
