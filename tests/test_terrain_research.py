@@ -13,7 +13,7 @@ from pyproj import Transformer
 
 from imagery.raster import RasterError
 from terrain.research import (
-    ahp_weights, analyze_research, checkpoint_accuracy, verify_research_bundle,
+    ahp_weights, analyze_research, checkpoint_accuracy, verify_research_bundle, replay_research_bundle,
 )
 
 
@@ -209,3 +209,51 @@ def test_cannot_interpolate_categorical_rasters_without_explicit_nearest(tmp_pat
     run = analyze_research(paths[0], polygon, factors, {"trials": 0})
     assert run["sources"][0]["interpolation"] == "nearest"
     assert run["metrics"]["score_mean"] >= 0
+
+
+def test_portable_replay_recomputes_nominal_and_seeded_ensemble(tmp_path):
+    paths, polygon, _ = create_grid(tmp_path)
+    model = analyze_research(paths[0], polygon, inputs(paths),
+                             {"trials": 16, "seed": 882, "threshold": .55})
+    archived = base64.b64decode(model["archive_base64"], validate=True)
+    replayed = replay_research_bundle(archived)
+    assert replayed["reproducible"]
+    assert set(replayed["outputs"]) == {
+        "suitability", "ensemble_mean", "ensemble_sd", "ensemble_frequency"}
+    assert max(replayed["outputs"].values()) < 2e-6
+    assert replayed["verified_files"] == len(model["archive_manifest"]["files"])
+
+
+def test_replay_rejects_bitwise_valid_but_scientifically_wrong_product(tmp_path):
+    """A forged but internally checksummed archive must fail numerical replay."""
+    from hashlib import sha256
+    paths, polygon, _ = create_grid(tmp_path)
+    model = analyze_research(paths[0], polygon, inputs(paths), {"trials": 0})
+    original = base64.b64decode(model["archive_base64"])
+    with ZipFile(BytesIO(original)) as source:
+        entries = {name: source.read(name) for name in source.namelist()}
+    with MemoryFile(entries["outputs/suitability.tif"]) as mem:
+        with mem.open() as ds:
+            values = ds.read(1)
+            valid = np.isfinite(values)
+            values[valid] = .17
+            spec = dict(driver="GTiff",width=ds.width,height=ds.height,count=1,
+                        dtype="float32",crs=ds.crs,transform=ds.transform,
+                        nodata=float("nan"),compress="deflate")
+        with MemoryFile() as replacement:
+            with replacement.open(**spec) as dst:
+                dst.write(values, 1)
+            entries["outputs/suitability.tif"] = replacement.read()
+    manifest = json.loads(entries["manifest.json"])
+    payload = entries["outputs/suitability.tif"]
+    manifest["files"]["outputs/suitability.tif"] = {
+        "sha256": sha256(payload).hexdigest(), "bytes": len(payload)}
+    entries["manifest.json"] = json.dumps(manifest).encode("utf8")
+    rebuilt = BytesIO()
+    with ZipFile(rebuilt, "w", compression=ZIP_DEFLATED) as zipfile:
+        for name, payload in entries.items():
+            zipfile.writestr(name, payload)
+    forged = rebuilt.getvalue()
+    assert verify_research_bundle(forged)["valid"]
+    with pytest.raises(RasterError, match="Scientific replay values differ"):
+        replay_research_bundle(forged)
