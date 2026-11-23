@@ -26,7 +26,7 @@ function collectionFromScope(scope:ExportScope,p:Props):GeoJSON.FeatureCollectio
     area_m2:p.measurement?.area_m2,perimeter_m:p.measurement?.perimeter_m,
     length_m:p.measurement?.length_m,method:p.measurement?.method}}]:[]):
   scope==='areas'?p.faces.map(f=>({type:'Feature',geometry:f.geometry,
-   properties:{name:f.name,...f.properties}})):
+   properties:{name:f.name,...f.properties,measurement_method:f.measurement.method}})):
   p.scratch.map(f=>({type:'Feature',geometry:f.geometry,properties:{
    name:f.name,source:f.source,area_m2:f.measurement.area_m2,
    perimeter_m:f.measurement.perimeter_m,length_m:f.measurement.length_m,
@@ -72,8 +72,17 @@ export default function ExportWorkbench(p:Props){
    }else if(scope==='project'&&projectFormat){
     await exportVectorFile(p.projectId!,format as 'geojson'|'gpkg'|'kml'|'gpx'|'shapefile');
    }else{
-    const featureCollection=scope==='project'?await exportProject(p.projectId!):
-      collectionFromScope(scope,p);
+    // CSV / scientific reports use authoritative persisted measurements.
+    // A generic vector-only GeoJSON export need not carry those attributes.
+    const featureCollection=scope==='project'&&['csv','report'].includes(format)?
+      {type:'FeatureCollection' as const,features:(p.workspace?.features??[]).map(f=>({
+        type:'Feature' as const,geometry:f.geometry,properties:{
+          ...f.properties,name:f.name,source:f.source,
+          area_m2:f.measurement?.area_m2,perimeter_m:f.measurement?.perimeter_m,
+          length_m:f.measurement?.length_m,measurement_method:f.measurement?.method,
+        },
+      }))}:
+      scope==='project'?await exportProject(p.projectId!):collectionFromScope(scope,p);
     if(!featureCollection.features.length)throw Error('No features in the selected export scope.');
     if(format==='geojson'){
      fileSave('geofathom-'+scope+'.geojson',new Blob([
