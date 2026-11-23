@@ -257,3 +257,59 @@ def test_replay_rejects_bitwise_valid_but_scientifically_wrong_product(tmp_path)
     assert verify_research_bundle(forged)["valid"]
     with pytest.raises(RasterError, match="Scientific replay values differ"):
         replay_research_bundle(forged)
+
+
+def test_research_api_resolves_managed_images_and_replays_bundle(tmp_path, monkeypatch):
+    from shutil import copyfile
+    from fastapi.testclient import TestClient
+    from core.main import app
+    from imagery.store import store_upload
+
+    paths, polygon, transform = create_grid(tmp_path)
+    monkeypatch.setenv("GEOFATHOM_IMAGERY_DIR", str(tmp_path / "api-imagery"))
+    ids = []
+    for i, path in enumerate(paths):
+        temp = tmp_path / f"upload-{i}.tif"
+        copyfile(path, temp)
+        ids.append(store_upload(temp, path.name)["id"])
+    criteria = [
+        {"image_id": ids[1], "name": "Road distance proxy",
+         "direction": "decreasing", "low": 0, "high": 13,
+         "weight": 2, "sigma": .3, "sampling": "nearest"},
+        {"image_id": ids[2], "name": "Terrain exposure proxy",
+         "direction": "increasing", "low": 0, "high": 13,
+         "weight": 1, "sigma": .2, "sampling": "bilinear"},
+    ]
+    client = TestClient(app)
+    payload = {"image_id": ids[0], "geometry": polygon, "criteria": criteria,
+               "trials": 8, "seed": 19, "threshold": .5}
+    response = client.post("/terrain/research", json=payload)
+    assert response.status_code == 200, response.text
+    research = response.json()
+    assert research["metrics"]["eligible_cells"] > 10
+    assert research["schema"] == "geofathom.research.v1"
+    archive = research["archive_base64"]
+    verified = client.post("/terrain/research/verify", json={"archive_base64": archive})
+    assert verified.status_code == 200, verified.text
+    assert verified.json()["valid"]
+    replay = client.post("/terrain/research/replay", json={"archive_base64": archive})
+    assert replay.status_code == 200, replay.text
+    assert replay.json()["reproducible"]
+    assert max(replay.json()["outputs"].values()) < 2e-6
+    bad = client.post("/terrain/research", json={**payload,
+        "pairwise": [[1, 9], [9, 1]]})
+    assert bad.status_code == 422
+    bad_path = client.post("/terrain/research", json={**payload, "criteria": [
+        {**criteria[0], "image_id": "../../secret"}, criteria[1]]})
+    assert bad_path.status_code == 422
+    to_wgs84 = Transformer.from_crs("EPSG:32617", "EPSG:4326", always_xy=True)
+    points = []
+    for i in range(5):
+        x, y = transform * (i + 2.5, 3.5)
+        longitude, latitude = to_wgs84.transform(x, y)
+        points.append({"longitude": longitude, "latitude": latitude, "elevation_m": 100.})
+    check = client.post("/terrain/research/checkpoints", json={
+        "image_id": ids[0], "vertical_datum": "NAVD88", "points": points})
+    assert check.status_code == 200, check.text
+    assert check.json()["rmse_m"] == pytest.approx(0.)
+    assert check.json()["datum_verified"]
