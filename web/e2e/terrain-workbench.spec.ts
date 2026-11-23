@@ -231,7 +231,7 @@ with tempfile.TemporaryDirectory() as directory:
    for(let i=0;i<data.length;i+=4)if(data[i+3]>0&&data[i+1]>data[i]+10&&data[i+1]>data[i+2]+10)return true;
    return false;
  })).toBe(true);
- const objEvent=page.waitForEvent('download');await page.getByRole('button',{name:'OBJ',exact:true}).click();
+ const objEvent=page.waitForEvent('download');await page.getByRole('button',{name:'OBJ (preview)',exact:true}).click();
  const obj=await objEvent;expect(readFileSync((await obj.path())!,'utf8')).toMatch(/\nf \d+ \d+ \d+/);
  await page.getByRole('button',{name:'Browse terrain tools',exact:true}).click();
  await tools.getByRole('button',{name:'Viewshed',exact:true}).click();

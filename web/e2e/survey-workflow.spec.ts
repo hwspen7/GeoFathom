@@ -88,11 +88,17 @@ for(const width of [1100,1280,1600])test(`drawing exits and error recovery stay 
  const metric=page.locator('.results-summary .metric:not(.secondary) strong');
  const original=await metric.textContent();
  await toolbar.getByRole('button',{name:'Cut hole',exact:true}).click();
- const bounds=(await map.boundingBox())!,y=bounds.y+bounds.height/2;
- // Deliberately cut outside the fitted source polygon, as in the reported
- // workflow. A server rejection must remain readable and cancellable.
- for(const [x,dy] of [[12,-20],[32,-20],[32,20],[12,20]])
-  await page.mouse.click(bounds.x+x,y+dy);
+ // Use exact WGS84 vertices outside the selected Xiamen polygon rather
+ // than pixels near the viewport edge: screen positions are not geography.
+ // This validates the server's actual hole containment check at all widths.
+ const numeric=page.locator('details.survey-options').filter({hasText:'Exact coordinates and construction'});
+ if(!(await numeric.getAttribute('open')))await numeric.locator('summary').click();
+ for(const [longitude,latitude] of [[120,25],[120.01,25],[120.01,25.01],[120,25.01]]){
+  await numeric.getByLabel('Longitude',{exact:true}).fill(String(longitude));
+  await numeric.getByLabel('Latitude',{exact:true}).fill(String(latitude));
+  await numeric.getByRole('button',{name:'Add precise vertex'}).click();
+ }
+ await expect(toolbar.getByText('4 pts')).toBeVisible();
  await page.keyboard.press('Enter');
  await expect(toolbar.getByRole('alert')).toContainText('strictly inside');
  await expect(toolbar.getByRole('button',{name:'Cancel drawing'})).toBeInViewport();
