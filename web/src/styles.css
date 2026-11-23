@@ -1549,6 +1549,9 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .workspace-object-error{flex:0 0 100%;box-sizing:border-box;white-space:normal;color:#9b3434;padding:5px 7px;font-size:11px}
 .workspace-object-pager{display:flex;align-items:center;justify-content:space-between;gap:5px;margin:5px 0;font-size:10px;color:#627d8e}
 .workspace-object-pager button{font-size:10px;padding:4px 6px}
+.workspace-object-notice{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:7px 0;padding:7px;border:1px solid #c6ded5;border-radius:5px;background:#f1faf6;font-size:11px;color:#396556}
+.workspace-object-notice span{flex:1;min-width:0;overflow-wrap:anywhere}
+.workspace-object-notice button{flex:none;padding:5px 7px;font-size:11px}
 @media(max-width:1200px){
   .desktop-gis .gis-toolbar{grid-template-columns:minmax(0,1fr) auto}
   .desktop-gis .gis-navigation-tools{grid-column:1;grid-row:1}

@@ -59,6 +59,8 @@ export default function ProjectsPanel({
   const [trashOpen,setTrashOpen]=useState(false);
   const [trashTotal,setTrashTotal]=useState(0);
   const [trashPulse,setTrashPulse]=useState(0);
+  const [recentDeleted,setRecentDeleted]=useState<{id:string;name:string}|null>(null);
+  const [objectError,setObjectError]=useState('');
   const notify = useRef(onWorkspace);
   notify.current = onWorkspace;
   const notifySwitch=useRef(onProjectSwitch);notifySwitch.current=onProjectSwitch;
@@ -86,6 +88,7 @@ export default function ProjectsPanel({
     setWorkspace(null);
     setLayerId('');
     setHistory(null);setTrash([]);setTrashTotal(0);setTrashOpen(false);
+    setRecentDeleted(null);setObjectError('');
     setError('');
     setInfo('');
   }, []);
@@ -371,6 +374,7 @@ export default function ProjectsPanel({
         await deleteProjectFeature(projectId,feature.id,feature.revision);
         if(selection.current===projectId){
           if(featureIdentity.current===feature.id)onFeatureDeleted();
+          setRecentDeleted({id:feature.id,name:feature.name});
           setTrashPulse(value=>value+1);
         }
       }
@@ -382,6 +386,21 @@ export default function ProjectsPanel({
       // Refresh a stale revision without ever publishing into another project.
       if(selection.current===projectId)await reload(projectId).catch(()=>{});
       throw cause;
+    }finally{objectWriting.current=false;setBusy(false);}
+  }
+
+  async function undoObjectDelete(){
+    if(!selected||!recentDeleted||busy||interactionBusy||objectWriting.current)return;
+    const projectId=selected,item=recentDeleted;
+    objectWriting.current=true;setBusy(true);setObjectError('');
+    try{
+      await restoreDeletedFeature(projectId,item.id);
+      if(selection.current===projectId){
+        await reload(projectId);
+        setRecentDeleted(null);setTrashPulse(value=>value+1);
+      }
+    }catch(cause){
+      if(selection.current===projectId)setObjectError(cause instanceof Error?cause.message:'Could not restore object.');
     }finally{objectWriting.current=false;setBusy(false);}
   }
 
@@ -422,13 +441,19 @@ export default function ProjectsPanel({
             {projects.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}
     </select>
   );
-  const featureTree=<WorkspaceFeatureTree
+  const featureTree=<><WorkspaceFeatureTree
     layers={workspace?.layers??[]}
     features={[...(workspace?.features??[]),
       ...extraFeatures.filter(f=>!(workspace?.features??[]).some(x=>x.id===f.id)).slice(0,60)]}
     selectedId={selectedFeatureId} onOpen={onOpen} busy={busy||interactionBusy}
     additionalGroups={objectGroups} onRename={(feature,name)=>changeObject(feature,name)}
-    onDelete={feature=>changeObject(feature)}/>;
+    onDelete={feature=>changeObject(feature)}/>
+    {recentDeleted&&<div className="workspace-object-notice" role="status">
+      <span>{recentDeleted.name} moved to project trash.</span>
+      <button type="button" disabled={busy||interactionBusy} onClick={()=>void undoObjectDelete()}>Undo delete</button>
+    </div>}
+    {objectError&&<p className="workspace-object-error" role="alert">{objectError}</p>}
+  </>;
   return (
     <div className="project-panel">
       {treeTarget?createPortal(featureTree,treeTarget):featureTree}

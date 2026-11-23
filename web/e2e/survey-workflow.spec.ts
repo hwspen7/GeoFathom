@@ -119,6 +119,11 @@ test('Object row actions address the neighbour, persist names and respect locked
  expect(body.features.map((f:{id:string})=>f.id)).toEqual([ids[0]]);
  const trash=await (await page.request.get(`${API}/projects/${project}/trash`)).json();
  expect(trash.items.some((f:{feature_id:string})=>f.feature_id===ids[1])).toBe(true);
+ await page.getByRole('button',{name:'Undo delete',exact:true}).click();
+ await expect(renamed).toBeVisible();
+ await expect(page.getByRole('button',{name:'厦门岛',exact:true})).toHaveAttribute('aria-pressed','true');
+ await renamed.getByRole('button',{name:'Delete object'}).click();
+ await expect(renamed).toHaveCount(0);
  const lock=await page.request.patch(`${API}/projects/${project}/layers/${body.features[0].layer_id}`,{data:{locked:true}});
  expect(lock.ok()).toBe(true);
  await page.reload();
