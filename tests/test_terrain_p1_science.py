@@ -194,7 +194,11 @@ def test_real_dsm_obstructions_and_greedy_multi_site_selection(real_dem,tmp_path
     assert chosen["metrics"]["candidate_site_count"]==3
     assert len(chosen["selection"]["selected_candidate_indices"])==2
     assert chosen["metrics"]["visible_cells"]>0
-    assert "greedy_coverage_not_global_optimum" in chosen["quality"]["flags"]
+    assert "optimal_only_within_supplied_candidate_sites" in chosen["quality"]["flags"]
+    audit=chosen["selection"]["optimizer"]
+    assert audit["global_optimum_within_supplied_candidates"] is True
+    assert audit["combinations_checked"]==3
+    assert sum(chosen["selection"]["marginal_visible_cells"])==audit["positively_visible_cells"]
 
 
 
