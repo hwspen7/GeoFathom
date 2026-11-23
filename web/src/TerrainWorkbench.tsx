@@ -159,6 +159,7 @@ export default function TerrainWorkbench(p:Props){
  const [selectedRecord,setSelectedRecord]=useState<string|null>(null);
  const [resultTab,setResultTab]=useState<'overview'|'visual'|'details'>('overview');
  const [figureView,setFigureView]=useState('analysis');
+ const [classMeasure,setClassMeasure]=useState<'cells'|'percent'|'area'>('cells');
  useEffect(()=>{setResultTab('overview');setFigureView('analysis');setExpanded(false);},[selectedRecord]);
  const [historyFocus,setHistoryFocus]=useState('');
  const [layerPage,setLayerPage]=useState(0);
@@ -757,7 +758,21 @@ export default function TerrainWorkbench(p:Props){
          </label>
 
          <img src={result.raster.png} alt="Derived terrain raster" style={{width:'100%',maxHeight:180,objectFit:'contain'}}/>
-         <MetricBars label="Terrain class distribution (cells)" values={result.raster.legend.map(b=>({name:b.label,value:b.cells,color:b.color}))}/>
+         <label className="terrain-opacity-control">Class distribution measure
+           <select aria-label="Terrain chart measure" value={classMeasure}
+             onChange={e=>setClassMeasure(e.target.value as 'cells'|'percent'|'area')}>
+             <option value="cells">Valid pixel count</option>
+             <option value="percent">Share of classified area (%)</option>
+             <option value="area">Projected grid area (km²)</option>
+           </select>
+         </label>
+         <MetricBars label={classMeasure==='cells'?'Terrain class distribution (cells)':
+           classMeasure==='percent'?'Terrain class distribution (valid %)':
+           'Terrain class distribution (projected km²)'} values={result.raster.legend.map(b=>({
+             name:b.label,color:b.color,value:classMeasure==='cells'?b.cells:
+               classMeasure==='area'?b.cells*result.cell_area_m2/1e6:
+               100*b.cells/Math.max(1,result.raster!.valid_cells),
+           }))}/>
 </div>}
        {resultTab==='visual'&&figureView==='analysis'&&result.operation==='aspect_map'&&result.raster&&<AspectRose bins={result.raster.legend}/>}
        {resultTab==='visual'&&figureView==='analysis'&&result.sections&&<SectionPlot sections={result.sections} onHover={p.onHover}/>}
