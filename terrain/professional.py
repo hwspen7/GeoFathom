@@ -379,7 +379,7 @@ def _derived_surface_tiled(z,valid,dx,dy,operation,max_slope=30.,
 
 def surface(z,valid,affine,crs,operation,reference,point,end_point,max_slope,
             min_elevation,max_elevation,max_tri,stream_cells,azimuth,altitude,feature,origin,cancel=None,
-            source_datum=None,gradient_method="horn",slope_classes="standard"):
+            source_datum=None,gradient_method="horn",slope_classes="standard",mfd_exponent=1.1):
     """Return the exact source-grid derivative and product-specific statistics."""
     dx,dy=abs(affine.a),abs(affine.e);cell=dx*dy
     features=[];metrics={}
@@ -392,8 +392,8 @@ def surface(z,valid,affine,crs,operation,reference,point,end_point,max_slope,
                  "fill_m3":float(np.nansum(np.maximum(-values,0))*cell)}
     elif operation=="flow_accumulation_mfd":
         from .multiflow import mfd_accumulation
-        values=mfd_accumulation(z,valid,dx,dy,cancel=cancel)
-        metrics={"mfd_exponent":1.1}
+        values=mfd_accumulation(z,valid,dx,dy,exponent=mfd_exponent,cancel=cancel)
+        metrics={"mfd_exponent":float(mfd_exponent)}
     elif operation in {"flow_direction","flow_accumulation","streams","stream_order"}:
         dst,direction,accum=d8_flow(z,valid,dx,dy,cancel)
         if operation=="flow_direction":values=direction
