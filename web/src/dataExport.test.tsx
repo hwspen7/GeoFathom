@@ -37,7 +37,6 @@ const polygonized:NetworkPolygonization={
  invalid_rings:0,source_segments:4,tolerance_m:1,
  method:'GEOS',warning:'Only enclosed areas have area',
 };
-const noop=()=>{};
 beforeEach(()=>{
  vi.resetAllMocks();
  api.importVectorFile.mockResolvedValue({created:1});
