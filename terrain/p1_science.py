@@ -162,20 +162,39 @@ def quadratic_curvature(z,valid,dx,dy,radius=2,kind="curvature",cancel=None,bloc
 
 
 def design_surface(z,valid,dx,dy,reference,east_grade=0.,north_grade=0.,
-                   sigma_z=0.,max_grade=.3):
+                   sigma_z=0.,max_grade=.3,curvature_east=0.,curvature_cross=0.,
+                   curvature_north=0.):
     """Grade-constrained design plane and cut/fill uncertainty bounds.
 
     sigmaz is a supplied one-sigma *assumption*, not a calibration claim.
     Independent-error and fully-correlated-error totals are kept separate.
     """
     z,valid=_validated(z,valid,dx,dy,8_000_000)
-    params=(reference,east_grade,north_grade,sigma_z,max_grade)
+    params=(reference,east_grade,north_grade,sigma_z,max_grade,
+            curvature_east,curvature_cross,curvature_north)
     if not all(map(math.isfinite,params)) or sigma_z<0 or not 0<max_grade<=1:
-        raise RasterError("Invalid design-grade or elevation uncertainty.")
-    if math.hypot(east_grade,north_grade)>max_grade+1e-12:
-        raise RasterError("Designed plane exceeds maximum grade.")
-    rows,cols=np.indices(z.shape)
-    plane=reference+(cols-(z.shape[1]-1)/2)*dx*east_grade-(rows-(z.shape[0]-1)/2)*dy*north_grade
+        raise RasterError("Invalid design-grade, quadratic curvature or elevation uncertainty.")
+    # Gradient of quadratic z(x,y) is affine in position. Its Euclidean norm
+    # is convex, so its maximum anywhere on the rectangular study grid is
+    # bounded above by the maximum at the four corners. This intentionally
+    # constrains the bounding rectangle, including cells outside a polygon.
+    xs=(-.5*(z.shape[1]-1)*dx,.5*(z.shape[1]-1)*dx)
+    ys=(-.5*(z.shape[0]-1)*dy,.5*(z.shape[0]-1)*dy)
+    maximum_found=max(math.hypot(
+            east_grade+curvature_east*x+curvature_cross*y,
+            north_grade+curvature_cross*x+curvature_north*y)
+        for x in xs for y in ys)
+    if maximum_found>max_grade+1e-12:
+        raise RasterError("Designed quadratic surface exceeds maximum grade on the bounding grid.")
+    # Broadcast 1-D coordinate axes rather than allocating two full-size
+    # integer index grids, keeping large DEM engineering jobs memory bounded.
+    x=(np.arange(z.shape[1],dtype=np.float64)-(z.shape[1]-1)/2)*dx
+    y=((z.shape[0]-1)/2-np.arange(z.shape[0],dtype=np.float64))*dy
+    x=x[None,:];y=y[:,None]
+    plane=reference+east_grade*x+north_grade*y
+    if curvature_east:plane=plane+.5*curvature_east*x*x
+    if curvature_cross:plane=plane+curvature_cross*x*y
+    if curvature_north:plane=plane+.5*curvature_north*y*y
     diff=np.where(valid,z-plane,np.nan)
     area=dx*dy;count=int(valid.sum())
     cut=float(np.nansum(np.maximum(diff,0))*area)
@@ -184,6 +203,10 @@ def design_surface(z,valid,dx,dy,reference,east_grade=0.,north_grade=0.,
         "cut_m3":cut,"fill_m3":fill,"net_cut_m3":cut-fill,
         "design_east_grade":east_grade,"design_north_grade":north_grade,
         "design_max_grade":max_grade,"design_reference_m":reference,
+        "design_bounding_max_grade":maximum_found,
+        "design_curvature_east_per_m":curvature_east,
+        "design_curvature_cross_per_m":curvature_cross,
+        "design_curvature_north_per_m":curvature_north,
         "assumed_elevation_sigma_m":sigma_z,
         "net_volume_independent_sigma_m3":sigma_z*area*math.sqrt(count),
         "net_volume_correlated_sigma_m3":sigma_z*area*count,
