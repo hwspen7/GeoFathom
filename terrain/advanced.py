@@ -275,7 +275,8 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
     with rasterio.open(path) as source:
         source_datum=vertical_datum(source)
     checkpoint(cancel)
-    hydro_ops={"flow_direction","flow_accumulation","streams","watershed"}
+    hydro_ops={"flow_direction","flow_accumulation","flow_accumulation_mfd",
+               "streams","stream_order","watershed"}
     # Drainage may use a conditioned working grid; other surface products
     # always operate on the original elevations.
     flow_z,conditioned=(condition_dem(z,valid,cancel) if fill_sinks and operation in hydro_ops
@@ -289,6 +290,17 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
             max_slope,min_elevation,max_elevation,max_tri,stream_cells,azimuth,altitude,
             _feature,_origin,cancel,source_datum=source_datum)
         result["warning"]="Projected source-grid product; nodata and incomplete neighborhoods excluded. Unconditioned D8 terminates at sinks/flats; suitability and path costs are screening estimates, not engineering certification."
+        if operation=="flow_accumulation_mfd":
+            result["warning"]=(
+                "Freeman-style MFD slope-power routing (exponent 1.1) "
+                "in fractional cell equivalents on a projected grid; "
+                "flats and sinks terminate unless conditioning is enabled. "
+                "NoData cannot be a flow receiver; this is screening hydrology.")
+        elif operation=="stream_order":
+            result["warning"]=(
+                "Strahler stream orders on the thresholded D8 channel network. "
+                "Unknown upstream regions outside the selected DEM are excluded; "
+                "orders are screening estimates, not a surveyed stream inventory.")
         if operation=="streams" and result["metrics"]["drainage_edges"]>result["metrics"]["vector_edges"]:
             result["warning"]+=" Vector edge budget exceeded; full drainage raster remains available."
     elif operation=="dem_difference":

@@ -15,7 +15,7 @@ from imagery.raster import RasterError
 from .cancellation import checkpoint
 
 SURFACES = {"elevation", "slope_map", "aspect_map", "hillshade", "tri", "tpi",
-            "curvature", "plan_curvature", "profile_curvature", "flow_direction", "flow_accumulation", "streams",
+            "curvature", "plan_curvature", "profile_curvature", "flow_direction", "flow_accumulation", "flow_accumulation_mfd", "streams", "stream_order",
             "suitability", "cutfill_map", "least_cost"}
 D8 = ((-1,0,64),(-1,1,128),(0,1,1),(1,1,2),(1,0,4),
       (1,-1,8),(0,-1,16),(-1,-1,32))
@@ -25,6 +25,9 @@ COLORS = ("#263c84","#287fa5","#65b5a2","#d8cf76","#bc7b42","#873c34")
 SLOPE_COLORS = ("#dcebec","#96cbc8","#5eac9e","#ebc579","#d68e60","#a94946")
 DIRECTION_COLORS = ("#777777","#d94841","#d59635","#269d68","#285cb0",
                     "#853a9b","#999d39","#2caabb","#be709b")
+STREAM_ORDER_COLORS=("#daeaf6","#b3d6ec","#88badf","#5e9dcb","#3d7db3",
+                     "#225e91","#174975","#103758","#762c64","#b14d48",
+                     "#d3823a","#a59436")
 
 
 # The unit of a derived cell is not necessarily the vertical unit of its DEM.
@@ -35,7 +38,8 @@ RASTER_UNITS = {
     "hillshade":"0..255", "tri":"m", "tpi":"m",
     "curvature":"1/m", "plan_curvature":"1/m",
     "profile_curvature":"1/m", "flow_direction":"D8_code",
-    "flow_accumulation":"cells", "streams":"binary",
+    "flow_accumulation":"cells", "flow_accumulation_mfd":"cell_equivalents",
+    "streams":"binary", "stream_order":"Strahler_order",
     "suitability":"binary", "least_cost":"binary",
 }
 
@@ -174,6 +178,16 @@ def classification(values,operation):
         classes=np.full(values.shape,-1,dtype=np.int16)
         for i,code in enumerate(codes):classes[finite&(values==code)]=i
         return classes,["Sink/flat","N","NE","E","SE","S","SW","W","NW"],DIRECTION_COLORS
+    elif operation=="stream_order":
+        # Exact integer Strahler levels remain categorical instead of
+        # being grouped into arbitrary continuous elevation bins.
+        orders=np.unique(values[finite].astype(np.int32))
+        if len(orders)>len(STREAM_ORDER_COLORS):
+            raise RasterError("Stream order legend exceeds the class budget.")
+        classes=np.full(values.shape,-1,dtype=np.int16)
+        for i,level in enumerate(orders):
+            classes[finite&(values==level)]=i
+        return classes,[f"Order {int(level)}" for level in orders],STREAM_ORDER_COLORS[:len(orders)]
     elif operation in {"streams","suitability","least_cost"}:
         return np.where(finite,values,-1).astype(np.int16),["Other","Selected"],("#a6adb4","#16856f")
     elif operation=="cutfill_map":
@@ -342,10 +356,22 @@ def surface(z,valid,affine,crs,operation,reference,point,end_point,max_slope,
         values=np.where(valid,z-reference,np.nan)
         metrics={"cut_m3":float(np.nansum(np.maximum(values,0))*cell),
                  "fill_m3":float(np.nansum(np.maximum(-values,0))*cell)}
-    elif operation in {"flow_direction","flow_accumulation","streams"}:
+    elif operation=="flow_accumulation_mfd":
+        from .multiflow import mfd_accumulation
+        values=mfd_accumulation(z,valid,dx,dy,cancel=cancel)
+        metrics={"mfd_exponent":1.1}
+    elif operation in {"flow_direction","flow_accumulation","streams","stream_order"}:
         dst,direction,accum=d8_flow(z,valid,dx,dy,cancel)
         if operation=="flow_direction":values=direction
         elif operation=="flow_accumulation":values=accum
+        elif operation=="stream_order":
+            from .multiflow import strahler_orders
+            if not 1<=stream_cells<=1_000_000:
+                raise RasterError("Invalid stream accumulation threshold.")
+            values=strahler_orders(dst,valid&(accum>=stream_cells),cancel)
+            metrics={"stream_threshold_cells":stream_cells,
+                     "channel_cells":int(np.isfinite(values).sum()),
+                     "max_stream_order":int(np.nanmax(values))}
         else:
             if not 1<=stream_cells<=1_000_000:raise RasterError("Invalid stream accumulation threshold.")
             values=np.where(valid,(accum>=stream_cells).astype(float),np.nan)
