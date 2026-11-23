@@ -2,7 +2,6 @@ import {useState} from 'react';
 import {downloadMapPDF,exportProject,exportVectorFile,
  type GeoWorkspace,type Measurement,type NetworkFace,type TerrainRasterLayer} from './api';
 import type {ScratchFeature} from './scratch';
-import {areaText,distanceText} from './displaySettings';
 
 type ExportScope='selection'|'local'|'areas'|'project';
 type ExportFormat='geojson'|'gpkg'|'kml'|'gpx'|'shapefile'|'csv'|'report'|'pdf'|'geotiff';
