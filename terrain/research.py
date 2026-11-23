@@ -209,7 +209,7 @@ def _make_bundle(files, metadata):
     return stream.getvalue(), manifest
 
 
-def verify_research_bundle(data):
+def verify_research_bundle(data, cancel=None):
     """Strictly verify names, individual hashes, sizes and required files."""
     try:
         with ZipFile(BytesIO(data), "r") as bundle:
@@ -232,6 +232,7 @@ def verify_research_bundle(data):
             if not isinstance(entries, dict) or set(entries) != set(names) - {"manifest.json"}:
                 raise RasterError("Research archive has missing or untracked files.")
             for name, expected in entries.items():
+                checkpoint(cancel)
                 payload = bundle.read(name)
                 if len(payload) != expected["bytes"] or sha256(payload).hexdigest() != expected["sha256"]:
                     raise RasterError("Research archive checksum mismatch: " + name)
