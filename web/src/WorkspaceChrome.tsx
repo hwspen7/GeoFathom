@@ -12,7 +12,8 @@ export const WORKSPACE_MODULES:readonly WorkspaceModule[]=[
   {id:'tools-terrain',label:'Terrain',description:'Elevation and hydrology'},
   {id:'tools-raster',label:'Raster / AI',description:'Imagery and raster analysis'},
   {id:'tools-style',label:'Cartography',description:'Map layout and labels'},
-  {id:'tools-services',label:'Data',description:'Data sources and APIs'},
+  {id:'tools-services',label:'Data',description:'Import, manage, polygonize and connect GIS datasets'},
+  {id:'tools-export',label:'Export',description:'Vector files, map PDFs, GeoTIFFs and research reports'},
   {id:'tools-ai',label:'Assistant',description:'Local assistant'},
 ];
 
