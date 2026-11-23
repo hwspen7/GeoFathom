@@ -50,6 +50,13 @@ export default function TerrainResearchWorkbench({
  const controller=useRef<AbortController|null>(null);
  const mounted=useRef(true);
  useEffect(()=>()=>{mounted.current=false;controller.current?.abort();},[]);
+ // A changed study area or primary DEM invalidates the previous analysis.
+ // Superseded requests must never publish into the new study.
+ const studyGeometryKey=JSON.stringify(geometry);
+ useEffect(()=>{
+  controller.current?.abort();
+  setResult(null);setReport(null);setBusy(false);
+ },[dem?.id,studyGeometryKey]);
  useEffect(()=>{onResult?.(result);},[result,onResult]);
  useEffect(()=>{
   if(!dem)return;
@@ -77,6 +84,7 @@ export default function TerrainResearchWorkbench({
    setMessage('Select a DEM and polygon study area.');return;
   }
   let factors:TerrainResearchCriterion[];
+  let request:AbortController|null=null;
   try{
    factors=criteria.map(row=>{
     if(!row.image_id||!row.name.trim()||!row.low.trim()||!row.high.trim())
@@ -98,18 +106,24 @@ export default function TerrainResearchWorkbench({
    const pairwise=ahp?JSON.parse(matrix) as number[][]:null;
    const settings=[threshold,sensitivity,trials,seed].map(Number);
    if(settings.some(value=>!Number.isFinite(value)))throw new Error('Invalid analysis controls.');
-   controller.current?.abort();const request=new AbortController();controller.current=request;
+   controller.current?.abort();request=new AbortController();controller.current=request;
    setBusy(true);setMessage('');setResult(null);
+   const activeRequest=request;
    const answer=await runTerrainResearch({
     image_id:dem.id,geometry,criteria:factors,threshold:settings[0],
     sensitivity_fraction:settings[1],trials:settings[2],seed:settings[3],
     pairwise,
-   },request.signal);
-   if(mounted.current&&!request.signal.aborted)setResult(answer);
+   },activeRequest.signal);
+   if(mounted.current&&!activeRequest.signal.aborted&&controller.current===activeRequest)setResult(answer);
   }catch(error){
    if(mounted.current&&!(error instanceof DOMException&&error.name==='AbortError'))
     setMessage(error instanceof Error?error.message:String(error));
-  }finally{if(mounted.current)setBusy(false);}
+  }finally{
+   if(mounted.current&&controller.current===request){
+    controller.current=null;
+    setBusy(false);
+   }
+  }
  }
  function exportArchive(){
   if(!result)return;
