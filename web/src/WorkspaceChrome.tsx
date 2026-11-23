@@ -33,10 +33,9 @@ export function searchWorkspaceCommands(commands:readonly WorkspaceCommand[],sea
 export function WorkspaceModuleBar({active,open,onActivate}:{
   active:string;open:boolean;onActivate:(id:string)=>void;
 }){
-  return <nav aria-label="Workspace tools" className="gis-menu workspace-module-bar" role="tablist">
+  return <nav aria-label="Workspace tools" className="gis-menu workspace-module-bar">
     {WORKSPACE_MODULES.map(module=>
-      <button key={module.id} type="button" role="tab"
-        aria-selected={open&&active===module.id}
+      <button key={module.id} type="button"
         aria-controls={module.id}
         aria-pressed={open&&active===module.id}
         title={module.description}

@@ -1,5 +1,7 @@
-import {describe,it,expect,vi} from 'vitest';
-import {render,fireEvent,screen} from '@testing-library/react';
+// @vitest-environment jsdom
+import {describe,it,expect,vi,afterEach} from 'vitest';
+import {render,fireEvent,screen,cleanup} from '@testing-library/react';
+afterEach(cleanup);
 import {WorkspaceCommandPalette,WorkspaceFeatureTree,type WorkspaceCommand} from './WorkspaceChrome';
 describe('shared research workbench chrome',()=>{
  it('searches and invokes commands without invoking disabled actions',()=>{

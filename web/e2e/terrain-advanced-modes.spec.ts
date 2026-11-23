@@ -236,3 +236,39 @@ test('3D DEM remains inspectable using the CPU preview if WebGL2 is unavailable'
  await page.getByRole('button',{name:'Reset view'}).click();
  await expect(exaggeration).toHaveValue('1');
 });
+
+
+test('shared Onshape-style command search and newly exposed Terrain tools',async({page})=>{
+ test.setTimeout(120000);
+ const fixture=await setup(page);
+ await page.keyboard.press('Control+k');
+ const dialog=page.getByRole('dialog',{name:'Workspace commands'});
+ await expect(dialog).toBeVisible();
+ await dialog.getByRole('searchbox',{name:'Search workspace commands'}).fill('fit selected');
+ await expect(dialog.getByRole('listitem',{name:/Fit selected area/})).toBeVisible();
+ await page.keyboard.press('Escape');
+ await expect(dialog).toHaveCount(0);
+ const shelf=page.getByLabel('Terrain tools');
+ const run=page.getByRole('button',{name:'Run terrain operation'});
+ await page.getByLabel('Find terrain tool').fill('MFD');
+ await shelf.getByRole('button',{name:'MFD accumulation',exact:true}).click();
+ await expect(run).toBeEnabled();
+ await run.click();
+ await expect(page.getByLabel('Terrain results')).toContainText('MFD slope exponent',{timeout:25000});
+ await page.getByLabel('Find terrain tool').fill('Strahler');
+ await shelf.getByRole('button',{name:'Stream order (Strahler)',exact:true}).click();
+ await page.getByLabel('Minimum upstream cells').fill('2');
+ await expect(run).toBeEnabled();
+ await run.click();
+ await expect(page.getByLabel('Terrain results')).toContainText('Maximum Strahler order',{timeout:25000});
+ await page.getByLabel('Find terrain tool').fill('Multi-observer');
+ await shelf.getByRole('button',{name:'Multi-observer viewshed',exact:true}).click();
+ await expect(run).toBeDisabled();
+ await page.getByLabel('Observer 1 longitude').fill(String(fixture.start[0]));
+ await page.getByLabel('Observer 1 latitude').fill(String(fixture.start[1]));
+ await page.getByLabel('Observer 2 longitude').fill(String(fixture.end[0]));
+ await page.getByLabel('Observer 2 latitude').fill(String(fixture.end[1]));
+ await expect(run).toBeEnabled();
+ await run.click();
+ await expect(page.getByLabel('Terrain results')).toContainText('Visible from all observers',{timeout:25000});
+});

@@ -634,9 +634,9 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 
 /* Shared Onshape-inspired research workspace. Neutral, compact, reusable. */
 .workspace-module-bar{scrollbar-width:thin}
-.workspace-module-bar button[role="tab"]{position:relative;border-radius:0!important;min-height:30px;padding:5px 11px}
-.workspace-module-bar button[role="tab"][aria-selected="true"]{background:#e7f0f7;color:#184e73}
-.workspace-module-bar button[role="tab"][aria-selected="true"]::after{content:"";position:absolute;bottom:0;left:5px;right:5px;height:2px;background:#2875a5}
+.workspace-module-bar button{position:relative;border-radius:0!important;min-height:30px;padding:5px 11px}
+.workspace-module-bar button[aria-pressed="true"]{background:#e7f0f7;color:#184e73}
+.workspace-module-bar button[aria-pressed="true"]::after{content:"";position:absolute;bottom:0;left:5px;right:5px;height:2px;background:#2875a5}
 .gis-command-trigger{display:flex;align-items:center;gap:5px;border:1px solid #cbd4dc;background:#fff;color:#3b5468;font-size:11px;padding:3px 7px;white-space:nowrap}
 .gis-command-trigger:hover{border-color:#7ba2bc;background:#f5fafc}
 .gis-command-trigger kbd{padding:2px 3px;border:1px solid #d9e1e7;background:#f7f9fa}
