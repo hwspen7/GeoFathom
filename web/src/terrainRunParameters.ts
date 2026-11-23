@@ -18,6 +18,10 @@ export interface TerrainParameterForm {
  gradientMethod:'horn'|'zevenbergen_thorne';slopeClasses:'standard'|'detailed'|'broad';
  neighborhoodRadius:string;viewshedDistance:string;viewshedAzimuth:string;
  viewshedWidth:string;routeModel:'surface'|'distance'|'gentle';meshSamples:string;streamOrderScheme:'strahler'|'shreve';hillshadeMode:'single'|'four_direction';
+ flowRoutingMethod?:'d8'|'dinf';depressionMethod?:'fill'|'breach';
+ curvatureMethod?:'finite_difference'|'quadratic';curvatureRadius?:string;
+ designEastGrade?:string;designNorthGrade?:string;designMaxGrade?:string;elevationSigma?:string;
+ optimizeObservers?:string;dsmImageId?:string;meshLod?:boolean;
 }
 
 export function terrainParametersForOperation(
@@ -124,5 +128,24 @@ export function terrainParametersForOperation(
      'plan_curvature','profile_curvature'].includes(operation))
   params.gradient_method=form.gradientMethod;
  if(operation==='slope_map')params.slope_classes=form.slopeClasses;
+ // P1 method controls are attached only to the analyses they actually change.
+ if(operation==='flow_accumulation'&&form.flowRoutingMethod==='dinf')params.flow_routing_method='dinf';
+ if(['flow_direction','flow_accumulation','flow_accumulation_mfd','streams','stream_order','watershed'].includes(operation)
+    &&form.fillSinks&&form.depressionMethod==='breach')params.depression_method='breach';
+ if(['curvature','plan_curvature','profile_curvature'].includes(operation)&&form.curvatureMethod==='quadratic'){
+  params.curvature_method='quadratic';
+  params.curvature_radius_cells=Number(form.curvatureRadius??'2');
+ }
+ if(['volume','cutfill_map'].includes(operation)){
+  if(form.designEastGrade&&Number(form.designEastGrade)!==0)params.design_east_grade=Number(form.designEastGrade);
+  if(form.designNorthGrade&&Number(form.designNorthGrade)!==0)params.design_north_grade=Number(form.designNorthGrade);
+  if(form.designMaxGrade&&Number(form.designMaxGrade)!==.3)params.design_max_grade=Number(form.designMaxGrade);
+  if(form.elevationSigma&&Number(form.elevationSigma)!==0)params.elevation_sigma_m=Number(form.elevationSigma);
+ }
+ if(['visibility','viewshed_multi'].includes(operation)&&form.dsmImageId)
+  params.dsm_image_id=form.dsmImageId;
+ if(operation==='viewshed_multi'&&form.optimizeObservers&&Number(form.optimizeObservers)>0)
+  params.optimize_observers=Number(form.optimizeObservers);
+ if(operation==='mesh'&&form.meshLod)params.mesh_lod=true;
  return params;
 }
