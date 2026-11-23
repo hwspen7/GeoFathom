@@ -995,7 +995,10 @@ export interface AdvancedTerrainResult {
     design_max_grade?:number|null;elevation_sigma_m?:number|null;
     optimize_observers?:number|null;dsm_source?:boolean|null;mesh_lod?:boolean|null;
     suitability_model?:string|null;suitability_weights?:number[]|null};
-  selection?:{selected_candidate_indices:number[];marginal_visible_cells:number[];total_candidate_sites:number};
+  selection?:{selected_candidate_indices:number[];marginal_visible_cells:number[];total_candidate_sites:number;
+    optimizer?:{candidate_count:number;selected_site_count:number;combinations_checked:number;
+      combinations_possible:number;positively_visible_cells:number;
+      global_optimum_within_supplied_candidates:boolean;objective:string;tie_break:string}};
   quality?:{status:string;reference_validation:string;uncertainty:string;
     source_overlap_pct:number;valid_study_cell_pct:number;
     derivative_coverage_pct:number|null;flags:string[];area_basis:string;
