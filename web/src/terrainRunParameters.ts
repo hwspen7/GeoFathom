@@ -22,6 +22,7 @@ export interface TerrainParameterForm {
  curvatureMethod?:'finite_difference'|'quadratic';curvatureRadius?:string;
  designEastGrade?:string;designNorthGrade?:string;designMaxGrade?:string;elevationSigma?:string;
  optimizeObservers?:string;dsmImageId?:string;meshLod?:boolean;
+ suitabilityModel?:'binary'|'weighted';suitabilitySlopeWeight?:string;suitabilityTriWeight?:string;suitabilityElevationWeight?:string;
 }
 
 export function terrainParametersForOperation(
@@ -147,5 +148,10 @@ export function terrainParametersForOperation(
  if(operation==='viewshed_multi'&&form.optimizeObservers&&Number(form.optimizeObservers)>0)
   params.optimize_observers=Number(form.optimizeObservers);
  if(operation==='mesh'&&form.meshLod)params.mesh_lod=true;
+ if(operation==='suitability'&&form.suitabilityModel==='weighted'){
+  params.suitability_model='weighted';
+  params.suitability_weights=[Number(form.suitabilitySlopeWeight??'.5'),
+    Number(form.suitabilityTriWeight??'.25'),Number(form.suitabilityElevationWeight??'.25')];
+ }
  return params;
 }
