@@ -711,9 +711,9 @@ button:disabled { opacity: .45; cursor: not-allowed; }
   border-right:1px solid #b8c6ce;
 }
 .desktop-gis .gis-operations{order:0;border-left:0;border-right:1px solid #c8cfd5}
-.desktop-gis .gis-body>.workspace-dock-resize[aria-label="Resize project tree"]{order:1}
+.desktop-gis .gis-body>.workspace-dock-resize[aria-label="Resize operations"]{order:1}
 .desktop-gis .gis-body>.main{order:2;min-width:240px;min-height:0}
-.desktop-gis .gis-body>.workspace-dock-resize[aria-label="Resize inspector"]{order:3}
+.desktop-gis .gis-body>.workspace-dock-resize[aria-label="Resize results"]{order:3}
 .desktop-gis .gis-results-monitor{order:4;min-width:260px;max-width:min(42vw,540px);
   flex:none;display:flex;flex-direction:column;min-height:0;background:#f9fafb;border-left:1px solid #c8cfd5}
 .desktop-gis .gis-results-monitor .sidebar-scroll{flex:1;min-height:0;overflow:auto;padding:5px 11px 15px}

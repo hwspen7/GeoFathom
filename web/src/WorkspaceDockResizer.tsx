@@ -43,11 +43,11 @@ export default function WorkspaceDockResizer({side,width,onChange}:{
   if(event.key==='End'){event.preventDefault();onChange(DOCK_LIMITS.max);}
  }
  return <div role="separator" tabIndex={0}
-   aria-label={side==='left'?'Resize project tree':'Resize inspector'}
+   aria-label={side==='left'?'Resize operations':'Resize results'}
    aria-orientation="vertical"
    aria-valuemin={DOCK_LIMITS.min} aria-valuemax={DOCK_LIMITS.max}
    aria-valuenow={width} className="workspace-dock-resize"
    onPointerDown={pointerDown} onPointerMove={pointerMove}
    onPointerUp={pointerUp} onPointerCancel={pointerUp}
-   onKeyDown={keyDown} title="Drag to resize · ← → adjust 20 px"/>;
+   onKeyDown={keyDown} title="Resize panel · ← → 20 px"/>;
 }

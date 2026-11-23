@@ -15,7 +15,7 @@ describe('accessible research workspace dock widths',()=>{
  it('supports keyboard resizing without requiring pointer devices',()=>{
   const onChange=vi.fn();
   render(<WorkspaceDockResizer side="left" width={265} onChange={onChange}/>);
-  const grip=screen.getByRole('separator',{name:'Resize project tree'});
+  const grip=screen.getByRole('separator',{name:'Resize operations'});
   fireEvent.keyDown(grip,{key:'ArrowRight'});
   expect(onChange).toHaveBeenCalledWith(285);
   fireEvent.keyDown(grip,{key:'Home'});
