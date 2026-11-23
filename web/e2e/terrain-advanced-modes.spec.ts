@@ -7,6 +7,7 @@
 import {test,expect} from './coverage-fixture';
 import {execFileSync} from 'node:child_process';
 import {resolve} from 'node:path';
+import {readFile} from 'node:fs/promises';
 
 const API='http://127.0.0.1:8000';
 const png=Buffer.from(
@@ -151,6 +152,14 @@ test('advanced surface families retain distinct real results and scientific expo
  await page.getByLabel('Terrain results').getByRole('button',{name:'Export',exact:true}).click();
  const exported=await exportEvent;
  expect(exported.suggestedFilename()).toMatch(/terrain-least_cost.*geojson/);
+ const exportedJson=JSON.parse(await readFile(await exported.path(),'utf8'));
+ expect(exportedJson.type).toBe('FeatureCollection');
+ expect(exportedJson.features.length).toBeGreaterThan(0);
+ expect(exportedJson.geofathom_run.schema).toBe('geofathom.terrain-run.v2');
+ expect(exportedJson.geofathom_run.geometry.type).toBe('Polygon');
+ expect(exportedJson.geofathom_run.source.sha256).toMatch(/^[a-f0-9]{64}$/);
+ expect(exportedJson.geofathom_run.parameters.max_slope_deg).toBe(45);
+ expect(exportedJson.geofathom_metrics.route_length_m).toBeGreaterThan(0);
 });
 
 test('invalid terrain inputs are blocked and DEM resampling uses real configured options',async({page})=>{
@@ -241,7 +250,12 @@ test('3D DEM remains inspectable using the CPU preview if WebGL2 is unavailable'
 test('shared Onshape-style command search and newly exposed Terrain tools',async({page})=>{
  test.setTimeout(120000);
  const fixture=await setup(page);
- await page.keyboard.press('Control+k');
+ const filter=page.getByRole('searchbox',{name:'Filter project features'});
+ await filter.fill('not-the-fixture');
+ await expect(page.getByRole('button',{name:/Advanced terrain study area/})).toHaveCount(0);
+ await filter.fill('Advanced terrain');
+ await expect(page.getByRole('button',{name:/Advanced terrain study area/})).toBeVisible();
+  await page.keyboard.press('Control+k');
  const dialog=page.getByRole('dialog',{name:'Workspace commands'});
  await expect(dialog).toBeVisible();
  await dialog.getByRole('searchbox',{name:'Search workspace commands'}).fill('fit selected');
