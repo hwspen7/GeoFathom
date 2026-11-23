@@ -96,14 +96,23 @@ describe('survey controls',()=>{
     const p=props();
     const {rerender}=render(<SurveyTools {...p}/>);
     expect((screen.getByRole('button',{name:'Cut hole'}) as HTMLButtonElement).disabled).toBe(true);
-    click('Polygon');click('Line');click('Rectangle');click('Circle');click('Trace network');
+    click('Polygon');click('Line');click('Rectangle');click('Circle');
+    expect((screen.getByRole('button',{name:'Trace network'}) as HTMLButtonElement).disabled).toBe(true);
+    expect(p.onStart).toHaveBeenCalledTimes(4);
+    rerender(<SurveyTools {...p} saved={[{id:'saved-line',name:'Reference line',
+      geometry:{type:'LineString',coordinates:[[10,20],[11,21]]}} as WorkspaceFeature]}/>);
+    click('Trace network');
     expect(p.onStart).toHaveBeenCalledTimes(5);
     rerender(<SurveyTools {...p} geometry={polygon} mode="polygon" points={[[10,20]]} canUndo canRedo/>);
     expect((screen.getByRole('button',{name:'Finish'}) as HTMLButtonElement).disabled).toBe(true);
     rerender(<SurveyTools {...p} geometry={polygon} mode="polygon" points={[[10,20],[11,20],[11,21]]} canUndo canRedo/>);
     click('Cut hole');click('Split line');click('Finish');
-    fireEvent.click(screen.getByTitle('Remove last point'));fireEvent.click(screen.getByTitle('Cancel'));
-    click('Vertices');click('Move');click('Snap ON');click('Undo');click('Redo');click('Copy');
+    fireEvent.click(screen.getByRole('button',{name:'Undo last sketch point'}));
+    fireEvent.click(screen.getByTitle('Cancel'));
+    click('Vertices');click('Move');click('Snap ON');click('Undo');click('Redo');
+    expect((screen.getByRole('button',{name:'Copy'}) as HTMLButtonElement).disabled).toBe(true);
+    rerender(<SurveyTools {...p} geometry={polygon} mode={null}/>);
+    click('Copy');
     fireEvent.click(screen.getByLabelText(/Linked\/shared vertices/));
     expect(p.onFinish).toHaveBeenCalledOnce();expect(p.onCancel).toHaveBeenCalledOnce();
     expect(p.onUndoPoint).toHaveBeenCalledOnce();expect(p.onEdit).toHaveBeenCalledWith(true,true);
