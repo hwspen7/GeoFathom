@@ -259,3 +259,128 @@ def test_p0_catalog_and_oracle_set_match_exactly():
     from terrain.catalog import GROUPS
     assert len(ALL_OPERATIONS)==28
     assert set(ALL_OPERATIONS)=={name for names in GROUPS.values() for name in names}
+
+
+@pytest.mark.parametrize("operation",ALL_OPERATIONS,ids=ALL_OPERATIONS)
+def test_p0_flat_zero_gradient_and_no_fabricated_result(operation,study):
+    """Second independent reference: flat DEM and exactly zero relief.
+
+    Undefined directional curvature must fail explicitly; no pretending an
+    arbitrary curvature angle is meaningful on a perfectly flat surface.
+    """
+    flat=study["flat"]
+    area=study["polygon"]
+    if operation=="slope":
+        result=analyze_area(flat,area)
+        assert result["mean_slope_deg"]==pytest.approx(0,abs=1e-8)
+        assert result["maximum_slope_deg"]==pytest.approx(0,abs=1e-8)
+        assert result["mean_aspect_deg"] is None
+        return
+    if operation=="profile":
+        result=elevation_profile(flat,study["line"],samples=11)
+        assert len(result["samples"])==11
+        assert all(item["elevation_m"]==200 for item in result["samples"])
+        return
+    kwargs={}
+    if operation in ("volume","cutfill_map"):
+        kwargs["reference"]=200
+    if operation=="contours":
+        kwargs["interval"]=10
+    if operation=="dem_difference":
+        kwargs["comparison_path"]=flat
+    if operation=="watershed":
+        kwargs["point"]=center(12,12)
+    if operation=="visibility":
+        kwargs["point"]=center(12,12)
+    if operation=="viewshed_multi":
+        kwargs["observer_points"]=[center(8,8),center(16,16)]
+    if operation=="least_cost":
+        kwargs.update(point=center(12,3),end_point=center(12,13),
+                      max_slope=30,route_model="surface")
+    if operation=="suitability":
+        kwargs.update(min_elevation=199,max_elevation=201,max_slope=1,
+                      max_tri=1)
+    if operation=="streams":
+        kwargs["stream_cells"]=2
+    if operation=="stream_order":
+        kwargs["stream_cells"]=1
+    if operation=="cross_sections":
+        area=study["line"]
+        kwargs.update(section_spacing=50,section_width=20)
+    if operation in ("plan_curvature","profile_curvature"):
+        from imagery.raster import RasterError
+        with pytest.raises(RasterError,match="No valid cells"):
+            run_terrain(flat,area,operation,**kwargs)
+        return
+    result=run_terrain(flat,area,operation,**kwargs)
+    if operation=="cross_sections":
+        assert len(result["sections"])==3
+        assert all(sample["elevation_m"]==200
+                   for section in result["sections"]
+                   for sample in section["samples"])
+        return
+    if operation=="contours":
+        assert not result["features"]
+        assert result["metrics"]["contour_lines"]==0
+        return
+    if operation=="distribution":
+        assert result["distribution"]==[{
+            "lower_m":200.,"upper_m":200.,"cells":N,
+            "area_m2":N*CELL_AREA,"cumulative_pct":100.}]
+        assert result["metrics"]["stddev_m"]==0
+        return
+    if operation=="volume":
+        assert result["metrics"]["cut_m3"]==0
+        assert result["metrics"]["fill_m3"]==0
+        return
+    if operation=="watershed":
+        assert result["metrics"]["upstream_cells"]==1
+        return
+    if operation=="visibility":
+        assert result["metrics"]["visible_cells"]==N
+        assert result["metrics"]["unknown_cells"]==0
+        return
+    if operation=="mesh":
+        heights=result["mesh"]["heights"]
+        assert len(heights)==N
+        assert set(heights)=={200}
+        return
+    data=float_raster(result)
+    if operation=="elevation":
+        np.testing.assert_array_equal(data,np.full((20,20),200))
+    elif operation=="slope_map":
+        assert np.nanmax(np.abs(data))==0
+    elif operation=="aspect_map":
+        assert result["metrics"]["directional_cells"]==0
+        assert result["metrics"]["flat_cells"]==18*18
+        assert set(np.unique(data[np.isfinite(data)]))=={-1}
+    elif operation=="hillshade":
+        assert data[10,10]==pytest.approx(255*math.sin(math.pi/4),abs=.0002)
+    elif operation in ("tri","tpi","curvature"):
+        assert np.nanmax(np.abs(data))==0
+    elif operation=="flow_direction":
+        np.testing.assert_array_equal(data,np.zeros((20,20)))
+    elif operation in ("flow_accumulation","flow_accumulation_mfd"):
+        np.testing.assert_array_equal(data,np.ones((20,20)))
+    elif operation=="streams":
+        assert result["metrics"]["stream_cells"]==0
+        np.testing.assert_array_equal(data,np.zeros((20,20)))
+    elif operation=="stream_order":
+        assert result["metrics"]["max_stream_order"]==1
+        np.testing.assert_array_equal(data,np.ones((20,20)))
+    elif operation=="viewshed_multi":
+        assert result["metrics"]["visible_by_all_cells"]==N
+        np.testing.assert_array_equal(data,np.full((20,20),2))
+    elif operation=="cutfill_map":
+        np.testing.assert_array_equal(data,np.zeros((20,20)))
+    elif operation=="suitability":
+        assert result["metrics"]["suitable_area_m2"]==18*18*CELL_AREA
+        assert np.nansum(data)==18*18
+    elif operation=="least_cost":
+        assert result["metrics"]["route_cost"]==pytest.approx(100,abs=.01)
+        assert result["metrics"]["route_length_m"]==pytest.approx(100,abs=.01)
+    elif operation=="dem_difference":
+        np.testing.assert_array_equal(data,np.zeros((20,20)))
+        assert result["metrics"]["net_elevation_volume_m3"]==0
+    else:
+        raise AssertionError(f"Missing P0 flat-ground oracle: {operation}")
