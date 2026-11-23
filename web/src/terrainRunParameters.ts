@@ -11,7 +11,7 @@ export interface TerrainParameterForm {
  interval:string;reference:string;lon:string;lat:string;
  height:string;target:string;endLon:string;endLat:string;
  maxSlope:string;minElevation:string;maxElevation:string;maxTri:string;
- streamCells:string;azimuth:string;altitude:string;
+ streamCells:string;azimuth:string;altitude:string;mfdExponent:string;
  sectionSpacing:string;sectionWidth:string;fillSinks:boolean;
  considerCurvature:boolean;refractionCoeff:string;comparisonId:string;
  observerPoints:[string,string][];drape:boolean;textureImageId:string|null;
@@ -71,7 +71,7 @@ export function terrainParametersForOperation(
    break;
   case 'flow_accumulation_mfd':
    params.fill_sinks=form.fillSinks;
-   params.mfd_exponent=1.1;
+   params.mfd_exponent=Number(form.mfdExponent);
    break;
   case 'streams':
   case 'stream_order':
