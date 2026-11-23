@@ -166,7 +166,7 @@ export default function TerrainWorkbench(p:Props){
  const selected=records.find(r=>r.id===selectedRecord);
  const result=selected?.advanced??null,slope=selected?.slope??null,profile=selected?.profile??null;
  const researchFigures=[
-   ...(result?.distribution?.length?[{id:'hypsometry',label:'Hypsometry',
+   ...(result?.distribution?.length&&['distribution','elevation'].includes(result.operation)?[{id:'hypsometry',label:'Hypsometry',
      plot:<HypsometricPlot bins={result.distribution}/>}] : []),
    ...(profile?.samples?.length?[{id:'gradient',label:'Gradient',
      plot:<ProfileGradePlot samples={profile.samples}/>}] : []),
