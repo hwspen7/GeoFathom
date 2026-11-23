@@ -107,6 +107,20 @@ with tempfile.TemporaryDirectory() as directory:
  await expect.poll(async()=>Number(await map.getAttribute('data-terrain-feature-count'))).toBeGreaterThan(0);
  await page.getByRole('button',{name:'Save terrain features'}).click();
  await expect(page.getByText(/Saved .* terrain features/)).toBeVisible();
+ // Saved contours are still useful after the browser-local analysis cache is
+ // gone; their project features retain source identity and run settings.
+ const stored=await page.request.get(API+'/projects/'+id+'/workspace');
+ expect(stored.status()).toBe(200);
+ const persisted=(await stored.json()).features as Array<{
+   properties:Record<string,unknown>
+ }>;
+ const contour=persisted.find(f=>f.properties.operation==='contours');
+ expect(contour).toBeTruthy();
+ expect(contour!.properties.terrain_run_id).toMatch(/^[a-f0-9-]{20,}$/);
+ expect(contour!.properties.source_sha256).toMatch(/^[a-f0-9]{64}$/);
+ expect(contour!.properties.research_parameters).toMatchObject({
+   contour_interval_m:5
+ });
  await tools.getByRole('button',{name:'Cut / fill',exact:true}).click();
  await page.getByLabel('Reference elevation',{exact:true}).fill('110');
  await page.getByRole('button',{name:'Run terrain operation'}).click();

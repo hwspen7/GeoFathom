@@ -138,7 +138,7 @@ export function WorkspaceFeatureTree<T extends FeatureItem>({
       items:visibleFeatures.filter(f=>!layers.some(l=>l.id===f.layer_id))},
   ].filter(g=>g.items.length>0);
   const lookup=new Map(features.map(f=>[f.id,f]));
-  return <div className="workspace-feature-tree" aria-label="Project feature tree">
+  return <div className="workspace-feature-tree" role="region" aria-label="Project feature tree">
     <div className="workspace-tree-header"><strong>Features</strong><span>{features.length}</span></div>
     <label className="workspace-tree-filter"><Search size={13}/>
       <input aria-label="Filter project features" type="search"

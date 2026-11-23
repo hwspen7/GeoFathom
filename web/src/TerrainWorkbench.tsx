@@ -414,7 +414,13 @@ export default function TerrainWorkbench(p:Props){
    try{
      const saved=await saveFeatureBatch(p.projectId,result.features.map((f,i)=>({
        geometry:f.geometry,name:String(f.properties.name||result.operation)+' '+(i+1),
-       source:'DEM '+source.name,properties:{...f.properties,source_image:source.id,operation:result.operation}
+       source:'DEM '+source.name,properties:{
+         ...f.properties,source_image:source.id,operation:result.operation,
+         terrain_run_id:selected.id,
+         source_sha256:source.sha256??null,
+         source_vertical_datum:source.vertical_datum??null,
+         research_parameters:structuredClone(selected.parameters??{}),
+       }
      })));
      if(alive.current){
        setRecords(old=>old.map(r=>r.id===selected.id?{...r,saved:true}:r));
