@@ -115,7 +115,8 @@ describe('external GIS services',()=>{
       layer_name:'tiles',attribution:'Source',tile_matrix_set:'custom'},'admin');
     api.removeOGCSource.mockResolvedValue(undefined);
     click('Previous');
-    fireEvent.click(within(row).getByRole('button',{name:'Remove'}));
+    const previousRow=screen.getByText('Vector · WFS').closest('.service-entry') as HTMLElement;
+    fireEvent.click(within(previousRow).getByRole('button',{name:'Remove'}));
     await screen.findByText('2 configured services');
     expect(api.removeOGCSource).toHaveBeenCalledWith('p','wfs','admin');
   });
