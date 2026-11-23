@@ -434,8 +434,7 @@ def surface(z,valid,affine,crs,operation,reference,point,end_point,max_slope,
     elif operation=="flow_accumulation" and flow_routing_method=="dinf":
         from .p1_science import dinfinity_accumulation
         values,angles=dinfinity_accumulation(z,valid,dx,dy,cancel=cancel)
-        metrics={"dinf_direction_valid_cells":int(np.isfinite(angles).sum()),
-                 "flow_routing_method":"dinf"}
+        metrics={"dinf_direction_valid_cells":int(np.isfinite(angles).sum())}
     elif operation=="flow_accumulation_mfd":
         from .multiflow import mfd_accumulation
         values=mfd_accumulation(z,valid,dx,dy,exponent=mfd_exponent,cancel=cancel)
