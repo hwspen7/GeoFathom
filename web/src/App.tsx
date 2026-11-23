@@ -1041,7 +1041,7 @@ export default function App() {
           <Search size={14}/> <span>Commands</span><kbd>Ctrl K</kbd>
         </button>
         <button className="gis-shortcut-help" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts" onClick={()=>setShortcutHelp(true)}>?</button>
-        <button className="gis-inspector-toggle" aria-label="Toggle project and layers" aria-expanded={showLayers} aria-pressed={showLayers} onClick={()=>setShowLayers(v=>!v)}>Project</button>
+        <button className="gis-inspector-toggle" aria-label="Toggle project and layers" aria-expanded={showLayers} aria-pressed={showLayers} onClick={()=>setShowLayers(v=>!v)}>Project / Search</button>
         <button className="gis-inspector-toggle" aria-label="Toggle operations" aria-pressed={showTools} onClick={()=>setShowTools(v=>!v)}>Tools</button>
         <button className="gis-connection" title={connectionError||'Check backend connection'} onClick={()=>setConnectionRetry(v=>v+1)}>{capabilities?<Wifi size={14}/>:<WifiOff size={14}/>} {capabilities?'Connected':'Reconnect API'}</button>
       </header>
@@ -1049,6 +1049,8 @@ export default function App() {
         <div className="gis-navigation-tools">
           <button aria-label="Pan and select" title="Pan and select (V / Esc)" onClick={stopInteraction}>Pan</button>
           <button disabled={!measurement||!!preview} title="Zoom to selected geometry (F)" onClick={fitSelection}>Fit selection</button>
+          <button disabled={!geometry} onClick={exportGeoJSON} title="Export selected geometry as GeoJSON"><Download size={14}/> Export GeoJSON</button>
+          <button disabled={!geometry} onClick={deselect} title="Clear selection without deleting saved features"><RotateCcw size={14}/> Deselect</button>
         </div>
         <div className="gis-survey-commands" ref={setToolbarTarget}/>
         <div className="gis-quick-basemap" aria-label="Quick basemap tools">
@@ -1058,7 +1060,7 @@ export default function App() {
         </div>
       </div>
       <div className="gis-body">
-        <aside className="sidebar gis-layers gis-project-drawer" hidden={!showLayers} aria-label="Project and layers" style={{width:Math.min(420,Math.max(300,leftDockWidth))}}>
+        <aside className="sidebar gis-layers gis-project-drawer" hidden={!showLayers} aria-label="Project and layers" style={{width:340}}>
           <WorkspaceDockHeading><Layers3 size={15}/> Project / Layers</WorkspaceDockHeading>
           <div className="sidebar-scroll">
           <section className="panel-section">
@@ -1473,7 +1475,7 @@ export default function App() {
         <aside className="gis-inspector gis-operations" hidden={!showTools} style={{width:rightDockWidth}} aria-label="Operations">
           <WorkspaceDockHeading><Compass size={15}/> Tools</WorkspaceDockHeading>
           <div className="sidebar-scroll">
-          {resultsTarget&&createPortal(<section className="panel-section results-summary">
+          {resultsTarget&&(geometry||measurement||preview)&&createPortal(<section className="panel-section results-summary">
             <div className="section-heading"><Compass size={16} /><span>Selection</span></div>
             <div className="analysis-card">
               
@@ -1486,8 +1488,7 @@ export default function App() {
                       : measurement.length_m !== null ? distanceText(measurement.length_m,display.distance) : 'Location only'}</strong>
                   </div>
                   {measurement.perimeter_m !== null && <div className="metric secondary"><span>Perimeter</span><strong>{distanceText(measurement.perimeter_m,display.distance)}</strong></div>}
-                  {measurement.area_m2 !== null && <div className="metric secondary"><span>Square meters</span><strong>{number(measurement.area_m2)} m²</strong></div>}
-                  <p className="analysis-footnote">{measurement.method}</p>
+                  <span className="analysis-measurement-method" title={measurement.method} aria-label="Measurement method">{measurement.method}</span>
                   {measurement.method===OFFLINE_METHOD&&<button onClick={()=>{if(geometry)void commitGeometry(geometry,'Exact measurement updated.');}}>Validate exact measurement</button>}
                 </>
               )}
@@ -1504,19 +1505,6 @@ export default function App() {
                   </div>
                 ) : null;
               })()}
-              {measurement?.area_m2 !== null && measurement?.area_m2 !== undefined && (
-                <div className="area-unit-picker">
-                  <label htmlFor="area-unit">Area unit</label>
-                  <select id="area-unit" value={areaUnit}
-                    onChange={event => setAreaUnit(event.target.value as typeof areaUnit)}>
-                    <option value="auto">Automatic</option><option value="m2">Square meters</option>
-                    <option value="ha">Hectares</option>
-                    <option value="km2">Square kilometers</option>
-                    <option value="mu">Mu (亩)</option>
-                  </select>
-                  <strong>{areaText(measurement.area_m2??0,areaUnit)}</strong>
-                </div>
-              )}
               {geometry && ['Polygon','MultiPolygon','LineString','MultiLineString'].includes(geometry.type) && (
                 <details className="edge-measurements">
                   <summary>Edge lengths · {previewEdgeLengths(geometry).total} segments</summary>
@@ -1528,25 +1516,7 @@ export default function App() {
                 </details>
               )}
               {selectedPlace && <p className="data-source">Data: {selectedPlace.source} · {geometry&&['Polygon','MultiPolygon','LineString','MultiLineString'].includes(geometry.type) ? 'Mapped outline':'Coordinates only · use DEM extent or draw a study area'}</p>}
-              <BoundaryEditor geometry={geometry} sourcePlace={selectedPlace} selectedParcel={selectedParcel}
-                onChooseParcel={value=>void chooseSelectedParcel(value)}
-                editing={editing&&!moving&&!edgeMoving} busy={busy} selectedNode={selectedBoundaryNode}
-                onSelectNode={setSelectedBoundaryNode}
-                onToggleEditing={()=>{if(editing){setEditing(false);setMoving(false);setEdgeMoving(false);}
-                  else editMode('vertices');}}
-                onMoveNode={(path,coordinate)=>{
-                  if(!geometry||selectedLocked)return;
-                  void commitGeometry(moveVertex(geometry,path,coordinate),'Boundary node coordinates validated.');
-                }}
-                onRemoveNode={path=>{
-                  if(!geometry||selectedLocked)return;
-                  try{void commitGeometry(removeVertex(geometry,path),'Boundary node removed and validated.');}
-                  catch(e){setError(e instanceof Error?e.message:String(e));}
-                }}/>
-              <div className="analysis-actions">
-                <button onClick={exportGeoJSON} disabled={!geometry}><Download size={15} /> Export GeoJSON</button>
-                <button onClick={deselect}><RotateCcw size={15} /> Deselect</button>
-              </div>
+
             </div>
           </section>,resultsTarget)}
 
@@ -1605,7 +1575,25 @@ export default function App() {
                 }
               }}
             />
- 
+            {geometry&&<details className="geometry-edit-controls">
+              <summary>Geometry / vertices</summary>
+              <BoundaryEditor geometry={geometry} sourcePlace={selectedPlace} selectedParcel={selectedParcel}
+                onChooseParcel={value=>void chooseSelectedParcel(value)}
+                editing={editing&&!moving&&!edgeMoving} busy={busy} selectedNode={selectedBoundaryNode}
+                onSelectNode={setSelectedBoundaryNode}
+                onToggleEditing={()=>{if(editing){setEditing(false);setMoving(false);setEdgeMoving(false);}
+                  else editMode('vertices');}}
+                onMoveNode={(path,coordinate)=>{
+                  if(!geometry||selectedLocked)return;
+                  void commitGeometry(moveVertex(geometry,path,coordinate),'Boundary node coordinates validated.');
+                }}
+                onRemoveNode={path=>{
+                  if(!geometry||selectedLocked)return;
+                  try{void commitGeometry(removeVertex(geometry,path),'Boundary node removed and validated.');}
+                  catch(e){setError(e instanceof Error?e.message:String(e));}
+                }}/>
+            </details>}
+
             {pendingShared && <div className="linked-preview">
               <strong>Shared boundary preview · {pendingShared.preview.count} features</strong>
               {pendingShared.preview.affected.map(item=><div key={item.id}>
