@@ -5,11 +5,12 @@
  * for exporting a scientific dataset or a portable project archive.
  */
 import type {AdvancedTerrainResult,RasterAsset,TerrainOperation,TerrainResult} from './api';
+import type {TerrainRunParameters} from './terrainRunRegistry';
 
 export interface PersistedTerrainResult {
  id:string;title:string;operation:TerrainOperation|'slope'|'profile';
  source:RasterAsset;referenceSource?:RasterAsset;geometry:GeoJSON.Geometry;
- inputKey:string;visible:boolean;createdAt:number;saved?:boolean;opacity:number;
+ inputKey:string;parameters?:TerrainRunParameters;visible:boolean;createdAt:number;saved?:boolean;opacity:number;
  resampling:'nearest'|'linear';
  advanced?:AdvancedTerrainResult;slope?:TerrainResult;
  profile?:{samples:Array<{distance_m:number;elevation_m:number|null;coordinate?:[number,number]}>;length_m:number;warning:string};

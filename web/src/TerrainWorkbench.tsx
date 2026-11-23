@@ -279,8 +279,25 @@ export default function TerrainWorkbench(p:Props){
    // The request guard above excludes concurrent calculations.
    const controller=new AbortController();analysisRequest.current=controller;
    const ticket=++sequence.current;setBusy(true);setError('');setInfo('');
+     const parameters:TerrainRunParameters={
+       contour_interval_m:Number(interval),
+       reference_elevation_m:Number(reference),
+       observer_longitude:Number(lon),observer_latitude:Number(lat),
+       observer_height_m:Number(height),target_height_m:Number(target),
+       end_longitude:Number(endLon),end_latitude:Number(endLat),
+       max_slope_deg:Number(maxSlope),min_elevation_m:Number(minElevation),
+       max_elevation_m:Number(maxElevation),max_tri_m:Number(maxTri),
+       min_stream_cells:Number(streamCells),azimuth_deg:Number(azimuth),
+       altitude_deg:Number(altitude),section_spacing_m:Number(sectionSpacing),
+       section_half_width_m:Number(sectionWidth),
+       fill_sinks:fillSinks,consider_curvature:considerCurvature,
+       refraction_coefficient:Number(refractionCoeff),
+       comparison_image_id:operation==='dem_difference'?comparisonId:null,
+       observer_points:operation==='viewshed_multi'?observerPoints.map(
+         ([x,y])=>[Number(x),Number(y)]):[],
+     };
    const record:TerrainRecord={id:crypto.randomUUID(),title:modes.find(m=>m.id===operation)!.title,
-     operation,source:dem,geometry:structuredClone(analysisGeometry),inputKey,visible:true,opacity:.5,
+     operation,source:dem,geometry:structuredClone(analysisGeometry),inputKey,parameters,visible:true,opacity:.5,
      referenceSource:operation==='dem_difference'?assets.find(a=>a.id===comparisonId):undefined,
      resampling:operation==='slope_map'||operation==='hillshade'?'linear':'nearest',createdAt:Date.now()};
    try{
@@ -314,24 +331,6 @@ export default function TerrainWorkbench(p:Props){
        // available but must be explicitly enabled to avoid opaque stacking.
        return [...kept.map(r=>r.advanced?.raster?{...r,visible:false}:r),record];
      });
-     const parameters:TerrainRunParameters={
-       contour_interval_m:Number(interval),
-       reference_elevation_m:Number(reference),
-       observer_longitude:Number(lon),observer_latitude:Number(lat),
-       observer_height_m:Number(height),target_height_m:Number(target),
-       end_longitude:Number(endLon),end_latitude:Number(endLat),
-       max_slope_deg:Number(maxSlope),min_elevation_m:Number(minElevation),
-       max_elevation_m:Number(maxElevation),max_tri_m:Number(maxTri),
-       min_stream_cells:Number(streamCells),azimuth_deg:Number(azimuth),
-       altitude_deg:Number(altitude),section_spacing_m:Number(sectionSpacing),
-       section_half_width_m:Number(sectionWidth),
-       fill_sinks:fillSinks,consider_curvature:considerCurvature,
-       refraction_coefficient:Number(refractionCoeff),
-       comparison_image_id:operation==='dem_difference'?comparisonId:null,
-       observer_points:operation==='viewshed_multi'?observerPoints.map(
-         ([x,y])=>[Number(x),Number(y)]):[],
-     };
-     record.parameters=parameters;
      setRunHistory(old=>insertTerrainRun(old,summarizeTerrainRun(
        record.id,record.createdAt,record.operation,record.source,record.geometry,
        physicalMetrics(record),record.referenceSource,parameters,
