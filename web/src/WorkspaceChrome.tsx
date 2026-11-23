@@ -96,7 +96,7 @@ export function WorkspaceCommandPalette({open,commands,onClose}:{
 }
 
 interface FeatureItem {id:string;name:string;revision?:number;layer_id?:string}
-interface FeatureLayer {id:string;name:string;visible:boolean}
+interface FeatureLayer {id:string;name:string;visible:boolean|number}
 function FeatureGroup({name,features,visible,selectedId,onOpen,search}:{
   name:string;features:FeatureItem[];visible:boolean;selectedId:string|null;
   onOpen:(id:string)=>void;search:boolean;
@@ -133,7 +133,7 @@ export function WorkspaceFeatureTree<T extends FeatureItem>({
     [f.name, f.id,layers.find(l=>l.id===f.layer_id)?.name??'']
       .some(s=>s.toLocaleLowerCase().includes(lowered)));
   const groups=[
-    ...layers.map(l=>({id:l.id,name:l.name,visible:l.visible,
+    ...layers.map(l=>({id:l.id,name:l.name,visible:Boolean(l.visible),
       items:visibleFeatures.filter(f=>f.layer_id===l.id)})),
     {id:'unassigned',name:'Unassigned / linked',visible:true,
       items:visibleFeatures.filter(f=>!layers.some(l=>l.id===f.layer_id))},
