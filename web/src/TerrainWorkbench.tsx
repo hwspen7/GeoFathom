@@ -146,6 +146,9 @@ export default function TerrainWorkbench(p:Props){
  const [curvatureRadius,setCurvatureRadius]=useState('2');
  const [designEastGrade,setDesignEastGrade]=useState('0'),[designNorthGrade,setDesignNorthGrade]=useState('0');
  const [designMaxGrade,setDesignMaxGrade]=useState('0.3'),[elevationSigma,setElevationSigma]=useState('0');
+ const [designCurvatureEast,setDesignCurvatureEast]=useState('0');
+ const [designCurvatureCross,setDesignCurvatureCross]=useState('0');
+ const [designCurvatureNorth,setDesignCurvatureNorth]=useState('0');
  const [dsmImageId,setDsmImageId]=useState(''),[optimizeObservers,setOptimizeObservers]=useState('0');
  const [externalInflowImageId,setExternalInflowImageId]=useState('');
  const [meshLod,setMeshLod]=useState(false);
@@ -296,7 +299,7 @@ export default function TerrainWorkbench(p:Props){
  const parametersValid=(operation!=='viewshed_multi'||multiObserversValid&&validNumber(optimizeObservers,0,4)&&Number.isInteger(Number(optimizeObservers))&&Number(optimizeObservers)<=observerPoints.length)&&
    (!['volume','cutfill_map'].includes(operation??'')||validNumber(designEastGrade,-1,1)&&validNumber(designNorthGrade,-1,1)&&
      validNumber(designMaxGrade,.00001,1)&&Math.hypot(Number(designEastGrade),Number(designNorthGrade))<=Number(designMaxGrade)+1e-12&&
-     validNumber(elevationSigma,0,10000))&&
+     validNumber(elevationSigma,0,10000)&&[designCurvatureEast,designCurvatureCross,designCurvatureNorth].every(n=>validNumber(n,-1,1)))&&
    (!['curvature','plan_curvature','profile_curvature'].includes(operation??'')||curvatureMethod!=='quadratic'||validNumber(curvatureRadius,1,4)&&Number.isInteger(Number(curvatureRadius)))&&
    (!['visibility','viewshed_multi'].includes(operation??'')||!dsmImageId||assets.some(a=>a.id===dsmImageId&&a.bands===1&&a.id!==dem?.id))&&
    (operation!=='flow_accumulation'||!externalInflowImageId||flowRoutingMethod==='dinf'&&assets.some(a=>a.id===externalInflowImageId&&a.bands===1&&a.id!==dem?.id))&&
@@ -329,6 +332,7 @@ export default function TerrainWorkbench(p:Props){
    routeModel,meshSamples,streamOrderScheme,hillshadeMode,
    flowRoutingMethod,depressionMethod,curvatureMethod,curvatureRadius,
    designEastGrade,designNorthGrade,designMaxGrade,elevationSigma,
+   designCurvatureEast,designCurvatureCross,designCurvatureNorth,
    dsmImageId,optimizeObservers,meshLod,externalInflowImageId,
    suitabilityModel,suitabilitySlopeWeight,suitabilityTriWeight,suitabilityElevationWeight,
  });
@@ -412,6 +416,8 @@ export default function TerrainWorkbench(p:Props){
          curvature_method:curvatureMethod,curvature_radius:Number(curvatureRadius),
          design_east_grade:Number(designEastGrade),design_north_grade:Number(designNorthGrade),
          design_max_grade:Number(designMaxGrade),elevation_sigma_m:Number(elevationSigma),
+         design_curvature_east:Number(designCurvatureEast),design_curvature_cross:Number(designCurvatureCross),
+         design_curvature_north:Number(designCurvatureNorth),
          optimize_observers:operation==='viewshed_multi'?Number(optimizeObservers):0,
          dsm_image_id:['visibility','viewshed_multi'].includes(operation)?dsmImageId||null:null,
          mesh_lod:operation==='mesh'&&meshLod,
@@ -1034,7 +1040,12 @@ export default function TerrainWorkbench(p:Props){
          <label>Maximum grade (m/m)<input aria-label="Design maximum grade" type="number" step="0.01" min="0.001" max="1" value={designMaxGrade} onChange={e=>setDesignMaxGrade(e.target.value)}/></label>
          <label>Assumed vertical error σ (m)<input aria-label="Assumed elevation sigma" type="number" step="0.1" min="0" max="10000" value={elevationSigma} onChange={e=>setElevationSigma(e.target.value)}/></label>
        </div>
-       <small className="compact-notice">A design plane is evaluated against original DEM cells; uncertainty is an explicit assumption, not a measured accuracy claim.</small>
+       <div className="area-fields">
+         <label>East quadratic (1/m)<input aria-label="Design east quadratic curvature" type="number" step="0.00001" min="-1" max="1" value={designCurvatureEast} onChange={e=>setDesignCurvatureEast(e.target.value)}/></label>
+         <label>Cross quadratic (1/m)<input aria-label="Design cross quadratic curvature" type="number" step="0.00001" min="-1" max="1" value={designCurvatureCross} onChange={e=>setDesignCurvatureCross(e.target.value)}/></label>
+         <label>North quadratic (1/m)<input aria-label="Design north quadratic curvature" type="number" step="0.00001" min="-1" max="1" value={designCurvatureNorth} onChange={e=>setDesignCurvatureNorth(e.target.value)}/></label>
+       </div>
+       <small className="compact-notice">Design uses a quadratic surface with a conservative maximum-grade check across the grid rectangle. Vertical uncertainty is assumed, not measured.</small>
      </details>}
      {operation==='cross_sections'&&<div className="area-fields"><label>Station spacing (m)<input type="number" value={sectionSpacing} onChange={e=>setSectionSpacing(e.target.value)}/></label><label>Half-width (m)<input type="number" value={sectionWidth} onChange={e=>setSectionWidth(e.target.value)}/></label></div>}
      {operation==='mesh'&&<label>3D mesh detail
