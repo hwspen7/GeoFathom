@@ -124,11 +124,16 @@ with tempfile.TemporaryDirectory() as directory:
  await page.getByLabel('Terrain tool group').selectOption('Surface');
  await page.getByRole('button',{name:'Browse terrain tools',exact:true}).click();
  await tools.getByRole('button',{name:'Slope map',exact:true}).click();
+ // Both choices must be real server inputs and survive in the analysis receipt.
+ await page.getByLabel('Terrain gradient algorithm').selectOption('zevenbergen_thorne');
+ await page.getByLabel('Slope classification preset').selectOption('detailed');
  await page.getByRole('button',{name:'Run terrain operation'}).click();
  await visual();
  await expect(page.getByAltText('Derived terrain raster')).toBeVisible();
  await page.getByRole('button',{name:'Composition',exact:true}).click();
  await expect(page.getByRole('img',{name:'Terrain class composition'})).toBeVisible();
+ await page.getByRole('button',{name:'Cumulative',exact:true}).click();
+ await expect(page.getByRole('img',{name:'Class share and cumulative area'})).toBeVisible();
  await page.getByRole('button',{name:'Analysis',exact:true}).click();
  await expect(map).toHaveAttribute('data-terrain-raster-count','1');
  await details();
@@ -137,6 +142,10 @@ with tempfile.TemporaryDirectory() as directory:
  await expect(countMetric.locator('strong')).not.toBeEmpty();
  await expect(countMetric.locator('strong')).not.toContainText('°');
  await expect(page.getByLabel('Slope edge cells explanation')).toContainText('boundary cells excluded');
+ await page.getByLabel('Terrain class statistics').locator('summary').click();
+ await expect(page.getByRole('table',{name:'Terrain class area statistics'}).locator('tbody tr')).toHaveCount(8);
+ await expect(page.getByLabel('Terrain run provenance')).toContainText('"gradient_method":"zevenbergen_thorne"');
+ await expect(page.getByLabel('Terrain run provenance')).toContainText('"slope_classes":"detailed"');
  await visual();
  const opacity=page.getByLabel('Terrain raster opacity');
  await expect(opacity).toHaveValue('50');
@@ -149,6 +158,13 @@ with tempfile.TemporaryDirectory() as directory:
  await outputs();
  const download=page.waitForEvent('download');await page.getByRole('button',{name:'GeoTIFF',exact:true}).click();
  expect((await download).suggestedFilename()).toBe('slope_map.tif');
+ const csvFile=page.waitForEvent('download');
+ await page.getByRole('button',{name:'Export terrain class CSV'}).click();
+ const exported=await csvFile;
+ expect(exported.suggestedFilename()).toBe('slope_map-classes.csv');
+ const csv=readFileSync((await exported.path())!,'utf8');
+ expect(csv).toContain('class,cells,percent_valid,area_m2,cumulative_percent');
+ expect(csv.split('\\n').length).toBeGreaterThan(8);
  // Two related raster analyses remain independently addressable.
  await page.getByRole('button',{name:'Browse terrain tools',exact:true}).click();
  await tools.getByRole('button',{name:'Hillshade',exact:true}).click();
