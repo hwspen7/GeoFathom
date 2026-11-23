@@ -85,12 +85,22 @@ export default function SurveyTools({
     });
   }
 
+  const traceReady=saved.some(feature=>
+    feature.geometry.type==='LineString'||feature.geometry.type==='MultiLineString');
   const toolbar=<div className="survey-command-bar">
       <div className="survey-mode-grid">
         {buttonModes.map(item => (
           <button key={item.mode} className={mode === item.mode ? 'active' : ''}
-            title={'Draw '+item.title.toLowerCase()+(({point:' (P)',polygon:' (G)',line:' (L)',rectangle:' (R)',circle:' (C)'} as Partial<Record<Exclude<ShapeMode,null>,string>>)[item.mode]??'')} aria-pressed={mode===item.mode} onClick={() => onStart(item.mode)}
-            disabled={busy||(['hole','split'].includes(item.mode)&&(locked||(geometry?.type!=='Polygon'&&geometry?.type!=='MultiPolygon')))}>
+            title={item.mode==='trace-along'&&!traceReady?
+              'Save a vector line in the active project before tracing.':
+              ['hole','split'].includes(item.mode)&&(!geometry||!['Polygon','MultiPolygon'].includes(geometry.type))?
+                'Select an editable polygon first.':
+                'Draw '+item.title.toLowerCase()+
+                (({point:' (P)',polygon:' (G)',line:' (L)',rectangle:' (R)',circle:' (C)'} as Partial<Record<Exclude<ShapeMode,null>,string>>)[item.mode]??'')}
+            aria-pressed={mode===item.mode} onClick={() => onStart(item.mode)}
+            disabled={busy||(item.mode==='trace-along'&&!traceReady)||
+              (['hole','split'].includes(item.mode)&&
+                (locked||(geometry?.type!=='Polygon'&&geometry?.type!=='MultiPolygon')))}>
             {item.mode === 'circle' ? <Circle size={15}/> :
              item.mode === 'line' ? <Ruler size={15}/> :
              item.mode === 'split' || item.mode === 'trace-along' ? <Scissors size={15}/> :
@@ -102,9 +112,12 @@ export default function SurveyTools({
       {mode && (
         <div className="survey-action-bar">
           <span><MousePointer2 size={13}/> {points.length} pts</span>
-          <button title="Remove last point" disabled={!points.length} onClick={onUndoPoint}><Undo2 size={14}/></button>
+          <button title="Undo last sketch point (Backspace)" aria-label="Undo last sketch point"
+            disabled={!points.length||busy} onClick={onUndoPoint}><Undo2 size={14}/></button>
           <button title="Cancel" aria-label="Cancel drawing" onClick={onCancel}><RotateCcw size={14}/></button>
-          <button className="finish-button" disabled={busy||points.length<(mode==='point'?1:['polygon','hole'].includes(mode)?3:2)} onClick={onFinish}><Check size={14}/> Finish</button>
+          <button className="finish-button" title="Finish (Enter / F2; double-click, right-click, or click the first polygon vertex)"
+            disabled={busy||points.length<(mode==='point'?1:['polygon','hole'].includes(mode)?3:2)}
+            onClick={onFinish}><Check size={14}/> Finish</button>
         </div>
       )}
       <div className="survey-action-bar">
@@ -120,7 +133,7 @@ export default function SurveyTools({
       <div className="survey-action-bar">
         <button disabled={!canUndo||busy} onClick={onUndo}><Undo2 size={14}/> Undo</button>
         <button disabled={!canRedo||busy} onClick={onRedo}><Redo2 size={14}/> Redo</button>
-        <button disabled={!geometry||busy} onClick={onDuplicate}><Copy size={14}/> Copy</button>
+        <button disabled={!geometry||busy||Boolean(mode)} onClick={onDuplicate}><Copy size={14}/> Copy</button>
       </div>
     </div>;
   return (
@@ -157,7 +170,11 @@ export default function SurveyTools({
           {numericMode === 'bearing' && <input aria-label="Bearing in degrees" type="number"
             step="any" placeholder="Bearing °" value={bearing} onChange={event => setBearing(event.target.value)}/>}
         </div>}
-        <button type="submit" className="numeric-submit">Apply exact geometry</button>
+        <button type="submit" className="numeric-submit"
+          disabled={Boolean(mode)&&numericMode!=='point'}
+          title={mode&&numericMode!=='point'?'Finish or cancel the active sketch first.':'Create exact geometry'}>
+          {mode&&numericMode==='point'?'Add precise vertex':'Apply exact geometry'}
+        </button>
       </form>
       <div className="survey-overlay">
         <div className="section-heading"><GitMerge size={14}/> Combine with saved feature</div>
