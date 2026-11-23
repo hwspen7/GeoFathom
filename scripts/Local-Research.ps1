@@ -121,7 +121,11 @@ $logDir=Join-Path $root 'data\local-acceptance'
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 $logFile=Join-Path $logDir ('acceptance-'+$Mode.ToLowerInvariant()+'-'+(Get-Date -Format 'yyyyMMdd-HHmmss')+'.txt')
 Start-Transcript -Path $logFile -Force | Out-Null
+$previousPath=$env:Path
 try{
+    # Playwright launches its backend with bare python; inherit the same
+    # virtual environment used by the numerical acceptance checks above.
+    $env:Path=(Split-Path -Parent $venv)+[IO.Path]::PathSeparator+$previousPath
     if($Mode -eq 'Full'){
         $cmake=CommandPath 'cmake.exe'
         Checked $cmake @('-S','.','-B','build/native-local-msvc','-A','x64') 'Configure MSVC C++ native kernels'
@@ -167,6 +171,7 @@ try{
     Write-Host "Log: $logFile"
     throw
 }finally{
+    $env:Path=$previousPath
     Remove-Item Env:\GEOFATHOM_REQUIRE_NATIVE -ErrorAction SilentlyContinue
     Remove-Item Env:\GEOFATHOM_NATIVE_LIBRARY -ErrorAction SilentlyContinue
     Remove-Item Env:\GEOFATHOM_E2E_DATABASE_PATH -ErrorAction SilentlyContinue
