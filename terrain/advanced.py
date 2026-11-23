@@ -642,7 +642,9 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
         result["mesh"]={"rows":heights.shape[0],"cols":heights.shape[1],
             "origin_xy":list(affine*(.5,.5)),"source_crs":str(crs),
             "dx_m":abs(affine.a)*step,"dy_m":abs(affine.e)*step,
-            "heights":[float(v) if ok else None for v,ok in zip(heights.flat,mask.flat)]}
+            "heights":[float(v) if ok else None for v,ok in zip(heights.flat,mask.flat)],
+            "source_grid_rows":int(z.shape[0]),"source_grid_cols":int(z.shape[1]),
+            "source_sampling_step":int(step)}
         if mesh_lod:
             from .p1_science import mesh_lod_tiles
             tiles=mesh_lod_tiles(heights,mask,abs(affine.a)*step,abs(affine.e)*step,
