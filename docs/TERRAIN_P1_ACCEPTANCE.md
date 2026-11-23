@@ -12,7 +12,7 @@ not a survey, field accuracy, or full professional certification.** See also
 | Hydrology | Eight-triangle D-infinity downslope routing on a metric projected grid, fractional two-receiver flow, explicit externally provided cell-equivalent upstream inflow, NoData diagonal-corner exclusion, deterministic high-to-low processing, optional bounded least-cut channel breaching, existing priority-flood filling and finite flat routing | No independent TauDEM/GRASS basin comparison across catchment topologies. Breaching is bounded **approximate least-cost excavation**, not a global minimum-cut earthworks design. Does not infer unknown off-grid inflow |
 | Curvature | 3×3–9×9 centered least-squares quadratic fit with normalized coordinates, analytic second derivatives, explicit NoData gaps and undefined directional curvature on flat terrain | No independently published external curvature tolerance suite; physically biased data need vertical error analysis |
 | Viewshed | Co-registered DSM blocker elevation alongside bare-earth observer/target heights, unknown-ray masks, refraction/curvature, greedy selection of up to four sites from at most 12 user candidates | Candidate search is greedy rather than globally optimal; ray count still bounded by 100 million and 10 km local extent; no automatically acquired/verified DSM inventory |
-| Engineering | Grade-constrained planar design surface and cut/fill, assumed independent vs fully correlated elevation error bounds; weighted suitability utility from slope, TRI and middle-of-band elevation with hard exclusions, normalized weights, continuous GeoTIFF score | Not a non-planar engineered surface, geotechnical model, surveyed volumetric computation, calibrated stochastic uncertainty distribution or GIS MCDA validation. Scores are **not probabilities** |
+| Engineering | Grade-constrained quadratic design surface (including optional east/north/cross curvature) and cut/fill, conservative whole-grid maximum grade, assumed independent vs fully correlated elevation error bounds; weighted suitability utility from slope, TRI and middle-of-band elevation with hard exclusions, normalized weights, continuous GeoTIFF score | Not a fully unconstrained CAD-designed surface, geotechnical model, surveyed volumetric computation, calibrated stochastic uncertainty distribution or GIS MCDA validation. Scores are **not probabilities** |
 | 3D | Seam-aligned 16/32/64-cell tile kernel with power-of-two LOD, a 3-level mesh pyramid in result data, camera-zoom-based index buffers with NoData interior checks, WebGL2 3D preview and OBJ export | This is **preloaded adaptive LOD**, not camera-visible network streaming / terrain quadtree with out-of-core fetch. The 3D viewport does not automatically drape every scientific result on the mesh |
 
 ## Semantics and reproducibility
@@ -33,6 +33,8 @@ not a survey, field accuracy, or full professional certification.** See also
 - Weighted suitability uses scores in [0,1], with a hard exclusion score of
   zero; empty/no-derivative cells are NoData. The score is neither probability
   nor a statistically calibrated suitability certainty.
+- Quadratic engineering design grades are bounded on the full study-grid
+  rectangle (a conservative bound for an irregular selected polygon).
 - Volume uncertainties are conditional on **user-supplied** one-sigma
   vertical error, and must not be confused with surveyed confidence intervals.
 - LOD index selection reduces GPU face count by a zoom-dependent factor but
