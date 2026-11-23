@@ -9,6 +9,7 @@ import type {ScratchFeature} from './scratch';
 const api=vi.hoisted(()=>({
  importVectorFile:vi.fn(),uploadImagery:vi.fn(),saveFeatureBatch:vi.fn(),
  exportVectorFile:vi.fn(),exportProject:vi.fn(),downloadMapPDF:vi.fn(),
+ bufferGeometry:vi.fn(),applyOverlay:vi.fn(),transformProjectCoordinates:vi.fn(),
 }));
 vi.mock('./api',()=>api);
 vi.mock('./DataServicesPanel',()=>({
@@ -43,6 +44,11 @@ beforeEach(()=>{
  api.exportProject.mockResolvedValue({type:'FeatureCollection',features:[{
   type:'Feature',geometry,properties:{name:'Area'}}]});
  api.downloadMapPDF.mockResolvedValue(undefined);
+ api.bufferGeometry.mockResolvedValue({geometry,measurement:measured});
+ api.applyOverlay.mockResolvedValue({geometry,measurement:measured});
+ api.transformProjectCoordinates.mockResolvedValue({
+  source:'EPSG:4326',target:'EPSG:3857',coordinates:[[111319.49,111325.14]],units:'meter',
+ });
  Object.defineProperty(URL,'createObjectURL',{configurable:true,value:vi.fn(()=> 'blob:geofathom-test')});
  Object.defineProperty(URL,'revokeObjectURL',{configurable:true,value:vi.fn()});
 });
@@ -55,6 +61,10 @@ function dataProps(){
   onRebuild:vi.fn(async()=>{}),onStoreAreas:vi.fn(),
   onRefresh:vi.fn(),onTiles:vi.fn(),onPreview:vi.fn(),onPage:vi.fn(),
   onRasterAdded:vi.fn(),onOpenLayers:vi.fn(),
+  vectorSources:[{id:'other',name:'Parcel B',geometry:{
+   type:'Polygon' as const,coordinates:[[[.02,.02],[.03,.02],[.03,.03],[.02,.02]]],
+  }}],
+  onDerived:vi.fn(),
  };
 }
 function exportProps(){
@@ -91,12 +101,31 @@ describe('Data and Export independent fixed workbenches',()=>{
   await waitFor(()=>expect(api.saveFeatureBatch).toHaveBeenCalled());
   expect(api.saveFeatureBatch.mock.calls[0][1][0].properties.source_type).toBe('polygonized_network');
  });
- it('only one Data source page is visible at a time',()=>{
+ it('system tools select indexed database, jobs and access without duplicate pages',()=>{
   render(<DataWorkbench {...dataProps()}/>);
-  fireEvent.click(screen.getByRole('button',{name:'Database'}));
+  fireEvent.click(screen.getByRole('button',{name:'System'}));
   expect(screen.getByTestId('data-source-panel').textContent).toBe('database');
-  fireEvent.click(screen.getByRole('button',{name:'Jobs'}));
+  fireEvent.change(screen.getByLabelText('Data system operation'),{target:{value:'jobs'}});
   expect(screen.getByTestId('data-source-panel').textContent).toBe('jobs');
+ });
+ it('Data performs real polygon union and saves a detached derived geometry',async()=>{
+  const props=dataProps();
+  render(<DataWorkbench {...props}/>);
+  fireEvent.click(screen.getByRole('button',{name:'Process'}));
+  fireEvent.change(screen.getByLabelText('Processing reference feature'),{target:{value:'other'}});
+  fireEvent.click(screen.getByRole('button',{name:'Run union'}));
+  await waitFor(()=>expect(api.applyOverlay).toHaveBeenCalled());
+  expect(props.onDerived).toHaveBeenCalledWith(geometry,measured,'union derived feature');
+ });
+ it('Data transforms source coordinates through project CRS service',async()=>{
+  render(<DataWorkbench {...dataProps()}/>);
+  fireEvent.click(screen.getByRole('button',{name:'Process'}));
+  fireEvent.change(screen.getByLabelText('Data processing operation'),{target:{value:'reproject'}});
+  fireEvent.change(screen.getByLabelText('Source longitude'),{target:{value:'1'}});
+  fireEvent.change(screen.getByLabelText('Source latitude'),{target:{value:'1'}});
+  fireEvent.click(screen.getByRole('button',{name:'Run reproject'}));
+  await waitFor(()=>expect(api.transformProjectCoordinates).toHaveBeenCalledWith(
+   'project-1',[[1,1]],'EPSG:3857'));
  });
  it('exports selection GeoJSON and detected-area measurements CSV',async()=>{
   render(<ExportWorkbench {...exportProps()}/>);
