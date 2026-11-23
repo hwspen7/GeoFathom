@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - feature/data-export-topology-workbench
     paths:
       - 'terrain/**'
       - 'tests/test_terrain_*'
