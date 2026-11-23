@@ -1740,3 +1740,42 @@ button:disabled { opacity: .45; cursor: not-allowed; }
   .desktop-gis .gis-toolbar .survey-mode-family{gap:1px}
   .desktop-gis .gis-toolbar .survey-idle-actions{gap:4px}
 }
+
+
+/* Scientific terrain result density: multi-view plots plus readable physical areas. */
+.desktop-gis .terrain-quality-summary{
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;
+  margin:5px 0 9px;color:#526d7d;font-size:10px;
+}
+.desktop-gis .terrain-quality-summary span{
+  min-width:0;overflow-wrap:anywhere;background:#f3f8fa;
+  border:1px solid #e1eaf0;padding:6px 7px;border-radius:5px;
+}
+.desktop-gis .terrain-quality-summary span:first-child{grid-column:1/-1}
+.desktop-gis .terrain-cumulative-chart{display:block;width:100%;height:auto;max-height:245px}
+.desktop-gis .terrain-class-data-table{
+  width:100%;border-collapse:collapse;table-layout:fixed;font-size:10px;
+  color:#304e61;font-variant-numeric:tabular-nums;
+}
+.desktop-gis .terrain-class-data-table th,
+.desktop-gis .terrain-class-data-table td{
+  padding:5px 3px;text-align:right;border-bottom:1px solid #e4edf2;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.desktop-gis .terrain-class-data-table th:first-child{
+  width:29%;text-align:left;
+}
+.desktop-gis .terrain-class-data-table thead th{
+  font-weight:650;color:#57768a;background:#f2f7fa;
+}
+.desktop-gis .terrain-class-data-table tbody th{font-weight:550}
+.desktop-gis .terrain-class-swatch{
+  display:inline-block;width:8px;height:8px;border-radius:2px;
+  margin-right:4px;vertical-align:middle;
+}
+.desktop-gis .terrain-metric-details[open]>.terrain-class-data-table{
+  margin:6px 0 8px;
+}
+.desktop-gis .terrain-output-downloads button{
+  min-height:27px;font-size:10px;
+}
