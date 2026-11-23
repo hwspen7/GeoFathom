@@ -291,7 +291,7 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
                 flow_routing_method="d8",depression_method="fill",curvature_method="finite_difference",curvature_radius=2,
                 design_east_grade=0.,design_north_grade=0.,design_max_grade=.3,elevation_sigma_m=0.,
                 optimize_observers=0,dsm_path=None,mesh_lod=False,
-                suitability_model="binary",suitability_weights=(.5,.25,.25),cancel=None):
+                suitability_model="binary",suitability_weights=(.5,.25,.25),external_inflow_path=None,cancel=None):
     checkpoint(cancel)
     if gradient_method not in {"horn","zevenbergen_thorne"}:
         raise RasterError("Unsupported terrain gradient method.")
@@ -323,6 +323,8 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
         raise RasterError("Coverage optimisation count must be 0–4.")
     if suitability_model not in {"binary","weighted"} or len(suitability_weights)!=3 or not all(math.isfinite(w) and w>=0 for w in suitability_weights) or sum(suitability_weights)<=0:
         raise RasterError("Invalid suitability weighting model or weights.")
+    if external_inflow_path is not None and not (operation=="flow_accumulation" and flow_routing_method=="dinf"):
+        raise RasterError("External contributing area is accepted only for D-infinity accumulation.")
     if operation=="cross_sections":
         from .corridor import cross_sections
         return cross_sections(path,geometry,section_spacing,section_width,cancel)
@@ -351,6 +353,19 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
             raise RasterError("DSM and DEM must have the same projected grid; explicitly resample first.")
         blocking_valid=valid&dsm_valid
         blocking_surface=np.where(blocking_valid,np.maximum(z,dsm),np.nan)
+    external_inflow=None
+    if external_inflow_path is not None:
+        with rasterio.open(external_inflow_path) as source:
+            if source.tags().get("TERRAIN_UNIT") not in {"cells","cell_equivalents"}:
+                raise RasterError("External inflow raster needs TERRAIN_UNIT=cells or cell_equivalents.")
+        flow,flow_valid,_,flow_affine,flow_crs,_,_=_window(external_inflow_path,geometry,maximum,max_cells)
+        if flow.shape!=z.shape or flow_crs!=crs or not np.allclose(tuple(flow_affine),tuple(affine),atol=1e-8,rtol=0):
+            raise RasterError("External contributing area raster must match the DEM grid exactly.")
+        if not flow_valid[valid].all():
+            raise RasterError("External contributing area is missing values on valid DEM cells; fill explicit zeros first.")
+        if np.any(flow[valid]<0):
+            raise RasterError("External contributing area cannot be negative.")
+        external_inflow=np.where(valid,flow,0.)
     hydro_ops={"flow_direction","flow_accumulation","flow_accumulation_mfd",
                "streams","stream_order","watershed"}
     # Drainage may use a conditioned working grid; other surface products
@@ -373,6 +388,7 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
                              "hillshade_mode":hillshade_mode if operation=="hillshade" else None,
                              "mesh_samples":mesh_samples if operation=="mesh" else None,
                              "flow_routing_method":flow_routing_method if operation in hydro_ops else None,
+                             "external_inflow_supplied":external_inflow is not None if operation=="flow_accumulation" else None,
                              "depression_method":depression_method if fill_sinks and operation in hydro_ops else None,
                              "curvature_method":curvature_method if operation in {"curvature","plan_curvature","profile_curvature"} else None,
                              "curvature_radius_cells":curvature_radius if operation in {"curvature","plan_curvature","profile_curvature"} else None,
@@ -399,8 +415,11 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
             flow_routing_method=flow_routing_method,curvature_method=curvature_method,curvature_radius=curvature_radius,
             design_east_grade=design_east_grade,design_north_grade=design_north_grade,
             design_max_grade=design_max_grade,elevation_sigma_m=elevation_sigma_m,
-            suitability_model=suitability_model,suitability_weights=suitability_weights)
+            suitability_model=suitability_model,suitability_weights=suitability_weights,external_inflow=external_inflow)
         result["warning"]="Projected source-grid product; nodata and incomplete neighborhoods excluded. Unconditioned D8 terminates at sinks/flats; suitability and path costs are screening estimates, not engineering certification."
+        if operation=="flow_accumulation" and external_inflow is not None:
+            result["warning"]=("D-infinity routing includes explicitly supplied external contributing-area cell equivalents on matching valid DEM cells. "
+                "The provided external inflow is not independently verified; no additional off-grid catchment is inferred.")
         if operation=="suitability" and suitability_model=="weighted":
             result["warning"]=("Weighted linear criteria (slope, terrain ruggedness and midpoint elevation) with hard constraints; "
                 "normalized scores 0–1 are utilities, not probabilities. The full source GeoTIFF preserves physical float scores. "
@@ -641,6 +660,8 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
         flags.append("upstream_outside_grid_not_evaluated")
     if dsm_path is not None and operation in {"visibility","viewshed_multi"}:
         flags.append("dsm_source_unverified")
+    if external_inflow is not None:
+        flags.append("external_upstream_contribution_input_unverified")
     if optimize_observers and operation=="viewshed_multi":
         flags.append("greedy_coverage_not_global_optimum")
     if operation in {"volume","cutfill_map"} and elevation_sigma_m>0:
