@@ -1368,3 +1368,82 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 }
 .desktop-gis .gis-results-monitor .terrain-result-tabs button{font-size:11px;min-height:36px}
 .desktop-gis .gis-results-monitor .terrain-outputs-list{margin:3px 0 0}
+
+
+/* Research-grade analysis retains the existing fixed, compact Terrain console.
+   Advanced hypotheses and checkpoint controls are disclosed, never duplicated. */
+.desktop-gis .terrain-research-console{
+  display:flex;flex-direction:column;gap:8px;min-width:0;width:100%;
+}
+.desktop-gis .terrain-research-row{
+  display:flex;align-items:center;gap:6px;justify-content:space-between;
+}
+.desktop-gis .terrain-research-row strong{font-size:12px;color:#2e5368}
+.desktop-gis .terrain-research-row button{
+  flex:0 0 auto;border:1px solid #cfdfe9;border-radius:6px;
+  color:#285f7c;background:#f6fafc;font-size:10px;font-weight:650;
+  min-height:30px;padding:6px 9px;
+}
+.desktop-gis .terrain-research-row button.primary-tool{
+  flex:1;background:#245f83;color:#fff;border-color:#245f83;
+}
+.desktop-gis .terrain-research-row button:disabled{opacity:.45}
+.desktop-gis .terrain-research-factor-chooser{
+  display:flex;align-items:end;gap:8px;
+}
+.desktop-gis .terrain-research-factor-chooser label{flex:1}
+.desktop-gis .terrain-research-factor-chooser>span{
+  font-size:10px;color:#688292;white-space:nowrap;padding-bottom:8px;
+}
+.desktop-gis .terrain-research-fields{
+  display:flex;flex-direction:column;gap:6px;min-width:0;
+}
+.desktop-gis .terrain-research-fields label,
+.desktop-gis .terrain-research-console>label,
+.desktop-gis .terrain-research-console .terrain-research-two>label,
+.desktop-gis .terrain-research-factor-chooser label{
+  display:flex;flex-direction:column;gap:3px;min-width:0;
+  font-size:10px;color:#58768a;font-weight:650;
+}
+.desktop-gis .terrain-research-console input:not([type="checkbox"]):not([type="file"]),
+.desktop-gis .terrain-research-console select{
+  box-sizing:border-box;min-width:0;width:100%;min-height:30px;
+  border:1px solid #d4e0e8;border-radius:5px;padding:5px 7px;
+  background:white;color:#28465b;font-size:11px;
+}
+.desktop-gis .terrain-research-console .terrain-research-two{
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;
+}
+.desktop-gis .terrain-research-advanced{
+  margin:0;border:1px solid #e0e9ef;border-radius:6px;
+  padding:6px 8px;background:#fcfdfe;font-size:10px;color:#536f82;
+}
+.desktop-gis .terrain-research-advanced>summary{
+  cursor:pointer;font-size:10px;font-weight:650;
+}
+.desktop-gis .terrain-research-advanced[open]{display:flex;flex-direction:column;gap:7px}
+.desktop-gis .terrain-research-advanced textarea{width:100%;min-height:54px;font-size:10px}
+.desktop-gis .terrain-research-advanced label:has(input[type="checkbox"]){
+  display:flex;flex-direction:row;gap:5px;align-items:center;
+}
+.desktop-gis .terrain-research-advanced .terrain-research-checkpoint-input{
+  display:flex;flex-direction:column;gap:5px;
+}
+.desktop-gis .terrain-research-checkpoint-input input{max-width:100%;font-size:10px}
+.desktop-gis .terrain-research-outcome{
+  border-top:1px solid #dbe6ec;padding-top:9px;display:flex;flex-direction:column;gap:9px;
+}
+.desktop-gis .terrain-research-report{
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;
+}
+.desktop-gis .terrain-research-report span{
+  background:#f3f7fa;border:1px solid #e1ebf0;border-radius:5px;
+  padding:6px;display:flex;justify-content:space-between;gap:4px;
+  font-size:10px;color:#49667c;
+}
+.desktop-gis .terrain-research-report strong{color:#174a6e}
+.desktop-gis .terrain-research-status{
+  display:block;color:#315e78;font-size:10px;line-height:1.4;
+}
+.desktop-gis .gis-operations .terrain-research-page{padding-top:10px!important}
+.desktop-gis .terrain-linked-row>button{min-width:48px;padding:6px}
