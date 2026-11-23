@@ -29,9 +29,10 @@ function saveFile(name:string,bytes:Uint8Array,mime:string){
  window.setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
 export default function TerrainResearchWorkbench({
- dem,geometry,assets,connected,
+ dem,geometry,assets,connected,onResult,
 }:{
  dem:RasterAsset|null;geometry:GeoJSON.Geometry|null;assets:RasterAsset[];connected:boolean;
+ onResult?:(result:TerrainResearchResult|null)=>void;
 }){
  const [criteria,setCriteria]=useState<CriterionForm[]>(()=>[initial(0),initial(1)]);
  const [selected,setSelected]=useState(0);
@@ -49,6 +50,7 @@ export default function TerrainResearchWorkbench({
  const controller=useRef<AbortController|null>(null);
  const mounted=useRef(true);
  useEffect(()=>()=>{mounted.current=false;controller.current?.abort();},[]);
+ useEffect(()=>{onResult?.(result);},[result,onResult]);
  useEffect(()=>{
   if(!dem)return;
   setCriteria(old=>old.map((row,i)=>row.image_id?row:{...row,image_id:i===0?dem.id:(assets.find(x=>x.id!==dem.id)?.id??dem.id)}));
@@ -228,7 +230,7 @@ export default function TerrainResearchWorkbench({
         <span>Mean σ <strong>{fmt(result.model.uncertainty.score_sd_mean)}</strong></span>}
      </div>
      <div className="terrain-research-row">
-       <button type="button" onClick={exportArchive}>Research ZIP</button>
+       {!onResult&&<button type="button" onClick={exportArchive}>Research ZIP</button>}
        <button type="button" disabled={validating} onClick={()=>void verify()}>Verify</button>
      </div>
    </section>}
