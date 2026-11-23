@@ -1180,7 +1180,6 @@ export default function App() {
           <div className="gis-header-popover" aria-label="Unified save and export actions">
             <div className="gis-project-actions" ref={setProjectActionsTarget}/>
             <button type="button" onClick={()=>revealPanel('tools-export')}>Open Export module</button>
-            <div className="gis-terrain-export-action" ref={setTerrainExportTarget}/>
           </div>
         </details>
         <button className="gis-connection" title={connectionError||'Check backend connection'} onClick={()=>setConnectionRetry(v=>v+1)}>{capabilities?<Wifi size={14}/>:<WifiOff size={14}/>} {capabilities?'Connected':'Reconnect API'}</button>
@@ -2090,6 +2089,8 @@ export default function App() {
               selected={geometry} measurement={measurement}
               scratch={scratch} faces={networkAreas?.faces??[]}
               terrainRasters={terrainRasters} viewport={viewport}/>
+            <div className="gis-terrain-export-action export-specialized-actions"
+              ref={setTerrainExportTarget}/>
           </section>
 
 
