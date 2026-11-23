@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import {createPortal} from 'react-dom';
 import {
-  Copy, Download, Eye, EyeOff, History, Layers3, Lock,
+  Copy, Eye, EyeOff, History, Layers3, Lock,
   LockOpen, MapPin, Plus, RotateCcw, Save,
 } from 'lucide-react';
 
 import {
-  copyProjectFeature, createLayer, deleteProjectFeature, exportProject, getFeatureHistory, getProjects,getProjectTrash,restoreDeletedFeature,type TrashedFeature,
+  copyProjectFeature, createLayer, deleteProjectFeature, getFeatureHistory, getProjects,getProjectTrash,restoreDeletedFeature,type TrashedFeature,
   getWorkspace, newProject, patchLayer, restoreFeature, saveProjectFeature,
   saveFeatureBatch, patchLayerStyle, updateProjectFeature, type GeoLayer, type GeoWorkspace, type Project,
   type WorkspaceFeature, type FeatureHistory,
@@ -235,21 +235,6 @@ export default function ProjectsPanel({
     });
   }
 
-  async function exportJson() {
-    if (!selected) return;
-    try {
-      const collection = await exportProject(selected);
-      const blob = new Blob([JSON.stringify(collection, null, 2)], {
-        type: 'application/geo+json',
-      });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url; link.download = 'geofathom-project.geojson';
-      document.body.append(link); link.click(); link.remove();
-      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-    } catch (cause) { setError(String(cause)); }
-  }
-
   async function addNewLayer(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selected || !layerName.trim()) return;
@@ -396,9 +381,7 @@ export default function ProjectsPanel({
         disabled={busy || !workspace || !geometry || locked || Boolean(!current && activeLayer?.locked)}>
         <Save size={14}/> {current ? 'Update feature' : 'Save selected'}
       </button>
-      <button onClick={() => void exportJson()} disabled={busy}>
-        <Download size={14}/> Export project
-      </button>
+
     </div>
   );
   const projectSelector=(
