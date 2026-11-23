@@ -811,3 +811,19 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 @media(max-width:1300px){
  .desktop-gis .gis-project-actions .project-actions button:last-child{display:none}
 }
+
+
+/* GIS and spatial analysis reuse the same research results monitor instead of
+   nesting result tables below the input forms. */
+.desktop-gis .gis-spatial-results,.desktop-gis .gis-professional-results{display:flex;flex-direction:column;gap:7px;min-width:0}
+.desktop-gis .gis-results-monitor .gis-result-list{max-height:245px;overflow:auto;min-width:0;margin:4px 0}
+.desktop-gis .gis-results-monitor .gis-result-list button{width:100%;overflow-wrap:anywhere;text-align:left}
+.desktop-gis .gis-attribute-results{border-top:1px solid #d8e1e7;padding-top:7px}
+.desktop-gis .gis-attribute-results>strong{font-size:12px;color:#354f62}
+.desktop-gis .gis-results-monitor .attribute-table-scroll{max-height:350px;overflow:auto;margin:5px 0;border:1px solid #dfe6eb;background:white}
+.desktop-gis .gis-results-monitor .attribute-table{min-width:440px}
+.desktop-gis .gis-professional-results .terrain-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.desktop-gis .gis-professional-results .terrain-metrics>div{display:flex;flex-direction:column;gap:3px;border:1px solid #dfe5ea;background:#fff;padding:8px}
+.desktop-gis .gis-professional-results .terrain-metrics strong{font-size:15px}
+.desktop-gis .gis-professional-results .terrain-profile{padding:6px 0;border-top:1px solid #dfe5ea}
+.desktop-gis .gis-header .workspace-module-bar{flex:1;min-width:130px;max-width:100%;overflow-x:auto;white-space:nowrap}

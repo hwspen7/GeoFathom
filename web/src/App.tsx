@@ -1730,6 +1730,7 @@ export default function App() {
           <section id="tools-gis" hidden={activeTool!=='tools-gis'} className="panel-section">
             <div className="section-heading"><Layers3 size={16}/><span>Professional GIS tools</span></div>
             <ProfessionalPanel
+              resultsTarget={resultsTarget} active={activeTool==='tools-gis'&&showTools}
               key={activeProjectId ?? 'no-project'}
               projectId={activeProjectId}
               workspace={projectWorkspace}
@@ -1806,6 +1807,7 @@ export default function App() {
               }}/>
             <div className="section-heading"><Layers3 size={16}/><span>GIS selection, QA & print layout</span></div>
             <SpatialToolsPanel
+              resultsTarget={resultsTarget} active={activeTool==='tools-spatial'&&showTools}
               key={activeProjectId ?? 'no-project'}
               projectId={activeProjectId}
               geometry={geometry}
