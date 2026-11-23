@@ -14,7 +14,7 @@ test('keyboard drawing, right-click completion, selection context and cancel',as
  for(const [a,b] of [[x,y],[x+d,y],[x+d,y+d],[x,y+d]])await page.mouse.click(a,b);
  await page.mouse.click(x+5,y+5,{button:'right'});
  await expect(toolbar.getByRole('button',{name:'Finish',exact:true})).toHaveCount(0);
- await openProjectDrawer(page);
+ await openProjectDrawer(page,'layers');
  await expect(page.getByLabel('Local drawings').getByRole('button',{name:'Polygon 1',exact:true})).toBeVisible();
  await page.mouse.click(x+d/2,y+d/2,{button:'right'});
  const menu=page.getByRole('menu',{name:'Map commands'});
