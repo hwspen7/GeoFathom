@@ -83,7 +83,10 @@ export function preferredSatellite(viewport:[number,number,number,number]|null,l
  if(licensed)return 'custom';
  if(viewport){
   const [w,s,e,n]=viewport,lon=(w+e)/2,lat=(s+n)/2;
-  if(lon>=-125&&lon<=-66&&lat>=24&&lat<=50)return 'satellite';
+  // The rough continental-US bounds also cover Vancouver and southern
+  // British Columbia. Never route that Canadian coast to US-only imagery.
+  if(lon>=-125&&lon<=-66&&lat>=24&&lat<50&&
+     !(lon<-120&&lat>=48.8))return 'satellite';
  }
  return 'imagery';
 }
