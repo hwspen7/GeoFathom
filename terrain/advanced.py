@@ -508,7 +508,7 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
         from .p1_science import design_surface
         _,design_metrics=design_surface(z,valid,abs(affine.a),abs(affine.e),reference,
             design_east_grade,design_north_grade,elevation_sigma_m,design_max_grade,
-            design_curvature_east,design_curvature_cross,design_curvature_north)
+            design_curvature_east,design_curvature_cross,design_curvature_north,cancel=cancel)
         result["metrics"]={**design_metrics,"reference_elevation_m":reference}
         result["warning"]="Projected cell-center cut/fill against the declared grade-constrained quadratic design surface; the maximum grade is conservatively checked across the full grid rectangle. NoData excluded. Uncertainty bounds assume the supplied one-sigma vertical error and independent versus fully correlated cell errors; not survey-certified."
     elif operation=="visibility":
