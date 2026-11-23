@@ -44,3 +44,36 @@ request to reproject to a locally suitable metric CRS. Scale error above
 the actual sampled maximum is in the machine-readable result and UI.
 Neither this geometric scale check nor a matching vertical datum label
 validates the absolute survey accuracy of the elevations.
+
+## Strict >=95 P0 controlled-numerical acceptance
+
+The P0 gate includes **two independent known-answer scenes for each of the
+28 operations**: a UTM linear-gradient plane and a horizontal zero-gradient
+surface. Reference values are derived by algebra and explicit graph/geometry
+identities, never by calling GeoFathom to generate expected answers. A
+duplicate terminal cross-section near an interval multiple was corrected.
+
+Run: `python scripts/terrain_p0_gate.py --junit build/terrain-p0-tests.xml --reference build/terrain-reference.json --output build/terrain-p0-matrix.json`
+
+| Evidence enforced by CI | Score |
+| --- | ---: |
+| Per-operation analytical plane reference | 45 |
+| Per-operation zero-relief reference | 35 |
+| All seven independent GDAL comparisons | 10 |
+| Common scientific and projection-safety invariants | 10 |
+| **Maximum** | **100** |
+
+If one analytical scene fails, its operation scores at most 65 or 55;
+if GDAL or any mandatory invariant fails, every operation scores <=90.
+The gate requires **28/28 individually >=95**, not a passing average.
+Evidence is emitted as a per-operation JSON matrix. It is deliberately
+possible to fail the gate: there are unit tests for missing cases, missing
+invariants and failed independent references.
+
+**Scope:** The reported number is a controlled *implementation conformance*
+benchmark score, not a measured probability of accuracy on an arbitrary
+real DEM, not a guarantee of valid vertical datum, and not an external
+field-survey certification. Independently surveyed ground control, realistic
+data uncertainty and real-world vertical alignment remain outside this
+benchmark. Running a reference gate must not falsely set a particular
+user dataset's quality.reference_validation to independently certified.
