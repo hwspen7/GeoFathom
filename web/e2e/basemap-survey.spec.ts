@@ -10,7 +10,7 @@ test('satellite and licensed imagery actually request tiles',async({page})=>{
  const loaded=page.waitForResponse(r=>r.url().includes('tiles.maps.eox.at')&&r.ok());
  await page.getByLabel('Quick basemap tools').getByRole('button',{name:'Satellite',exact:true}).click();
  await loaded;
- await openProjectDrawer(page);
+ await openProjectDrawer(page,'layers');
  await expect(page.getByLabel('Basemap',{exact:true})).toHaveValue('sentinel');
  await page.getByText('Settings',{exact:true}).click();
  await page.getByText('Connect high-resolution imagery',{exact:true}).click();
