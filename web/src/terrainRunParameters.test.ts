@@ -52,6 +52,9 @@ describe('scientific operation-specific input manifests',()=>{
    gradient_method:'zevenbergen_thorne',slope_classes:'detailed'});
   expect(terrainParametersForOperation('aspect_map',changed)).toEqual({
    gradient_method:'zevenbergen_thorne'});
+  expect(terrainParametersForOperation('slope',changed))
+    .toEqual({gradient_method:'zevenbergen_thorne'});
+  expect(terrainParametersForOperation('curvature',changed)).toEqual({});
   expect(terrainParametersForOperation('tpi',changed)).toEqual({neighborhood_radius_cells:1});
   expect(terrainParametersForOperation('mesh',changed)).toEqual({mesh_samples:256,drape:false});
   expect(terrainParametersForOperation('least_cost',{...changed,routeModel:'gentle'}))

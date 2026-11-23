@@ -369,7 +369,7 @@ export default function TerrainWorkbench(p:Props){
      resampling:operation==='slope_map'||operation==='hillshade'?'linear':'nearest',createdAt:Date.now()};
    try{
      if(operation==='profile')record.profile=await terrainProfile(dem.id,analysisGeometry,controller.signal);
-     else if(operation==='slope')record.slope=await analyzeTerrain(dem.id,analysisGeometry,controller.signal);
+     else if(operation==='slope')record.slope=await analyzeTerrain(dem.id,analysisGeometry,controller.signal,gradientMethod);
      else record.advanced=await advancedTerrain({image_id:dem.id,geometry:analysisGeometry,operation,
        interval:Number(interval),reference:Number(reference),point:needsPoint?[Number(lon),Number(lat)]:null,
        observer_height:Number(height),target_height:Number(target),end_point:operation==='least_cost'?[Number(endLon),Number(endLat)]:null,
@@ -993,7 +993,7 @@ export default function TerrainWorkbench(p:Props){
         </select>
       </label>}
       {operation==='mesh'&&p.imageRaster&&p.imageRaster.bands>=3&&<label className="gis-check"><input type="checkbox" checked={drape} onChange={e=>setDrape(e.target.checked)}/> Drape selected RGB imagery</label>}
-     {['slope_map','aspect_map','hillshade','suitability','curvature','plan_curvature','profile_curvature'].includes(operation)&&
+     {['slope','slope_map','aspect_map','hillshade','suitability','plan_curvature','profile_curvature'].includes(operation)&&
         <label>Gradient algorithm
           <select aria-label="Terrain gradient algorithm" value={gradientMethod}
             onChange={e=>setGradientMethod(e.target.value as 'horn'|'zevenbergen_thorne')}>

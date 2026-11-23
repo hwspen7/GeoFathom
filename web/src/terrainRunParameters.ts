@@ -118,7 +118,7 @@ export function terrainParametersForOperation(
  if(operation==='tri'||operation==='tpi')
   params.neighborhood_radius_cells=Number(form.neighborhoodRadius);
  // Method selections are scientific inputs, not display-only settings.
- if(['slope_map','aspect_map','hillshade','suitability','curvature',
+ if(['slope','slope_map','aspect_map','hillshade','suitability',
      'plan_curvature','profile_curvature'].includes(operation))
   params.gradient_method=form.gradientMethod;
  if(operation==='slope_map')params.slope_classes=form.slopeClasses;

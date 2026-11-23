@@ -589,10 +589,11 @@ export interface TerrainResult {
   elevation_relief_m:number;mean_slope_deg:number;mean_aspect_deg:number|null;
   maximum_slope_deg:number;valid_pixels:number;engine:string;warning:string;
 }
-export function analyzeTerrain(imageId:string,geometry:GeoJSON.Geometry,signal?:AbortSignal):Promise<TerrainResult> {
+export function analyzeTerrain(imageId:string,geometry:GeoJSON.Geometry,signal?:AbortSignal,
+ gradientMethod:'horn'|'zevenbergen_thorne'='horn'):Promise<TerrainResult> {
   return request('/terrain/analyze',{
     signal,method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({image_id:imageId,geometry,vertical_unit:'meter'}),
+    body:JSON.stringify({image_id:imageId,geometry,vertical_unit:'meter',gradient_method:gradientMethod}),
   });
 }
 export function terrainProfile(imageId:string,geometry:GeoJSON.Geometry,signal?:AbortSignal):Promise<{
