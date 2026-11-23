@@ -2071,9 +2071,14 @@ export default function App() {
               onPreview={value=>{if(projectCurrent())setExternalFeatures(value);}}
               onPage={value=>{if(projectCurrent())setPagedFeatures(value);}}
               onRefresh={()=>setRefreshToken(value=>value+1)}
-              onRasterAdded={asset=>{
-                // Imported GeoTIFF becomes a selectable managed DEM source.
-                setDemLayer(asset);setRasterLayers(old=>selectDEM(old,asset));
+              onRasterAdded={(asset,kind)=>{
+                // Do not silently reinterpret imagery (RGB, satellite, masks)
+                // as an elevation model. DEM is selected only explicitly.
+                if(kind==='dem'){
+                  setDemLayer(asset);setRasterLayers(old=>selectDEM(old,asset));
+                }else{
+                  setImageLayer(asset);setRasterLayers(old=>addRaster(old,asset,'image'));
+                }
                 setMessage('Raster added to the active map.');
               }}
             />
