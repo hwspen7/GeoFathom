@@ -47,7 +47,7 @@ jobs:
           python -m pytest -q --junitxml=build/terrain-p0-tests.xml tests/test_terrain_p0_all_operations.py tests/test_terrain_p0_gate.py tests/test_terrain_projection_p0.py tests/test_terrain_scope_p0.py tests/test_terrain_p0_scientific_invariants.py tests/test_terrain_professional.py tests/test_terrain_conditioning.py tests/test_terrain_gradient_unification.py tests/test_terrain_catalog.py
       - name: Run P1 scientific analytic and GeoTIFF integration checks
         run: |
-          python -m pytest -q --junitxml=build/terrain-p1-tests.xml tests/test_terrain_p1_science.py tests/test_terrain_exact_coverage.py tests/test_terrain_uncertainty.py tests/test_terrain_mesh_streaming.py tests/test_terrain_p1_external_references.py
+          python -m pytest -q --junitxml=build/terrain-p1-tests.xml tests/test_terrain_p1_science.py tests/test_terrain_exact_coverage.py tests/test_terrain_uncertainty.py tests/test_terrain_mesh_streaming.py tests/test_terrain_p1_external_references.py tests/test_terrain_p1_compiled.py
       - name: Enforce >=95 P0 synthetic numerical score for every Terrain operation
         run: |
           python scripts/terrain_p0_gate.py --junit build/terrain-p0-tests.xml --reference build/terrain-reference.json --output build/terrain-p0-matrix.json
