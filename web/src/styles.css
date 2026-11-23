@@ -1562,3 +1562,181 @@ button:disabled { opacity: .45; cursor: not-allowed; }
   .desktop-gis .gis-quick-basemap{grid-column:2;grid-row:1}
   .desktop-gis .gis-survey-commands{grid-column:1/-1;grid-row:2}
 }
+
+
+/* Compact fixed-grid workspace chrome, 2026-11.
+   Reserve a real status row; the canvas and dock footers never overlap it. */
+.desktop-gis.workspace{
+  display:grid;grid-template-rows:42px 44px minmax(0,1fr) 26px;
+  height:100vh;height:100dvh;min-height:0;width:100%;overflow:hidden;
+}
+.desktop-gis .gis-header{
+  grid-row:1;min-width:0;height:42px;min-height:42px;max-height:42px;
+  background:#fff;border-bottom:1px solid #dce6ed;
+}
+.desktop-gis .gis-header .workspace-module-bar button{
+  background:transparent;border:0;color:#526779;font-weight:600;
+}
+.desktop-gis .gis-header .workspace-module-bar button[aria-pressed=true]{
+  color:#145779;background:#f0f6fa;
+}
+.desktop-gis .gis-header .workspace-module-bar button[aria-pressed=true]::after{
+  height:2px;left:7px;right:7px;background:#277aa6;
+}
+.desktop-gis .gis-header .gis-command-trigger{
+  box-shadow:none;border-color:#dce5ec;color:#46667b;
+}
+.desktop-gis .gis-toolbar{
+  grid-row:2;display:flex;flex-flow:row nowrap;align-items:center;
+  flex:initial;box-sizing:border-box;height:44px;min-height:44px;max-height:44px;
+  gap:7px;padding:5px 10px;background:#f9fbfc;border-bottom:1px solid #dce6ed;
+  overflow:visible;
+}
+.desktop-gis .gis-navigation-tools,.desktop-gis .gis-quick-basemap{
+  flex:none;align-self:center;margin:0;display:flex;flex-wrap:nowrap;
+  align-items:center;gap:2px;
+}
+.desktop-gis .gis-navigation-tools{
+  border-right:1px solid #dce6ed;padding:0 8px 0 0;
+}
+.desktop-gis .gis-quick-basemap{
+  margin-left:auto;padding:0 0 0 8px;border-left:1px solid #dce6ed;
+}
+.desktop-gis .gis-survey-commands{
+  flex:1 1 auto;min-width:0;align-self:center;
+}
+.desktop-gis .gis-toolbar .survey-command-bar{
+  display:flex;flex-flow:row nowrap;align-items:center;position:relative;
+  min-width:0;height:34px;gap:7px;
+}
+.desktop-gis .gis-toolbar .survey-mode-grid{
+  display:flex;flex-flow:row nowrap;align-items:center;gap:7px;flex:none;
+}
+.desktop-gis .gis-toolbar .survey-mode-family{
+  display:flex;flex-flow:row nowrap;align-items:center;gap:2px;flex:none;
+}
+.desktop-gis .gis-toolbar .survey-topology-tools{
+  border-left:1px solid #dce6ed;padding-left:7px;
+}
+.desktop-gis .gis-toolbar .survey-mode-grid button,
+.desktop-gis .gis-toolbar .survey-action-bar button,
+.desktop-gis .gis-navigation-tools button,.desktop-gis .gis-quick-basemap button{
+  display:inline-flex;align-items:center;justify-content:center;
+  gap:4px;flex:none;height:30px;min-height:30px;max-height:30px;
+  margin:0;padding:4px 7px;border:1px solid transparent;
+  border-radius:5px!important;background:transparent;color:#3a596c;
+  font-size:11px;white-space:nowrap;line-height:1;
+}
+.desktop-gis .gis-toolbar .survey-mode-grid button:hover:not(:disabled),
+.desktop-gis .gis-toolbar .survey-action-bar button:hover:not(:disabled),
+.desktop-gis .gis-navigation-tools button:hover:not(:disabled),
+.desktop-gis .gis-quick-basemap button:hover:not(:disabled){
+  background:#edf4f8;border-color:#d6e6f0;
+}
+.desktop-gis .gis-toolbar button.active,
+.desktop-gis .gis-toolbar button[aria-pressed=true]{
+  background:#e6f2f8!important;color:#17648b!important;border-color:#a7d1e5!important;
+}
+.desktop-gis .gis-toolbar .survey-topology-tools button{
+  width:32px;min-width:32px;padding:4px;
+}
+.desktop-gis .gis-toolbar .survey-topology-tools .survey-button-caption{display:none}
+.desktop-gis .gis-toolbar .survey-idle-actions{
+  display:flex;flex-flow:row nowrap;align-items:center;justify-content:flex-start;
+  gap:7px;min-width:0;
+}
+.desktop-gis .gis-toolbar .survey-action-bar{
+  display:flex;flex-flow:row nowrap;align-items:center;gap:2px;flex:none;
+}
+.desktop-gis .gis-toolbar .survey-idle-actions>.survey-action-bar:first-child{
+  border-left:1px solid #dce6ed;padding-left:7px;
+}
+.desktop-gis .gis-toolbar .survey-idle-actions>.survey-action-bar:last-child{
+  border-left:1px solid #dce6ed;padding-left:7px;
+}
+.desktop-gis .gis-toolbar .survey-sketch-session{
+  display:flex;flex-flow:row nowrap;align-items:center;
+  height:34px;min-width:0;flex:0 1 auto;padding:2px 5px;gap:3px;
+  border:1px solid #c9e2ef;border-radius:5px!important;background:#f0f8fb;
+}
+.desktop-gis .gis-toolbar .survey-sketch-session button{padding:4px 5px}
+.desktop-gis .gis-toolbar .survey-sketch-session kbd{display:none}
+.desktop-gis .gis-toolbar .survey-sketch-session .finish-button{
+  background:#187e4a!important;color:#fff!important;border-color:#187e4a!important;
+}
+.desktop-gis .gis-toolbar .survey-sketch-feedback:not(.has-error){display:none}
+.desktop-gis .gis-toolbar .survey-sketch-feedback.has-error{
+  position:absolute;top:calc(100% + 7px);left:0;z-index:35;
+  width:max-content;max-width:min(480px,70vw);padding:8px 10px;
+  box-shadow:0 6px 18px #1d2c3c22;line-height:1.45;
+}
+.desktop-gis .gis-quick-basemap{
+  border-radius:6px;overflow:hidden;gap:0;border-left:0;padding-left:0;
+  border:1px solid #dce6ed;background:#fff;
+}
+.desktop-gis .gis-quick-basemap button{
+  border:0!important;border-radius:0!important;padding:4px 9px;
+}
+.desktop-gis .gis-quick-basemap button+button{border-left:1px solid #e6edf2!important}
+.desktop-gis .gis-body{
+  grid-row:3;min-width:0;min-height:0;max-height:100%;
+  overflow:hidden;position:relative;
+}
+.desktop-gis .gis-body>.main,
+.desktop-gis .gis-body .gis-operations,
+.desktop-gis .gis-body .gis-results-monitor{
+  min-height:0;max-height:100%;overflow:hidden;
+}
+.desktop-gis .gis-body>.main{display:flex;flex-direction:column;min-width:0}
+.desktop-gis .gis-body .map-wrap{
+  flex:1 1 auto;min-height:0;max-height:100%;overflow:hidden;position:relative;
+}
+.desktop-gis .gis-operations>.sidebar-scroll,
+.desktop-gis .gis-results-monitor>.sidebar-scroll{
+  flex:1 1 0%;min-height:0;max-height:100%;
+}
+.desktop-gis .gis-operations>.workspace-fixed-footer:not(:empty),
+.desktop-gis .gis-results-monitor>.workspace-fixed-footer:not(:empty){
+  position:relative;flex:0 0 auto;min-height:0;max-width:100%;
+  padding:8px 11px;box-shadow:none;z-index:1;
+}
+.desktop-gis .gis-status{
+  grid-row:4;height:26px;min-height:26px;max-height:26px;
+  min-width:0;box-sizing:border-box;padding:0 10px;
+  border-top:1px solid #dce6ed;background:#fff;
+  color:#5d7486;overflow:hidden;z-index:2;
+}
+@media(max-width:1500px){
+  .desktop-gis .gis-toolbar .survey-primary-modes button{
+    min-width:32px;width:32px;padding:4px;
+  }
+  .desktop-gis .gis-toolbar .survey-primary-modes .survey-button-caption{display:none}
+  .desktop-gis .gis-toolbar{gap:5px}
+  .desktop-gis .gis-toolbar .survey-command-bar{gap:5px}
+}
+@media(max-width:1250px){
+  .desktop-gis.workspace{grid-template-rows:42px 73px minmax(0,1fr) 26px}
+  .desktop-gis .gis-toolbar{
+    height:73px;min-height:73px;max-height:73px;
+    display:grid;grid-template-columns:minmax(0,1fr) auto;
+    grid-template-rows:30px 30px;gap:3px 8px;padding:5px 8px;
+  }
+  .desktop-gis .gis-navigation-tools{
+    grid-column:1;grid-row:1;justify-self:start;
+  }
+  .desktop-gis .gis-quick-basemap{
+    grid-column:2;grid-row:1;margin:0;justify-self:end;
+  }
+  .desktop-gis .gis-survey-commands{
+    grid-column:1/-1;grid-row:2;width:100%;align-self:center;
+  }
+  .desktop-gis .gis-toolbar .survey-command-bar{height:30px}
+}
+@media(max-width:850px){
+  .desktop-gis .gis-toolbar .survey-action-bar button{
+    padding:4px 5px;font-size:10px;
+  }
+  .desktop-gis .gis-toolbar .survey-mode-grid{gap:4px}
+  .desktop-gis .gis-toolbar .survey-mode-family{gap:1px}
+  .desktop-gis .gis-toolbar .survey-idle-actions{gap:4px}
+}
