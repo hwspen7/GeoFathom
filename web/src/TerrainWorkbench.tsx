@@ -140,6 +140,14 @@ export default function TerrainWorkbench(p:Props){
  const [meshSamples,setMeshSamples]=useState('256');
  const [streamOrderScheme,setStreamOrderScheme]=useState<'strahler'|'shreve'>('strahler');
  const [hillshadeMode,setHillshadeMode]=useState<'single'|'four_direction'>('single');
+ const [flowRoutingMethod,setFlowRoutingMethod]=useState<'d8'|'dinf'>('d8');
+ const [depressionMethod,setDepressionMethod]=useState<'fill'|'breach'>('fill');
+ const [curvatureMethod,setCurvatureMethod]=useState<'finite_difference'|'quadratic'>('finite_difference');
+ const [curvatureRadius,setCurvatureRadius]=useState('2');
+ const [designEastGrade,setDesignEastGrade]=useState('0'),[designNorthGrade,setDesignNorthGrade]=useState('0');
+ const [designMaxGrade,setDesignMaxGrade]=useState('0.3'),[elevationSigma,setElevationSigma]=useState('0');
+ const [dsmImageId,setDsmImageId]=useState(''),[optimizeObservers,setOptimizeObservers]=useState('0');
+ const [meshLod,setMeshLod]=useState(false);
  const [fillSinks,setFillSinks]=useState(true),[considerCurvature,setConsiderCurvature]=useState(true),[refractionCoeff,setRefractionCoeff]=useState('0.13');
  const [sectionSpacing,setSectionSpacing]=useState('50'),[sectionWidth,setSectionWidth]=useState('20'),[drape,setDrape]=useState(false),[expanded,setExpanded]=useState(false);
  const [pickEnd,setPickEnd]=useState(false);
@@ -277,10 +285,15 @@ export default function TerrainWorkbench(p:Props){
  const mapMismatch=!!dem&&!!p.viewport&&!terrainBoundsOverlap(dem.bbox,p.viewport);
  const verified=!!dem&&(/Copernicus DEM GLO-|USGS 3DEP Bare Earth DEM/.test(dem.provenance)||verticalConfirmed);
  const validNumber=(value:string,min:number,max:number)=>value.trim()!==''&&Number.isFinite(Number(value))&&Number(value)>=min&&Number(value)<=max;
- const multiObserversValid=observerPoints.length>=2&&observerPoints.length<=4&&
+ const multiObserversValid=observerPoints.length>=2&&observerPoints.length<=(Number(optimizeObservers)>0?12:4)&&
    observerPoints.every(([x,y])=>validNumber(x,-180,180)&&validNumber(y,-90,90))&&
    new Set(observerPoints.map(([x,y])=>Number(x)+','+Number(y))).size===observerPoints.length;
- const parametersValid=(operation!=='viewshed_multi'||multiObserversValid)&&
+ const parametersValid=(operation!=='viewshed_multi'||multiObserversValid&&validNumber(optimizeObservers,0,4)&&Number.isInteger(Number(optimizeObservers))&&Number(optimizeObservers)<=observerPoints.length)&&
+   (!['volume','cutfill_map'].includes(operation??'')||validNumber(designEastGrade,-1,1)&&validNumber(designNorthGrade,-1,1)&&
+     validNumber(designMaxGrade,.00001,1)&&Math.hypot(Number(designEastGrade),Number(designNorthGrade))<=Number(designMaxGrade)+1e-12&&
+     validNumber(elevationSigma,0,10000))&&
+   (!['curvature','plan_curvature','profile_curvature'].includes(operation??'')||curvatureMethod!=='quadratic'||validNumber(curvatureRadius,1,4)&&Number.isInteger(Number(curvatureRadius)))&&
+   (!['visibility','viewshed_multi'].includes(operation??'')||!dsmImageId||assets.some(a=>a.id===dsmImageId&&a.bands===1&&a.id!==dem?.id))&&
    (operation!=='cross_sections'||validNumber(sectionSpacing,1,10000)&&validNumber(sectionWidth,1,2000))&&
    (operation!=='contours'||validNumber(interval,.01,1e6))&&
    (operation!=='dem_difference'||!!comparisonId&&comparisonId!==dem?.id&&assets.some(a=>a.id===comparisonId&&a.bands===1))&&
@@ -306,6 +319,9 @@ export default function TerrainWorkbench(p:Props){
    textureImageId:p.imageRaster?.id??null,gradientMethod,slopeClasses,
    neighborhoodRadius,viewshedDistance,viewshedAzimuth,viewshedWidth,
    routeModel,meshSamples,streamOrderScheme,hillshadeMode,
+   flowRoutingMethod,depressionMethod,curvatureMethod,curvatureRadius,
+   designEastGrade,designNorthGrade,designMaxGrade,elevationSigma,
+   dsmImageId,optimizeObservers,meshLod,
  });
  // Only edits to the actual operation inputs invalidate a scientific run.
  const inputKey=JSON.stringify([dem?.id,analysisGeometry,operation,scientificParameters]);
@@ -382,7 +398,14 @@ export default function TerrainWorkbench(p:Props){
          neighborhood_radius:Number(neighborhoodRadius),
          max_distance_m:Number(viewshedDistance),view_azimuth:Number(viewshedAzimuth),
          view_width:Number(viewshedWidth),route_model:routeModel,
-         mesh_samples:Number(meshSamples),stream_order_scheme:streamOrderScheme,hillshade_mode:hillshadeMode},controller.signal);
+         mesh_samples:Number(meshSamples),stream_order_scheme:streamOrderScheme,hillshade_mode:hillshadeMode,
+         flow_routing_method:flowRoutingMethod,depression_method:depressionMethod,
+         curvature_method:curvatureMethod,curvature_radius:Number(curvatureRadius),
+         design_east_grade:Number(designEastGrade),design_north_grade:Number(designNorthGrade),
+         design_max_grade:Number(designMaxGrade),elevation_sigma_m:Number(elevationSigma),
+         optimize_observers:operation==='viewshed_multi'?Number(optimizeObservers):0,
+         dsm_image_id:['visibility','viewshed_multi'].includes(operation)?dsmImageId||null:null,
+         mesh_lod:operation==='mesh'&&meshLod},controller.signal);
      if(ticket!==sequence.current||controller.signal.aborted)return;
      // Commit scientific data before reporting a completed run. An immediate
      // reload or project switch must never race a pending cache write.
