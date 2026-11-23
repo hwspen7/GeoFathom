@@ -470,7 +470,14 @@ def surface(z,valid,affine,crs,operation,reference,point,end_point,max_slope,
             bearing=circular_mean_degrees(angles)
             if bearing is not None:metrics["circular_mean_aspect_deg"]=bearing
     else:
+        finite_values=values[np.isfinite(values)]
+        percentiles=np.percentile(finite_values,[10,50,90])
         metrics.update({"product_valid_cells":product["valid_cells"],
-                        "product_min":float(np.nanmin(values)),"product_max":float(np.nanmax(values)),
-                        "product_mean":float(np.nanmean(values))})
+                        "product_min":float(finite_values.min()),
+                        "product_max":float(finite_values.max()),
+                        "product_mean":float(finite_values.mean()),
+                        "product_std":float(finite_values.std()),
+                        "product_p10":float(percentiles[0]),
+                        "product_p50":float(percentiles[1]),
+                        "product_p90":float(percentiles[2])})
     return product,metrics,features
