@@ -63,7 +63,7 @@ test('invalid new polygon edge is rejected before Finish, and Escape exits witho
   // A, C, D are a valid triangle. New D->B would cross A->C.
   for(const [x,y] of [p.a,p.c,p.d,p.b])await page.mouse.click(x,y);
   await expect(toolbar.getByText('3 pts')).toBeVisible();
-  await expect(page.getByText(/crosses or touches an existing polygon edge/)).toBeVisible();
+  await expect(page.getByRole('alert').filter({hasText:/crosses or touches an existing polygon edge/})).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(toolbar.getByRole('button',{name:'Finish',exact:true})).toHaveCount(0);
   await expect(toolbar.getByRole('button',{name:'Polygon',exact:true})).toHaveAttribute('aria-pressed','false');
