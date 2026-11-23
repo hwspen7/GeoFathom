@@ -131,6 +131,7 @@ export default function TerrainWorkbench(p:Props){
  const [streamCells,setStreamCells]=useState('100'),[azimuth,setAzimuth]=useState('315'),[altitude,setAltitude]=useState('45');
  const [gradientMethod,setGradientMethod]=useState<'horn'|'zevenbergen_thorne'>('horn');
  const [slopeClasses,setSlopeClasses]=useState<'standard'|'detailed'|'broad'>('standard');
+ const [mfdExponent,setMfdExponent]=useState('1.1');
  const [fillSinks,setFillSinks]=useState(true),[considerCurvature,setConsiderCurvature]=useState(true),[refractionCoeff,setRefractionCoeff]=useState('0.13');
  const [sectionSpacing,setSectionSpacing]=useState('50'),[sectionWidth,setSectionWidth]=useState('20'),[drape,setDrape]=useState(false),[expanded,setExpanded]=useState(false);
  const [pickEnd,setPickEnd]=useState(false);
@@ -276,6 +277,7 @@ export default function TerrainWorkbench(p:Props){
    (!['streams','stream_order'].includes(operation??'')||validNumber(streamCells,1,1000000)&&Number.isInteger(Number(streamCells)))&&
    (operation!=='hillshade'||validNumber(azimuth,0,360)&&validNumber(altitude,0,90))&&
    (!needsPoint||validNumber(lon,-180,180)&&validNumber(lat,-90,90))&&
+   (operation!=='flow_accumulation_mfd'||validNumber(mfdExponent,.5,8))&&
    (!['visibility','viewshed_multi'].includes(operation??'')||!considerCurvature||validNumber(refractionCoeff,0,.5))&&
    (!['visibility','viewshed_multi'].includes(operation??'')||validNumber(height,0,1000)&&validNumber(target,0,1000));
  const canRun=operation!==null&&p.connected&&resultCacheReady&&verified&&!!correctShape&&!sourceMismatch&&!mapMismatch&&parametersValid;
@@ -283,7 +285,7 @@ export default function TerrainWorkbench(p:Props){
  const scientificParameters=terrainParametersForOperation(operation,{
    interval,reference,lon,lat,height,target,endLon,endLat,
    maxSlope,minElevation,maxElevation,maxTri,streamCells,
-   azimuth,altitude,sectionSpacing,sectionWidth,fillSinks,
+   azimuth,altitude,sectionSpacing,sectionWidth,fillSinks,mfdExponent,
    considerCurvature,refractionCoeff,comparisonId,observerPoints,drape,
    textureImageId:p.imageRaster?.id??null,gradientMethod,slopeClasses,
  });
@@ -358,7 +360,7 @@ export default function TerrainWorkbench(p:Props){
        max_slope:Number(maxSlope),min_elevation:Number(minElevation),max_elevation:Number(maxElevation),max_tri:Number(maxTri),stream_cells:Number(streamCells),azimuth:Number(azimuth),altitude:Number(altitude),section_spacing:Number(sectionSpacing),section_width:Number(sectionWidth),fill_sinks:fillSinks,consider_curvature:considerCurvature,refraction_coeff:Number(refractionCoeff),comparison_image_id:operation==='dem_difference'?comparisonId:null,
         observer_points:operation==='viewshed_multi'?observerPoints.map(([x,y])=>[Number(x),Number(y)] as [number,number]):null,
         texture_image_id:operation==='mesh'&&drape&&p.imageRaster&&p.imageRaster.bands>=3?p.imageRaster.id:null,
-         gradient_method:gradientMethod,slope_classes:slopeClasses},controller.signal);
+         gradient_method:gradientMethod,slope_classes:slopeClasses,mfd_exponent:Number(mfdExponent)},controller.signal);
      if(ticket!==sequence.current||controller.signal.aborted)return;
      // Commit scientific data before reporting a completed run. An immediate
      // reload or project switch must never race a pending cache write.
@@ -945,6 +947,11 @@ export default function TerrainWorkbench(p:Props){
         </select>
       </label>}
       {operation==='hillshade'&&<div className="area-fields"><label>Sun azimuth (°)<input type="number" value={azimuth} onChange={e=>setAzimuth(e.target.value)}/></label><label>Sun altitude (°)<input type="number" value={altitude} onChange={e=>setAltitude(e.target.value)}/></label></div>}
+     {operation==='flow_accumulation_mfd'&&<label>MFD convergence exponent
+       <input aria-label="MFD routing exponent" type="number" min="0.5" max="8" step="0.1"
+         value={mfdExponent} onChange={e=>setMfdExponent(e.target.value)}/>
+       <small className="compact-notice">Larger values concentrate flow toward steeper downslope neighbors.</small>
+     </label>}
      {(operation==='streams'||operation==='stream_order')&&<label>Minimum upstream cells<input type="number" min="1" step="1" value={streamCells} onChange={e=>setStreamCells(e.target.value)}/></label>}
      {['flow_direction','flow_accumulation','flow_accumulation_mfd','streams','stream_order','watershed'].includes(operation)&&<label className="gis-check"><input aria-label="Condition drainage DEM" type="checkbox" checked={fillSinks} onChange={e=>setFillSinks(e.target.checked)}/> Fill depressions and route flat cells</label>}
      {(operation==='visibility'||operation==='viewshed_multi')&&<><label className="gis-check"><input aria-label="Consider Earth curvature" type="checkbox" checked={considerCurvature} onChange={e=>setConsiderCurvature(e.target.checked)}/> Earth curvature and atmospheric refraction</label>{considerCurvature&&<label>Refraction coefficient<input aria-label="Terrain refraction coefficient" type="number" min="0" max="0.5" step="0.01" value={refractionCoeff} onChange={e=>setRefractionCoeff(e.target.value)}/></label>}</>}
