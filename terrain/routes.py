@@ -126,7 +126,7 @@ class AdvancedTerrainInput(BaseModel):
     consider_curvature:bool=False
     refraction_coeff:float=Field(default=0.13,ge=0,le=0.5)
     comparison_image_id:str|None=None
-    observer_points:list[tuple[float,float]]|None=Field(default=None,min_length=2,max_length=4)
+    observer_points:list[tuple[float,float]]|None=Field(default=None,min_length=2,max_length=12)
     gradient_method:Literal['horn','zevenbergen_thorne']='horn'
     slope_classes:Literal['standard','detailed','broad']='standard'
     mfd_exponent:float=Field(default=1.1,ge=0.5,le=8.0)
@@ -138,6 +138,17 @@ class AdvancedTerrainInput(BaseModel):
     mesh_samples:int=Field(default=256,ge=64,le=512)
     stream_order_scheme:Literal['strahler','shreve']='strahler'
     hillshade_mode:Literal['single','four_direction']='single'
+    flow_routing_method:Literal['d8','dinf']='d8'
+    depression_method:Literal['fill','breach']='fill'
+    curvature_method:Literal['finite_difference','quadratic']='finite_difference'
+    curvature_radius:int=Field(default=2,ge=1,le=4)
+    design_east_grade:float=Field(default=0,ge=-1,le=1)
+    design_north_grade:float=Field(default=0,ge=-1,le=1)
+    design_max_grade:float=Field(default=0.3,gt=0,le=1)
+    elevation_sigma_m:float=Field(default=0,ge=0,le=10000)
+    optimize_observers:int=Field(default=0,ge=0,le=4)
+    dsm_image_id:str|None=None
+    mesh_lod:bool=False
 
 @router.post("/advanced")
 async def advanced(request:Request,body:AdvancedTerrainInput):
@@ -152,6 +163,11 @@ async def advanced(request:Request,body:AdvancedTerrainInput):
             body.observer_points,body.gradient_method,body.slope_classes,
             body.mfd_exponent,body.neighborhood_radius,
             body.max_distance_m,body.view_azimuth,body.view_width,
-            body.route_model,body.mesh_samples,body.stream_order_scheme,body.hillshade_mode)
+            body.route_model,body.mesh_samples,body.stream_order_scheme,body.hillshade_mode,
+            body.flow_routing_method,body.depression_method,body.curvature_method,body.curvature_radius,
+            body.design_east_grade,body.design_north_grade,body.design_max_grade,body.elevation_sigma_m,
+            body.optimize_observers,
+            raster(body.dsm_image_id) if body.dsm_image_id and body.operation in {"visibility","viewshed_multi"} else None,
+            body.mesh_lod)
     except (GeometryError,RasterError,ValueError,OverflowError) as error:
         raise HTTPException(status_code=422,detail=str(error)) from error
