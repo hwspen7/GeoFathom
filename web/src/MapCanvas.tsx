@@ -203,9 +203,12 @@ function featureCollection(
 
   const draft=drawingPreview(drawingMode,vertices,cursor);
   if(draft)features.push({type:'Feature',properties:{role:'drawing',color:'#168047',fillOpacity:.22,lineWidth:2},geometry:draft});
-  for (const position of vertices) {
+  for (const [index,position] of vertices.entries()) {
     features.push({
-      type: 'Feature', properties: { role: 'draw-vertex' },
+      type: 'Feature',
+      properties: {role:index===0&&['polygon','hole'].includes(drawingMode??'')?'draw-start':'draw-vertex',
+        pointRadius:index===0&&['polygon','hole'].includes(drawingMode??'')?8:6,
+        strokeColor:index===0&&['polygon','hole'].includes(drawingMode??'')?'#11835c':'#2563eb'},
       geometry: { type: 'Point', coordinates: position },
     });
   }
@@ -291,7 +294,7 @@ export default function MapCanvas({
   const cursorTick=useRef(0);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const eventRef = useRef({
-    selected,selectedFeatureId,drawingMode, traceMode, annotationMode,selectionBoxMode,labelMoveMode,editing, moving,edgeMoving, snapping, selectedLocked,
+    selected,selectedFeatureId,drawingMode,vertices, traceMode, annotationMode,selectionBoxMode,labelMoveMode,editing, moving,edgeMoving, snapping, selectedLocked,
     layerFeatures, onMapClick,onFinishDrawing,terrainPicking,onTerrainPick,onContextMenu,onEditingError, onTraceClick,onAnnotationClick,onSelectionBox,onLabelMove,onViewportChange,
     onGeometryPreview, onGeometryCommit, onSelectSavedFeature,onDeselect,preservePlaceSelection,onSelectPinnedPlace,onSelectBoundaryNode,
     profileSamples,onProfileCursor,
@@ -314,7 +317,7 @@ export default function MapCanvas({
   const spatialSnap = useRef<PixelSnapIndex|null>(null);
   const [ready, setReady] = useState(false);
   eventRef.current = {
-    selected,selectedFeatureId,drawingMode, traceMode, annotationMode,selectionBoxMode,labelMoveMode,editing, moving,edgeMoving, snapping, selectedLocked,
+    selected,selectedFeatureId,drawingMode,vertices, traceMode, annotationMode,selectionBoxMode,labelMoveMode,editing, moving,edgeMoving, snapping, selectedLocked,
     layerFeatures, onMapClick,onFinishDrawing,terrainPicking,onTerrainPick,onContextMenu,onEditingError, onTraceClick,onAnnotationClick,onSelectionBox,onLabelMove,onViewportChange,
     onGeometryPreview, onGeometryCommit, onSelectSavedFeature,onDeselect,preservePlaceSelection,onSelectPinnedPlace,onSelectBoundaryNode,
     profileSamples,onProfileCursor,
@@ -541,7 +544,16 @@ export default function MapCanvas({
       }
       const current = drag.current;
       if (!current) {
-        if(eventRef.current.drawingMode&&Date.now()-cursorTick.current>=33){cursorTick.current=Date.now();setCursor(snapAt(coordinates(event),null));}
+        if(eventRef.current.drawingMode&&Date.now()-cursorTick.current>=33){
+          cursorTick.current=Date.now();
+          const state=eventRef.current;
+          let point=snapAt(coordinates(event),null);
+          if((state.drawingMode==='polygon'||state.drawingMode==='hole')&&state.vertices.length>=3){
+            const first=state.vertices[0],projected=map.project(first as maplibregl.LngLatLike);
+            if(Math.hypot(event.point.x-projected.x,event.point.y-projected.y)<=14)point=first;
+          }
+          setCursor(point);
+        }
         return;
       }
       // Selecting a vertex is not a geometry edit. Ignore sub-4px pointer
@@ -629,7 +641,21 @@ export default function MapCanvas({
       if (state.selectionBoxMode||state.labelMoveMode) return;
       if (state.annotationMode) state.onAnnotationClick(coordinates(event));
       else if (state.traceMode) state.onTraceClick(coordinates(event));
-      else if (state.drawingMode) state.onMapClick(snapAt(coordinates(event), null));
+      else if (state.drawingMode) {
+        // A browser double-click fires two click events. The second must
+        // never add a phantom last vertex before the dblclick finish event.
+        if(event.originalEvent.detail>=2)return;
+        if((state.drawingMode==='polygon'||state.drawingMode==='hole')&&state.vertices.length>=3){
+          const first=state.vertices[0],pixel=map.project(first as maplibregl.LngLatLike);
+          if(Math.hypot(pixel.x-event.point.x,pixel.y-event.point.y)<=14){
+            // Topological closure: reusing the start is a FINISH action,
+            // not a repeated point that creates a bow-tie polygon.
+            state.onFinishDrawing();
+            return;
+          }
+        }
+        state.onMapClick(snapAt(coordinates(event), null));
+      }
       else if (state.editing&&!state.moving&&!state.edgeMoving&&!state.selectedLocked&&state.selected){
         // A click inspects a node regardless of whether the MapLibre worker
         // supplied the expected point feature on the preceding mousedown.
@@ -914,6 +940,7 @@ export default function MapCanvas({
             'match',['get','role'],
             'prompt-positive','#39b779','prompt-negative','#ed4a4a',
             'prompt-box-corner','#f2a138','edit-midpoint','#c9e5ff',
+            'draw-start','#d8fff0',
             'boundary-node','#168047','boundary-node-selected','#ef7d23',
             'saved',['coalesce',['get','color'],'#2563eb'],'#ffffff',
           ],
