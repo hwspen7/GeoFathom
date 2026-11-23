@@ -217,10 +217,10 @@ export function WorkspaceFeatureTree<T extends FeatureItem>({
   const lastPage=pages.length-1,currentPage=Math.min(page,lastPage);
   const offset=pages.slice(0,currentPage).reduce((sum,items)=>sum+items.length,0);
   const paged=new Set(pages[currentPage]);
+  const selectedPage=pages.findIndex(items=>selectedKey!==null&&items.includes(selectedKey));
   useEffect(()=>{
-    const index=pages.findIndex(items=>selectedKey!==null&&items.includes(selectedKey));
-    setPage(index>=0?index:0);
-  },[selectedKey,filter,pageSize]);
+    setPage(selectedPage>=0?selectedPage:0);
+  },[selectedKey,selectedPage,filter,pageSize]);
   return <div className="workspace-feature-tree" role="region" aria-label="Project feature tree">
     <div className="workspace-tree-header"><strong>Features</strong><span>{features.length+additionalGroups.reduce((sum,g)=>sum+g.items.length,0)}</span></div>
     <label className="workspace-tree-filter"><Search size={13}/>

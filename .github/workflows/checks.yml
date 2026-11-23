@@ -153,7 +153,7 @@ jobs:
         if: always()
         with:
           name: geofathom-workspace-ui-screenshots
-          path: web/test-results/**/attachments/*.png
+          path: web/test-results/**/survey-*.png
           if-no-files-found: warn
           retention-days: 7
       - uses: actions/upload-artifact@v4

@@ -38,7 +38,7 @@ async function points(page:Page){
 for(const width of [1100,1280,1600])test(`drawing exits and error recovery stay on screen at ${width}px`,async({page},testInfo)=>{
  await page.setViewportSize({width,height:760});
  const {toolbar,map}=await setup(page);
- await testInfo.attach('survey-objects-'+width,{body:await page.screenshot(),contentType:'image/png'});
+ await page.screenshot({path:testInfo.outputPath('survey-objects-'+width+'.png')});
  for(const name of ['Point','Polygon','Line','Rectangle','Circle','Cut hole','Split line']){
   const tool=toolbar.getByRole('button',{name,exact:true});
   await tool.click();
@@ -63,10 +63,23 @@ for(const width of [1100,1280,1600])test(`drawing exits and error recovery stay 
  await page.keyboard.press('Enter');
  await expect(toolbar.getByRole('alert')).toContainText('more point');
  await expect(toolbar.getByRole('button',{name:'Cancel drawing'})).toBeInViewport();
- await testInfo.attach('survey-recovery-'+width,{body:await page.screenshot(),contentType:'image/png'});
  await toolbar.getByRole('button',{name:'Cancel drawing'}).click();
  await expect(toolbar.getByRole('alert')).toHaveCount(0);
  await expect(page.getByRole('button',{name:'厦门岛',exact:true})).toHaveAttribute('aria-pressed','true');
+ const metric=page.locator('.results-summary .metric:not(.secondary) strong');
+ const original=await metric.textContent();
+ await toolbar.getByRole('button',{name:'Cut hole',exact:true}).click();
+ const bounds=(await map.boundingBox())!,y=bounds.y+bounds.height/2;
+ // Deliberately cut outside the fitted source polygon, as in the reported
+ // workflow. A server rejection must remain readable and cancellable.
+ for(const [x,dy] of [[12,-20],[32,-20],[32,20],[12,20]])
+  await page.mouse.click(bounds.x+x,y+dy);
+ await page.keyboard.press('Enter');
+ await expect(toolbar.getByRole('alert')).toContainText('strictly inside');
+ await expect(toolbar.getByRole('button',{name:'Cancel drawing'})).toBeInViewport();
+ await page.screenshot({path:testInfo.outputPath('survey-recovery-'+width+'.png')});
+ await toolbar.getByRole('button',{name:'Cancel drawing'}).click();
+ await expect(metric).toHaveText(original!);
 });
 
 test('splitting a polygon produces independent selectable objects and exits the tool',async({page})=>{
