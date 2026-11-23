@@ -1028,3 +1028,25 @@ export function getProjectTrash(id:string):Promise<{items:TrashedFeature[];total
 export function restoreDeletedFeature(projectId:string,featureId:string):Promise<WorkspaceFeature>{
  return request('/projects/'+encodeURIComponent(projectId)+'/trash/'+encodeURIComponent(featureId)+'/restore',{method:'POST'});
 }
+
+
+/** Each detected face is a genuinely closed and independently measured polygon. */
+export interface NetworkFace{
+ id:string;name:string;geometry:GeoJSON.Polygon;measurement:Measurement;
+ label_anchor:[number,number];
+ properties:{source_type:'polygonized_network';area_m2:number;perimeter_m:number;snap_tolerance_m:number};
+}
+export interface NetworkPolygonization{
+ faces:NetworkFace[];count:number;area_m2:number;
+ dangles:number;cuts:number;invalid_rings:number;source_segments:number;
+ tolerance_m:number;method:string;warning:string;
+}
+export function polygonizeNetwork(
+ geometries:GeoJSON.Geometry[],tolerance_m=1,minimum_area_m2=.01,
+ signal?:AbortSignal,
+):Promise<NetworkPolygonization>{
+ return request('/edit/polygonize',{method:'POST',signal,
+  headers:{'Content-Type':'application/json'},
+  body:JSON.stringify({geometries,tolerance_m,minimum_area_m2,max_faces:300}),
+ });
+}
