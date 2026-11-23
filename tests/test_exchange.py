@@ -329,3 +329,16 @@ def test_export_preflight_rejects_geometry_collapsing_precision():
     response=client.post(root(pid)+'/vector/export/preflight',json={'format':'geojson','precision':0,'collection':collection(poly)})
     assert response.status_code==422,response.text
     assert 'precision' in response.text
+
+def test_gpkg_import_closes_native_attribute_connections_before_temp_cleanup(monkeypatch):
+    import sqlite3
+    from storage import vectorio
+    binary,_,_=write_vector(collection(feature()),'gpkg')
+    real_connect=sqlite3.connect;connections=[]
+    def tracked(*args,**kwargs):
+        connection=real_connect(*args,**kwargs);connections.append(connection);return connection
+    monkeypatch.setattr(vectorio.sqlite3,'connect',tracked)
+    assert read_vector('sites.gpkg',binary)['count']==1
+    assert connections
+    for connection in connections:
+        with pytest.raises(sqlite3.ProgrammingError,match='closed'):connection.execute('SELECT 1')

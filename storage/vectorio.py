@@ -3,6 +3,7 @@
 WGS84 is the editing store; output CRS belongs to the delivered dataset. Formats
 with restricted attribute types carry a documented lossless companion encoding.
 """
+from contextlib import closing
 import csv
 import hashlib
 import io
@@ -184,7 +185,7 @@ def _raw_layers(paths,manifest,options):
             if encoded_column and layer['_path'].suffix=='.gpkg' and field_map:
                 def quote(value):return '"'+str(value).replace('"','""')+'"'
                 fid=pyogrio.read_info(layer['_path'],layer=layer['_layer'])['fid_column']
-                with sqlite3.connect(layer['_path'].resolve().as_uri()+'?mode=ro',uri=True) as sql:
+                with closing(sqlite3.connect(layer['_path'].resolve().as_uri()+'?mode=ro',uri=True)) as sql:
                     sql.row_factory=sqlite3.Row
                     query='SELECT * FROM '+quote(layer['_layer'])+' WHERE '+quote(fid)+' IN ('+','.join('?' for _ in fids)+')'
                     native_rows={r[fid]:dict(r) for r in sql.execute(query,[int(v) for v in fids])}
