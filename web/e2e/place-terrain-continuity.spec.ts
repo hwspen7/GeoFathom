@@ -67,6 +67,7 @@ test('Draw profile line keeps CMH selected before and after Finish, until explic
  await search(page,cmh);
  const toolbar=page.getByLabel('Survey toolbar');
  await page.getByRole('navigation',{name:'Workspace tools'}).getByRole('button',{name:'Terrain',exact:true}).click();
+ await page.getByRole('tab',{name:'Tools',exact:true}).click();
  await page.getByLabel('Terrain tools').getByRole('button',{name:'Elevation profile',exact:true}).click();
  await page.getByRole('button',{name:'Draw profile line',exact:true}).click();
  await expect(page.locator('.results .result.active')).toHaveCount(1);
@@ -120,6 +121,7 @@ test('Cancel stops an independent profile drawing without discarding CMH',async(
  await expect(map).toHaveAttribute('data-label-layer-ready','true',{timeout:25000});
  await search(page,cmh);
  await page.getByRole('navigation',{name:'Workspace tools'}).getByRole('button',{name:'Terrain',exact:true}).click();
+ await page.getByRole('tab',{name:'Tools',exact:true}).click();
  await page.getByLabel('Terrain tools').getByRole('button',{name:'Elevation profile',exact:true}).click();
  await page.getByRole('button',{name:'Draw profile line',exact:true}).click();
  await page.getByLabel('Survey toolbar').getByRole('button',{name:'Cancel drawing',exact:true}).click();
