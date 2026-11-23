@@ -76,8 +76,8 @@ export function WorkspaceCommandPalette({open,commands,onClose}:{
           }}/>
         <kbd>Esc</kbd>
       </div>
-      <div className="workspace-command-results" role="list" aria-label="Matching commands">
-        {matches.map((command,i)=><button type="button" role="listitem"
+      <div className="workspace-command-results" role="group" aria-label="Matching commands">
+        {matches.map((command,i)=><button type="button"
           className={i===index?'is-focused':''}
           key={command.id} disabled={command.disabled}
           onMouseEnter={()=>setIndex(i)}

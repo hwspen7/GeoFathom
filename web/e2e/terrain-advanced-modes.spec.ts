@@ -245,7 +245,7 @@ test('shared Onshape-style command search and newly exposed Terrain tools',async
  const dialog=page.getByRole('dialog',{name:'Workspace commands'});
  await expect(dialog).toBeVisible();
  await dialog.getByRole('searchbox',{name:'Search workspace commands'}).fill('fit selected');
- await expect(dialog.getByRole('listitem',{name:/Fit selected area/})).toBeVisible();
+ await expect(dialog.getByRole('button',{name:/Fit selected area/})).toBeVisible();
  await page.keyboard.press('Escape');
  await expect(dialog).toHaveCount(0);
  const shelf=page.getByLabel('Terrain tools');

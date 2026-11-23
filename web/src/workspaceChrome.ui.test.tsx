@@ -13,7 +13,7 @@ describe('shared research workbench chrome',()=>{
   render(<WorkspaceCommandPalette open commands={commands} onClose={close}/>);
   fireEvent.change(screen.getByRole('searchbox',{name:'Search workspace commands'}),
    {target:{value:'terrain'}});
-  fireEvent.click(screen.getByRole('listitem',{name:/Terrain/}));
+  fireEvent.click(screen.getByRole('button',{name:/Terrain/}));
   expect(perform).toHaveBeenCalledTimes(1);
   expect(close).toHaveBeenCalledTimes(1);
  });
