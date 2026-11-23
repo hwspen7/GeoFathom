@@ -1725,7 +1725,7 @@ export default function App() {
           <section id="tools-gis" hidden={activeTool!=='tools-gis'} className="panel-section">
             <div className="section-heading"><Layers3 size={16}/><span>Professional GIS tools</span></div>
             <ProfessionalPanel
-              resultsTarget={resultsTarget} active={activeTool==='tools-gis'&&showTools}
+              resultsTarget={resultsTarget} active={activeTool==='tools-gis'}
               key={activeProjectId ?? 'no-project'}
               projectId={activeProjectId}
               workspace={projectWorkspace}
@@ -1746,7 +1746,7 @@ export default function App() {
               resultsTarget={resultsTarget}
               operationsFooterTarget={operationsFooterTarget}
               resultsFooterTarget={resultsFooterTarget}
-              active={activeTool==='tools-terrain'&&showTools}
+              active={activeTool==='tools-terrain'}
               geometry={preview||drawingMode&&!terrainLineDrawing?null:extentMode?extentGeometry:geometry}
               profileGeometry={terrainProfileLine} raster={demLayer} imageRaster={imageLayer} viewport={viewport}
               connected={Boolean(capabilities)} localImport={capabilities?.local_raster_import===true}
@@ -1803,7 +1803,7 @@ export default function App() {
               }}/>
             <div className="section-heading"><Layers3 size={16}/><span>GIS selection, QA & print layout</span></div>
             <SpatialToolsPanel
-              resultsTarget={resultsTarget} active={activeTool==='tools-spatial'&&showTools}
+              resultsTarget={resultsTarget} active={activeTool==='tools-spatial'}
               key={activeProjectId ?? 'no-project'}
               projectId={activeProjectId}
               geometry={geometry}
@@ -1891,7 +1891,7 @@ export default function App() {
         <aside className="gis-results-monitor" aria-label="Results monitor">
           <WorkspaceDockHeading><Layers3 size={15}/> Results</WorkspaceDockHeading>
           <div className="sidebar-scroll" ref={setResultsTarget}>
-            {!measurement&&activeTool!=='tools-terrain'&&<div className="workspace-monitor-empty">No selection</div>}
+            {!measurement&&activeTool==='tools-survey'&&<div className="workspace-monitor-empty">No selection</div>}
           </div>
           <div className="workspace-fixed-footer" ref={setResultsFooterTarget}/>
         </aside>
