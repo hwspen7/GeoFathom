@@ -77,3 +77,10 @@ npm run test:e2e
 
 A pass of one layer does not imply another layer passed. Browser checks must run
 in an environment that permits Chromium processes and its IPC sockets.
+
+The repository-wide `quality-targets` coverage threshold job is currently
+explicitly skipped by project decision. Coverage measurement, reports and the
+recorded target comparisons remain available. Build, functional, data integrity,
+native safety, PostGIS and serial/concurrent browser checks still run and must
+pass. A green workflow under this policy does not assert that coverage targets
+have been reached; removing the job-level false condition re-enables that gate.

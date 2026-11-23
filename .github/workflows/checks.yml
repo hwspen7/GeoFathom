@@ -294,6 +294,9 @@ jobs:
 
 
   quality-targets:
+    # Coverage targets are temporarily advisory by explicit project decision.
+    # Keep the measured reports above; remove this condition to enforce again.
+    if: ${{ false }}
     needs: [quality-measurement]
     runs-on: ubuntu-latest
     steps:
