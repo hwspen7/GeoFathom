@@ -1489,3 +1489,19 @@ button:disabled { opacity: .45; cursor: not-allowed; }
   background:#f6f9fb;border-radius:4px;padding:5px 7px;font-size:10px;
 }
 .desktop-gis .terrain-research-remote-row strong{color:#31576e;font-variant-numeric:tabular-nums}
+
+.desktop-gis .terrain-research-remote-row{min-height:37px}
+.desktop-gis .terrain-research-remote-row>span{flex:1 1 82px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.desktop-gis .terrain-research-remote-row>strong{flex:none;min-width:47px;text-align:right}
+.desktop-gis .terrain-research-change-track{
+  position:relative;flex:1 1 95px;height:12px;min-width:60px;
+  border-radius:2px;background:#ecf1f5;overflow:hidden;
+}
+.desktop-gis .terrain-research-change-track::after{
+  content:'';position:absolute;left:50%;top:0;bottom:0;width:1px;background:#647889;
+}
+.desktop-gis .terrain-research-change-positive,.desktop-gis .terrain-research-change-negative{
+  position:absolute;top:1px;bottom:1px;border-radius:2px;
+}
+.desktop-gis .terrain-research-change-positive{background:#317e94}
+.desktop-gis .terrain-research-change-negative{background:#c37a55}
