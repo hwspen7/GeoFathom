@@ -1,7 +1,7 @@
 import {useEffect,useMemo,useRef,useState,type ChangeEvent} from 'react';
 import {createPortal} from 'react-dom';
 import {Mountain} from 'lucide-react';
-import {advancedTerrain,saveFeatureBatch,analyzeTerrain,terrainProfile,listImagery,uploadImagery,fetchPublicDEM,prepareDEM,type DEMProcessMode,type TerrainMesh,type TerrainOperation,type RasterAsset,type TerrainRasterLayer} from './api';
+import {advancedTerrain,saveFeatureBatch,analyzeTerrain,terrainProfile,listImagery,uploadImagery,fetchPublicDEM,prepareDEM,type DEMProcessMode,type TerrainMesh,type TerrainOperation,type RasterAsset,type TerrainRasterLayer,type TerrainResearchResult} from './api';
 import {ProfilePlot,MetricBars,ElevationDistribution,AspectRose,SectionPlot,ResultPane,HypsometricPlot,ProfileGradePlot,TerrainClassShare} from './TerrainCharts';
 import {GPUView} from './TerrainMeshView';
 import type {Position} from './editing';
@@ -137,6 +137,8 @@ export default function TerrainWorkbench(p:Props){
  const [resultCacheReady,setResultCacheReady]=useState(false);
  const [resultCacheError,setResultCacheError]=useState('');
  const [runHistory,setRunHistory]=useState(()=>readTerrainRuns(p.projectId));
+ const [researchRun,setResearchRun]=useState<TerrainResearchResult|null>(null);
+ const [researchTab,setResearchTab]=useState<'overview'|'figures'|'data'>('overview');
  const [historyStorageError,setHistoryStorageError]=useState(false);
  useEffect(()=>{setHistoryStorageError(!writeTerrainRuns(p.projectId,runHistory));},[runHistory,p.projectId]);
  useEffect(()=>{
@@ -302,7 +304,12 @@ export default function TerrainWorkbench(p:Props){
  useEffect(()=>()=>{fetchAbort.current?.abort();},[fetchKey]);
  useEffect(()=>()=>{latest.current.onFetchTarget?.(null);},[]);
  // Published result layers are independent from the currently selected input.
- useEffect(()=>{latest.current.onPreview(records.filter(r=>r.visible).flatMap(r=>r.advanced?.features??[]));latest.current.onRasterPreview?.(records.flatMap(r=>r.visible&&r.advanced?.raster?[{id:r.id,title:r.title,raster:r.advanced.raster,opacity:r.opacity,resampling:r.resampling}]:[]));},[records]);
+ useEffect(()=>{latest.current.onPreview(records.filter(r=>r.visible).flatMap(r=>r.advanced?.features??[]));
+   latest.current.onRasterPreview?.([
+     ...records.flatMap(r=>r.visible&&r.advanced?.raster?[{id:r.id,title:r.title,raster:r.advanced.raster,opacity:r.opacity,resampling:r.resampling}]:[]),
+     ...(researchRun?.preview_raster?[{id:'research-'+researchRun.archive_sha256.slice(0,12),title:'Research suitability',raster:researchRun.preview_raster,opacity:.58,resampling:'linear' as const}]:[]),
+   ]);
+ },[records,researchRun]);
  useEffect(()=>{
    if(!p.active||!p.connected)return;
    let current=true;
@@ -550,6 +557,14 @@ export default function TerrainWorkbench(p:Props){
  </div>:null;
  const terrainFileActions=<div className="terrain-file-actions">
    {selected&&(result||slope||profile)&&<button type="button" onClick={exportResult}>Terrain result JSON</button>}
+   {researchRun&&<button type="button" onClick={()=>{
+     const bytes=Uint8Array.from(atob(researchRun.archive_base64),c=>c.charCodeAt(0));
+     const url=URL.createObjectURL(new Blob([bytes],{type:'application/zip'}));
+     const link=document.createElement('a');link.href=url;
+     link.download='geofathom-research-'+researchRun.archive_sha256.slice(0,12)+'.zip';
+     document.body.appendChild(link);link.click();link.remove();
+     window.setTimeout(()=>URL.revokeObjectURL(url),1000);
+   }}>Research ZIP</button>}
    {runHistory.length>0&&<button type="button" onClick={()=>{
      const url=URL.createObjectURL(new Blob([JSON.stringify(runHistory,null,2)],{type:'application/json'}));
      const a=document.createElement('a');a.href=url;a.download='terrain-run-history.json';
@@ -562,7 +577,34 @@ export default function TerrainWorkbench(p:Props){
    {busy&&<button onClick={()=>{setLive(false);cancelAnalysis();setInfo('Analysis request cancelled.');}}>Cancel</button>}
    <label><input aria-label="Live terrain updates" type="checkbox" checked={live} onChange={e=>setLive(e.target.checked)}/> Live</label>
  </div>:null;
- const monitor=<div className="terrain-monitor-content">
+ const monitor=<div className={'terrain-monitor-content'+(leftTab==='research'&&researchRun?' research-active':'')}>
+   {researchRun&&leftTab==='research'&&<section className="terrain-research-remote" aria-label="Research result monitor">
+     <nav className="terrain-result-tabs terrain-research-result-tabs" role="tablist" aria-label="Research views">
+       {([['overview','Overview'],['figures','Figures'],['data','Data']] as const).map(([id,label])=>
+         <button type="button" key={id} role="tab" aria-selected={researchTab===id}
+           onClick={()=>setResearchTab(id)}>{label}</button>)}
+     </nav>
+     {researchTab==='overview'&&<div className="terrain-research-remote-metrics">
+       <div><small>Eligible pixels</small><strong>{fmt(researchRun.metrics.eligible_cells)}</strong></div>
+       <div><small>Above threshold</small><strong>{fmt(researchRun.metrics.eligible_above_threshold_pct)}%</strong></div>
+       <div><small>Mean score</small><strong>{fmt(researchRun.metrics.score_mean)}</strong></div>
+       <div><small>Eligible area</small><strong>{fmt(researchRun.metrics.eligible_area_m2)} m²</strong></div>
+       {researchRun.model.uncertainty.score_sd_mean!==undefined&&
+        <div><small>Ensemble mean σ</small><strong>{fmt(researchRun.model.uncertainty.score_sd_mean)}</strong></div>}
+       {researchRun.model.ahp&&<div><small>AHP consistency</small><strong>{fmt(researchRun.model.ahp.consistency_ratio)}</strong></div>}
+     </div>}
+     {researchTab==='figures'&&<figure className="terrain-research-remote-figure">
+       <img src={researchRun.preview_raster.png} alt="Continuous research suitability score on a georeferenced grid"/>
+       <figcaption>Suitability score, 0–1. NoData is transparent.</figcaption>
+     </figure>}
+     {researchTab==='data'&&<div className="terrain-research-remote-table">
+       <div className="section-heading">Weight sensitivity</div>
+       {researchRun.sensitivity.map((scenario,i)=><div key={i} className="terrain-research-remote-row">
+         <span>{scenario.criterion} · {scenario.direction}</span>
+         <strong>{scenario.mean_score_delta>=0?'+':''}{scenario.mean_score_delta.toFixed(4)}</strong>
+       </div>)}
+     </div>}
+   </section>}
    {!!records.length&&<section className="terrain-run-list" aria-label="Analysis result layers">
      <div className="terrain-run-selector">
        <label>Result
@@ -995,7 +1037,7 @@ export default function TerrainWorkbench(p:Props){
    <section id="terrain-panel-research" className="terrain-step terrain-control-page terrain-research-page"
       role="region" aria-label="Research study page" hidden={leftTab!=='research'}>
      <TerrainResearchWorkbench dem={dem} geometry={p.geometry} assets={assets}
-       connected={p.connected}/>
+       connected={p.connected} onResult={setResearchRun}/>
    </section>
    {info&&<p className="project-info">{info}</p>}{error&&<p className="discovery-error" role="alert">{error}</p>}
  </div>
