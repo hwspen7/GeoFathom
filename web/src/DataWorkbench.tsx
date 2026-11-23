@@ -141,8 +141,8 @@ export default function DataWorkbench(p:Props){
     <div className="data-area-rows">
      {p.network.faces.slice(areaPage*4,(areaPage+1)*4).map(f=>
       <div key={f.id}><strong>{f.name}</strong>
-       <span>{fmt(f.measurement.area_m2/1e6)} km²</span>
-       <small>{fmt(f.measurement.perimeter_m/1000)} km perimeter</small>
+       <span>{fmt((f.measurement.area_m2??0)/1e6)} km²</span>
+       <small>{fmt((f.measurement.perimeter_m??0)/1000)} km perimeter</small>
       </div>)}
     </div>
     {p.network.count>4&&<div className="gis-record-pager">
