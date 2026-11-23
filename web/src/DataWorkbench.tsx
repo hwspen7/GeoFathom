@@ -2,9 +2,10 @@ import {useEffect,useRef,useState,type ChangeEvent} from 'react';
 import {importVectorFile,uploadImagery,saveFeatureBatch,
   type NetworkPolygonization,type NetworkFace,type GeoWorkspace,type RasterAsset} from './api';
 import DataServicesPanel,{type ExternalTile} from './DataServicesPanel';
+import ApiAccessPanel from './ApiAccessPanel';
 
 type BBox=[number,number,number,number];
-type DataPage='import'|'areas'|'sources'|'database'|'jobs';
+type DataPage='import'|'areas'|'sources'|'database'|'jobs'|'access';
 interface Props{
  projectId:string|null;workspace:GeoWorkspace|null;viewport:BBox|null;
  geometry:GeoJSON.Geometry|null;network:NetworkPolygonization|null;
@@ -76,7 +77,7 @@ export default function DataWorkbench(p:Props){
  return <div className="data-workbench">
   <nav aria-label="Data operations" className="data-page-buttons">
    {([['import','Import'],['areas','Areas'],['sources','Sources'],
-      ['database','Database'],['jobs','Jobs']] as const).map(([key,name])=>
+      ['database','Database'],['jobs','Jobs'],['access','Access']] as const).map(([key,name])=>
       <button type="button" key={key} aria-pressed={page===key}
        onClick={()=>{setPage(key);setError('');}}>{name}</button>)}
   </nav>
@@ -158,6 +159,9 @@ export default function DataWorkbench(p:Props){
     projectId={p.projectId} viewport={p.viewport} drawnGeometry={p.geometry}
     onTiles={p.onTiles} onPreview={p.onPreview} onPage={p.onPage}
     onRefresh={p.onRefresh}/>
+  </div>
+  <div className="data-page" hidden={page!=='access'}>
+   <ApiAccessPanel/>
   </div>
   {status&&<small className="project-info" role="status">{status}</small>}
   {error&&<small className="discovery-error" role="alert">{error}</small>}
