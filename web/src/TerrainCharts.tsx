@@ -214,7 +214,7 @@ export function ProfileGradePlot({samples}:{samples:ProfileSample[]}){
      <text x="306" y="138" textAnchor="end" fontSize="9" fill="#4c6475">{fmt(distance)} m</text>
      <text x="176" y="152" fontSize="10" textAnchor="middle" fill="#4c6475">Distance along line</text>
    </svg>
-   <div className="profile-readout">Ascent +{fmt(grades.filter(p=>p.grade_pct>0).length)} segments · descent {fmt(grades.filter(p=>p.grade_pct<0).length)} segments</div>
+   <div className="profile-readout">Steepest climb {fmt(Math.max(0,hi))}% · descent {fmt(Math.min(0,lo))}%</div>
  </div>;
 }
 export function TerrainClassShare({bins}:{bins:{label:string;color:string;cells:number}[]}){
