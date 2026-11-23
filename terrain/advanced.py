@@ -564,7 +564,7 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
             "observers with unobstructed sightlines only when all observer "
             "rays are known; NoData means one or more rays are unknown. "
             "The vector union includes any positively observed cells even "
-            "when other observer rays are unknown. "
+            "when other observer rays are unknown. "+
             ("Supplied co-registered DSM obstructs rays; missing DSM cells remain unknown. " if dsm_path else
              "Bare DEM only; buildings and vegetation are not evaluated. ")+
             ("Greedy selection maximises incremental known-cell coverage, not a global optimum. " if optimize_observers else "")+
