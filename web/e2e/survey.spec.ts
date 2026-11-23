@@ -1,5 +1,5 @@
 import {expect,test} from './coverage-fixture';
-import {openProjectDrawer} from './workspace-ui';
+import {openProjectDrawer,openFileMenu} from './workspace-ui';
 
 const tile='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/ZecAAAAASUVORK5CYII=';
 
@@ -65,6 +65,7 @@ test('survey editor draws, repositions vertices, supports undo and saves project
   await page.getByRole('button',{name:'Redo',exact:true}).click();
   await openProjectDrawer(page);  await page.getByLabel('New project name').fill('Playwright Survey');
   await page.getByRole('button',{name:'Create project'}).click();
+  await openFileMenu(page);
   await expect(page.getByRole('button',{name:'Save selected'})).toBeEnabled();
   await page.getByRole('button',{name:'Save selected'}).click();
   await expect(page.getByText('New geometry saved to the chosen layer.')).toBeVisible();
