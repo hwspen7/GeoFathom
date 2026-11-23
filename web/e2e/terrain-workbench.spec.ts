@@ -32,7 +32,7 @@ with tempfile.TemporaryDirectory() as directory:
  await page.goto('/');
  await page.getByLabel('Active project').selectOption(id);
  await page.getByRole('navigation',{name:'Workspace tools'}).getByRole('button',{name:'Terrain',exact:true}).click();
- await page.getByRole('tab',{name:'Source',exact:true}).click();
+ await page.getByRole('button',{name:'Get DEM',exact:true}).click();
  await page.getByLabel('DEM elevation layer').selectOption(fixture.id);
  await page.getByLabel('Confirm DEM meter elevations').check();
  await page.getByRole('button',{name:/DEM study area/}).click();
@@ -48,7 +48,7 @@ with tempfile.TemporaryDirectory() as directory:
  await expect(terrainTab).toHaveAttribute('aria-pressed','true');
  await expect(page.getByRole('complementary',{name:'Operations'})).toBeVisible();
  await expect(page.getByLabel('Results monitor')).toBeVisible();
- await expect(page.getByRole('button',{name:'Toggle project and layers'})).toHaveAttribute('aria-expanded','false');
+ await expect(page.getByLabel('Project and layers',{exact:true})).toBeHidden();
  // Real browser desktop contract: two docks flank a full-height map.
  const left=await page.getByRole('complementary',{name:'Operations'}).boundingBox();
  const center=await page.getByLabel('Interactive geospatial map').boundingBox();
@@ -59,41 +59,43 @@ with tempfile.TemporaryDirectory() as directory:
  expect(center!.height).toBeGreaterThan(400);
  expect(Math.round(left!.width)).toBe(318);
  expect(Math.round(right!.width)).toBe(364);
- await expect(page.getByRole('tablist',{name:'Terrain controls'})).toBeVisible();
- await expect(page.getByRole('tab',{name:'Source',exact:true})).toHaveAttribute('aria-selected','true');
- await expect(page.getByRole('tablist',{name:'Terrain controls'})).not.toContainText('01');
- await expect(page.getByRole('tablist',{name:'Terrain controls'})).not.toContainText('02');
+ await expect(page.getByLabel('Terrain analysis inputs')).toBeVisible();
+ await expect(page.getByRole('button',{name:'Get DEM',exact:true})).toHaveAttribute('aria-pressed','true');
+ await expect(page.getByLabel('Terrain analysis inputs')).not.toContainText('01');
+ await expect(page.getByLabel('Terrain analysis inputs')).not.toContainText('02');
  const scrollModes=await page.locator('.gis-operations>.sidebar-scroll,.gis-results-monitor>.sidebar-scroll')
    .evaluateAll(elements=>elements.map(element=>getComputedStyle(element).overflowY));
  expect(scrollModes).toEqual(['hidden','hidden']);
  await expect(page.getByRole('button',{name:'Open full operations view'})).toBeVisible();
  await expect(page.getByRole('button',{name:'Open full results view'})).toBeVisible();
  await expect(page.getByRole('separator',{name:/Resize (operations|results)/})).toHaveCount(0);
- const visual=()=>page.getByRole('tab',{name:'Visual',exact:true}).click();
- const outputs=()=>page.getByRole('tab',{name:'Outputs',exact:true}).click();
- const details=()=>page.getByRole('tab',{name:'Details',exact:true}).click();
+ const visual=()=>page.getByRole('tab',{name:'Figures',exact:true}).click();
+ const outputs=()=>page.getByRole('tab',{name:'Data',exact:true}).click();
+ const details=()=>page.getByRole('tab',{name:'Data',exact:true}).click();
  // Survey commands must not remain in the global toolbar while Terrain runs.
  await expect(page.getByLabel('Survey toolbar').getByRole('button',{name:'Polygon',exact:true})).toHaveCount(0);
+ // Repeated module activation must preserve the fixed Tools panel and active analysis.
  await terrainTab.click();
- await expect(terrainTab).toHaveAttribute('aria-pressed','false');
- await terrainTab.click();
- await page.getByRole('tab',{name:'Tools',exact:true}).click();
+ await expect(terrainTab).toHaveAttribute('aria-pressed','true');
+ await expect(page.getByRole('complementary',{name:'Operations'})).toBeVisible();
+ await page.getByRole('button',{name:'Browse terrain tools',exact:true}).click();
  const tools=page.getByLabel('Terrain tools');
  await expect(tools.getByRole('button',{pressed:true})).toHaveCount(0);
  await expect(page.getByRole('button',{name:'Run terrain operation'})).toHaveCount(0);
  const map=page.getByLabel('Interactive geospatial map');
- await page.getByRole('tab',{name:'Tools',exact:true}).click();
+ await page.getByRole('button',{name:'Browse terrain tools',exact:true}).click();
  await tools.getByRole('button',{name:'Slope / aspect',exact:true}).click();
  await page.getByRole('button',{name:'Run terrain operation'}).click();
+ await expect(page.getByRole('tablist',{name:'Terrain result views'}).getByRole('tab')).toHaveCount(3);
  await expect(page.getByRole('tab',{name:'Overview',exact:true})).toHaveAttribute('aria-selected','true');
  await page.getByRole('tab',{name:'Overview',exact:true}).focus();
  await page.keyboard.press('ArrowRight');
- await expect(page.getByRole('tab',{name:'Visual',exact:true})).toHaveAttribute('aria-selected','true');
- await expect(page.getByRole('tab',{name:'Visual',exact:true})).toBeFocused();
+ await expect(page.getByRole('tab',{name:'Figures',exact:true})).toHaveAttribute('aria-selected','true');
+ await expect(page.getByRole('tab',{name:'Figures',exact:true})).toBeFocused();
  await visual();
  await expect(page.getByRole('img',{name:'Slope (degrees)'})).toBeVisible();
  await expect(page.getByLabel('Results monitor').getByLabel('Terrain results')).toBeVisible();
- await page.getByRole('tab',{name:'Tools',exact:true}).click();
+ await page.getByRole('button',{name:'Browse terrain tools',exact:true}).click();
  await tools.getByRole('button',{name:'Elevation distribution',exact:true}).click();
  await page.getByRole('button',{name:'Run terrain operation'}).click();
  await visual();
@@ -113,9 +115,9 @@ with tempfile.TemporaryDirectory() as directory:
    expect(readFileSync((await file.path())!).subarray(0,8).toString('hex')).toBe(header);
  }
  await dialogue.getByRole('button',{name:'Close expanded',exact:true}).click();
- await page.getByRole('tab',{name:'Tools',exact:true}).click();
+ await page.getByRole('button',{name:'Browse terrain tools',exact:true}).click();
  await page.getByLabel('Terrain tool group').selectOption('Surface');
- await page.getByRole('tab',{name:'Tools',exact:true}).click();
+ await page.getByRole('button',{name:'Browse terrain tools',exact:true}).click();
  await tools.getByRole('button',{name:'Slope map',exact:true}).click();
  await page.getByRole('button',{name:'Run terrain operation'}).click();
  await visual();
@@ -143,7 +145,7 @@ with tempfile.TemporaryDirectory() as directory:
  const download=page.waitForEvent('download');await page.getByRole('button',{name:'GeoTIFF',exact:true}).click();
  expect((await download).suggestedFilename()).toBe('slope_map.tif');
  // Two related raster analyses remain independently addressable.
- await page.getByRole('tab',{name:'Tools',exact:true}).click();
+ await page.getByRole('button',{name:'Browse terrain tools',exact:true}).click();
  await tools.getByRole('button',{name:'Hillshade',exact:true}).click();
  await page.getByRole('button',{name:'Run terrain operation'}).click();
  await expect(map).toHaveAttribute('data-terrain-raster-count','1');
@@ -156,9 +158,9 @@ with tempfile.TemporaryDirectory() as directory:
  await expect(map).toHaveAttribute('data-terrain-raster-count','2');
  await previousSlope.uncheck();
  await expect(map).toHaveAttribute('data-terrain-raster-count','1');
- await page.getByRole('tab',{name:'Tools',exact:true}).click();
+ await page.getByRole('button',{name:'Browse terrain tools',exact:true}).click();
  await page.getByLabel('Terrain tool group').selectOption('Quick');
- await page.getByRole('tab',{name:'Tools',exact:true}).click();
+ await page.getByRole('button',{name:'Browse terrain tools',exact:true}).click();
  await tools.getByRole('button',{name:'Contours',exact:true}).click();
  await page.getByLabel('Contour interval').fill('5');
  await page.getByRole('button',{name:'Run terrain operation'}).click();
@@ -180,14 +182,14 @@ with tempfile.TemporaryDirectory() as directory:
  expect(contour!.properties.research_parameters).toMatchObject({
    contour_interval_m:5
  });
- await page.getByRole('tab',{name:'Tools',exact:true}).click();
+ await page.getByRole('button',{name:'Browse terrain tools',exact:true}).click();
  await tools.getByRole('button',{name:'Cut / fill',exact:true}).click();
  await page.getByLabel('Reference elevation',{exact:true}).fill('110');
  await page.getByRole('button',{name:'Run terrain operation'}).click();
  await expect(page.getByLabel('Terrain results').getByText('Cut',{exact:true}).first()).toBeVisible();
  await visual();
  await expect(page.getByRole('img',{name:'Earthwork volume (m³)'})).toBeVisible();
- await page.getByRole('tab',{name:'Tools',exact:true}).click();
+ await page.getByRole('button',{name:'Browse terrain tools',exact:true}).click();
  await tools.getByRole('button',{name:'3D terrain',exact:true}).click();
  await page.getByRole('button',{name:'Run terrain operation'}).click();
  await visual();
@@ -203,7 +205,7 @@ with tempfile.TemporaryDirectory() as directory:
  })).toBe(true);
  const objEvent=page.waitForEvent('download');await page.getByRole('button',{name:'OBJ',exact:true}).click();
  const obj=await objEvent;expect(readFileSync((await obj.path())!,'utf8')).toMatch(/\nf \d+ \d+ \d+/);
- await page.getByRole('tab',{name:'Tools',exact:true}).click();
+ await page.getByRole('button',{name:'Browse terrain tools',exact:true}).click();
  await tools.getByRole('button',{name:'Viewshed',exact:true}).click();
  await page.getByRole('button',{name:'Pick observer',exact:true}).click();
  const bounds=(await map.boundingBox())!;
@@ -212,7 +214,7 @@ with tempfile.TemporaryDirectory() as directory:
  await page.getByRole('button',{name:'Run terrain operation'}).click();
  await visual();
  await expect(page.getByRole('img',{name:'Visibility (cells)'})).toBeVisible();
- await page.getByRole('tab',{name:'Tools',exact:true}).click();
+ await page.getByRole('button',{name:'Browse terrain tools',exact:true}).click();
  await tools.getByRole('button',{name:'Watershed (D8)',exact:true}).click();
  await page.getByRole('button',{name:'Area center',exact:true}).click();
  await page.getByRole('button',{name:'Run terrain operation'}).click();
@@ -225,11 +227,11 @@ with tempfile.TemporaryDirectory() as directory:
  // Reload the workspace instead of relying on a stale list from a different query.
  await page.reload();
  await page.getByRole('navigation',{name:'Workspace tools'}).getByRole('button',{name:'Terrain',exact:true}).click();
- await page.getByRole('tab',{name:'Source',exact:true}).click();
+ await page.getByRole('button',{name:'Get DEM',exact:true}).click();
  await page.getByLabel('DEM elevation layer').selectOption(fixture.id);
  await page.getByLabel('Confirm DEM meter elevations').check();
  await page.getByRole('button',{name:/DEM profile line/}).click();
- await page.getByRole('tab',{name:'Tools',exact:true}).click();
+ await page.getByRole('button',{name:'Browse terrain tools',exact:true}).click();
  await page.getByLabel('Terrain tools').getByRole('button',{name:'Elevation profile',exact:true}).click();
  await page.getByRole('button',{name:'Run terrain operation'}).click();
  await visual();
@@ -258,14 +260,14 @@ with tempfile.TemporaryDirectory() as directory:
    return idx!==null&&idx!=='none';
  },{timeout:15000}).toBe(true);
  await expect(page.getByLabel('Profile sample position')).toBeVisible();
- await page.getByRole('tab',{name:'Tools',exact:true}).click();
+ await page.getByRole('button',{name:'Browse terrain tools',exact:true}).click();
  await page.getByLabel('Terrain tool group').selectOption('Engineering');
- await page.getByRole('tab',{name:'Tools',exact:true}).click();
+ await page.getByRole('button',{name:'Browse terrain tools',exact:true}).click();
  await page.getByLabel('Terrain tools').getByRole('button',{name:'Cross sections',exact:true}).click();
  await page.getByRole('button',{name:'Run terrain operation'}).click();
  await visual();
  await expect(page.getByRole('button',{name:'All sections CSV'})).toBeVisible();
- await page.getByRole('tab',{name:'Source',exact:true}).click();
+ await page.getByRole('button',{name:'Get DEM',exact:true}).click();
  await page.getByLabel('DEM elevation layer').selectOption('');
  await expect(page.getByLabel('DEM elevation layer')).toHaveValue('');
  await expect(page.getByRole('button',{name:'Run terrain operation'})).toBeDisabled();
