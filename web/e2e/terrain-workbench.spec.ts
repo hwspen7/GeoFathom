@@ -274,7 +274,6 @@ with tempfile.TemporaryDirectory() as directory:
  // Restored layers are hidden until explicitly enabled on the map.
  await page.reload();
  await activateWorkspaceModule(page,'Terrain');
- const restored=page.getByLabel('Analysis result layers');
  const resultSelect=page.getByLabel('Choose terrain result');
  await expect(resultSelect.locator('option').filter({hasText:'Cross sections'})).toHaveCount(1);
  await expect(resultSelect.locator('option').filter({hasText:'Slope map'})).toHaveCount(1);
@@ -291,14 +290,21 @@ with tempfile.TemporaryDirectory() as directory:
  const cachedRaster=page.waitForEvent('download');
  await page.getByRole('button',{name:'GeoTIFF',exact:true}).click();
  expect((await cachedRaster).suggestedFilename()).toBe('slope_map.tif');
- await page.getByLabel('Terrain output layers').locator('summary').click();
+ const layerManager=page.getByLabel('Terrain output layers',{exact:true}).locator('.terrain-layer-manager');
+ if(await layerManager.getAttribute('open')===null)await layerManager.locator('summary').click();
+ const removeSlope=layerManager.getByRole('button',{name:'Remove result Slope map',exact:true});
+ // Restored outputs are paged. Reach the actual row through the visible
+ // page controls before removing it; never treat the selector as the layer list.
+ const pages=layerManager.getByLabel('Terrain layer pages',{exact:true});
+ while(await removeSlope.count()===0&&await pages.getByRole('button',{name:'Next',exact:true}).isEnabled())
+  await pages.getByRole('button',{name:'Next',exact:true}).click();
  // Removing a result removes it from IndexedDB as well as React memory.
- await restored.getByRole('button',{name:'Remove result Slope map'}).click();
- await expect(restored.getByRole('button',{name:/Slope map ·/})).toHaveCount(0);
+ await removeSlope.click();
+ await expect(resultSelect.locator('option').filter({hasText:'Slope map'})).toHaveCount(0);
  await page.reload();
  await activateWorkspaceModule(page,'Terrain');
  await outputs();
- await expect(page.getByLabel('Analysis result layers').getByRole('button',{name:/Slope map ·/})).toHaveCount(0);
+ await expect(page.getByLabel('Choose terrain result').locator('option').filter({hasText:'Slope map'})).toHaveCount(0);
  // Results from one project must never be visible in a different project.
  const another=await page.request.post(API+'/projects',{data:{name:'Independent terrain project '+Date.now()}});
  expect(another.status()).toBe(201);

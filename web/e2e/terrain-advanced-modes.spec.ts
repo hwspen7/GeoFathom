@@ -100,8 +100,8 @@ test('advanced surface families retain distinct real results and scientific expo
   await page.getByRole('tab',{name:'Data',exact:true}).click();
   const manager=page.getByLabel('Terrain output layers').locator('.terrain-layer-manager');
   if(await manager.getAttribute('open')===null)await manager.locator('summary').click();
-  await expect(page.getByLabel('Analysis result layers')
-    .locator('.scratch-row > button[title]').filter({hasText:title})).toBeVisible();
+  await expect(manager.locator('.scratch-row > button[title]').filter({hasText:title})).toBeVisible();
+  await expect(page.getByLabel('Choose terrain result',{exact:true}).locator('option:checked')).toContainText(title);
  };
  for(const name of [
   'Elevation map','Aspect map','Ruggedness (TRI)','Position (TPI)',
@@ -159,9 +159,8 @@ test('advanced surface families retain distinct real results and scientific expo
  await page.getByRole('tab',{name:'Overview',exact:true}).click();
  await expect(page.getByLabel('Terrain results')).toContainText(/route length/i);
  const exportEvent=page.waitForEvent('download');
- await page.locator('.gis-file-menu > summary').click();
+ await activateWorkspaceModule(page,'Export');
  await page.getByRole('button',{name:'Terrain result JSON'}).click();
- await page.locator('.gis-file-menu > summary').click();
  const exported=await exportEvent;
  expect(exported.suggestedFilename()).toMatch(/terrain-least_cost.*geojson/);
  const exportedJson=JSON.parse(await readFile(await exported.path(),'utf8'));
@@ -248,10 +247,20 @@ test('3D DEM remains inspectable using the CPU preview if WebGL2 is unavailable'
  await page.getByRole('button',{name:'Browse terrain tools',exact:true}).click();
  await page.getByLabel('Terrain tools',{exact:true}).getByRole('button',{name:'3D terrain',exact:true}).click();
  await page.getByRole('button',{name:'Run terrain operation'}).click();
+ await page.getByRole('tab',{name:'Figures',exact:true}).click();
  await expect(page.getByText('WebGL2 unavailable · CPU preview')).toBeVisible();
  const canvas=page.getByLabel('Interactive 3D terrain preview');
  await expect(canvas).toBeVisible();
- await expect(canvas).not.toHaveAttribute('data-renderer','webgl2');
+ await expect(canvas).toHaveAttribute('data-renderer','canvas2d');
+ // Require real CPU-drawn terrain pixels, not only the fallback notice.
+ await expect.poll(()=>canvas.evaluate(node=>{
+  const element=node as HTMLCanvasElement,context=element.getContext('2d');
+  if(!context)return false;
+  const data=context.getImageData(0,0,element.width,element.height).data;
+  for(let i=0;i<data.length;i+=4)
+   if(data[i+3]>0&&(data[i]!==237||data[i+1]!==242||data[i+2]!==245))return true;
+  return false;
+ })).toBe(true);
  const exaggeration=page.getByLabel('Terrain vertical exaggeration');
  await expect(exaggeration).toHaveValue('1');
  await exaggeration.focus();

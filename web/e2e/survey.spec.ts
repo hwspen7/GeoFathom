@@ -103,8 +103,9 @@ test('import KML, query the attribute table and persist a bulk property update',
   await page.getByLabel('Attribute search field').selectOption('name');
   await page.getByLabel('Attribute search value').fill('Facility');
   await page.getByRole('button',{name:'Filter rows'}).click();
-  await expect(page.getByRole('button',{name:'Facility A',exact:true})).toBeVisible();
-  await page.getByLabel('Select Facility A').check();
+  const attributes=page.getByRole('region',{name:'Attribute results',exact:true});
+  await expect(attributes.getByRole('button',{name:'Facility A',exact:true})).toBeVisible();
+  await attributes.getByLabel('Select Facility A',{exact:true}).check();
   await page.getByLabel('Attribute property name').fill('category');
   await page.getByLabel('New attribute value').fill('warehouse');
   await page.getByRole('button',{name:'Save properties & revisions'}).click();

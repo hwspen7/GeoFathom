@@ -51,7 +51,7 @@ function MeshView({mesh}:{mesh:TerrainMesh}){
     }
   },[mesh,angle,tilt,exaggeration]);
   return <div className="dem-mesh">
-    <canvas ref={canvas} width={320} height={220} aria-label="Interactive 3D terrain preview"
+    <canvas ref={canvas} width={320} height={220} aria-label="Interactive 3D terrain preview" data-renderer="canvas2d"
       onPointerDown={e=>{e.currentTarget.setPointerCapture(e.pointerId);drag.current={x:e.clientX,y:e.clientY};}}
       onPointerMove={e=>{if(!drag.current)return;const dx=e.clientX-drag.current.x,dy=e.clientY-drag.current.y;
         setAngle(a=>a+dx*.012);setTilt(t=>Math.max(.2,Math.min(1.45,t+dy*.008)));drag.current={x:e.clientX,y:e.clientY};}}
@@ -993,6 +993,7 @@ export default function TerrainWorkbench(p:Props){
  {p.resultsTarget?(p.active?createPortal(monitor,p.resultsTarget):null):monitor}
  {p.operationsFooterTarget?(p.active&&runActions?createPortal(runActions,p.operationsFooterTarget):null):null}
  {p.resultsFooterTarget?(p.active&&resultActions?createPortal(resultActions,p.resultsFooterTarget):null):resultActions}
- {p.exportTarget?(p.active?createPortal(terrainFileActions,p.exportTarget):null):null}
+ {/* Export owns a separate module; its actions must survive leaving Terrain. */}
+ {p.exportTarget?createPortal(terrainFileActions,p.exportTarget):null}
  </>;
 }
