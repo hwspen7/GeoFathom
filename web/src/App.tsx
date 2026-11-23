@@ -1644,6 +1644,7 @@ export default function App() {
                 setPendingAnnotation(null);setSelectionBoxMode(false);setLabelMoveMode(false);
               }}
               mode={drawingMode}
+              sketchError={drawingMode?error:null}
               geometry={geometry}
               points={vertices}
               editing={editing}
