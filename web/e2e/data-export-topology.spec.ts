@@ -15,6 +15,7 @@ test('Data and Export are independent fixed top modules with real GIS operations
  await page.getByRole('button',{name:'Import',exact:true}).click();
  await expect(page.getByLabel('Import dataset file')).toBeVisible();
  await page.getByRole('button',{name:'Sources',exact:true}).click();
+ await page.getByRole('button',{name:'Add source'}).click();
  await expect(page.getByLabel('New OGC service type')).toBeVisible();
  await modules.getByRole('button',{name:'Export',exact:true}).click();
  await expect(page.getByLabel('Export scope')).toBeVisible();
