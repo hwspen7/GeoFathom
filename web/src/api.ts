@@ -1076,3 +1076,11 @@ export function verifyTerrainResearchArchive(archive_base64:string){
   method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({archive_base64}),
  });
 }
+/** Stronger than checksum verification: recompute each numerical GeoTIFF from
+ * the ZIP's aligned study inputs and reject deviations beyond float32 storage.
+ */
+export function replayTerrainResearchArchive(archive_base64:string){
+ return request<{reproducible:boolean;outputs:Record<string,number>;verified_files:number;warning:string}>('/terrain/research/replay',{
+  method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({archive_base64}),
+ });
+}
