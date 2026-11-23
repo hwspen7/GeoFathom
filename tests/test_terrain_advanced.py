@@ -245,6 +245,8 @@ def test_multi_observer_visibility_counts_and_nodata_match_single_ray_model(dem)
             np.testing.assert_allclose(actual,expected,rtol=0,atol=0,equal_nan=True)
             assert dst.tags()["TERRAIN_UNIT"]=="observer_count"
     assert result["metrics"]["visible_cells"]==int(np.count_nonzero(
+        (visible_a|visible_b)&known_a&known_b))
+    assert result["metrics"]["visible_any_known_cells"]==int(np.count_nonzero(
         visible_a|visible_b))
     assert result["metrics"]["visible_by_all_cells"]==int(np.count_nonzero(
         visible_a&visible_b))
@@ -312,6 +314,12 @@ def test_multi_viewshed_partial_ray_never_becomes_false_aggregate_visibility(dem
         source.write(array,1)
     result=run_terrain(path,polygon,"viewshed_multi",observer_points=observers)
     assert result["metrics"]["unknown_cells"]>0
+    # These three categories must partition the known selected DEM grid.
+    visible=result["metrics"]["visible_cells"]
+    unknown=result["metrics"]["unknown_cells"]
+    hidden=result["valid_cells"]-visible-unknown
+    assert hidden>=0 and visible+hidden+unknown==result["valid_cells"]
+    assert result["metrics"]["visible_any_known_cells"]>=visible
     with MemoryFile(base64.b64decode(result["raster"]["geotiff"])) as mem:
         with mem.open() as output:
             sampled=output.read(1)

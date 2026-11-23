@@ -394,6 +394,10 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
             # misrepresenting a partial count as total observer coverage.
             fully_known &= available
         union=count>0
+        # Chart categories must be mutually exclusive. Partial but positive
+        # sightings remain available as vector geometry, while the strict
+        # raster/count metrics refer only to pixels known for ALL observers.
+        fully_visible=union&fully_known
         result["raster"]=raster_product(
             np.where(fully_known,count.astype(float),np.nan),
             "viewshed_multi",affine,crs,cancel,source_datum=source_datum)
@@ -401,15 +405,18 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
                                           "Visible from any observer",cancel)
         result["metrics"]={
             "observer_count":len(origins),
-            "visible_cells":int(union.sum()),
+            "visible_cells":int(fully_visible.sum()),
+            "visible_any_known_cells":int(union.sum()),
             "visible_by_all_cells":int((count==len(origins)).sum()),
-            "visible_grid_area_m2":int(union.sum())*cell,
+            "visible_grid_area_m2":int(fully_visible.sum())*cell,
             "unknown_cells":int((valid&~fully_known).sum()),
         }
         result["warning"]=(
             "Multi-observer cell-center viewshed: raster values count the "
             "observers with unobstructed sightlines only when all observer "
             "rays are known; NoData means one or more rays are unknown. "
+            "The vector union includes any positively observed cells even "
+            "when other observer rays are unknown. "
             "Terrain/DSM only, without independently verified buildings.")
     elif operation=="watershed":
         origin=_origin(point,crs,affine,valid)

@@ -86,7 +86,9 @@ const units:Record<string,string>={cut_m3:'m³',fill_m3:'m³',net_cut_m3:'m³',c
  contour_lines:'',contour_levels:'',product_valid_cells:'',observer_count:'',visible_by_all_cells:'',channel_cells:'',max_stream_order:'',mfd_exponent:'',stream_threshold_cells:'',flat_cells:'',directional_cells:'',route_cells:'',dataset_overlap_pct:'%',valid_grid_pct:'%',comparison_coverage_pct:'%',interval_m:'m',visible_cells:'',visible_grid_area_m2:'m²',unknown_cells:'',upstream_cells:'',upstream_grid_area_m2:'m²',elevation_change_mean_m:'m',elevation_change_min_m:'m',elevation_change_max_m:'m',elevation_change_rmse_m:'m',elevation_change_mae_m:'m',raised_volume_m3:'m³',lowered_volume_m3:'m³',net_elevation_volume_m3:'m³',maximum_fill_depth_m:'m',total_fill_depth_m:'m',conditioning_fill_volume_m3:'m³',minimum_m:'m',maximum_m:'m',mean_m:'m',median_m:'m',stddev_m:'m',p10_m:'m',p90_m:'m',relief_m:'m',circular_mean_aspect_deg:'°'};
 const names:Record<string,string>={cut_m3:'Cut',fill_m3:'Fill',net_cut_m3:'Net cut',covered_grid_area_m2:'Grid area',reference_elevation_m:'Reference',
  contour_lines:'Contour paths',contour_levels:'Elevation levels',dataset_overlap_pct:'DEM footprint coverage',valid_grid_pct:'Valid grid coverage',interval_m:'Interval',visible_cells:'Visible cells',visible_grid_area_m2:'Visible area',unknown_cells:'Unknown cells',
- observer_count:'Observers',visible_by_all_cells:'Visible from all observers',channel_cells:'Channel cells',max_stream_order:'Maximum Strahler order',mfd_exponent:'MFD slope exponent',stream_threshold_cells:'Stream threshold',
+ observer_count:'Observers',visible_by_all_cells:'Visible from all observers',
+ visible_any_known_cells:'Visible from at least one confirmed observer',
+ channel_cells:'Channel cells',max_stream_order:'Maximum Strahler order',mfd_exponent:'MFD slope exponent',stream_threshold_cells:'Stream threshold',
  upstream_cells:'Upstream cells',upstream_grid_area_m2:'Catchment area',comparison_cells:'Matched cells',comparison_coverage_pct:'Coverage (%)',increased_cells:'Raised cells',decreased_cells:'Lowered cells',unchanged_cells:'Unchanged cells',datum_labels_match:'Datum labels match (1=yes)',elevation_change_mean_m:'Mean elevation difference',elevation_change_min_m:'Minimum difference',elevation_change_max_m:'Maximum difference',elevation_change_rmse_m:'RMS difference (not accuracy)',elevation_change_mae_m:'Mean absolute difference',raised_volume_m3:'Raised volume',lowered_volume_m3:'Lowered volume',net_elevation_volume_m3:'Net volume',conditioned_cells:'Depression-filled cells',flat_routing_cells:'Numerically routed flat cells',outlet_cells:'Outlets',maximum_fill_depth_m:'Max fill depth',conditioning_fill_volume_m3:'Conditioning volume',total_fill_depth_m:'Sum of fill depths',minimum_m:'Lowest elevation',maximum_m:'Highest elevation',mean_m:'Mean elevation',median_m:'Median elevation',stddev_m:'Standard deviation',p10_m:'10th percentile',p90_m:'90th percentile',relief_m:'Relief',hypsometric_integral:'Hypsometric integral',circular_mean_aspect_deg:'Mean downslope bearing',product_min:'Minimum',product_max:'Maximum',product_mean:'Mean',product_valid_cells:'Calculated raster cells'};
 const fmt=(n:number)=>n.toLocaleString('en-US',{maximumFractionDigits:2});
 interface Props{
@@ -771,7 +773,17 @@ export default function TerrainWorkbench(p:Props){
            {fmt(result.valid_cells-result.raster.valid_cells)} boundary cells excluded by the 3 × 3 slope calculation.
            Source DEM coverage and calculated-slope coverage are different measures.
          </small>}
-       <small className="compact-notice" title={result.warning}>{result.valid_cells} DEM source cells valid · {result.missing_cells} source cells missing · Method ⓘ</small>
+       <details className="terrain-result-quality" aria-label="Terrain method and quality">
+         <summary>Method and quality · {result.valid_cells} valid DEM cells
+           {Number.isFinite(result.metrics.dataset_overlap_pct)
+             ?' · '+fmt(result.metrics.dataset_overlap_pct)+'% study-area overlap':''}
+           {Number.isFinite(result.metrics.valid_grid_pct)
+             ?' · '+fmt(result.metrics.valid_grid_pct)+'% valid selected cells':''}
+         </summary>
+         <p>{result.warning}</p>
+         <small>Output units: {result.raster?.unit??'See metric labels'}
+           · Declared vertical datum: {selected?.source.vertical_datum??'Unknown'}</small>
+       </details>
        {result.features.length>0&&<div className="survey-action-bar"><button disabled={!p.projectId||busy||selected?.saved||result.features.length>512} title={result.features.length>512?'Export GeoJSON for results exceeding the atomic project batch limit.':'Save to project'} onClick={()=>void save()}>{selected?.saved?'Saved to project':'Save terrain features'}</button>
          <button onClick={()=>setRecords(old=>old.map(r=>r.id===selectedRecord?{...r,visible:true}:r))}>Show on map</button><button onClick={()=>setRecords(old=>old.map(r=>r.id===selectedRecord?{...r,visible:false}:r))}>Hide</button></div>}
      </>}
