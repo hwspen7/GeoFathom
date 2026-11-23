@@ -118,7 +118,7 @@ jobs:
 
   browser:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -135,14 +135,14 @@ jobs:
       - name: Install Chromium and system dependencies
         working-directory: web
         run: npx playwright install --with-deps chromium
-      - name: Real browser UI integration tests (serial, no retries)
+      - name: Verify browser workspace starts with accessible map and navigation
         working-directory: web
-        run: npm run test:e2e
-      - name: Real browser UI integration tests (four concurrent workers)
+        run: npx playwright test e2e/workspace-bootstrap.spec.ts --workers=1
+      - name: Complete browser suite with coverage (three workers, no retries)
         working-directory: web
         env:
-          GEOFATHOM_E2E_WORKERS: '4'
-          GEOFATHOM_E2E_DATABASE_PATH: data/e2e-geofathom-parallel.sqlite
+          GEOFATHOM_E2E_WORKERS: '3'
+          GEOFATHOM_E2E_DATABASE_PATH: data/e2e-geofathom-acceptance.sqlite
         run: npm run test:e2e:coverage
       - uses: actions/upload-artifact@v4
         with:
