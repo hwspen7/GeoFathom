@@ -48,6 +48,16 @@ with tempfile.TemporaryDirectory() as directory:
  await expect(page.getByLabel('Operations')).toBeVisible();
  await expect(page.getByLabel('Results monitor')).toBeVisible();
  await expect(page.getByRole('button',{name:'Toggle project and layers'})).toHaveAttribute('aria-expanded','false');
+ // Real browser desktop contract: two docks flank a full-height map.
+ const left=await page.getByLabel('Operations').boundingBox();
+ const center=await page.getByLabel('Interactive geospatial map').boundingBox();
+ const right=await page.getByLabel('Results monitor').boundingBox();
+ expect(left&&center&&right).toBeTruthy();
+ expect(left!.x+left!.width).toBeLessThan(center!.x+10);
+ expect(center!.x+center!.width).toBeLessThan(right!.x+10);
+ expect(center!.height).toBeGreaterThan(400);
+ // Survey commands must not remain in the global toolbar while Terrain runs.
+ await expect(page.getByLabel('Survey toolbar').getByRole('button',{name:'Polygon',exact:true})).toHaveCount(0);
  await terrainTab.click();
  await expect(terrainTab).toHaveAttribute('aria-pressed','false');
  await terrainTab.click();
