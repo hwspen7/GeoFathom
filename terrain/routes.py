@@ -164,6 +164,26 @@ class AdvancedTerrainInput(BaseModel):
             raise ValueError("Cannot optimize more observation sites than candidates.")
         return self
 
+class MeshTileInput(BaseModel):
+    image_id:str
+    geometry:dict
+    level:Literal[1,2,4,8,16,32,64]
+    tile_row:int=Field(ge=0,le=127)
+    tile_col:int=Field(ge=0,le=127)
+    tile_cells:Literal[32]=32
+
+
+@router.post("/mesh/tile")
+async def mesh_tile(request:Request,body:MeshTileInput):
+    """Fetch one exact source-window tile; do not materialize the entire DEM."""
+    from .mesh_tiles import stream_mesh_tile
+    try:
+        return await run_cancelable(request,stream_mesh_tile,raster(body.image_id),
+            body.geometry,body.level,body.tile_row,body.tile_col,body.tile_cells)
+    except (GeometryError,RasterError,ValueError,OverflowError) as error:
+        raise HTTPException(status_code=422,detail=str(error)) from error
+
+
 @router.post("/advanced")
 async def advanced(request:Request,body:AdvancedTerrainInput):
     from .advanced import run_terrain
