@@ -653,7 +653,13 @@ export default function TerrainWorkbench(p:Props){
        <summary>Source · {selected.id.slice(0,8)}</summary>
        <div className="terrain-source-details">
          <div>Operation: {selected.title}</div>
-          {selected.parameters&&Object.keys(selected.parameters).length>0&&<div>Algorithm parameters: {JSON.stringify(selected.parameters)}</div>}
+          {selected.parameters&&Object.keys(selected.parameters).length>0&&
+            <div className="terrain-parameter-grid" aria-label="Terrain algorithm parameters">
+              {Object.entries(selected.parameters).map(([key,value])=><div key={key}>
+                <span>{key.replaceAll('_',' ')}</span>
+                <strong>{Array.isArray(value)?JSON.stringify(value):String(value??'None')}</strong>
+              </div>)}
+            </div>}
          <div>Run: {new Date(selected.createdAt).toLocaleString()} · ID {selected.id}</div>
          <div>Input DEM: {selected.source.name}</div>
          <div>Source ID: {selected.source.id}</div>
