@@ -1,4 +1,5 @@
 import {expect,test} from './coverage-fixture';
+import {openProjectDrawer} from './workspace-ui';
 import {type Page} from '@playwright/test';
 
 const tile='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/ZecAAAAASUVORK5CYII=';
@@ -11,6 +12,7 @@ const API='http://127.0.0.1:8000';
 async function create(page:Page,name:string){
   name=name+'-'+Date.now().toString(36);
   await page.goto('/');
+  await openProjectDrawer(page);
   await page.getByLabel('New project name').fill(name);
   await page.getByRole('button',{name:'Create project'}).click();
   const select=page.getByLabel('Active project');
@@ -48,6 +50,7 @@ test('professional spatial QA detects overlap and prints a valid real PDF',async
     .locator('summary').click();
   await page.getByLabel('Run topology QA').click();
   await expect(page.getByLabel('Topology QA results')).toContainText('overlap');
+  await expect(page.getByLabel('Results monitor').getByLabel('Topology QA results')).toBeVisible();
   const api=await page.request.post(API+'/projects/'+id+'/quality/topology',{data:{
     study_area:rectangle(0,22,.04,.04),minimum_area_m2:1,
   }});
@@ -162,7 +165,7 @@ test('P1 drag a saved point label and commit revisioned offset fields',async({pa
   await page.reload();
   const map=page.getByLabel('Interactive geospatial map');
   await expect(map).toHaveAttribute('data-label-layer-ready','true',{timeout:25000});
-  await page.locator('.layer-cartography summary').click();
+  await openProjectDrawer(page);  await page.locator('.layer-cartography summary').click();
   await page.getByLabel('Enable layer labels').check();
   await expect.poll(async()=>{
     const r=await page.request.get(API+'/projects/'+id+'/workspace');

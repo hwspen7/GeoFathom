@@ -1,4 +1,5 @@
 import {expect,test} from './coverage-fixture';
+import {openProjectDrawer} from './workspace-ui';
 const tile=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/ZecAAAAASUVORK5CYII=','base64');
 test('toolbar offers live area, exact dimensions and basemap switching',async({page})=>{
  await page.route('**/tile.openstreetmap.org/**',r=>r.fulfill({contentType:'image/png',body:tile}));
@@ -19,6 +20,7 @@ test('toolbar offers live area, exact dimensions and basemap switching',async({p
  const label=page.getByLabel('Live map dimensions').locator('.map-dimension-total');
  await expect(label).not.toContainText('~ ');
  const exact=await label.textContent();
+ await openProjectDrawer(page,'layers');
  await page.getByLabel('Basemap',{exact:true}).selectOption('satellite');
  await expect(label).toHaveText(exact!);
  await page.getByLabel('Basemap',{exact:true}).selectOption('blank');

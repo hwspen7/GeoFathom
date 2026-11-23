@@ -7,3 +7,16 @@ it('keeps DEM and ordinary layers independent and does not duplicate sources',()
  expect(layers[1]).toMatchObject({asset:b,visible:false,opacity:.2});
  expect(addRaster(layers,b,'dem')).toHaveLength(2);
 });
+
+it('selects only one DEM at a time while retaining imported imagery',async()=>{
+ const a={id:'dem-a'} as import('./api').RasterAsset,b={id:'dem-b'} as import('./api').RasterAsset;
+ const {selectDEM,hideDEMs}=await import('./rasterLayers');
+ const first=selectDEM([],a),second=selectDEM(first,b);
+ expect(second).toHaveLength(2);
+ expect(second.find(l=>l.asset.id==='dem-a')?.visible).toBe(false);
+ expect(second.find(l=>l.asset.id==='dem-b')?.visible).toBe(true);
+ expect(hideDEMs(second).every(l=>!l.visible)).toBe(true);
+ const existing=[{asset:a,kind:'image' as const,visible:true,opacity:1}];
+ const converted=selectDEM(existing,a);
+ expect(converted[0]).toMatchObject({kind:'dem',visible:true,opacity:.32});
+});

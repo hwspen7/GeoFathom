@@ -151,10 +151,11 @@ class DEMFetchRequest(BaseModel):
 @router.post("/dem/fetch",status_code=201)
 async def fetch_dem(body:DEMFetchRequest,request:Request,
     token:str|None=Header(default=None,alias="X-GeoFathom-Admin-Token")):
-    """Fetch a bounded, projected subset from the fixed public Copernicus DEM source."""
+    """Fetch validated 3DEP or Copernicus terrain; abandon stale client requests safely."""
     require_raster_import(request,token)
     from .public_dem import fetch_dem_subset
     try:
-        return await run_in_threadpool(fetch_dem_subset,body.bbox,body.resolution_m)
+        from terrain.routes import run_cancelable
+        return await run_cancelable(request,fetch_dem_subset,body.bbox,body.resolution_m)
     except RasterError as error:
         raise HTTPException(status_code=422,detail=str(error)) from error

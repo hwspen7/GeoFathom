@@ -1,10 +1,12 @@
 import {useState} from 'react';
+import {createPortal} from 'react-dom';
 import {AlertTriangle,Download,MousePointer2,Square} from 'lucide-react';
 import {downloadMapPDF,reviewTopology,selectSpatialFeatures,
   type QualityIssue,type SpatialRelation} from './api';
 
 type BBox=[number,number,number,number];
 interface Props{
+  resultsTarget?:HTMLElement|null;active?:boolean;
   projectId:string|null;
   geometry:GeoJSON.Geometry|null;
   viewport:BBox|null;
@@ -69,6 +71,21 @@ export default function SpatialToolsPanel(p:Props){
       show_grid:grid,show_legend:legend,layer_ids:null});
     setNotice('Vector PDF map exported.');
   }
+  const resultPanel=<div className="gis-spatial-results">
+        {result&&<div className="gis-result-list" aria-label="Spatial selection results">
+          <strong>{result.total} matches</strong>
+          {result.results.slice(0,80).map(row=><button key={row.id} onClick={()=>p.onOpen(row.id)}>
+            {row.name}
+          </button>)}
+        </div>}
+        {issueCount!==null&&<div className="gis-result-list" aria-label="Topology QA results">
+          <strong>{issueCount} topology issues</strong>
+          {issues.map((issue,index)=><button key={index} title={issue.message}
+            onClick={()=>issue.feature_ids.length&&p.onOpen(issue.feature_ids[0])}>
+            {issue.type}: {issue.message} · {issue.area_m2.toFixed(1)} m²
+          </button>)}
+        </div>}
+  </div>;
   return <div className="professional-panel">
     <details>
       <summary><MousePointer2 size={14}/> Select by location · {p.selectedIds.length} selected</summary>
@@ -105,12 +122,7 @@ export default function SpatialToolsPanel(p:Props){
             p.onSelected([]);setResult(null);setNotice('Selection cleared.');
           }}>Clear selection</button>
         </div>
-        {result&&<div className="gis-result-list" aria-label="Spatial selection results">
-          <strong>{result.total} matches</strong>
-          {result.results.slice(0,80).map(row=><button key={row.id} onClick={()=>p.onOpen(row.id)}>
-            {row.name}
-          </button>)}
-        </div>}
+
       </div>
     </details>
     <details>
@@ -125,13 +137,7 @@ export default function SpatialToolsPanel(p:Props){
           Results are diagnostic and do not modify geometry.</p>
         <button aria-label="Run topology QA" disabled={busy||!p.projectId}
           onClick={()=>void execute(quality)}>Analyze topology</button>
-        {issueCount!==null&&<div className="gis-result-list" aria-label="Topology QA results">
-          <strong>{issueCount} topology issues</strong>
-          {issues.map((issue,index)=><button key={index} title={issue.message}
-            onClick={()=>issue.feature_ids.length&&p.onOpen(issue.feature_ids[0])}>
-            {issue.type}: {issue.message} · {issue.area_m2.toFixed(1)} m²
-          </button>)}
-        </div>}
+
       </div>
     </details>
     <details>
@@ -182,5 +188,6 @@ export default function SpatialToolsPanel(p:Props){
     </details>
     {notice&&<p className="project-info">{notice}</p>}
     {error&&<p className="discovery-error">{error}</p>}
+    {p.resultsTarget?(p.active?createPortal(resultPanel,p.resultsTarget):null):resultPanel}
   </div>;
 }

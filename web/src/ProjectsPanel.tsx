@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import {createPortal} from 'react-dom';
 import {
-  Copy, Download, Eye, EyeOff, FolderOpen, History, Layers3, Lock,
+  Copy, Download, Eye, EyeOff, History, Layers3, Lock,
   LockOpen, MapPin, Plus, RotateCcw, Save,
 } from 'lucide-react';
 
@@ -12,6 +13,7 @@ import {
 } from './api';
 
 import {rememberProject,restoreProject,storedProject} from './projectSelection';
+import {WorkspaceFeatureTree} from './WorkspaceChrome';
 
 interface Props {
   geometry: GeoJSON.Geometry | null;
@@ -28,12 +30,15 @@ interface Props {
   onSavedDraft?:()=>void;
   onProjectSwitch?:(id:string|null,created:boolean)=>void;
   extraFeatures:WorkspaceFeature[];
+  toolbarTarget?:HTMLElement|null;
+  toolbarActionsTarget?:HTMLElement|null;
+  treeTarget?:HTMLElement|null;
 }
 
 export default function ProjectsPanel({
   geometry, featureName, featureSource, featureProperties, selectedFeatureId,
   splitParts, refreshToken, onOpen, onWorkspace, onPlaceAnnotation, onFeatureDeleted,
-  extraFeatures,onSavedDraft,onProjectSwitch,
+  extraFeatures,onSavedDraft,onProjectSwitch,toolbarTarget,toolbarActionsTarget,treeTarget,
 }: Props) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [listRetry,setListRetry]=useState(0);
@@ -59,6 +64,8 @@ export default function ProjectsPanel({
   const initializedSelection=useRef(false);
   const requestSequence = useRef(0);
   const styleWriting=useRef(false);
+  type LayerStyleUpdate={labels?:Partial<GeoLayer['style']['labels']>;symbol?:Partial<GeoLayer['style']['symbol']>};
+  const queuedStyleWrites=useRef<Array<{projectId:string;layerId:string;changes:LayerStyleUpdate}>>([]);
   const historySequence = useRef(0);
   const featureIdentity = useRef(selectedFeatureId);
   featureIdentity.current = selectedFeatureId;
@@ -94,6 +101,19 @@ export default function ProjectsPanel({
     });
     return () => { cancelled = true; };
   }, [chooseProject,listRetry]);
+
+  // Projects may also be created by scripts or other connected clients.
+  // Refresh on selector focus without replacing the current selection,
+  // its workspace, or a newer mutation response.
+  const refreshProjectList = useCallback(async () => {
+    try {
+      const list=await getProjects();
+      setProjects(list);
+      setError('');
+    } catch (cause) {
+      setError('Cannot refresh project list. '+(cause instanceof Error?cause.message:String(cause)));
+    }
+  }, []);
 
   const reload = useCallback(async (projectId: string): Promise<GeoWorkspace> => {
     // Old mutation callbacks may still request a refresh; never publish them.
@@ -248,35 +268,57 @@ export default function ProjectsPanel({
     await run(async () => { await patchLayer(selected, layer.id, update); });
   }
 
-  async function styleLayer(changes:{
-    labels?:Partial<GeoLayer['style']['labels']>;
-    symbol?:Partial<GeoLayer['style']['symbol']>;
-  }){
-    if(!selected||!activeLayer||busy||styleWriting.current)return;
+  async function flushLayerStyleWrites(){
+    if(styleWriting.current)return;
     styleWriting.current=true;
-    const projectId=selected,layer=activeLayer;
-    // React controlled inputs must update immediately. Revert from the
-    // authoritative server state if an optimistic style write is rejected.
-    setWorkspace(current=>current?{
-      ...current,
-      layers:current.layers.map(item=>item.id===layer.id?{
-        ...item,style:{
-          labels:{...item.style.labels,...changes.labels},
-          symbol:{...item.style.symbol,...changes.symbol},
-        },
-      }:item),
-    }:current);
     setBusy(true);setError('');setInfo('');
     try{
-      await patchLayerStyle(projectId,layer.id,{
-        ...changes,expected_revision:layer.style_revision,
-      });
-      await reload(projectId);
-      setInfo('Label and symbology settings saved.');
-    }catch(failure){
-      setError(failure instanceof Error?failure.message:'Could not save layer style.');
-      try{await reload(projectId);}catch{ /* Surface the original error. */ }
-    }finally{styleWriting.current=false;setBusy(false);}
+      while(queuedStyleWrites.current.length){
+        const job=queuedStyleWrites.current.shift()!;
+        // Never apply a pending write to a different project identity.
+        if(selection.current!==job.projectId)continue;
+        try{
+          // Obtain the server's latest revision for every serialized mutation.
+          // A pending blur event is not dropped merely because another save is active.
+          const current=await getWorkspace(job.projectId);
+          if(selection.current!==job.projectId)continue;
+          const layer=current.layers.find(l=>l.id===job.layerId);
+          if(!layer)throw Error('Layer no longer exists.');
+          await patchLayerStyle(job.projectId,job.layerId,{
+            ...job.changes,expected_revision:layer.style_revision,
+          });
+          if(selection.current===job.projectId){
+            await reload(job.projectId);
+            setInfo('Label and symbology settings saved.');
+          }
+        }catch(failure){
+          if(selection.current===job.projectId){
+            setError(failure instanceof Error?failure.message:'Could not save layer style.');
+            try{await reload(job.projectId);}catch{ /* Preserve original write error. */ }
+          }
+        }
+      }
+    }finally{
+      styleWriting.current=false;
+      setBusy(false);
+      // A project switch during a save must still load its own workspace.
+      if(selection.current)void reload(selection.current).catch(()=>setError('Could not refresh project layers.'));
+      if(queuedStyleWrites.current.length)void flushLayerStyleWrites();
+    }
+  }
+
+  async function styleLayer(changes:LayerStyleUpdate){
+    if(!selected||!activeLayer||selection.current!==selected)return;
+    const projectId=selected,layerId=activeLayer.id;
+    // Optimistic changes are visible immediately; the queue serializes writes.
+    setWorkspace(current=>current?{...current,
+      layers:current.layers.map(item=>item.id===layerId?{...item,style:{
+        labels:{...item.style.labels,...changes.labels},
+        symbol:{...item.style.symbol,...changes.symbol},
+      }}:item),
+    }:current);
+    queuedStyleWrites.current.push({projectId,layerId,changes});
+    void flushLayerStyleWrites();
   }
 
   function placeNote(event:FormEvent<HTMLFormElement>){
@@ -348,8 +390,28 @@ export default function ProjectsPanel({
     });
   }
 
+  const projectActions=(
+    <div className="project-actions">
+      <button data-project-save onClick={() => void save()}
+        disabled={busy || !workspace || !geometry || locked || Boolean(!current && activeLayer?.locked)}>
+        <Save size={14}/> {current ? 'Update feature' : 'Save selected'}
+      </button>
+      <button onClick={() => void exportJson()} disabled={busy}>
+        <Download size={14}/> Export project
+      </button>
+    </div>
+  );
+  const projectSelector=(
+    <select aria-label="Active project" value={selected} disabled={busy}
+            onFocus={()=>{void refreshProjectList();}}
+            onChange={event => chooseProject(event.target.value)}>
+            <option value="">Local workspace</option>
+            {projects.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}
+    </select>
+  );
   return (
     <div className="project-panel">
+      {toolbarTarget&&createPortal(projectSelector,toolbarTarget)}
       <form onSubmit={create} className="project-create">
         <input aria-label="New project name" placeholder="New project name" maxLength={150}
           value={draftName} onChange={event => setDraftName(event.target.value)} />
@@ -359,11 +421,7 @@ export default function ProjectsPanel({
       </form>
       {projects.length > 0 && (
         <>
-          <select aria-label="Active project" value={selected} disabled={busy}
-            onChange={event => chooseProject(event.target.value)}>
-            <option value="">Local workspace</option>
-            {projects.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}
-          </select>
+          {!toolbarTarget&&projectSelector}
 
           <details open={trashOpen} onToggle={e=>setTrashOpen(e.currentTarget.open)}>
             <summary>Project trash {trashOpen?'· '+trashTotal:''}</summary>
@@ -406,7 +464,7 @@ export default function ProjectsPanel({
                 </label>
                 <label>Label source field
                   <input aria-label="Label source field" list="geo-label-fields"
-                    key={activeLayer.id+'-field-'+activeLayer.style_revision}
+                    key={activeLayer.id+'-field'}
                     defaultValue={activeLayer.style.labels.field}
                     maxLength={64}
                     onBlur={event=>{
@@ -435,14 +493,14 @@ export default function ProjectsPanel({
                   <label>Text color
                     <input type="color" aria-label="Label text color" disabled={busy}
                       defaultValue={activeLayer.style.labels.text_color}
-                      key={activeLayer.id+'-text-'+activeLayer.style_revision}
+                      key={activeLayer.id+'-text'}
                       onBlur={event=>{if(event.currentTarget.value!==activeLayer.style.labels.text_color)
                         void styleLayer({labels:{text_color:event.currentTarget.value}});}}/>
                   </label>
                   <label>Halo color
                     <input type="color" aria-label="Label halo color" disabled={busy}
                       defaultValue={activeLayer.style.labels.halo_color}
-                      key={activeLayer.id+'-halo-'+activeLayer.style_revision}
+                      key={activeLayer.id+'-halo'}
                       onBlur={event=>{if(event.currentTarget.value!==activeLayer.style.labels.halo_color)
                         void styleLayer({labels:{halo_color:event.currentTarget.value}});}}/>
                   </label>
@@ -486,7 +544,7 @@ export default function ProjectsPanel({
                 <label>Category color attribute
                   <input aria-label="Category color field" maxLength={64}
                     placeholder="e.g. category, landuse, status"
-                    key={activeLayer.id+'-category-field-'+activeLayer.style_revision}
+                    key={activeLayer.id+'-category-field'}
                     defaultValue={activeLayer.style.symbol.category_field}
                     onBlur={event=>{
                       const value=event.currentTarget.value.trim();
@@ -566,38 +624,25 @@ export default function ProjectsPanel({
               onChange={event => setLayerName(event.target.value)} maxLength={100}/>
             <button type="submit" disabled={busy || !workspace || !layerName.trim()}><Plus size={14}/></button>
           </form>
-          <div className="project-actions">
-            <button data-project-save onClick={() => void save()} disabled={busy || !workspace || !geometry || locked || Boolean(!current && activeLayer?.locked)}>
-              <Save size={14}/> {current ? 'Update feature' : 'Save selected'}
-            </button>
-            <button onClick={() => void exportJson()} disabled={busy}>
-              <Download size={14}/> Export
-            </button>
-          </div>
+          {toolbarActionsTarget?createPortal(projectActions,toolbarActionsTarget):projectActions}
           {splitParts.length > 1 && (
             <button className="project-split-save" disabled={busy || !workspace || Boolean(activeLayer?.locked)}
               onClick={() => void saveSplit()}>Save all {splitParts.length} split pieces</button>
           )}
 
-          <div className="project-features">
-            {workspace?.features.map(item => {
-              const layer = workspace.layers.find(l => l.id === item.layer_id);
-              return (
-                <button key={item.id} disabled={!layer?.visible} onClick={() => onOpen(item)}
-                  className={selectedFeatureId === item.id ? 'active' : ''}>
-                  <FolderOpen size={14}/><span>{item.name}</span><small>r{item.revision}</small>
-                </button>
-              );
-            })}
-            {extraFeatures.filter(f=>!(workspace?.features??[]).some(x=>x.id===f.id))
-              .slice(0,60).map(item=><button key={item.id}
-              className={selectedFeatureId===item.id?'active':''}
-              onClick={()=>onOpen(item)}>
-                <FolderOpen size={14}/><span>{item.name}</span><small>r{item.revision}</small>
-              </button>)}
-            {!workspace?.features.length&&!extraFeatures.length &&
-              <p className="compact-notice">No saved features yet.</p>}
-          </div>
+          {treeTarget?createPortal(<> 
+          <WorkspaceFeatureTree
+            layers={workspace?.layers??[]}
+            features={[...(workspace?.features??[]),
+              ...extraFeatures.filter(f=>!(workspace?.features??[]).some(x=>x.id===f.id)).slice(0,60)]}
+            selectedId={selectedFeatureId} onOpen={onOpen}/>
+          </>,treeTarget):<>
+          <WorkspaceFeatureTree
+            layers={workspace?.layers??[]}
+            features={[...(workspace?.features??[]),
+              ...extraFeatures.filter(f=>!(workspace?.features??[]).some(x=>x.id===f.id)).slice(0,60)]}
+            selectedId={selectedFeatureId} onOpen={onOpen}/>
+          </>}
 
           {current&&<details className="feature-inspector">
             <summary>Identify feature · properties & measurement</summary>

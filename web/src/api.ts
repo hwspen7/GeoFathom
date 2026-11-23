@@ -291,6 +291,12 @@ export interface RasterAsset {
   corners: [[number, number], [number, number], [number, number], [number, number]];
   preview_url: string;
   acquired_at: string | null;
+  // These values are declared by the source file, never inferred from the
+  // requested output grid and never treated as verified geodetic control.
+  resolution_unit?: string;
+  sha256?: string;
+  vertical_unit?: string | null;
+  vertical_datum?: string | null;
   provenance: string;
 }
 
@@ -967,16 +973,33 @@ export async function downloadGISJob(projectId:string,id:string):Promise<void>{
 }
 
 
-export type TerrainOperation='contours'|'volume'|'visibility'|'watershed'|'mesh';
-export interface TerrainMesh {rows:number;cols:number;dx_m:number;dy_m:number;heights:Array<number|null>}
+export type TerrainOperation='dem_difference'|'contours'|'volume'|'visibility'|'viewshed_multi'|'watershed'|'mesh'|'distribution'|'elevation'|'slope_map'|'aspect_map'|'hillshade'|'tri'|'tpi'|'curvature'|'plan_curvature'|'profile_curvature'|'flow_direction'|'flow_accumulation'|'flow_accumulation_mfd'|'streams'|'stream_order'|'suitability'|'cutfill_map'|'least_cost'|'cross_sections';
+export interface TerrainRaster {png:string;geotiff:string;corners:[[number,number],[number,number],[number,number],[number,number]];legend:{label:string;color:string;cells:number}[];width:number;height:number;valid_cells:number;unit?:string}
+export interface TerrainRasterLayer {id:string;title:string;raster:TerrainRaster;opacity:number;resampling:'nearest'|'linear'}
+export interface TerrainDistributionBin {lower_m:number;upper_m:number;cells:number;area_m2:number;cumulative_pct:number}
+export interface TerrainMesh {rows:number;cols:number;dx_m:number;dy_m:number;heights:Array<number|null>;origin_xy?:[number,number];source_crs?:string;texture?:{png:string;coverage_pct:number}}
 export interface AdvancedTerrainResult {
-  operation:TerrainOperation;source_crs:string;valid_cells:number;missing_cells:number;
+  operation:TerrainOperation;source_crs:string;source_vertical_datum?:string|null;valid_cells:number;missing_cells:number;
   cell_area_m2:number;metrics:Record<string,number>;warning:string;
-  features:Array<GeoJSON.Feature<GeoJSON.Geometry,Record<string,unknown>>>;mesh?:TerrainMesh;
+  features:Array<GeoJSON.Feature<GeoJSON.Geometry,Record<string,unknown>>>;mesh?:TerrainMesh;distribution?:TerrainDistributionBin[];raster?:TerrainRaster;sections?:{station_m:number;length_m:number;samples:{distance_m:number;offset_m:number;elevation_m:number|null;coordinate:[number,number]}[]}[];
 }
 export function advancedTerrain(body:{image_id:string;geometry:GeoJSON.Geometry;operation:TerrainOperation;
-  interval:number;reference:number;point:[number,number]|null;observer_height:number;target_height:number},signal?:AbortSignal):Promise<AdvancedTerrainResult>{
+  interval:number;reference:number;point:[number,number]|null;observer_height:number;target_height:number;end_point?:[number,number]|null;max_slope?:number;min_elevation?:number;max_elevation?:number;max_tri?:number;stream_cells?:number;azimuth?:number;altitude?:number;section_spacing?:number;section_width?:number;texture_image_id?:string|null;fill_sinks?:boolean;consider_curvature?:boolean;refraction_coeff?:number;comparison_image_id?:string|null;observer_points?:[number,number][]|null},signal?:AbortSignal):Promise<AdvancedTerrainResult>{
   return request('/terrain/advanced',{signal,method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+}
+
+export type DEMProcessMode='clip'|'mosaic'|'resample';
+export async function prepareDEM(body:{
+  image_ids:string[];mode:DEMProcessMode;resolution_m:number;
+  sampling:'nearest'|'bilinear'|'average';geometry?:GeoJSON.Geometry|null
+},token:string,signal?:AbortSignal):Promise<{
+  asset:RasterAsset;operation:DEMProcessMode;valid_cells:number;total_cells:number;
+  resolution_m:number;warning:string
+}>{
+  const headers:Record<string,string>={'Content-Type':'application/json'};
+  if(token)headers['X-GeoFathom-Admin-Token']=token;
+  else headers['X-GeoFathom-Local-Import']='1';
+  return request('/terrain/dem/prepare',{method:'POST',headers,signal,body:JSON.stringify(body)});
 }
 
 export function bufferGeometry(geometry:GeoJSON.Geometry,distance_m:number):Promise<EditResponse&{warning:string}>{
@@ -990,12 +1013,12 @@ export function compareAreas(left:GeoJSON.Geometry,right:GeoJSON.Geometry):Promi
     body:JSON.stringify({left,right})});
 }
 
-export function fetchPublicDEM(bbox:[number,number,number,number],resolution_m:30|90,token:string):Promise<{
- asset:RasterAsset;resolution_m:number;valid_cells:number;total_cells:number;missing_tiles:string[];warning:string
+export function fetchPublicDEM(bbox:[number,number,number,number],resolution_m:1|3|10|30|90,token:string,signal?:AbortSignal):Promise<{
+ asset:RasterAsset;resolution_m:number;valid_cells:number;total_cells:number;missing_tiles:string[];warning:string;requested_bbox:[number,number,number,number];valid_coverage_pct:number
 }>{
  const headers:Record<string,string>={'Content-Type':'application/json'};
  if(token)headers['X-GeoFathom-Admin-Token']=token;else headers['X-GeoFathom-Local-Import']='1';
- return request('/imagery/dem/fetch',{method:'POST',headers,body:JSON.stringify({bbox,resolution_m})});
+ return request('/imagery/dem/fetch',{signal,method:'POST',headers,body:JSON.stringify({bbox,resolution_m})});
 }
 
 export interface TrashedFeature{feature_id:string;layer_id:string;name:string;deleted_at:string}

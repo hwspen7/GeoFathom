@@ -1,4 +1,5 @@
 import {expect,test} from './coverage-fixture';
+import {openProjectDrawer,closeProjectDrawer} from './workspace-ui';
 
 const tile='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/ZecAAAAASUVORK5CYII=';
 test.beforeEach(async({page})=>{
@@ -11,6 +12,7 @@ async function project(page:import('@playwright/test').Page,name:string) {
   // persists across browser retries and otherwise creates ambiguous options.
   name=name+'-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,8);
   await page.goto('/');
+  await openProjectDrawer(page);
   await page.getByLabel('New project name').fill(name);
   await page.getByRole('button',{name:'Create project'}).click();
   const selection=page.getByLabel('Active project');
@@ -35,10 +37,17 @@ async function savedWorkspace(page:import('@playwright/test').Page,id:string) {
 }
 
 test('style labels by field, persist symbol settings and reload the workspace',async({page})=>{
+  // MapLibre does not accept feature data expressions in text-allow-overlap.
+  // Preserve per-feature overlap behavior without invalid style definitions.
+  const invalidStyles:string[]=[];
+  page.on('console',message=>{
+    if(message.type()==='error'&&message.text().includes('text-allow-overlap: data expressions not supported'))
+      invalidStyles.push(message.text());
+  });
   const id=await project(page,'Labeling integration');
   const map=page.getByLabel('Interactive geospatial map');
   await expect(map).toHaveAttribute('data-label-layer-ready','true',{timeout:25000});
-  await page.locator('.layer-cartography summary').click();
+  await openProjectDrawer(page);  await page.locator('.layer-cartography summary').click();
   const enabled=page.getByLabel('Enable layer labels');
   await expect(enabled).not.toBeChecked();
   await enabled.check();
@@ -70,7 +79,7 @@ test('style labels by field, persist symbol settings and reload the workspace',a
   expect(other.status()).toBe(201);
   await page.reload();
   await expect(page.getByLabel('Active project')).toHaveValue(id);
-  await page.locator('.layer-cartography summary').click();
+  await openProjectDrawer(page);  await page.locator('.layer-cartography summary').click();
   await expect(page.getByLabel('Enable layer labels')).toBeChecked();
   await expect(page.getByLabel('Label font size')).toHaveValue('18');
   await expect(page.getByLabel('Label source field')).toHaveValue('category');
@@ -78,6 +87,23 @@ test('style labels by field, persist symbol settings and reload the workspace',a
   await expect(page.getByLabel('Map legend',{exact:true})).toContainText('Measurements');
   await page.getByLabel('Toggle map legend').click();
   await expect(page.getByLabel('Map legend',{exact:true})).not.toBeVisible();
+  expect(invalidStyles).toEqual([]);
+});
+
+test('label field edits are queued during an in-flight style mutation',async({page})=>{
+  const id=await project(page,'Concurrent label editing');
+  const map=page.getByLabel('Interactive geospatial map');
+  await expect(map).toHaveAttribute('data-label-layer-ready','true',{timeout:25000});
+  await openProjectDrawer(page);  await page.locator('.layer-cartography summary').click();
+  const enabled=page.getByLabel('Enable layer labels');
+  await enabled.check();
+  const field=page.getByLabel('Label source field');
+  await field.fill('category');
+  await field.press('Tab');
+  await expect.poll(async()=>{
+    const w=await savedWorkspace(page,id);
+    return {enabled:w.layers[0].style.labels.enabled,field:w.layers[0].style.labels.field};
+  },{timeout:25000}).toEqual({enabled:true,field:'category'});
 });
 
 test('click to create, rename, revise and delete a permanent map note',async({page})=>{
@@ -85,6 +111,7 @@ test('click to create, rename, revise and delete a permanent map note',async({pa
   const map=page.getByLabel('Interactive geospatial map');
   await expect(map).toHaveAttribute('data-label-layer-ready','true',{timeout:25000});
   await page.getByLabel('Map note text').fill('Observation point 设备 A');
+  await openProjectDrawer(page);
   await page.getByLabel('Place map note').click();
   await expect(page.getByLabel('Cancel map note')).toBeVisible();
   const bbox=await map.boundingBox();
@@ -99,6 +126,7 @@ test('click to create, rename, revise and delete a permanent map note',async({pa
   expect(w.features[0].properties.annotation_text).toBe('Observation point 设备 A');
   expect(w.features[0].geometry.type).toBe('Point');
   await page.getByLabel('Edit selected map note').fill('Updated observation point');
+  await openProjectDrawer(page);
   await page.getByLabel('Save map note text').click();
   await expect(page.getByText('Annotation text saved as a new revision.')).toBeVisible();
   await expect.poll(async()=>{
@@ -108,6 +136,7 @@ test('click to create, rename, revise and delete a permanent map note',async({pa
   w=await savedWorkspace(page,id);
   expect(w.features[0].revision).toBe(1);
   page.once('dialog',dialog=>void dialog.accept());
+  await openProjectDrawer(page);
   await page.getByLabel('Delete selected map feature').click();
   await expect.poll(async()=> (await savedWorkspace(page,id)).features.length).toBe(0);
 });
@@ -148,7 +177,7 @@ test('categorized attribute colors produce visible legend classes and identify a
     expect(response.status()).toBe(201);
   }
   await page.reload();
-  await page.locator('.layer-cartography summary').click();
+  await openProjectDrawer(page);  await page.locator('.layer-cartography summary').click();
   await page.getByLabel('Category color field').fill('category');
   await page.getByLabel('Category color field').press('Tab');
   await expect.poll(async()=>{
@@ -165,7 +194,9 @@ test('categorized attribute colors produce visible legend classes and identify a
   const legend=page.getByLabel('Map legend',{exact:true});
   await expect(legend).toContainText('hospital');
   await expect(legend).toContainText('school');
-  await page.locator('.project-features button').filter({hasText:'Facility A'}).click();
+  await closeProjectDrawer(page);
+  await page.getByLabel('Project feature tree').getByRole('button',{name:'Facility A',exact:true}).click();
+  await openProjectDrawer(page);
   await page.locator('.feature-inspector summary').click();
   await expect(page.locator('.feature-inspector-body')).toContainText('Surveyor');
   await expect(page.getByText(/height:/)).toBeVisible();
@@ -184,6 +215,7 @@ test('map labels treat HTML-like annotation content as plain geographic data',as
   // geographic clicks; the map canvas existing in the DOM is insufficient.
   await expect(map).toHaveAttribute('data-label-layer-ready','true',{timeout:25000});
   await page.getByLabel('Map note text').fill(malicious);
+  await openProjectDrawer(page);
   await page.getByLabel('Place map note').click();
   await expect(page.getByLabel('Cancel map note')).toBeVisible();
   const bounds=await map.boundingBox();

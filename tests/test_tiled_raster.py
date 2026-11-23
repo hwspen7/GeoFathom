@@ -221,3 +221,98 @@ def test_tiled_scratch_quota_is_enforced_and_temp_files_cleaned(monkeypatch,tmp_
                              progress=lambda x: (_ for _ in ()).throw(
                                  RuntimeError("abort")) if x>.1 else None)
     assert list(scratch.iterdir())==[]
+
+
+def test_operator_raster_limits_and_disk_admission_fail_closed(monkeypatch, tmp_path):
+    """Reject invalid budgets before allocation or temporary-file creation."""
+    from types import SimpleNamespace
+    from vision import tiled
+    monkeypatch.setenv("GEOFATHOM_RASTER_MAX_PIXELS", "invalid")
+    with pytest.raises(RasterError, match="Invalid raster maximum"):
+        TilePlan(64, 64, tile_size=64, max_pixels=4096, memory_mb=8)
+    monkeypatch.setenv("GEOFATHOM_RASTER_MAX_PIXELS", "0")
+    with pytest.raises(RasterError, match="outside the allowed range"):
+        TilePlan(64, 64, tile_size=64, max_pixels=4096, memory_mb=8)
+    monkeypatch.setenv("GEOFATHOM_RASTER_MAX_PIXELS", "4096")
+    plan = TilePlan(64, 64, tile_size=64, max_pixels=4096, memory_mb=8)
+    assert plan.count == 1
+    monkeypatch.setenv("GEOFATHOM_RASTER_TEMP_DIR", str(tmp_path))
+    monkeypatch.setenv("GEOFATHOM_RASTER_SCRATCH_MB", "unlimited")
+    with pytest.raises(RasterError, match="Invalid raster scratch quota"):
+        with tiled._scratch(plan, "rejected-"):
+            pytest.fail("Invalid disk quota was accepted.")
+    monkeypatch.setenv("GEOFATHOM_RASTER_SCRATCH_MB", "15")
+    with pytest.raises(RasterError, match="between 16 and 2048"):
+        with tiled._scratch(plan, "rejected-"):
+            pytest.fail("Undersized disk quota was accepted.")
+    monkeypatch.setenv("GEOFATHOM_RASTER_SCRATCH_MB", "16")
+    monkeypatch.setattr(tiled.shutil, "disk_usage", lambda _: SimpleNamespace(free=0))
+    with pytest.raises(RasterError, match="Insufficient free disk space"):
+        with tiled._scratch(plan, "rejected-"):
+            pytest.fail("Insufficient disk space was accepted.")
+    assert not list(tmp_path.glob("rejected-*"))
+    mask = tmp_path / "mask.bin"
+    mask.write_bytes(b"0123456789")
+    with pytest.raises(RasterError, match="temporary-disk quota"):
+        tiled._check_scratch(mask, 9)
+    tiled._check_scratch(mask, 10)
+
+
+def test_disk_mask_preflight_and_top_k_polygonization(monkeypatch, tmp_path):
+    """Reject fragmented masks and preserve the largest real connected polygon."""
+    from vision import tiled
+    path = tmp_path / "categories.tif"
+    labels = np.zeros((128, 128), np.uint8)
+    labels[10:30, 10:30] = 1
+    labels[50:60, 50:60] = 1
+    with rasterio.open(path, "w", driver="GTiff", width=128, height=128,
+                       count=1, dtype="uint8", nodata=0, crs="EPSG:4326",
+                       transform=AFFINE) as target:
+        target.write(labels, 1)
+    features, truncated = tiled._disk_features(path, {1: "site"},
+                                                max_features=1, min_pixels=1)
+    assert truncated is True
+    assert len(features) == 1
+    assert features[0]["properties"]["pixel_count"] == 400
+    ignored, was_truncated = tiled._disk_features(path, {2: "absent"},
+                                                   max_features=1, min_pixels=1)
+    assert ignored == [] and was_truncated is False
+    def fail_measurement(_):
+        raise ValueError("Invalid geodesy")
+    monkeypatch.setattr(tiled, "measure_geometry", fail_measurement)
+    with pytest.raises(RasterError, match="cannot be geodesically measured"):
+        tiled._disk_features(path, {1: "site"}, max_features=1, min_pixels=1)
+    monkeypatch.setattr(tiled, "_transitions",
+                        lambda _: tiled.MAX_BOUNDARY_TRANSITIONS + 1)
+    with rasterio.open(path) as src:
+        with pytest.raises(RasterError, match="too fragmented"):
+            tiled._preflight_mask(src, progress=None)
+
+
+@pytest.mark.parametrize("index,first,second,threshold", [
+    ("invalid", 1, 2, .2), ("ndvi", 1, 1, .2),
+    ("ndvi", 1, 2, 1.), ("ndvi", 1, 5, .2),
+])
+def test_tiled_spectral_input_validation(tmp_path, index, first, second, threshold):
+    path = raster(tmp_path, "invalid-input.tif")
+    with pytest.raises(RasterError):
+        spectral_index_tiled(path, "scene", index, first, second, threshold)
+
+
+def test_tiled_semantic_admission_prevents_invalid_device_and_memory(monkeypatch, tmp_path):
+    """No ONNX allocation is allowed before device and tensor budgets are checked."""
+    from vision import tiled, semantic
+    path = raster(tmp_path, "semantic-input.tif")
+    config = {"bands": [1, 2, 3, 4], "classes": [f"class-{n}" for n in range(32)],
+              "tile_size": 128, "max_batch": 1, "halo": 0,
+              "input_scale": 100., "mean": [0.] * 4, "std": [1.] * 4}
+    monkeypatch.setattr(semantic, "_manifest", lambda _: config)
+    for confidence in (-.1, 1.1, float("nan")):
+        with pytest.raises(RasterError, match="Confidence threshold"):
+            tiled.semantic_segmentation_tiled(path, "scene", "demo", confidence)
+    monkeypatch.setenv("GEOFATHOM_VISION_DEVICE", "unknown")
+    with pytest.raises(RasterError, match="cpu or cuda"):
+        tiled.semantic_segmentation_tiled(path, "scene", "demo", memory_mb=4)
+    monkeypatch.setenv("GEOFATHOM_VISION_DEVICE", "cpu")
+    with pytest.raises(RasterError, match="output tensors exceed"):
+        tiled.semantic_segmentation_tiled(path, "scene", "demo", memory_mb=4)

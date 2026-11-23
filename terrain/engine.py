@@ -26,9 +26,28 @@ def _check_dem(src):
     if not src.crs or not src.crs.is_projected or src.crs.linear_units.lower() not in {"metre","meter","metres","meters"}:
         raise RasterError("DEM terrain analysis requires projected horizontal coordinates in meters.")
     if src.count!=1:raise RasterError("DEM needs exactly one elevation band.")
-    unit=(src.units[0] or src.tags().get("VERTICAL_UNIT","")).strip().lower()
-    if unit and unit not in {"m","metre","meter","metres","meters"}:
-        raise RasterError("DEM vertical units must be meters.")
+    # A slope/aspect/flow raster is a valid GeoTIFF, but not an absolute
+    # elevation surface. Do not silently interpret its float32 pixels as DEM.
+    # Only an exported absolute elevation grid may be reused as terrain input.
+    operation=src.tags().get("TERRAIN_OPERATION")
+    if operation and operation!="elevation":
+        raise RasterError("Derived terrain products are not source DEM elevations; select an elevation raster.")
+    derived_unit=src.tags().get("TERRAIN_UNIT")
+    if derived_unit and derived_unit!="m":
+        raise RasterError("Source DEM elevations must have meter-valued raster cells.")
+    # Rasterio reads raw sample values, not scaled physical heights. Reject
+    # non-identity band transforms to avoid silent errors in slope and volume.
+    if not math.isclose(float(src.scales[0]),1.,rel_tol=0,abs_tol=1e-12) or not math.isclose(float(src.offsets[0]),0.,rel_tol=0,abs_tol=1e-12):
+        raise RasterError("Scaled DEM bands are unsupported: convert band scale/offset to physical meter elevations before analysis.")
+    # Band-unit and dataset-tag metadata are independent assertions. A
+    # declared meter band must not silently override a conflicting foot tag.
+    for unit in (src.units[0],src.tags().get("VERTICAL_UNIT","")):
+        if unit and unit.strip().lower() not in {"m","metre","meter","metres","meters"}:
+            raise RasterError("DEM vertical units must be meters.")
+    # The presence of two incompatible declared vertical datums must also
+    # fail closed, including for simple slope/profile operations.
+    from .vertical import vertical_datum
+    vertical_datum(src)
     if abs(src.transform.b)>1e-9 or abs(src.transform.d)>1e-9:
         raise RasterError("DEM must be north-up; rectify rotated imagery before analysis.")
     if src.transform.a<=0 or src.transform.e>=0:
@@ -94,8 +113,23 @@ def analyze_area(path,geometry,vertical_unit="meter",cancel=None):
             w=w.intersection(Window(0,0,src.width,src.height))
         except Exception as error:
             raise RasterError("Selected region is outside DEM raster.") from error
-        if w.width<3 or w.height<3 or w.width>1024 or w.height>1024:
-            raise RasterError("Select a DEM area between 3×3 and 1024×1024 source pixels.")
+        if w.width<3 or w.height<3 or w.width>8192 or w.height>8192 or w.width*w.height>32_000_000:
+            raise RasterError("Slope analysis supports up to 32 million pixels and 8192 pixels per side. Select a coarser DEM or smaller region.")
+        # Keep the high-performance C++ Horn kernel for small study areas.
+        # Large windows use exactly overlapping 3x3 NumPy blocks and do not
+        # allocate an 8+ million-cell elevation/mask array in one piece.
+        if w.width>4096 or w.height>4096 or w.width*w.height>8_000_000:
+            from .tiled import analyze_area_tiled
+            result=analyze_area_tiled(src,polygon,w,cancel)
+            return {
+                "source":"User-provided projected GeoTIFF DEM",
+                "source_crs":str(src.crs),"vertical_unit":"meter",
+                "cell_resolution_m":[abs(src.transform.a),abs(src.transform.e)],
+                **result,
+                "warning":"Slope and aspect use complete 3x3 Horn neighborhoods "
+                          "with one-pixel halos across processing tiles; "
+                          "DEM vertical units and datum must be verified. Not survey-grade.",
+            }
         values=src.read(1,window=w,masked=True).astype(np.float32)
         cover=geometry_mask([polygon],out_shape=values.shape,
                             transform=src.window_transform(w),invert=True)
@@ -151,10 +185,12 @@ def elevation_profile(path,geometry,samples=80,cancel=None):
         xs,ys=transform("EPSG:4326",src.crs,
                         [p[0] for p in interpolated],[p[1] for p in interpolated])
         heights=[]
-        for sample in src.sample(zip(xs,ys),indexes=1,masked=True):
+        locations=list(zip(xs,ys))
+        for (x,y),sample in zip(locations,src.sample(locations,indexes=1,masked=True)):
             checkpoint(cancel)
-            value=sample[0]
-            heights.append(None if np.ma.is_masked(value) or not np.isfinite(value)
+            row,col=src.index(x,y);value=sample[0]
+            inside=0<=row<src.height and 0<=col<src.width
+            heights.append(None if not inside or np.ma.is_masked(value) or not np.isfinite(value)
                            else float(value))
         return {"samples":[{"distance_m":float(d),"elevation_m":h,"coordinate":p}
                            for d,h,p in zip(distances,heights,interpolated)],

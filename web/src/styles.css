@@ -598,3 +598,773 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 
 .terrain-run-list{max-height:220px;overflow:auto;margin-top:8px;border-top:1px solid #c8d2da;padding-top:6px}
 .terrain-run-list button{font-size:11px}.terrain-run-list .scratch-row button{max-width:100%}
+
+.terrain-result-dialog{width:min(1000px,92vw);max-height:90vh;overflow:auto;border:1px solid #9baab5;background:#f9fafb;padding:16px;color:#263340}
+.terrain-result-dialog::backdrop{background:#11202c55}
+.terrain-result-dialog .terrain-profile-chart svg,.terrain-result-dialog .dem-mesh canvas{max-height:60vh;object-fit:contain}
+.terrain-aspect-rose{display:block;width:100%;max-height:330px}
+.terrain-result-dialog .terrain-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}
+
+.terrain-category{display:flex;align-items:center;justify-content:space-between;gap:6px;font-size:11px;margin-bottom:5px}
+.terrain-category select{flex:1;min-width:0;font-size:11px;padding:4px;background:#fff;border:1px solid #c5cfd6}
+.terrain-chart{display:block;width:100%;height:auto}
+.terrain-map-legend{margin:2px 0;font-size:10px;padding-left:4px}
+.terrain-map-legend summary{cursor:pointer}
+
+/* Compact georeferenced editing; node labels stay in Inspector, never over the map. */
+.desktop-gis .boundary-inspector{padding:7px 0;margin:7px 0;border-top:1px solid #dce3e8;border-bottom:1px solid #dce3e8;display:grid;gap:6px}
+.desktop-gis .boundary-inspector label{display:grid;gap:3px;font-size:11px;color:#4f6270}
+.desktop-gis .boundary-inspector select,.desktop-gis .boundary-inspector input{min-width:0;max-width:100%;font-size:11px;padding:5px;border:1px solid #c5d0d9;border-radius:3px;background:#fff;color:#263340}
+.desktop-gis .boundary-node-detail{padding:4px 0}
+.desktop-gis .boundary-node-detail summary{font-size:11px;cursor:pointer;color:#344b62}
+.desktop-gis .boundary-node-detail[open]{display:grid;gap:7px}
+.desktop-gis .boundary-inspector .area-fields{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+
+.desktop-gis .terrain-opacity-control{display:flex;align-items:center;gap:8px;font-size:11px;color:#526270;padding:4px 0}
+.desktop-gis .terrain-opacity-control input{min-width:70px;flex:1}
+
+/* Dataset/run version transparency, without covering the active GIS canvas. */
+.desktop-gis .terrain-run-provenance,.desktop-gis .terrain-run-comparison{margin:5px 0;padding:6px 0;border-top:1px solid #dfe6e9;font-size:11px}
+.desktop-gis .terrain-run-provenance summary{cursor:pointer;color:#42647b}
+.desktop-gis .terrain-source-details{display:grid;gap:3px;overflow-wrap:anywhere;padding:6px 0;color:#526270}
+.desktop-gis .terrain-run-comparison label{display:grid;gap:4px}
+.desktop-gis .terrain-run-comparison select{max-width:100%}
+.desktop-gis .terrain-run-comparison small{display:block;color:#805d32}
+
+
+/* Shared Onshape-inspired research workspace. Neutral, compact, reusable. */
+.workspace-module-bar{scrollbar-width:thin}
+.workspace-module-bar button{position:relative;border-radius:0!important;min-height:30px;padding:5px 11px}
+.workspace-module-bar button[aria-pressed="true"]{background:#e7f0f7;color:#184e73}
+.workspace-module-bar button[aria-pressed="true"]::after{content:"";position:absolute;bottom:0;left:5px;right:5px;height:2px;background:#2875a5}
+.gis-command-trigger{display:flex;align-items:center;gap:5px;border:1px solid #cbd4dc;background:#fff;color:#3b5468;font-size:11px;padding:3px 7px;white-space:nowrap}
+.gis-command-trigger:hover{border-color:#7ba2bc;background:#f5fafc}
+.gis-command-trigger kbd{padding:2px 3px;border:1px solid #d9e1e7;background:#f7f9fa}
+.workspace-dock-heading{justify-content:space-between}
+.workspace-dock-heading>span{display:flex;align-items:center;gap:6px}
+.workspace-dock-actions{margin-left:auto}
+.workspace-command-shade{position:fixed;inset:0;display:flex;justify-content:center;align-items:flex-start;padding-top:min(14vh,120px);background:rgba(20,31,40,.34);z-index:250}
+.workspace-command-dialog{width:min(520px,calc(100vw - 36px));max-height:74vh;display:flex;flex-direction:column;background:#fff;box-shadow:0 15px 60px #12233150;border:1px solid #b9c5cd;border-radius:7px;overflow:hidden}
+.workspace-command-search{display:flex;align-items:center;gap:9px;padding:12px 14px;border-bottom:1px solid #e1e6eb;color:#5b7181}
+.workspace-command-search input{flex:1;min-width:0;border:0;outline:0;font-size:14px;background:transparent;color:#233b4b}
+.workspace-command-search kbd{padding:3px 5px;background:#f4f6f8;border:1px solid #dde4e9}
+.workspace-command-results{overflow:auto;min-height:42px;padding:5px}
+.workspace-command-results button{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;background:#fff;border:1px solid transparent;text-align:left;padding:8px 11px;color:#253c4e;min-height:43px}
+.workspace-command-results button.is-focused,.workspace-command-results button:hover{background:#edf4fa;border-color:#b6ccdd}
+.workspace-command-results button:disabled{color:#98a5b1;opacity:.72}
+.workspace-command-title{display:flex;flex-direction:column;gap:3px;min-width:0;font-size:12px}
+.workspace-command-title small{color:#738492;font-size:10px}
+.workspace-command-results kbd{color:#587084;white-space:nowrap;font-size:10px}
+.workspace-command-empty,.workspace-tree-empty{display:block;padding:9px;color:#738391;font-size:11px}
+.workspace-command-dialog>footer{padding:7px 13px;border-top:1px solid #e3e8ec;background:#f8fafb;color:#73818b;font-size:10px}
+.workspace-feature-tree{border-top:1px solid #dce3e8;margin-top:10px;padding-top:7px}
+.workspace-tree-header{display:flex;justify-content:space-between;gap:7px;align-items:center;font-size:12px;color:#30495b;margin-bottom:6px}
+.workspace-tree-header span{color:#617988;font-size:10px}
+.workspace-tree-filter{display:flex;align-items:center;gap:5px;padding:4px 7px;background:#fff;border:1px solid #d1dce3;color:#748a98;margin-bottom:6px}
+.workspace-tree-filter input{width:100%;min-width:0;outline:0;border:0;background:transparent;font-size:11px}
+.workspace-feature-group{border:0;margin:0}
+.workspace-feature-group>summary{display:flex;align-items:center;gap:5px;padding:5px 3px;font-size:11px;color:#405b70;cursor:pointer}
+.workspace-feature-group>summary small{margin-left:auto;color:#708898}
+.workspace-feature-group .project-features{margin:0 0 5px 9px;padding-left:6px;border-left:1px solid #d5e0e6;max-height:230px;gap:2px}
+.workspace-feature-group .project-features button{border:0;background:transparent;padding:6px 5px;min-height:27px;border-radius:3px;color:#415a70;display:flex;gap:6px;align-items:center}
+.workspace-feature-group .project-features button:hover{background:#eaf1f5}
+.workspace-feature-group .project-features button.active,
+.workspace-feature-group .project-features button[aria-pressed="true"]{background:#dceaf4;color:#174f74}
+.workspace-feature-group .project-features button span{flex:1;text-align:left}
+.workspace-feature-group .project-features button small{font-size:10px;color:#7c8c99}
+.workspace-tool-controls{display:flex;align-items:flex-end;gap:7px;margin-bottom:6px}
+.workspace-tool-controls>.terrain-category{flex:1}
+.workspace-tool-search{flex:1;min-width:0;display:flex;align-items:center;gap:4px;background:#fff;padding:5px 6px;border:1px solid #cad5dd;color:#637a8b}
+.workspace-tool-search input{width:100%;min-width:0;outline:0;border:0!important;padding:0!important;font-size:11px;background:transparent}
+.terrain-observer-grid{display:grid;gap:6px}
+.terrain-observer-row{display:grid;grid-template-columns:1fr 1fr auto;gap:5px;align-items:end}
+.terrain-observer-row label{display:grid;gap:3px;min-width:0}
+.terrain-observer-row input{min-width:0;width:100%;font-size:11px}
+.terrain-observer-row button{min-height:25px;padding:4px 7px}
+@media(max-width:1100px){.gis-command-trigger span{display:none}}
+@media(max-width:700px){.gis-command-trigger kbd{display:none}.workspace-tool-controls{flex-direction:column;align-items:stretch}.workspace-tool-controls>*{width:100%}}
+
+/* Onshape-like adjustable docks with mouse/touch and keyboard. MapLibre
+ * observes its own map container and resizes when the center canvas changes. */
+.desktop-gis .gis-layers{max-width:min(38vw,540px)}
+.desktop-gis .gis-inspector{max-width:min(40vw,540px)}
+.workspace-dock-resize{flex:0 0 6px;position:relative;cursor:col-resize;background:#e7ebee;border:0;z-index:7;touch-action:none}
+.workspace-dock-resize::before{content:"";position:absolute;top:calc(50% - 17px);left:2px;width:2px;height:34px;border-radius:2px;background:#afbdc7}
+.workspace-dock-resize:hover,.workspace-dock-resize:focus-visible{background:#c3d9e8;outline:1px solid #3b86b4;outline-offset:-1px}
+@media(max-width:850px){.workspace-dock-resize{display:none}}
+
+.terrain-result-quality{border-top:1px solid #d6e0e6;margin:7px 0;padding-top:6px;font-size:11px}
+.terrain-result-quality>summary{color:#445e70;cursor:pointer;line-height:1.35}
+.terrain-result-quality>p{margin:6px 0;white-space:normal;color:#5c6470;max-height:170px;overflow:auto}
+.terrain-result-quality>small{display:block;color:#667d8b;font-size:10px}
+
+
+/* Two-dock research workspace: operations | map | result monitor.
+   Project/layer management opens from the top bar; it is not a third fixed
+   sidebar and never shrinks the map. Preserve independent scroll regions. */
+.desktop-gis .gis-body{position:relative;isolation:isolate}
+.desktop-gis .gis-project-drawer{
+  position:absolute;left:0;top:0;bottom:0;z-index:24;
+  width:min(370px,calc(100vw - 24px))!important;min-width:0;
+  max-width:min(420px,calc(100vw - 24px));
+  box-shadow:6px 0 18px #14273425;
+  border-right:1px solid #b8c6ce;
+}
+.desktop-gis .gis-operations{order:0;border-left:0;border-right:1px solid #c8cfd5}
+.desktop-gis .gis-body>.workspace-dock-resize[aria-label="Resize operations"]{order:1}
+.desktop-gis .gis-body>.main{order:2;min-width:240px;min-height:0}
+.desktop-gis .gis-body>.workspace-dock-resize[aria-label="Resize results"]{order:3}
+.desktop-gis .gis-results-monitor{order:4;min-width:260px;max-width:min(42vw,540px);
+  flex:none;display:flex;flex-direction:column;min-height:0;background:#f9fafb;border-left:1px solid #c8cfd5}
+.desktop-gis .gis-results-monitor .sidebar-scroll{flex:1;min-height:0;overflow:auto;padding:5px 11px 15px}
+.workspace-monitor-empty{padding:14px 5px;color:#758593;font-size:12px}
+.desktop-gis .gis-operations .sidebar-scroll{padding:0 11px 18px}
+.desktop-gis .gis-operations .results-summary{display:none}
+.desktop-gis .gis-results-monitor .results-summary{border:0;padding:6px 0}
+.desktop-gis .gis-results-monitor .results-summary .analysis-card{padding:0;border:0;background:transparent}
+.desktop-gis .terrain-monitor-content{display:flex;flex-direction:column;gap:5px;min-width:0}
+.desktop-gis .gis-results-monitor .terrain-output{margin-top:0}
+.desktop-gis .gis-results-monitor .terrain-run-list{max-height:none;overflow:visible}
+.desktop-gis .gis-results-monitor .terrain-run-provenance{max-width:100%;min-width:0}
+.desktop-gis .gis-results-monitor .terrain-source-details{overflow-wrap:anywhere}
+.desktop-gis .gis-results-monitor .terrain-profile-chart img{max-height:140px}
+@media(max-width:850px){
+ .desktop-gis .gis-operations{width:240px!important;min-width:210px;max-width:42vw}
+ .desktop-gis .gis-results-monitor{width:280px!important;min-width:220px;max-width:43vw}
+ .desktop-gis .gis-project-drawer{position:absolute}
+}
+@media(max-width:620px){
+ .desktop-gis .gis-operations{position:absolute;left:0;top:0;bottom:0;z-index:9;max-width:80vw;box-shadow:2px 0 10px #0003}
+ .desktop-gis .gis-results-monitor{width:min(295px,47vw)!important;min-width:165px;max-width:47vw}
+ .desktop-gis .gis-body>.main{min-width:0}
+}
+
+
+/* Compact desktop result monitor. All scientific details remain accessible
+   through explicit expanders, not permanent stacked blocks. */
+.desktop-gis .gis-results-monitor .terrain-run-list{margin:0;padding:5px 0;border-top:0}
+.desktop-gis .terrain-run-selector label{display:flex;align-items:center;gap:7px;font-size:11px;font-weight:600;color:#365065}
+.desktop-gis .terrain-run-selector select{flex:1;min-width:0;width:100%;padding:7px 5px;border:1px solid #c9d4dc;background:white}
+.desktop-gis .terrain-layer-manager{margin-top:5px;border:0}
+.desktop-gis .terrain-layer-manager>summary{font-size:11px;cursor:pointer;color:#526e83;padding:6px 2px}
+.desktop-gis .terrain-result-layer-list{max-height:156px;overflow:auto;border-top:1px solid #e0e6eb}
+.desktop-gis .terrain-result-layer-list .scratch-row{display:flex;align-items:center;gap:5px;min-height:27px;padding:2px 0;border-bottom:1px solid #e8edf0}
+.desktop-gis .terrain-result-layer-list .scratch-row>button[title]{flex:1;min-width:0;text-overflow:ellipsis;overflow:hidden;white-space:nowrap;text-align:left}
+.desktop-gis .terrain-result-layer-list .scratch-row>button[aria-label^="Remove"]{flex:none;width:25px}
+.desktop-gis .terrain-history{margin:0;border-top:1px solid #e1e7eb!important}
+.desktop-gis .terrain-history-actions{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:5px;padding:5px 0}
+.desktop-gis .terrain-history-actions select{grid-column:1/-1;width:100%;min-width:0}
+.desktop-gis .terrain-history-actions button{min-height:27px;font-size:11px}
+.desktop-gis .terrain-key-metrics{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin:5px 0 8px}
+.desktop-gis .terrain-key-metrics>div{display:flex;flex-direction:column;align-items:flex-start;gap:3px;min-width:0;border:1px solid #e3e9ee;background:#fff;padding:9px 8px}
+.desktop-gis .terrain-key-metrics span{font-size:10px;color:#687e90}
+.desktop-gis .terrain-key-metrics strong{font-size:16px;line-height:1.15;font-weight:700;color:#1f496b;overflow-wrap:anywhere}
+.desktop-gis .terrain-metric-details{border-top:1px solid #e0e5e9;margin:5px 0}
+.desktop-gis .terrain-metric-details>summary,.desktop-gis .terrain-run-comparison>summary{cursor:pointer;padding:7px 2px;font-size:11px;color:#43637a}
+.desktop-gis .terrain-metric-details .terrain-metrics>div{padding:4px 3px}
+.desktop-gis .terrain-run-comparison{border-top:1px solid #e0e6eb}
+.desktop-gis .terrain-run-comparison label{margin-top:6px}
+.desktop-gis .terrain-output>.section-heading{display:flex;align-items:center;justify-content:space-between;gap:5px;padding-top:7px;margin-bottom:5px}
+.desktop-gis .terrain-output>.section-heading span{display:flex;gap:4px}
+.desktop-gis .terrain-output>.section-heading button{padding:4px 6px;font-size:10px}
+.desktop-gis .gis-results-monitor .terrain-profile-chart img{max-height:118px}
+.desktop-gis .gis-results-monitor .terrain-bars{padding:3px 4px;margin:5px 0}
+.desktop-gis .gis-results-monitor .terrain-bars>div{margin-top:2px}
+.desktop-gis .gis-results-monitor .terrain-result-quality{padding-top:3px;margin:3px 0}
+.desktop-gis .gis-results-monitor .terrain-output>.terrain-run-provenance{margin:1px 0;padding:2px 0}
+.desktop-gis .gis-results-monitor .metric{padding:5px 0}
+.desktop-gis .gis-results-monitor .metric strong{font-size:18px}
+.desktop-gis .gis-results-monitor .metric.secondary strong{font-size:13px}
+.desktop-gis .gis-results-monitor .analysis-measurement-method{display:block;font-size:10px;color:#687c89;max-width:100%;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.desktop-gis .geometry-edit-controls{margin:9px 0;border-top:1px solid #d5dfe6}
+.desktop-gis .geometry-edit-controls>summary{padding:6px 2px;font-size:11px;color:#45647d;cursor:pointer}
+.desktop-gis .gis-operations .terrain-source>.compact-notice:not([aria-label]){display:none}
+.desktop-gis .gis-operations .terrain-source .professional-form>.compact-notice{display:none}
+.desktop-gis .gis-operations .terrain-observer-grid{max-height:230px;overflow:auto}
+@media(max-width:880px){
+ .desktop-gis .gis-results-monitor .terrain-key-metrics{grid-template-columns:1fr}
+}
+
+
+/* Project scope stays in the top toolbar; searchable feature tree lives in
+   left operations. The full project/search drawer is only on demand. */
+.desktop-gis .gis-active-project{flex:0 1 180px;min-width:105px;max-width:235px;display:flex}
+.desktop-gis .gis-active-project select{height:27px;min-width:0;width:100%;border:1px solid #cbd5dc;background:#fff;color:#2b475a;padding:2px 5px;font-size:11px;text-overflow:ellipsis}
+.desktop-gis .workspace-objects{border:0;border-bottom:1px solid #d4dde4;margin:0 0 5px;padding:1px 0 5px}
+.desktop-gis .workspace-objects>summary{cursor:pointer;color:#3c5b70;font-size:11px;font-weight:650;padding:6px 4px}
+.desktop-gis .workspace-objects .workspace-feature-tree{border-top:0;margin-top:2px;padding-top:2px}
+.desktop-gis .workspace-objects .project-features{max-height:110px}
+.desktop-gis .workspace-objects .workspace-tree-header{display:none}
+@media(max-width:1100px){
+ .desktop-gis .gis-active-project{max-width:160px;min-width:90px}
+}
+@media(max-width:740px){
+ .desktop-gis .gis-active-project{max-width:115px;min-width:75px}
+}
+
+
+/* Project-specific Save/Export are accessible from the single top toolbar;
+   editing in hidden project drawers never hides the active save control. */
+.desktop-gis .gis-project-actions{display:flex;align-items:center;flex:none}
+.desktop-gis .gis-project-actions .project-actions{margin:0;gap:4px}
+.desktop-gis .gis-project-actions .project-actions button{width:auto;flex:none;min-height:29px;white-space:nowrap;padding:5px 8px;font-size:11px}
+@media(max-width:1300px){
+ .desktop-gis .gis-project-actions .project-actions button:last-child{display:none}
+}
+
+
+/* GIS and spatial analysis reuse the same research results monitor instead of
+   nesting result tables below the input forms. */
+.desktop-gis .gis-spatial-results,.desktop-gis .gis-professional-results{display:flex;flex-direction:column;gap:7px;min-width:0}
+.desktop-gis .gis-results-monitor .gis-result-list{max-height:245px;overflow:auto;min-width:0;margin:4px 0}
+.desktop-gis .gis-results-monitor .gis-result-list button{width:100%;overflow-wrap:anywhere;text-align:left}
+.desktop-gis .gis-attribute-results{border-top:1px solid #d8e1e7;padding-top:7px}
+.desktop-gis .gis-attribute-results>strong{font-size:12px;color:#354f62}
+.desktop-gis .gis-results-monitor .attribute-table-scroll{max-height:350px;overflow:auto;margin:5px 0;border:1px solid #dfe6eb;background:white}
+.desktop-gis .gis-results-monitor .attribute-table{min-width:440px}
+.desktop-gis .gis-professional-results .terrain-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.desktop-gis .gis-professional-results .terrain-metrics>div{display:flex;flex-direction:column;gap:3px;border:1px solid #dfe5ea;background:#fff;padding:8px}
+.desktop-gis .gis-professional-results .terrain-metrics strong{font-size:15px}
+.desktop-gis .gis-professional-results .terrain-profile{padding:6px 0;border-top:1px solid #dfe5ea}
+.desktop-gis .gis-header .workspace-module-bar{flex:1;min-width:130px;max-width:100%;overflow-x:auto;white-space:nowrap}
+
+
+/* Fixed-width, edge-to-edge research workbench. Both side panels remain
+   internally scrollable with mouse/touch/keyboard; their scroll chrome is hidden.
+   Horizontal screen space belongs to the map, never a draggable divider. */
+.desktop-gis .gis-body {display:flex;gap:0;min-height:0;}
+.desktop-gis .gis-body>.workspace-dock-resize {display:none!important;}
+.desktop-gis .gis-operations {
+  order:0;flex:0 0 318px;width:318px!important;min-width:318px!important;
+  max-width:318px!important;box-shadow:none;border-right:1px solid #dce3ea;
+  background:#f8fafc;
+}
+.desktop-gis .gis-body>.main {order:1;flex:1 1 auto;min-width:200px;min-height:0;}
+.desktop-gis .gis-results-monitor {
+  order:2;flex:0 0 364px;width:364px!important;min-width:364px!important;
+  max-width:364px!important;box-shadow:none;border-left:1px solid #dce3ea;
+  background:#fff;
+}
+.desktop-gis .gis-operations .sidebar-scroll,
+.desktop-gis .gis-results-monitor .sidebar-scroll,
+.desktop-gis .gis-project-drawer .sidebar-scroll,
+.desktop-gis .terrain-result-layer-list,
+.desktop-gis .gis-results-monitor .gis-result-list {
+  scrollbar-width:none;-ms-overflow-style:none;overscroll-behavior:contain;
+}
+.desktop-gis .gis-operations .sidebar-scroll::-webkit-scrollbar,
+.desktop-gis .gis-results-monitor .sidebar-scroll::-webkit-scrollbar,
+.desktop-gis .gis-project-drawer .sidebar-scroll::-webkit-scrollbar,
+.desktop-gis .terrain-result-layer-list::-webkit-scrollbar,
+.desktop-gis .gis-results-monitor .gis-result-list::-webkit-scrollbar {display:none;width:0;height:0;}
+.desktop-gis .gis-operations .sidebar-scroll{padding:8px 14px 18px;}
+.desktop-gis .gis-results-monitor .sidebar-scroll{padding:9px 15px 18px;}
+.desktop-gis .workspace-fixed-footer:empty{display:none}
+.desktop-gis .workspace-fixed-footer:not(:empty){
+  flex:0 0 auto;background:#fff;border-top:1px solid #e1e8ef;
+  padding:10px 13px;box-shadow:0 -5px 18px rgba(25,49,71,.045);z-index:2;
+}
+.desktop-gis .gis-results-monitor>.workspace-fixed-footer:not(:empty){padding:9px 14px 12px;}
+@media(max-width:1120px){
+  .desktop-gis .gis-operations{flex-basis:294px;width:294px!important;min-width:294px!important;max-width:294px!important}
+  .desktop-gis .gis-results-monitor{flex-basis:330px;width:330px!important;min-width:330px!important;max-width:330px!important}
+}
+@media(max-width:780px){
+  .desktop-gis .gis-operations{position:absolute;left:0;top:0;bottom:0;z-index:9;max-width:min(310px,85vw)!important;min-width:min(310px,85vw)!important;width:min(310px,85vw)!important;box-shadow:3px 0 12px #10213224}
+  .desktop-gis .gis-results-monitor{flex:0 0 min(320px,55vw);min-width:min(320px,55vw)!important;max-width:min(320px,55vw)!important;width:min(320px,55vw)!important}
+  .desktop-gis .gis-body>.main{min-width:0}
+}
+
+
+/* GeoFathom research UI: disciplined, fixed-console visual system.
+   Only presentation changes: calculations, payloads, history and exports retain
+   their original ownership and accessibility. */
+.desktop-gis{
+  --gf-ink:#20374a;--gf-muted:#66798b;--gf-blue:#28698d;
+  --gf-border:#e1e8ee;--gf-soft:#f4f7fa;--gf-surface:#fff;
+  font-family:Inter,'Segoe UI',system-ui,sans-serif;color:var(--gf-ink);
+}
+.desktop-gis .gis-operations>.workspace-dock-heading,
+.desktop-gis .gis-results-monitor>.workspace-dock-heading{
+  height:43px;min-height:43px;padding:0 15px;
+  border-bottom:1px solid var(--gf-border);background:var(--gf-surface);
+  color:#264258;font-size:12px;font-weight:750;letter-spacing:.025em;
+}
+.desktop-gis .gis-operations #tools-terrain.panel-section{padding:0;border:0}
+.desktop-gis .gis-operations #tools-terrain.panel-section>.section-heading:first-child{display:none}
+.desktop-gis .gis-operations .terrain-workbench{padding:0;margin:0;min-width:0}
+.desktop-gis .gis-operations .terrain-step{display:flex;flex-direction:column;gap:9px;padding:13px 0 17px;border-bottom:1px solid var(--gf-border);min-width:0}
+.desktop-gis .gis-operations .terrain-source{margin:0}
+.desktop-gis .gis-operations .terrain-analysis-step{border-bottom:0;padding-top:15px}
+.desktop-gis .terrain-step-heading{display:flex;align-items:center;gap:10px;min-height:22px;color:#2b4054}
+.desktop-gis .terrain-step-heading>span{width:22px;height:22px;display:grid;place-items:center;
+  background:#edf3f7;color:#48728d;font-weight:800;font-size:10px;border:1px solid #dce7ee;border-radius:6px}
+.desktop-gis .terrain-step-heading>strong{font-size:12px;font-weight:750;letter-spacing:.01em}
+.desktop-gis .gis-operations .terrain-step label{font-size:11px;font-weight:550;color:#516779}
+.desktop-gis .gis-operations .terrain-step input:not([type=checkbox]):not([type=range]):not([type=file]),
+.desktop-gis .gis-operations .terrain-step select,
+.desktop-gis .gis-operations .terrain-step textarea{
+  width:100%;min-width:0;min-height:34px;border:1px solid #d2dde5;
+  border-radius:6px!important;background:#fff;color:#293f50;padding:6px 9px;
+  font-size:12px;line-height:1.25;
+}
+.desktop-gis .gis-operations .terrain-step button{
+  min-height:32px;padding:6px 9px;border:1px solid #d2dce4;background:#fff;
+  border-radius:6px!important;color:#345268;font-size:11px;font-weight:625;
+  transition:background-color .12s,border-color .12s;line-height:1.3;
+}
+.desktop-gis .gis-operations .terrain-step button:hover:not(:disabled){
+  background:#eef5f9;border-color:#9fbbce
+}
+.desktop-gis .gis-operations .terrain-step .raster-upload{
+  min-height:33px;display:flex;align-items:center;justify-content:center;
+  background:#f1f6fa;border:1px solid #d0e0eb;border-radius:6px;
+  color:#245e80;font-weight:700;font-size:11px
+}
+.desktop-gis .gis-operations .terrain-step .area-fields{gap:8px}
+.desktop-gis .gis-operations .terrain-step .survey-action-bar{gap:6px}
+.desktop-gis .gis-operations .terrain-step .compact-notice{
+  font-size:10px;line-height:1.4;color:#718496
+}
+.desktop-gis .terrain-source-metadata{border-top:1px solid var(--gf-border);padding-top:3px}
+.desktop-gis .terrain-source-metadata>summary{font-size:10px!important;color:var(--gf-muted)!important;padding:5px 0!important}
+.desktop-gis .terrain-source-metadata .compact-notice{display:block;overflow-wrap:anywhere;margin-top:4px}
+.desktop-gis .gis-operations .terrain-dem-tools{padding:0!important;margin:2px 0;border:1px solid #dce6ee;border-radius:7px!important;background:#fff}
+.desktop-gis .terrain-dem-tools>summary{color:#44667e;padding:9px 8px!important;font-weight:650;font-size:11px}
+.desktop-gis .terrain-dem-tools>.professional-form{padding:7px 9px 10px}
+.desktop-gis .workspace-tool-controls{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;align-items:end}
+.desktop-gis .workspace-tool-controls label{min-width:0}
+.desktop-gis .workspace-tool-controls .workspace-tool-search{
+  min-height:34px;display:flex;align-items:center;gap:6px;padding:0 7px;
+  background:#fff;border:1px solid #d2dde5;border-radius:6px;color:#638397
+}
+.desktop-gis .workspace-tool-controls .workspace-tool-search input{
+  border:0!important;box-shadow:none;outline:none;padding:3px 0!important;
+  width:100%;min-height:30px!important;background:none;min-width:0;font-size:11px
+}
+.desktop-gis .terrain-command-grid{gap:6px;margin:3px 0 4px;grid-template-columns:repeat(2,minmax(0,1fr))}
+.desktop-gis .terrain-command-grid button{min-height:34px!important;white-space:normal;text-align:center}
+.desktop-gis .terrain-command-grid button[aria-pressed=true]{
+  background:#e2eff7;border-color:#7da7c1;color:#205a80;box-shadow:inset 0 0 0 1px #7da7c1
+}
+.desktop-gis .terrain-step .gis-check{display:flex;align-items:center;gap:6px}
+.desktop-gis .gis-operations .terrain-run-row{display:flex;align-items:center;gap:9px;min-width:0}
+.desktop-gis .gis-operations .terrain-run-row>.primary-tool{
+  background:#21698e!important;border:1px solid #21698e!important;color:white!important;
+  min-height:37px;border-radius:7px!important;font-size:12px;font-weight:750;
+}
+.desktop-gis .gis-operations .terrain-run-row>.primary-tool:disabled{background:#d4dfe7!important;color:#5e7888!important;border-color:#d4dfe7!important}
+.desktop-gis .gis-operations .terrain-run-row>label{
+  font-size:11px;color:#526c7e;display:flex;align-items:center;gap:5px
+}
+.desktop-gis .gis-operations .terrain-run-row>button:not(.primary-tool){
+  padding:7px 9px;background:#fff;border:1px solid #d5dfe6;border-radius:6px
+}
+/* Right monitor: one result, one active view, no permanent wall of metadata. */
+.desktop-gis .gis-results-monitor .terrain-monitor-content{gap:9px}
+.desktop-gis .terrain-run-list{border:0!important;margin:0!important;padding:0!important}
+.desktop-gis .terrain-run-selector label{display:grid;grid-template-columns:1fr;gap:5px;font-size:10px;letter-spacing:.025em;color:#6c8293}
+.desktop-gis .terrain-run-selector select{
+  border:1px solid #d2dfe8;border-radius:7px!important;
+  background:#f9fbfd;min-height:38px;padding:7px 9px;
+  font-weight:650;font-size:12px;color:#294457;box-shadow:none;
+}
+.desktop-gis .terrain-result-tabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0;
+  position:sticky;top:-9px;z-index:5;background:#fff;border-bottom:1px solid #dce5ec;padding:3px 0 0}
+.desktop-gis .terrain-result-tabs>button{border:0!important;background:transparent;color:#768b9b;
+  font-size:11px;font-weight:650;min-height:36px;border-radius:0!important;
+  border-bottom:2px solid transparent!important;padding:7px 3px}
+.desktop-gis .terrain-result-tabs>button:hover{color:#2c647f;background:#f6f9fb}
+.desktop-gis .terrain-result-tabs>button[aria-selected=true]{
+  color:#205c81;border-bottom-color:#287ca8!important;background:#fff;font-weight:750
+}
+.desktop-gis .gis-results-monitor .terrain-output{margin:0;padding:1px 0 0;border:0}
+.desktop-gis .terrain-tab-content{min-width:0;display:flex;flex-direction:column;gap:9px}
+.desktop-gis .terrain-tab-content>.section-heading{display:flex;justify-content:space-between;align-items:center;
+  margin:2px 0 0;gap:8px;font-size:13px;line-height:1.25;color:#263d51;font-weight:800}
+.desktop-gis .terrain-tab-content>.section-heading>span{display:flex;gap:5px}
+.desktop-gis .terrain-tab-content>.section-heading button{border:1px solid #dce6ed;background:#fff;border-radius:5px!important;
+  color:#4e728a;font-size:10px;min-height:25px;padding:3px 7px}
+.desktop-gis .gis-results-monitor .terrain-key-metrics{
+  display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:0
+}
+.desktop-gis .gis-results-monitor .terrain-key-metrics>div{
+  padding:12px 10px;border:1px solid #e2eaf0;border-radius:9px;
+  background:linear-gradient(155deg,#fbfdff,#f4f8fb);
+  display:flex;align-items:flex-start;flex-direction:column;gap:7px;
+}
+.desktop-gis .gis-results-monitor .terrain-key-metrics span{font-weight:575;font-size:10px;line-height:1.25;color:#72889a}
+.desktop-gis .gis-results-monitor .terrain-key-metrics strong{font-size:18px;line-height:1.1;
+  font-weight:750;letter-spacing:-.3px;color:#1e4e6c;overflow-wrap:anywhere}
+.desktop-gis .terrain-overview-context{display:flex;flex-direction:column;gap:3px;
+  color:#7b8c98;font-size:10px;line-height:1.35;overflow-wrap:anywhere}
+.desktop-gis .terrain-overview-preview{width:100%;height:195px;object-fit:contain;
+  display:block;background:#f3f6f9;border:1px solid #e4ebf0;border-radius:9px;padding:6px}
+.desktop-gis .terrain-tab-content .terrain-profile-chart{padding:6px 0}
+.desktop-gis .terrain-tab-content .terrain-profile-chart>img{height:auto;max-height:230px!important;
+  background:#f3f6f8;border-radius:8px;padding:5px}
+.desktop-gis .terrain-tab-content .terrain-opacity-control{gap:8px;padding:6px 0}
+.desktop-gis .terrain-tab-content .terrain-bars{background:transparent;border:0;padding:5px 0;margin:3px 0}
+.desktop-gis .terrain-tab-content .terrain-bar-track{border-radius:3px;background:#e9eef3}
+.desktop-gis .terrain-outputs-list{margin:0;padding:0}
+.desktop-gis .terrain-outputs-list>.terrain-layer-manager{border:1px solid #e1e9ee;border-radius:8px;margin:2px 0;padding:4px 8px;background:#f9fbfc}
+.desktop-gis .terrain-outputs-list>.terrain-layer-manager>summary{font-size:11px;font-weight:650;padding:7px 3px}
+.desktop-gis .terrain-output-downloads{display:flex;flex-direction:column;gap:7px}
+.desktop-gis .terrain-output-downloads button{background:#f6f9fb;border:1px solid #d7e2ea;
+  min-height:34px;border-radius:7px!important;color:#275c7a;font-weight:700;text-align:center}
+.desktop-gis .terrain-output-downloads small{color:#84929d;font-size:10px}
+.desktop-gis .terrain-research-history{order:2;margin-top:4px}
+.desktop-gis .terrain-result-quality,.desktop-gis .terrain-run-provenance,.desktop-gis .terrain-run-comparison,.desktop-gis .terrain-metric-details{
+  border:1px solid #e2e9ee!important;border-radius:7px;background:#fff;
+  padding:2px 8px!important;margin:0!important;
+}
+.desktop-gis .terrain-result-quality>summary,.desktop-gis .terrain-run-provenance>summary,
+.desktop-gis .terrain-run-comparison>summary,.desktop-gis .terrain-metric-details>summary{
+  padding:9px 3px!important;min-height:34px;cursor:pointer;color:#41647c;font-size:11px;font-weight:650
+}
+.desktop-gis .terrain-tab-content .terrain-source-details{font-size:10px;line-height:1.55;padding:6px 2px}
+.desktop-gis .terrain-result-footer{display:flex;align-items:center;gap:7px}
+.desktop-gis .terrain-result-footer button{flex:1 1 auto;min-width:0;min-height:36px;
+  padding:6px 5px;border-radius:7px!important;border:1px solid #d5e0e8;
+  background:#fff;color:#46677d;font-size:10px;font-weight:650;white-space:normal;line-height:1.3}
+.desktop-gis .terrain-result-footer .terrain-action-primary{background:#276d91;color:#fff;border-color:#276d91}
+.desktop-gis .terrain-result-footer button:disabled{opacity:.46}
+/* Preserve touch and keyboard scrolling without a visible scrollbar thumb. */
+.desktop-gis .gis-operations .sidebar-scroll,.desktop-gis .gis-results-monitor .sidebar-scroll{
+  overflow-x:hidden;overflow-y:auto;scroll-behavior:smooth
+}
+@media(max-width:880px){
+  .desktop-gis .gis-results-monitor .terrain-key-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+
+
+/* Invisible scrollbars must not make keyboard access ambiguous. */
+.desktop-gis .gis-operations .sidebar-scroll:focus-visible,
+.desktop-gis .gis-results-monitor .sidebar-scroll:focus-visible{
+  outline:2px solid #a5c9dd;outline-offset:-2px;
+}
+.desktop-gis .terrain-result-tabs button:focus-visible{
+  outline:2px solid #3984ae;outline-offset:-3px;position:relative;z-index:1;
+}
+
+
+/* One-line data target, not a paragraph of map coordinates. Full bounds
+   remain available via tooltip and from the underlying controlled source. */
+.desktop-gis .gis-operations [aria-label="DEM download target"]{
+  display:block;width:100%;white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis;font-variant-numeric:tabular-nums;
+}
+.desktop-gis .gis-operations .terrain-source>.survey-action-bar>.compact-notice{display:none}
+
+
+/* True non-scrolling side consoles. Navigation occurs via fixed pages rather
+   than moving the side columns. Long/legacy forms are still accessible in
+   an explicit expanded workspace; never silently discard controls. */
+.desktop-gis .gis-operations:not(.workspace-dock-expanded)>.sidebar-scroll,
+.desktop-gis .gis-results-monitor:not(.workspace-dock-expanded)>.sidebar-scroll{
+  overflow:hidden!important;scroll-behavior:auto!important;
+  overscroll-behavior:none;min-height:0;
+}
+.desktop-gis .gis-operations:not(.workspace-dock-expanded) .workspace-objects{flex:0 0 auto;}
+.desktop-gis .gis-operations:not(.workspace-dock-expanded) #tools-terrain{
+  display:flex!important;flex:1 1 auto;flex-direction:column;min-height:0;overflow:hidden;
+  padding:0!important;margin:0!important;
+}
+.desktop-gis .gis-operations #tools-terrain[hidden]{display:none!important}
+.desktop-gis .gis-operations:not(.workspace-dock-expanded) .terrain-workbench{
+  flex:1 1 auto;min-height:0;min-width:0;display:flex;flex-direction:column;
+}
+.desktop-gis .terrain-workflow-tabs{
+  display:grid;grid-template-columns:repeat(4,minmax(0,1fr));flex:0 0 auto;
+  gap:0;border-bottom:1px solid #dae4eb;background:#f9fbfd;padding:2px 0 0;
+  margin-bottom:8px;
+}
+.desktop-gis .terrain-workflow-tabs>button{
+  width:100%;min-height:36px;padding:7px 1px;border:0!important;
+  border-bottom:2px solid transparent!important;background:transparent!important;
+  color:#728797;font-weight:650;font-size:10px;border-radius:0!important;
+}
+.desktop-gis .terrain-workflow-tabs>button[aria-selected="true"]{
+  color:#215c83;border-bottom-color:#287da6!important;background:#fff!important;
+}
+.desktop-gis .terrain-workflow-tabs>button:disabled{opacity:.36}
+.desktop-gis .terrain-workflow-tabs>button:focus-visible{outline:2px solid #277da7;outline-offset:-3px}
+.desktop-gis .gis-operations .terrain-control-page[hidden]{display:none!important}
+.desktop-gis .gis-operations .terrain-control-page{
+  display:flex;flex-direction:column;flex:0 1 auto;min-width:0;min-height:0;
+  overflow:hidden;gap:8px;border:0!important;margin:0!important;padding:7px 1px 12px!important;
+}
+.desktop-gis .gis-operations .terrain-control-page .terrain-step-heading{display:none!important}
+.desktop-gis .gis-operations .terrain-setup-heading{
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+  font-size:12px;color:#24455e;font-weight:700;margin:1px 0 7px
+}
+.desktop-gis .gis-operations .terrain-setup-heading button{
+  border:1px solid #d6e2ea;border-radius:6px!important;min-height:28px;
+  background:#fff;font-size:10px;padding:3px 7px;white-space:nowrap
+}
+.desktop-gis .gis-operations .terrain-control-page>.professional-form{
+  min-height:0;gap:7px;display:flex;flex-direction:column;
+}
+.desktop-gis .gis-operations .terrain-control-page .compact-notice{
+  font-size:10px;line-height:1.3
+}
+.desktop-gis .gis-operations .terrain-source-metadata{flex:0 0 auto}
+.desktop-gis .gis-operations .terrain-process-page .terrain-dem-process-form{display:flex;flex-direction:column;gap:6px}
+.desktop-gis .gis-operations .terrain-process-page .professional-form{display:flex;flex-direction:column;gap:8px}
+.desktop-gis .terrain-control-page .terrain-command-grid{margin:4px 0}
+.desktop-gis .workspace-dock-expand-button{
+  background:transparent;border:0;color:#5b7890!important;
+  padding:4px!important;min-height:26px;min-width:26px;
+  border-radius:5px!important;display:inline-flex;align-items:center;justify-content:center;
+  cursor:pointer;
+}
+.desktop-gis .workspace-dock-expand-button:hover{background:#edf3f7;color:#205778!important}
+.desktop-gis .workspace-dock-backdrop{position:fixed;inset:0;background:#182b3b70;z-index:150}
+.desktop-gis .gis-body .workspace-dock-expanded{
+  position:fixed!important;inset:5vh auto 5vh max(6vw,24px);z-index:151!important;
+  width:min(760px,88vw)!important;max-width:min(760px,88vw)!important;
+  min-width:0!important;max-height:90vh!important;box-shadow:0 18px 55px #132c4266;
+  background:#fff;border:1px solid #bacbd7;border-radius:11px;
+}
+.desktop-gis .gis-body .gis-results-monitor.workspace-dock-expanded{
+  inset:5vh max(6vw,24px) 5vh auto;
+}
+.desktop-gis .gis-body .workspace-dock-expanded>.sidebar-scroll{
+  overflow-y:auto!important;overflow-x:hidden!important;
+  scrollbar-width:thin;-ms-overflow-style:auto;scroll-behavior:auto!important;
+}
+.desktop-gis .gis-body .workspace-dock-expanded>.sidebar-scroll::-webkit-scrollbar{display:block;width:8px}
+.desktop-gis .gis-body .workspace-dock-expanded .terrain-workbench{display:block}
+.desktop-gis .gis-body .workspace-dock-expanded .terrain-control-page:not([hidden]){overflow:visible;flex:none}
+.desktop-gis .gis-body .workspace-dock-expanded .terrain-tab-content{overflow:visible}
+.desktop-gis .gis-body .workspace-dock-expanded #tools-terrain{overflow:visible}
+@media(max-width:740px){
+  .desktop-gis .gis-body .workspace-dock-expanded,
+  .desktop-gis .gis-body .gis-results-monitor.workspace-dock-expanded{
+    inset:3vh 12px 3vh 12px;max-height:94vh!important;
+    width:calc(100vw - 24px)!important;max-width:calc(100vw - 24px)!important;
+  }
+}
+
+
+/* Result layer manager is paginated, not a hidden nested scroller. */
+.desktop-gis .terrain-outputs-list .terrain-result-layer-list{
+  max-height:none!important;overflow:hidden!important;
+}
+.desktop-gis .terrain-layer-pager{
+  display:flex;gap:8px;justify-content:space-between;align-items:center;
+  padding:7px 1px 4px;color:#64798a;font-size:10px;
+}
+.desktop-gis .terrain-layer-pager button{
+  background:#fff;border:1px solid #d7e1e8;padding:5px 8px;
+  border-radius:5px!important;color:#35647e;font-size:10px;
+}
+.desktop-gis .terrain-layer-pager button:disabled{opacity:.35}
+
+
+/* Fixed navigation and consolidated file actions.
+   The toolbar does not acquire a horizontal scrollbar when modules change. */
+.desktop-gis .gis-header{
+  order:0;position:relative;z-index:70;flex:0 0 42px;height:42px;min-height:42px;
+  display:flex;align-items:center;gap:7px;padding:0 12px;
+  background:#fff;border-bottom:1px solid #d9e3eb;overflow:visible;
+}
+.desktop-gis .gis-brand{order:0;flex:none;font-weight:750;margin-right:8px}
+.desktop-gis .gis-header .workspace-module-bar{
+  order:1;display:flex;align-items:center;flex:1 1 auto;min-width:0;
+  max-width:none;overflow:hidden!important;white-space:nowrap;scrollbar-width:none;
+}
+.desktop-gis .workspace-module-buttons{display:flex;align-items:center;gap:1px;min-width:0}
+.desktop-gis .workspace-module-bar button{flex:none;padding:7px 9px;min-height:34px;font-size:11px;font-weight:590}
+.desktop-gis .workspace-module-compact{display:none}
+.desktop-gis .gis-active-project{order:2;flex:0 1 136px;min-width:104px;max-width:145px}
+.desktop-gis .gis-header .gis-workspace-menu{order:3}
+.desktop-gis .gis-header .gis-file-menu{order:4}
+.desktop-gis .gis-settings{order:5}
+.desktop-gis .gis-command-trigger{order:6;flex:none;border-radius:6px;min-height:29px}
+.desktop-gis .gis-connection{order:7;flex:none;min-width:25px;padding:3px 2px}
+.desktop-gis .gis-header-menu{position:relative;flex:none;z-index:75}
+.desktop-gis .gis-header-menu>summary{
+  list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  height:30px;padding:0 10px;border-radius:6px;border:1px solid transparent;
+  font-size:11px;font-weight:650;color:#3d5b70;white-space:nowrap;
+}
+.desktop-gis .gis-header-menu>summary::-webkit-details-marker{display:none}
+.desktop-gis .gis-header-menu>summary:hover,
+.desktop-gis .gis-header-menu[open]>summary{background:#eef4f8;border-color:#d7e4ec;color:#1e638a}
+.desktop-gis .gis-header-popover{
+  position:absolute;right:0;top:calc(100% + 7px);min-width:205px;max-width:270px;
+  display:flex;flex-direction:column;gap:3px;padding:7px;background:#fff;
+  border:1px solid #d3e0e8;border-radius:9px;box-shadow:0 10px 26px #1c354022;z-index:80;
+}
+.desktop-gis .gis-header-popover button{
+  width:100%;min-height:32px;padding:7px 10px;display:flex;align-items:center;gap:7px;
+  background:transparent;border:0;border-radius:5px;text-align:left;
+  white-space:nowrap;font-size:11px;font-weight:590;color:#304b60;
+}
+.desktop-gis .gis-header-popover button:hover:not(:disabled){background:#edf4f8;color:#135879}
+.desktop-gis .gis-header-popover button:disabled{opacity:.4}
+.desktop-gis .gis-file-menu-panel,.desktop-gis .gis-file-menu .gis-project-actions{
+  display:flex;flex-direction:column;align-items:stretch;width:100%;
+}
+.desktop-gis .gis-file-menu .project-actions,
+.desktop-gis .gis-file-menu .terrain-file-actions{display:flex;flex-direction:column;gap:3px;width:100%;margin:0}
+.desktop-gis .gis-file-menu .project-actions button{width:100%;justify-content:flex-start;min-height:32px}
+.desktop-gis .gis-file-menu .gis-terrain-export-action:not(:empty){border-top:1px solid #e7edf1;padding-top:5px}
+.desktop-gis .gis-file-menu .gis-project-actions:empty,
+.desktop-gis .gis-file-menu .gis-terrain-export-action:empty{display:none}
+.desktop-gis .gis-settings>summary{font-size:11px;font-weight:650;padding:6px 7px}
+.desktop-gis .gis-toolbar{
+  order:1;flex:0 0 40px;max-height:40px;min-height:40px;
+  display:flex;align-items:center;gap:8px;padding:4px 10px;
+  border-bottom:1px solid #dce5eb;background:#f8fafc;overflow:visible;
+}
+.desktop-gis .gis-navigation-tools{border-right:1px solid #dce5eb;gap:5px;padding-right:9px}
+.desktop-gis .gis-navigation-tools button,.desktop-gis .gis-quick-basemap button{
+  min-height:29px;padding:5px 9px;border-radius:5px;font-size:11px;
+}
+.desktop-gis .gis-survey-commands{min-width:0;flex:1 1 auto}
+.desktop-gis .gis-quick-basemap{margin-left:auto;flex-wrap:nowrap;padding-left:8px;border-left:1px solid #dce5eb}
+.desktop-gis .gis-body{order:2;flex:1;min-height:0}
+.desktop-gis .gis-status{order:3}
+.desktop-gis .workspace-dock-heading{flex:0 0 39px;min-height:39px;height:39px}
+.desktop-gis .gis-operations .terrain-step-heading>span{display:none}
+.desktop-gis .gis-operations .terrain-step{gap:7px}
+.desktop-gis .terrain-result-tabs{position:static;flex:0 0 auto;top:auto}
+.desktop-gis .gis-results-monitor .terrain-monitor-content{display:flex;flex-direction:column;min-height:0;gap:8px}
+.desktop-gis .gis-results-monitor .terrain-tab-content{gap:8px;min-height:0}
+.desktop-gis .gis-results-monitor .terrain-key-metrics>div{padding:10px 9px;gap:5px}
+.desktop-gis .gis-results-monitor .terrain-key-metrics strong{font-size:17px}
+.desktop-gis .terrain-figure-tabs{
+  display:grid;grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:3px;margin:0;padding:4px;border-radius:7px;background:#f0f5f8;
+}
+.desktop-gis .terrain-figure-tabs button{
+  min-width:0;min-height:29px;padding:4px 2px;
+  border:0;border-radius:5px;background:transparent;white-space:nowrap;
+  font-size:10px;font-weight:650;color:#628095;
+}
+.desktop-gis .terrain-figure-tabs button[aria-pressed=true]{
+  color:#155a83;background:white;box-shadow:0 1px 4px #29455716;
+}
+.desktop-gis .terrain-figure-stage{display:flex;justify-content:center;align-items:flex-start;min-width:0}
+.desktop-gis .terrain-research-figure{width:100%;min-width:0}
+.desktop-gis .terrain-research-figure svg{width:100%;height:auto;max-height:230px}
+.desktop-gis .terrain-research-figure .profile-readout{font-size:10px;color:#5a7487}
+.desktop-gis .terrain-tab-content .terrain-figure-stage .terrain-chart{max-width:100%}
+.desktop-gis .gis-results-monitor .terrain-result-footer button{min-height:32px}
+@media(max-width:1500px){
+  .desktop-gis .workspace-module-bar button{font-size:10.5px;padding:7px 6px}
+  .desktop-gis .gis-active-project{flex-basis:112px;min-width:86px}
+  .desktop-gis .gis-header{gap:4px;padding:0 8px}
+  .desktop-gis .gis-header-menu>summary{padding:0 6px}
+}
+@media(max-width:1280px){
+  .desktop-gis .workspace-module-buttons{display:none}
+  .desktop-gis .workspace-module-compact{
+    display:block;width:100%;max-width:220px;min-height:30px;
+    border:1px solid #d3dee6;background:#fff;border-radius:6px;
+    color:#2a516a;font-size:11px;padding:4px 7px;
+  }
+  .desktop-gis .gis-header .workspace-module-bar{flex:1 1 150px}
+}
+@media(max-width:850px){
+  .desktop-gis .gis-active-project{min-width:80px;flex-basis:90px}
+  .desktop-gis .gis-command-trigger kbd{display:none}
+  .desktop-gis .gis-workspace-menu>summary{font-size:0}
+  .desktop-gis .gis-workspace-menu>summary::before{content:"Work";font-size:11px}
+  .desktop-gis .gis-connection{font-size:0}
+}
+
+
+/* The project drawer is a three-page fixed console, not a long scrollable stack.
+   Repeated records are paged in place and the underlying data stay mounted. */
+.desktop-gis .gis-project-drawer{
+  display:flex;flex-direction:column;min-height:0;overflow:hidden;
+}
+.desktop-gis .gis-project-drawer[hidden]{display:none!important}
+.desktop-gis .gis-project-drawer>.workspace-dock-heading{flex:0 0 39px;height:39px}
+.desktop-gis .gis-drawer-tabs{
+  flex:0 0 38px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
+  align-items:stretch;padding:0 9px;background:#fafcfd;border-bottom:1px solid #dce5eb;
+}
+.desktop-gis .gis-drawer-tabs button{
+  border:0;border-bottom:2px solid transparent;background:transparent;
+  padding:6px 4px;color:#6d8798;font-size:11px;font-weight:650;
+}
+.desktop-gis .gis-drawer-tabs button[aria-selected=true]{border-bottom-color:#287da6;color:#1d6185}
+.desktop-gis .gis-project-drawer>.sidebar-scroll{
+  min-height:0;flex:1;overflow:hidden!important;padding:9px 13px!important;
+  scrollbar-width:none;overscroll-behavior:none;
+}
+.desktop-gis .gis-project-drawer .panel-section[hidden]{display:none!important}
+.desktop-gis .gis-project-drawer .panel-section{border-top:0;margin:0;padding:4px 0 10px}
+.desktop-gis .gis-project-drawer .panel-section+.panel-section:not([hidden]){
+  border-top:1px solid #e3e9ee;padding-top:10px;
+}
+.desktop-gis .gis-project-drawer .project-panel{display:flex;flex-direction:column;gap:6px;min-height:0}
+.desktop-gis .gis-project-drawer .project-create{margin:0}
+.desktop-gis .gis-project-drawer .layer-row{min-height:29px}
+.desktop-gis .gis-record-pager{
+  display:flex;align-items:center;justify-content:space-between;gap:7px;
+  padding:6px 0 0;color:#6d8393;font-size:10px;font-variant-numeric:tabular-nums;
+}
+.desktop-gis .gis-record-pager button{
+  border:1px solid #d5e1e9;background:#fff;border-radius:5px;
+  padding:5px 8px;min-height:27px;color:#32657e;font-size:10px;
+}
+.desktop-gis .gis-record-pager button:disabled{opacity:.4}
+.desktop-gis .gis-project-drawer .scratch-list,
+.desktop-gis .gis-project-drawer .pinned-places,
+.desktop-gis .gis-project-drawer .results{max-height:none;overflow:hidden}
+.desktop-gis .gis-project-drawer .scratch-row{min-height:31px}
+.desktop-gis .gis-project-drawer .pinned-places .survey-action-bar{min-height:28px}
+
+
+/* Linked Terrain workflow: source and selected computation remain visible
+   as real controls instead of disconnected four-step tab navigation. */
+.desktop-gis .terrain-linked-controls{
+  display:flex;flex-direction:column;gap:7px;flex:0 0 auto;
+  padding:5px 0 12px;border-bottom:1px solid #dce5eb;
+}
+.desktop-gis .terrain-linked-row{
+  display:flex;align-items:end;gap:6px;min-width:0;
+}
+.desktop-gis .terrain-linked-select{
+  display:flex;flex-direction:column;flex:1 1 auto;min-width:0;
+  gap:3px;font-size:10px;font-weight:670;color:#597689;
+}
+.desktop-gis .terrain-linked-select select{
+  display:block;min-width:0;width:100%;height:34px;
+  border:1px solid #cad8e2;border-radius:6px;
+  background:#fff;color:#243f53;font-size:11px;font-weight:620;
+  padding:5px 8px;overflow:hidden;text-overflow:ellipsis;
+}
+.desktop-gis .terrain-linked-row>button{
+  flex:none;height:34px;min-width:54px;padding:6px 9px;
+  border:1px solid #d3e0e8;border-radius:6px;background:#f7fafc;
+  color:#42687f;font-size:10px;font-weight:700;
+}
+.desktop-gis .terrain-linked-row>button.terrain-linked-active,
+.desktop-gis .terrain-linked-row>button[aria-pressed="true"]{
+  border-color:#89b1c8;background:#eaf4fa;color:#155d80;
+}
+.desktop-gis .terrain-linked-row>button:disabled{opacity:.38}
+.desktop-gis .gis-operations .terrain-control-page{
+  gap:6px;padding:10px 0!important;min-height:0;
+}
+.desktop-gis .gis-operations .terrain-setup-page{padding-top:9px!important}
+.desktop-gis .gis-operations .terrain-setup-heading{
+  margin:0;min-height:28px;color:#294c61;font-size:12px;
+}
+.desktop-gis .gis-operations .terrain-setup-heading button{
+  min-height:27px;padding:3px 8px;font-size:10px;
+}
+.desktop-gis .gis-operations .terrain-source .raster-upload{min-height:31px}
+.desktop-gis .gis-operations .terrain-source .area-fields{gap:6px}
+.desktop-gis .gis-results-monitor .terrain-result-tabs{
+  grid-template-columns:repeat(3,minmax(0,1fr));margin-top:2px;
+}
+.desktop-gis .gis-results-monitor .terrain-result-tabs button{font-size:11px;min-height:36px}
+.desktop-gis .gis-results-monitor .terrain-outputs-list{margin:3px 0 0}

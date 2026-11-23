@@ -1,4 +1,5 @@
 import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react';
+import {createPortal} from 'react-dom';
 import { Database, FileDown, FileUp, Mountain, Search, TableProperties } from 'lucide-react';
 import {
   analyzeTerrain, exportVectorFile, importVectorFile, queryAttributes,
@@ -7,6 +8,7 @@ import {
 } from './api';
 
 interface Props {
+  resultsTarget?:HTMLElement|null;active?:boolean;
   projectId:string|null;
   workspace:GeoWorkspace|null;
   geometry:GeoJSON.Geometry|null;
@@ -30,13 +32,14 @@ function numericText(value:string,kind:'text'|'number'|'boolean') {
 }
 
 export default function ProfessionalPanel({
-  projectId,workspace,geometry,raster,refreshToken,onRefresh,onOpen,
+  projectId,workspace,geometry,raster,refreshToken,onRefresh,onOpen,resultsTarget,active,
 }:Props) {
   const [query,setQuery]=useState('');
   const [field,setField]=useState('name');
   const [operator,setOperator]=useState<'contains'|'equals'|'gte'|'lte'|'exists'>('contains');
   const [result,setResult]=useState<AttributeResult|null>(null);
   const [selection,setSelection]=useState<string[]>([]);
+  const [tableOpen,setTableOpen]=useState(false);
   const [editField,setEditField]=useState('category');
   const [editValue,setEditValue]=useState('');
   const [editType,setEditType]=useState<'text'|'number'|'boolean'>('text');
@@ -130,9 +133,40 @@ export default function ProfessionalPanel({
     return xx.toFixed(2)+','+yy.toFixed(2);
   }).join(' '):'';
 
+  const resultPanel=<div className="gis-professional-results">
+    {tableOpen&&<section className="gis-attribute-results" aria-label="Attribute results">
+      <strong>Attributes · {result?.total??0}</strong>
+        <div className="attribute-table-scroll">
+          <table className="attribute-table">
+            <thead><tr><th>Select</th><th>Name</th><th>Value</th><th>Source</th></tr></thead>
+            <tbody>{(result?.results??[]).map(row=><tr key={row.id}>
+              <td><input aria-label={'Select '+row.name} type="checkbox" checked={selection.includes(row.id)}
+                onChange={e=>setSelection(old=>e.target.checked?[...old,row.id]:old.filter(x=>x!==row.id))}/></td>
+              <td><button className="attribute-open" onClick={()=>onOpen(row.id)}>{row.name}</button></td>
+              <td>{formatValue(field==='name'?row.name:field==='source'?row.source:row.properties[field])}</td>
+              <td>{row.source}</td>
+            </tr>)}</tbody>
+          </table>
+        </div>
+
+    </section>}
+          {terrain&&<div className="terrain-metrics">
+            <div><span>Elevation</span><strong>{terrain.elevation_min_m.toFixed(1)}–{terrain.elevation_max_m.toFixed(1)} m</strong></div>
+            <div><span>Relief</span><strong>{terrain.elevation_relief_m.toFixed(1)} m</strong></div>
+            <div><span>Mean slope</span><strong>{terrain.mean_slope_deg.toFixed(2)}°</strong></div>
+            <div><span>Mean aspect</span><strong>{terrain.mean_aspect_deg===null?'Flat':terrain.mean_aspect_deg.toFixed(1)+'°'}</strong></div>
+            <small>{terrain.engine} · {terrain.valid_pixels} pixels</small>
+          </div>}
+          {profile&&<div className="terrain-profile">
+            {plot&&<svg viewBox="0 0 340 110" role="img" aria-label="Elevation profile">
+              <polyline points={plot} fill="none" stroke="#2967b3" strokeWidth="2" />
+            </svg>}
+            <span>{profiles.length} valid samples · {Number.isFinite(minimum)?minimum.toFixed(1):'—'}–{Number.isFinite(maximum)?maximum.toFixed(1):'—'} m</span>
+          </div>}
+  </div>;
   return (
     <div className="professional-panel">
-      <details>
+      <details onToggle={e=>setTableOpen(e.currentTarget.open)}>
         <summary><TableProperties size={14}/> Attribute table · {result?.total ?? 0} features</summary>
         <form onSubmit={event=>void submitQuery(event)} className="professional-form">
           <div className="area-fields">
@@ -152,18 +186,6 @@ export default function ProfessionalPanel({
             value={query} onChange={e=>setQuery(e.target.value)}/>}
           <button disabled={busy||!projectId} type="submit"><Search size={14}/> Filter rows</button>
         </form>
-        <div className="attribute-table-scroll">
-          <table className="attribute-table">
-            <thead><tr><th>Select</th><th>Name</th><th>Value</th><th>Source</th></tr></thead>
-            <tbody>{(result?.results??[]).map(row=><tr key={row.id}>
-              <td><input aria-label={'Select '+row.name} type="checkbox" checked={selection.includes(row.id)}
-                onChange={e=>setSelection(old=>e.target.checked?[...old,row.id]:old.filter(x=>x!==row.id))}/></td>
-              <td><button className="attribute-open" onClick={()=>onOpen(row.id)}>{row.name}</button></td>
-              <td>{formatValue(field==='name'?row.name:field==='source'?row.source:row.properties[field])}</td>
-              <td>{row.source}</td>
-            </tr>)}</tbody>
-          </table>
-        </div>
         <form className="professional-form" onSubmit={e=>void bulkEdit(e)}>
           <strong>Edit {selection.length} selected features</strong>
           <input aria-label="Attribute property name" placeholder="Property name" maxLength={64}
@@ -209,23 +231,12 @@ export default function ProfessionalPanel({
             Analyze selected {geometry?.type==='LineString'?'elevation profile':'terrain area'}
           </button>
           <p className="project-hint">Requires a meter-based projected DEM GeoTIFF, with meter elevations in its first band. Satellite RGB imagery is not a DEM.</p>
-          {terrain&&<div className="terrain-metrics">
-            <div><span>Elevation</span><strong>{terrain.elevation_min_m.toFixed(1)}–{terrain.elevation_max_m.toFixed(1)} m</strong></div>
-            <div><span>Relief</span><strong>{terrain.elevation_relief_m.toFixed(1)} m</strong></div>
-            <div><span>Mean slope</span><strong>{terrain.mean_slope_deg.toFixed(2)}°</strong></div>
-            <div><span>Mean aspect</span><strong>{terrain.mean_aspect_deg===null?'Flat':terrain.mean_aspect_deg.toFixed(1)+'°'}</strong></div>
-            <small>{terrain.engine} · {terrain.valid_pixels} pixels</small>
-          </div>}
-          {profile&&<div className="terrain-profile">
-            {plot&&<svg viewBox="0 0 340 110" role="img" aria-label="Elevation profile">
-              <polyline points={plot} fill="none" stroke="#2967b3" strokeWidth="2" />
-            </svg>}
-            <span>{profiles.length} valid samples · {Number.isFinite(minimum)?minimum.toFixed(1):'—'}–{Number.isFinite(maximum)?maximum.toFixed(1):'—'} m</span>
-          </div>}
+
         </div>
       </details>
       {notice&&<p className="project-info">{notice}</p>}
       {error&&<p className="discovery-error">{error}</p>}
+      {resultsTarget?(active?createPortal(resultPanel,resultsTarget):null):resultPanel}
     </div>
   );
 }

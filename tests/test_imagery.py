@@ -217,3 +217,43 @@ def test_local_desktop_import_needs_explicit_header_and_trusted_origin(geotiff, 
     monkeypatch.setenv("GEOFATHOM_MODEL_ADMIN_TOKEN","protected")
     assert client.post("/imagery/upload",files=files,headers={
         "X-GeoFathom-Local-Import":"1"}).status_code==403
+
+
+def test_float_dem_preview_is_transparent_where_nodata_or_nan(tmp_path):
+    from io import BytesIO
+    from PIL import Image
+    path=tmp_path/"partially-missing.tif"
+    values=np.full((32,32),-9999.,dtype=np.float32)
+    values[20:,0:16]=120.
+    values[20:,16:]=200.
+    values[25,18]=np.nan
+    with rasterio.open(path,"w",driver="GTiff",count=1,width=32,height=32,
+                       dtype="float32",crs="EPSG:32617",
+                       transform=from_origin(500000,4500000,10,10),
+                       nodata=-9999) as dst:
+        dst.write(values,1)
+    rendered=np.array(Image.open(BytesIO(preview_png(path))).convert("RGBA"))
+    assert rendered[0,0,3]==0
+    assert rendered[25,18,3]==0
+    assert rendered[22,4,3]==255 and rendered[22,20,3]==255
+    # More than half of the source is NoData, yet the valid terrain still
+    # retains full contrast instead of stretching around -9999 meters.
+    assert int(rendered[22,20,0])-int(rendered[22,4,0])>200
+
+
+def test_raster_source_metadata_keeps_native_units_and_declared_datum(tmp_path):
+    path=tmp_path/"source-metadata.tif"
+    with rasterio.open(path,"w",driver="GTiff",width=8,height=8,
+                       count=1,dtype="float32",crs="EPSG:32617",
+                       transform=from_origin(500000,4500000,5,5)) as ds:
+        ds.write(np.ones((8,8),dtype=np.float32),1)
+        ds.update_tags(VERTICAL_UNIT="meter",VERTICAL_DATUM="NAVD88")
+    result=metadata(path)
+    assert result["resolution"]==[5.,5.]
+    assert result["resolution_unit"] in {"metre","meter"}
+    assert result["vertical_unit"]=="meter"
+    assert result["vertical_datum"]=="NAVD88"
+    assert result["acquired_at"] is None
+    with rasterio.open(path,"r+") as ds:
+        ds.update_tags(VERTICAL_DATUM="")
+    assert metadata(path)["vertical_datum"] is None

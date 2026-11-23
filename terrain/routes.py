@@ -2,7 +2,7 @@
 
 import asyncio
 from threading import Event
-from fastapi import APIRouter,HTTPException,Request
+from fastapi import APIRouter,HTTPException,Request,Header
 from pydantic import BaseModel,Field
 from starlette.concurrency import run_in_threadpool
 
@@ -61,8 +61,35 @@ async def area(request:Request,body:TerrainInput)->dict:
 @router.post("/profile")
 async def profile(request:Request,body:TerrainInput)->dict:
     try:
+        # Profile elevations and output field names are always in meters.
+        # Honor the API unit contract rather than silently accepting feet.
+        if body.vertical_unit!="meter":
+            raise RasterError("Terrain model currently supports vertical elevations in meters only.")
         return await run_cancelable(request,elevation_profile,raster(body.image_id),
                                        body.geometry,body.samples)
+    except (GeometryError,RasterError,ValueError) as error:
+        raise HTTPException(status_code=422,detail=str(error)) from error
+
+
+class DEMPrepareInput(BaseModel):
+    image_ids:list[str]=Field(min_length=1,max_length=4)
+    mode:str
+    geometry:dict|None=None
+    resolution_m:float|None=Field(default=None,ge=1,le=1000)
+    sampling:str="bilinear"
+
+
+@router.post("/dem/prepare",status_code=201)
+async def prepare_dem_asset(request:Request,body:DEMPrepareInput,
+                            token:str|None=Header(default=None,alias="X-GeoFathom-Admin-Token")):
+    """Prepare a locally stored elevation product with the import permission."""
+    from imagery.routes import require_raster_import
+    from .dem_processing import prepare_dem
+    require_raster_import(request,token)
+    try:
+        paths=[raster(identifier) for identifier in body.image_ids]
+        return await run_cancelable(request,prepare_dem,paths,body.mode,
+                                    body.geometry,body.resolution_m,body.sampling)
     except (GeometryError,RasterError,ValueError) as error:
         raise HTTPException(status_code=422,detail=str(error)) from error
 
@@ -76,12 +103,33 @@ class AdvancedTerrainInput(BaseModel):
     point:tuple[float,float]|None=None
     observer_height:float=Field(default=1.7,ge=0,le=1000)
     target_height:float=Field(default=0,ge=0,le=1000)
+    end_point:tuple[float,float]|None=None
+    max_slope:float=Field(default=30,ge=0,le=90)
+    min_elevation:float=Field(default=-12000,ge=-12000,le=12000)
+    max_elevation:float=Field(default=12000,ge=-12000,le=12000)
+    max_tri:float=Field(default=100,ge=0,le=100000)
+    stream_cells:int=Field(default=100,ge=1,le=1000000)
+    azimuth:float=Field(default=315,ge=0,le=360)
+    altitude:float=Field(default=45,ge=0,le=90)
+    section_spacing:float=Field(default=50,ge=1,le=10000)
+    section_width:float=Field(default=20,ge=1,le=2000)
+    texture_image_id:str|None=None
+    fill_sinks:bool=False
+    consider_curvature:bool=False
+    refraction_coeff:float=Field(default=0.13,ge=0,le=0.5)
+    comparison_image_id:str|None=None
+    observer_points:list[tuple[float,float]]|None=Field(default=None,min_length=2,max_length=4)
 
 @router.post("/advanced")
 async def advanced(request:Request,body:AdvancedTerrainInput):
     from .advanced import run_terrain
     try:
         return await run_cancelable(request,run_terrain,raster(body.image_id),body.geometry,
-            body.operation,body.interval,body.reference,body.point,body.observer_height,body.target_height)
+            body.operation,body.interval,body.reference,body.point,body.observer_height,body.target_height,
+            body.end_point,body.max_slope,body.min_elevation,body.max_elevation,body.max_tri,body.stream_cells,body.azimuth,body.altitude,
+            body.section_spacing,body.section_width,raster(body.texture_image_id) if body.texture_image_id and body.operation=='mesh' else None,
+            body.fill_sinks,body.consider_curvature,body.refraction_coeff,
+            raster(body.comparison_image_id) if body.operation=="dem_difference" and body.comparison_image_id else None,
+            body.observer_points)
     except (GeometryError,RasterError,ValueError,OverflowError) as error:
         raise HTTPException(status_code=422,detail=str(error)) from error
