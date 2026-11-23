@@ -91,8 +91,10 @@ export default function SurveyTools({
   const modeName=buttonModes.find(item=>item.mode===mode)?.title;
   const toolbar=<div className={'survey-command-bar'+(mode?' is-drawing':'')}>
       <div className="survey-mode-grid" role="group" aria-label="Draw and reshape tools">
-        {buttonModes.map(item => (
+        <div className="survey-mode-family survey-primary-modes" role="group" aria-label="Drawing tools">
+          {buttonModes.slice(0,5).map(item => (
           <button key={item.mode} className={mode === item.mode ? 'active' : ''}
+            aria-label=<span className="survey-button-caption">{item.title}</span>
             title={item.mode==='trace-along'&&!traceReady?
               'Save a vector line in the active project before tracing.':
               ['hole','split'].includes(item.mode)&&(!geometry||!['Polygon','MultiPolygon'].includes(geometry.type))?
@@ -102,14 +104,23 @@ export default function SurveyTools({
             aria-pressed={mode===item.mode} onClick={() => mode===item.mode?onCancel():onStart(item.mode)}
             disabled={(busy&&mode!==item.mode)||(item.mode==='trace-along'&&!traceReady)||
               (['hole','split'].includes(item.mode)&&
-                (locked||(geometry?.type!=='Polygon'&&geometry?.type!=='MultiPolygon')))}>
-            {item.mode === 'circle' ? <Circle size={15}/> :
-             item.mode === 'line' ? <Ruler size={15}/> :
-             item.mode === 'split' || item.mode === 'trace-along' ? <Scissors size={15}/> :
-             item.mode === 'hole' ? <Eraser size={15}/> : <Pencil size={15}/>}
-            {item.title}
-          </button>
-        ))}
+                (locked||(geometry?.type!=='Polygon'&&geometry?.type!=='MultiPolygon')))}
+        </div>
+        <div className="survey-mode-family survey-topology-tools" role="group" aria-label="Topology tools">
+          {buttonModes.slice(5).map(item => (
+          <button key={item.mode} className={mode === item.mode ? 'active' : ''}
+            aria-label=<span className="survey-button-caption">{item.title}</span>
+            title={item.mode==='trace-along'&&!traceReady?
+              'Save a vector line in the active project before tracing.':
+              ['hole','split'].includes(item.mode)&&(!geometry||!['Polygon','MultiPolygon'].includes(geometry.type))?
+                'Select an editable polygon first.':
+                'Draw '+item.title.toLowerCase()+
+                (({point:' (P)',polygon:' (G)',line:' (L)',rectangle:' (R)',circle:' (C)'} as Partial<Record<Exclude<ShapeMode,null>,string>>)[item.mode]??'')}
+            aria-pressed={mode===item.mode} onClick={() => mode===item.mode?onCancel():onStart(item.mode)}
+            disabled={(busy&&mode!==item.mode)||(item.mode==='trace-along'&&!traceReady)||
+              (['hole','split'].includes(item.mode)&&
+                (locked||(geometry?.type!=='Polygon'&&geometry?.type!=='MultiPolygon')))}
+        </div>
       </div>
       {mode && (
         <div className="survey-action-bar survey-sketch-session" role="group" aria-label="Active drawing">
