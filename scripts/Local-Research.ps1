@@ -20,7 +20,9 @@ function CommandPath([string]$name) {
 function Checked([string]$exe,[string[]]$arguments,[string]$label) {
     Write-Host ''
     Write-Host "==> $label" -ForegroundColor Cyan
-    & $exe @arguments
+    # Display native output without returning it as a PowerShell function
+    # result; Ensure-Node must return only the npm executable path.
+    & $exe @arguments | Out-Host
     if($LASTEXITCODE -ne 0){throw "$label failed (exit $LASTEXITCODE)"}
 }
 function Ensure-Python {
@@ -29,8 +31,14 @@ function Ensure-Python {
         Checked $system @('-m','venv',(Join-Path $root '.venv')) 'Create isolated Python environment'
     }
     Checked $venv @('-c','import sys; assert sys.version_info >= (3,11), "Python 3.11+ is required"') 'Check Python version'
-    & $venv -c 'import fastapi, rasterio, pyproj, shapely, uvicorn, pytest' 2>$null
-    if($LASTEXITCODE -ne 0){
+    $depsReady=$false
+    try {
+        & $venv -c 'import fastapi, rasterio, pyproj, shapely, uvicorn, pytest' 2>$null | Out-Null
+        $depsReady=($LASTEXITCODE -eq 0)
+    } catch {
+        $depsReady=$false
+    }
+    if(-not $depsReady){
         Checked $venv @('-m','pip','install','-c','requirements/windows.lock','-e','.[dev]') 'Install locked Windows GIS dependencies'
     }
 }
