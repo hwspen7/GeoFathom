@@ -1045,7 +1045,7 @@ export interface TerrainResearchInput{
  pairwise?:number[][]|null;
 }
 export interface TerrainResearchResult{
- schema:string;metrics:Record<string,number>;
+ schema:string;metrics:Record<string,number>;preview_raster:TerrainRaster;
  model:{weights:number[];ahp:{consistency_ratio:number}|null;
   uncertainty:{trials:number;seed:number;score_sd_mean?:number;above_threshold_frequency_mean?:number}};
  sensitivity:Array<{criterion:string;direction:'up'|'down';weight:number;mean_score:number;
