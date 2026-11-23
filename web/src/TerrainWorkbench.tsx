@@ -139,6 +139,11 @@ export default function TerrainWorkbench(p:Props){
  const [runHistory,setRunHistory]=useState(()=>readTerrainRuns(p.projectId));
  const [researchRun,setResearchRun]=useState<TerrainResearchResult|null>(null);
  const [researchTab,setResearchTab]=useState<'overview'|'figures'|'data'>('overview');
+ const researchStudyKey=useMemo(
+   ()=>JSON.stringify({demId:p.raster?.id??null,geometry:p.geometry,projectId:p.projectId}),
+   [p.raster?.id,p.geometry,p.projectId],
+ );
+ useEffect(()=>setResearchRun(null),[researchStudyKey]);
  const [historyStorageError,setHistoryStorageError]=useState(false);
  useEffect(()=>{setHistoryStorageError(!writeTerrainRuns(p.projectId,runHistory));},[runHistory,p.projectId]);
  useEffect(()=>{
@@ -304,12 +309,14 @@ export default function TerrainWorkbench(p:Props){
  useEffect(()=>()=>{fetchAbort.current?.abort();},[fetchKey]);
  useEffect(()=>()=>{latest.current.onFetchTarget?.(null);},[]);
  // Published result layers are independent from the currently selected input.
- useEffect(()=>{latest.current.onPreview(records.filter(r=>r.visible).flatMap(r=>r.advanced?.features??[]));
+ useEffect(()=>{
+   const hasResearch=leftTab==='research'&&researchRun!==null;
+   latest.current.onPreview(hasResearch?[]:records.filter(r=>r.visible).flatMap(r=>r.advanced?.features??[]));
    latest.current.onRasterPreview?.([
-     ...records.flatMap(r=>r.visible&&r.advanced?.raster?[{id:r.id,title:r.title,raster:r.advanced.raster,opacity:r.opacity,resampling:r.resampling}]:[]),
-     ...(researchRun?.preview_raster?[{id:'research-'+researchRun.archive_sha256.slice(0,12),title:'Research suitability',raster:researchRun.preview_raster,opacity:.58,resampling:'linear' as const}]:[]),
+     ...(!hasResearch?records.flatMap(r=>r.visible&&r.advanced?.raster?[{id:r.id,title:r.title,raster:r.advanced.raster,opacity:r.opacity,resampling:r.resampling}]:[]):[]),
+     ...(hasResearch&&researchRun?.preview_raster?[{id:'research-'+researchRun.archive_sha256.slice(0,12),title:'Research suitability',raster:researchRun.preview_raster,opacity:.58,resampling:'linear' as const}]:[]),
    ]);
- },[records,researchRun]);
+ },[records,researchRun,leftTab]);
  useEffect(()=>{
    if(!p.active||!p.connected)return;
    let current=true;
