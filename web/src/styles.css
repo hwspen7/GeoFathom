@@ -1276,3 +1276,47 @@ button:disabled { opacity: .45; cursor: not-allowed; }
   .desktop-gis .gis-workspace-menu>summary::before{content:"Work";font-size:11px}
   .desktop-gis .gis-connection{font-size:0}
 }
+
+
+/* The project drawer is a three-page fixed console, not a long scrollable stack.
+   Repeated records are paged in place and the underlying data stay mounted. */
+.desktop-gis .gis-project-drawer{
+  display:flex;flex-direction:column;min-height:0;overflow:hidden;
+}
+.desktop-gis .gis-project-drawer[hidden]{display:none!important}
+.desktop-gis .gis-project-drawer>.workspace-dock-heading{flex:0 0 39px;height:39px}
+.desktop-gis .gis-drawer-tabs{
+  flex:0 0 38px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
+  align-items:stretch;padding:0 9px;background:#fafcfd;border-bottom:1px solid #dce5eb;
+}
+.desktop-gis .gis-drawer-tabs button{
+  border:0;border-bottom:2px solid transparent;background:transparent;
+  padding:6px 4px;color:#6d8798;font-size:11px;font-weight:650;
+}
+.desktop-gis .gis-drawer-tabs button[aria-selected=true]{border-bottom-color:#287da6;color:#1d6185}
+.desktop-gis .gis-project-drawer>.sidebar-scroll{
+  min-height:0;flex:1;overflow:hidden!important;padding:9px 13px!important;
+  scrollbar-width:none;overscroll-behavior:none;
+}
+.desktop-gis .gis-project-drawer .panel-section[hidden]{display:none!important}
+.desktop-gis .gis-project-drawer .panel-section{border-top:0;margin:0;padding:4px 0 10px}
+.desktop-gis .gis-project-drawer .panel-section+.panel-section:not([hidden]){
+  border-top:1px solid #e3e9ee;padding-top:10px;
+}
+.desktop-gis .gis-project-drawer .project-panel{display:flex;flex-direction:column;gap:6px;min-height:0}
+.desktop-gis .gis-project-drawer .project-create{margin:0}
+.desktop-gis .gis-project-drawer .layer-row{min-height:29px}
+.desktop-gis .gis-record-pager{
+  display:flex;align-items:center;justify-content:space-between;gap:7px;
+  padding:6px 0 0;color:#6d8393;font-size:10px;font-variant-numeric:tabular-nums;
+}
+.desktop-gis .gis-record-pager button{
+  border:1px solid #d5e1e9;background:#fff;border-radius:5px;
+  padding:5px 8px;min-height:27px;color:#32657e;font-size:10px;
+}
+.desktop-gis .gis-record-pager button:disabled{opacity:.4}
+.desktop-gis .gis-project-drawer .scratch-list,
+.desktop-gis .gis-project-drawer .pinned-places,
+.desktop-gis .gis-project-drawer .results{max-height:none;overflow:hidden}
+.desktop-gis .gis-project-drawer .scratch-row{min-height:31px}
+.desktop-gis .gis-project-drawer .pinned-places .survey-action-bar{min-height:28px}
