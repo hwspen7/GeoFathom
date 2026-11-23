@@ -17,7 +17,7 @@ export interface TerrainParameterForm {
  observerPoints:[string,string][];drape:boolean;textureImageId:string|null;
  gradientMethod:'horn'|'zevenbergen_thorne';slopeClasses:'standard'|'detailed'|'broad';
  neighborhoodRadius:string;viewshedDistance:string;viewshedAzimuth:string;
- viewshedWidth:string;routeModel:'surface'|'distance'|'gentle';meshSamples:string;
+ viewshedWidth:string;routeModel:'surface'|'distance'|'gentle';meshSamples:string;streamOrderScheme:'strahler'|'shreve';
 }
 
 export function terrainParametersForOperation(
@@ -84,6 +84,7 @@ export function terrainParametersForOperation(
    break;
   case 'streams':
   case 'stream_order':
+   if(operation==='stream_order')params.stream_order_scheme=form.streamOrderScheme;
    params.fill_sinks=form.fillSinks;
    params.min_stream_cells=Number(form.streamCells);
    break;

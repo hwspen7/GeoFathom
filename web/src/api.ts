@@ -985,7 +985,7 @@ export interface AdvancedTerrainResult {
   cell_area_m2:number;metrics:Record<string,number>;warning:string;
   algorithm_options?:{gradient_method:string;slope_classes:string;
     neighborhood_radius_cells?:number|null;route_model?:string|null;
-    mesh_samples?:number|null;maximum_distance_m?:number|null;
+    mesh_samples?:number|null;stream_order_scheme?:string|null;maximum_distance_m?:number|null;
     view_azimuth_deg?:number|null;view_width_deg?:number|null};
   quality?:{status:string;reference_validation:string;uncertainty:string;
     source_overlap_pct:number;valid_study_cell_pct:number;
@@ -995,7 +995,7 @@ export interface AdvancedTerrainResult {
 export function advancedTerrain(body:{image_id:string;geometry:GeoJSON.Geometry;operation:TerrainOperation;
   interval:number;reference:number;point:[number,number]|null;observer_height:number;target_height:number;end_point?:[number,number]|null;max_slope?:number;min_elevation?:number;max_elevation?:number;max_tri?:number;stream_cells?:number;azimuth?:number;altitude?:number;section_spacing?:number;section_width?:number;texture_image_id?:string|null;fill_sinks?:boolean;consider_curvature?:boolean;refraction_coeff?:number;comparison_image_id?:string|null;observer_points?:[number,number][]|null;gradient_method?:'horn'|'zevenbergen_thorne';slope_classes?:'standard'|'detailed'|'broad';mfd_exponent?:number;neighborhood_radius?:number;max_distance_m?:number;
   view_azimuth?:number;view_width?:number;route_model?:'surface'|'distance'|'gentle';
-  mesh_samples?:number},signal?:AbortSignal):Promise<AdvancedTerrainResult>{
+  mesh_samples?:number;stream_order_scheme?:'strahler'|'shreve'},signal?:AbortSignal):Promise<AdvancedTerrainResult>{
   return request('/terrain/advanced',{signal,method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
 }
 

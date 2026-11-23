@@ -9,7 +9,7 @@ const base:TerrainParameterForm={
  comparisonId:'',observerPoints:[['',''],['','']],drape:false,
  textureImageId:null,gradientMethod:'horn',slopeClasses:'standard',
  neighborhoodRadius:'1',viewshedDistance:'0',viewshedAzimuth:'0',
- viewshedWidth:'360',routeModel:'surface',meshSamples:'256',
+ viewshedWidth:'360',routeModel:'surface',meshSamples:'256',streamOrderScheme:'strahler',
 };
 describe('scientific operation-specific input manifests',()=>{
  it('does not invent a zero-degree observer for a contour experiment',()=>{
@@ -34,7 +34,9 @@ describe('scientific operation-specific input manifests',()=>{
   expect(terrainParametersForOperation('flow_accumulation_mfd',{...filled,mfdExponent:'2.5'}))
     .toEqual({fill_sinks:true,mfd_exponent:2.5});
    expect(terrainParametersForOperation('stream_order',filled))
-   .toEqual({fill_sinks:true,min_stream_cells:25});
+   .toEqual({stream_order_scheme:'strahler',fill_sinks:true,min_stream_cells:25});
+  expect(terrainParametersForOperation('stream_order',{...filled,streamOrderScheme:'shreve'}))
+   .toMatchObject({stream_order_scheme:'shreve'});
   const viewshed=terrainParametersForOperation('viewshed_multi',filled);
   expect(viewshed.observer_points).toEqual([
    [-83.001,40.01],[-83.02,40.015]]);

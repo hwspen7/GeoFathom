@@ -138,6 +138,7 @@ export default function TerrainWorkbench(p:Props){
  const [viewshedWidth,setViewshedWidth]=useState('360');
  const [routeModel,setRouteModel]=useState<'surface'|'distance'|'gentle'>('surface');
  const [meshSamples,setMeshSamples]=useState('256');
+ const [streamOrderScheme,setStreamOrderScheme]=useState<'strahler'|'shreve'>('strahler');
  const [fillSinks,setFillSinks]=useState(true),[considerCurvature,setConsiderCurvature]=useState(true),[refractionCoeff,setRefractionCoeff]=useState('0.13');
  const [sectionSpacing,setSectionSpacing]=useState('50'),[sectionWidth,setSectionWidth]=useState('20'),[drape,setDrape]=useState(false),[expanded,setExpanded]=useState(false);
  const [pickEnd,setPickEnd]=useState(false);
@@ -303,7 +304,7 @@ export default function TerrainWorkbench(p:Props){
    considerCurvature,refractionCoeff,comparisonId,observerPoints,drape,
    textureImageId:p.imageRaster?.id??null,gradientMethod,slopeClasses,
    neighborhoodRadius,viewshedDistance,viewshedAzimuth,viewshedWidth,
-   routeModel,meshSamples,
+   routeModel,meshSamples,streamOrderScheme,
  });
  // Only edits to the actual operation inputs invalidate a scientific run.
  const inputKey=JSON.stringify([dem?.id,analysisGeometry,operation,scientificParameters]);
@@ -380,7 +381,7 @@ export default function TerrainWorkbench(p:Props){
          neighborhood_radius:Number(neighborhoodRadius),
          max_distance_m:Number(viewshedDistance),view_azimuth:Number(viewshedAzimuth),
          view_width:Number(viewshedWidth),route_model:routeModel,
-         mesh_samples:Number(meshSamples)},controller.signal);
+         mesh_samples:Number(meshSamples),stream_order_scheme:streamOrderScheme},controller.signal);
      if(ticket!==sequence.current||controller.signal.aborted)return;
      // Commit scientific data before reporting a completed run. An immediate
      // reload or project switch must never race a pending cache write.
@@ -1024,7 +1025,14 @@ export default function TerrainWorkbench(p:Props){
          value={mfdExponent} onChange={e=>setMfdExponent(e.target.value)}/>
        <small className="compact-notice">Larger values concentrate flow toward steeper downslope neighbors.</small>
      </label>}
-     {(operation==='streams'||operation==='stream_order')&&<label>Minimum upstream cells<input type="number" min="1" step="1" value={streamCells} onChange={e=>setStreamCells(e.target.value)}/></label>}
+     {operation==='stream_order'&&<label>Stream hierarchy model
+        <select aria-label="Stream hierarchy algorithm" value={streamOrderScheme}
+          onChange={e=>setStreamOrderScheme(e.target.value as 'strahler'|'shreve')}>
+          <option value="strahler">Strahler · confluence order</option>
+          <option value="shreve">Shreve · additive magnitude</option>
+        </select>
+      </label>}
+      {(operation==='streams'||operation==='stream_order')&&<label>Minimum upstream cells<input type="number" min="1" step="1" value={streamCells} onChange={e=>setStreamCells(e.target.value)}/></label>}
      {['flow_direction','flow_accumulation','flow_accumulation_mfd','streams','stream_order','watershed'].includes(operation)&&<label className="gis-check"><input aria-label="Condition drainage DEM" type="checkbox" checked={fillSinks} onChange={e=>setFillSinks(e.target.checked)}/> Fill depressions and route flat cells</label>}
      {['visibility','viewshed_multi'].includes(operation)&&<details className="terrain-method-settings">
         <summary>Viewing sector and range</summary>
