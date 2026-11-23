@@ -161,10 +161,18 @@ def _make_bundle(files, metadata):
                           for name, payload in sorted(contents.items())},
                 "replay_note": "Aligned input rasters are included; original acquisition files are identified by SHA-256 but are not included."}
     stream = BytesIO()
+    from zipfile import ZipInfo
+    def stable(name):
+        # Fixed timestamps and member order make identical studies bitwise
+        # reproducible across executions (provided inputs and dependencies match).
+        info = ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
+        info.compress_type = ZIP_DEFLATED
+        info.external_attr = 0o644 << 16
+        return info
     with ZipFile(stream, "w", compression=ZIP_DEFLATED, compresslevel=6) as bundle:
         for name, payload in sorted(contents.items()):
-            bundle.writestr(name, payload)
-        bundle.writestr("manifest.json", _canonical(manifest))
+            bundle.writestr(stable(name), payload)
+        bundle.writestr(stable("manifest.json"), _canonical(manifest))
     return stream.getvalue(), manifest
 
 
@@ -179,6 +187,11 @@ def verify_research_bundle(data):
                 raise RasterError("Research archive contains unsafe or duplicate paths.")
             if "manifest.json" not in names or "analysis.json" not in names:
                 raise RasterError("Research archive is missing a manifest or analysis.")
+            # Guard the archive verifier against zip bombs and oversized inputs.
+            if sum(item.file_size for item in bundle.infolist()) > 120_000_000 or any(
+                item.file_size > 50_000_000 for item in bundle.infolist()
+            ):
+                raise RasterError("Research archive exceeds verification safety limits.")
             manifest = json.loads(bundle.read("manifest.json"))
             if manifest.get("schema") != SCHEMA or manifest.get("hash_algorithm") != "SHA-256":
                 raise RasterError("Unsupported research manifest.")
@@ -195,7 +208,7 @@ def verify_research_bundle(data):
             return {"valid": True, "files": len(entries),
                     "source_sha256": [entry["sha256"] for entry in metadata["sources"]],
                     "model": metadata["model"]}
-    except (BadZipFile, KeyError, ValueError, TypeError, json.JSONDecodeError) as exc:
+    except (BadZipFile, KeyError, ValueError, TypeError, OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise RasterError("Invalid research archive.") from exc
 
 
