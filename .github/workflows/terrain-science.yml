@@ -1,0 +1,47 @@
+name: Terrain scientific reference gate
+
+on:
+  push:
+    branches:
+      - main
+      - feature/data-export-topology-workbench
+    paths:
+      - 'terrain/**'
+      - 'tests/test_terrain_*'
+      - 'benchmarks/terrain_reference.py'
+      - '.github/workflows/terrain-science.yml'
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  independent-gdal:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install independent GDAL command-line reference
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends gdal-bin
+          gdaldem --version
+      - name: Install GeoFathom numerical dependencies
+        run: python -m pip install -c requirements/linux.lock -e ".[dev]"
+      - name: Run independent GDAL cross-implementation comparisons
+        run: |
+          mkdir -p build
+          python benchmarks/terrain_reference.py --strict --output build/terrain-reference.json
+      - name: Test P0 scientific invariants and edge cases
+        run: |
+          python -m pytest -q tests/test_terrain_scope_p0.py tests/test_terrain_professional.py tests/test_terrain_conditioning.py tests/test_terrain_gradient_unification.py tests/test_terrain_catalog.py
+      - name: Preserve numeric comparisons and failure evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: terrain-scientific-reference
+          path: build/terrain-reference.json
+          if-no-files-found: warn
+          retention-days: 30
