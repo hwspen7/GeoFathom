@@ -39,6 +39,25 @@ for(const width of [1100,1280,1600])test(`drawing exits and error recovery stay 
  await page.setViewportSize({width,height:760});
  const {toolbar,map}=await setup(page);
  await page.screenshot({path:testInfo.outputPath('survey-objects-'+width+'.png')});
+ // The map ends above the dedicated status row; dock footers do not overlap it.
+ const chrome=await toolbar.boundingBox();
+ const mapBox=await map.boundingBox();
+ const statusBox=await page.locator('.gis-status').boundingBox();
+ const bodyBox=await page.locator('.gis-body').boundingBox();
+ expect(chrome).not.toBeNull();
+ expect(mapBox).not.toBeNull();
+ expect(statusBox).not.toBeNull();
+ expect(bodyBox).not.toBeNull();
+ expect(chrome!.height).toBeLessThanOrEqual(width<=1250?75:46);
+ expect(chrome!.y+chrome!.height).toBeLessThanOrEqual(mapBox!.y+1);
+ expect(bodyBox!.y+bodyBox!.height).toBeLessThanOrEqual(statusBox!.y+1);
+ expect(statusBox!.y+statusBox!.height).toBeLessThanOrEqual(761);
+ for(const footer of await page.locator('.gis-operations > .workspace-fixed-footer:not(:empty), .gis-results-monitor > .workspace-fixed-footer:not(:empty)').all()){
+  if(!await footer.isVisible())continue;
+  const bounds=(await footer.boundingBox())!;
+  expect(bounds.y+bounds.height).toBeLessThanOrEqual(statusBox!.y+1);
+ }
+
  for(const name of ['Point','Polygon','Line','Rectangle','Circle','Cut hole','Split line']){
   const tool=toolbar.getByRole('button',{name,exact:true});
   await tool.click();
