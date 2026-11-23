@@ -20,7 +20,7 @@ test('toolbar offers live area, exact dimensions and basemap switching',async({p
  const label=page.getByLabel('Live map dimensions').locator('.map-dimension-total');
  await expect(label).not.toContainText('~ ');
  const exact=await label.textContent();
- await openProjectDrawer(page);
+ await openProjectDrawer(page,'layers');
  await page.getByLabel('Basemap',{exact:true}).selectOption('satellite');
  await expect(label).toHaveText(exact!);
  await page.getByLabel('Basemap',{exact:true}).selectOption('blank');
