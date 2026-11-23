@@ -1473,3 +1473,29 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 @media(max-width:1440px){
   .desktop-gis .workspace-module-bar button{padding-left:6px;padding-right:6px;font-size:10px}
 }
+
+/* Non-scrolling Data / Export panels occupy the full remaining dock.
+   Each task is a fixed page; provider administration can use the existing
+   full-workspace control when editing a long external service specification. */
+.desktop-gis .gis-operations .sidebar-scroll.data-fixed-operations{
+  overflow:hidden!important;display:flex;flex-direction:column;
+  min-height:0;padding:7px 10px 8px;
+}
+.desktop-gis .data-fixed-operations>.workspace-objects[hidden]{display:none!important}
+.desktop-gis .data-fixed-operations>.panel-section[hidden]{display:none!important}
+.desktop-gis .data-fixed-operations>.panel-section:not([hidden]){
+  display:flex;flex-direction:column;flex:1;min-height:0;
+  border:0;padding:0;margin:0;
+}
+.desktop-gis .data-fixed-operations .data-workbench,
+.desktop-gis .data-fixed-operations .export-workbench{
+  flex:1;min-height:0;overflow:hidden;
+}
+.desktop-gis .data-workbench>.data-page:not([hidden]){
+  flex:1;min-height:0;overflow:hidden;
+}
+.desktop-gis .data-fixed-operations>.panel-section .export-specialized-actions{
+  display:flex;align-items:center;gap:5px;flex-wrap:wrap;
+}
+.desktop-gis .data-page-buttons button{padding:5px 4px;font-size:10px}
+.desktop-gis .data-network-result-row{margin:3px 0}
