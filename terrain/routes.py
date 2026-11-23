@@ -122,6 +122,7 @@ class AdvancedTerrainInput(BaseModel):
     observer_points:list[tuple[float,float]]|None=Field(default=None,min_length=2,max_length=4)
     gradient_method:Literal['horn','zevenbergen_thorne']='horn'
     slope_classes:Literal['standard','detailed','broad']='standard'
+    mfd_exponent:float=Field(default=1.1,ge=0.5,le=8.0)
 
 @router.post("/advanced")
 async def advanced(request:Request,body:AdvancedTerrainInput):
@@ -133,6 +134,6 @@ async def advanced(request:Request,body:AdvancedTerrainInput):
             body.section_spacing,body.section_width,raster(body.texture_image_id) if body.texture_image_id and body.operation=='mesh' else None,
             body.fill_sinks,body.consider_curvature,body.refraction_coeff,
             raster(body.comparison_image_id) if body.operation=="dem_difference" and body.comparison_image_id else None,
-            body.observer_points,body.gradient_method,body.slope_classes)
+            body.observer_points,body.gradient_method,body.slope_classes,body.mfd_exponent)
     except (GeometryError,RasterError,ValueError,OverflowError) as error:
         raise HTTPException(status_code=422,detail=str(error)) from error
