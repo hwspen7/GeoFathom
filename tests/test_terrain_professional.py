@@ -188,3 +188,22 @@ def test_halo_tiled_derivatives_match_full_window_with_nodata(operation):
         expected=full[operation]
     np.testing.assert_allclose(result,expected,rtol=0,atol=1e-10,equal_nan=True)
     assert np.isnan(result[0]).all() and np.isnan(result[:,-1]).all()
+
+
+def test_d8_flow_and_watershed_never_cross_nodata_diagonal_corners():
+    from terrain.advanced import _watershed
+    heights=np.array([[5.,np.nan],[np.nan,1.]])
+    valid=np.array([[True,False],[False,True]])
+    receivers,directions,accum=d8_flow(heights,valid,10,10)
+    assert receivers[0,0]==-1 and receivers[1,1]==-1
+    assert directions[0,0]==0 and directions[1,1]==0
+    assert accum[0,0]==1 and accum[1,1]==1
+    assert np.isnan(accum[0,1]) and np.isnan(accum[1,0])
+    assert _watershed(heights,valid,(1,1),from_origin(0,20,10,10)).sum()==1
+    # Removing only one orthogonal neighbor also blocks a diagonal shortcut;
+    # an ordinary two-step path through the other valid neighbor is allowed.
+    heights=np.array([[5.,np.nan],[4.,1.]])
+    valid=np.array([[True,False],[True,True]])
+    receivers,_,accum=d8_flow(heights,valid,10,10)
+    assert receivers[0,0]==2
+    assert accum[1,1]==3

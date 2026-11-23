@@ -94,6 +94,11 @@ def d8_directions(z, valid, dx, dy, cancel=None):
         rt=slice(max(0,dr),min(h,h+dr));ct=slice(max(0,dc),min(w,w+dc))
         drop=(z[rs,cs]-z[rt,ct])/math.hypot(dr*dy,dc*dx)
         good=valid[rs,cs]&valid[rt,ct]&(drop>best[rs,cs])
+        if dr and dc:
+            # A diagonal D8 receiver is not connected across a NoData
+            # corner unless both side-adjacent cells are valid. Apply the
+            # same topology convention as MFD and least-cost routing.
+            good &= valid[rs,ct]&valid[rt,cs]
         rr,cc=np.indices(drop.shape)
         best[rs,cs][good]=drop[good];dst[rs,cs][good]=((rr+rt.start)*w+cc+ct.start)[good]
         direction[rs,cs][good]=code
