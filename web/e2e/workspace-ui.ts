@@ -2,12 +2,14 @@
  * Project switching and the searchable object tree stay visible outside it.
  */
 import type {Page} from '@playwright/test';
-export async function openProjectDrawer(page:Page){
+export async function openProjectDrawer(page:Page,tab:'project'|'layers'|'search'='project'){
  const drawer=page.getByLabel('Project and layers',{exact:true});
- if(await drawer.isVisible())return;
- const menu=page.locator('.gis-workspace-menu > summary');
- if(!(await page.locator('.gis-workspace-menu[open]').count()))await menu.click();
- await page.locator('.gis-workspace-menu button').filter({hasText:'Project / Layers'}).click();
+ if(!(await drawer.isVisible())){
+   const menu=page.locator('.gis-workspace-menu > summary');
+   if(!(await page.locator('.gis-workspace-menu[open]').count()))await menu.click();
+   await page.locator('.gis-workspace-menu button').filter({hasText:'Project / Layers'}).click();
+ }
+ await drawer.getByRole('tab',{name:tab==='project'?'Project':tab==='layers'?'Layers':'Search',exact:true}).click();
 }
 
 export async function closeProjectDrawer(page:Page){
