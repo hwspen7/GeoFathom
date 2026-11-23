@@ -13,7 +13,7 @@ from imagery.raster import RasterError
 from .engine import _check_dem
 from .cancellation import checkpoint
 from .vertical import vertical_datum
-from .professional import SURFACES, surface, d8_directions, D8
+from .professional import SURFACES, surface, d8_directions, D8, raster_product
 from .hydrology import condition_dem
 
 def _window(path, geometry, maximum, max_cells=1_000_000):
@@ -255,20 +255,20 @@ def _mask_features(mask,affine,crs,name,cancel=None):
 def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,observer_height=1.7,target_height=0.,
                 end_point=None,max_slope=30.,min_elevation=-12000.,max_elevation=12000.,max_tri=100.,
                 stream_cells=100,azimuth=315.,altitude=45.,section_spacing=50.,section_width=20.,texture_path=None,
-                fill_sinks=False,consider_curvature=False,refraction_coeff=0.13,comparison_path=None,cancel=None):
+                fill_sinks=False,consider_curvature=False,refraction_coeff=0.13,comparison_path=None,observer_points=None,cancel=None):
     checkpoint(cancel)
     if operation=="cross_sections":
         from .corridor import cross_sections
         return cross_sections(path,geometry,section_spacing,section_width,cancel)
-    if operation not in {"contours","volume","visibility","watershed","mesh","distribution","dem_difference"}|SURFACES:
+    if operation not in {"contours","volume","visibility","viewshed_multi","watershed","mesh","distribution","dem_difference"}|SURFACES:
         raise RasterError("Unknown terrain operation.")
     # Independent analysis budgets. Local surface derivatives can use large
     # grids; visibility ray tracing and catchment/path traversals remain bounded.
     simple_large={"dem_difference","elevation","slope_map","aspect_map","hillshade","tri","tpi",
                   "curvature","plan_curvature","profile_curvature","cutfill_map","suitability","volume","distribution"}
     extended=operation in simple_large
-    maximum=4096 if extended else 512 if operation=="visibility" else 1024
-    max_cells=8_000_000 if extended else 262_144 if operation=="visibility" else 1_000_000
+    maximum=4096 if extended else 512 if operation in {"visibility","viewshed_multi"} else 1024
+    max_cells=8_000_000 if extended else 262_144 if operation in {"visibility","viewshed_multi"} else 1_000_000
     z,valid,covered,affine,crs,boundary,coverage=_window(path,geometry,maximum,max_cells)
     # Read declared vertical datum metadata independently of numerical
     # heights. Missing metadata remains unknown; never invent NAVD88/EGM96.
@@ -364,6 +364,50 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
         result["metrics"]={"visible_cells":int(seen.sum()),"visible_grid_area_m2":int(seen.sum())*cell,"unknown_cells":int((valid&~known).sum())}
         result["warning"]=("Local cell-center visibility with Earth curvature and configurable atmospheric refraction. "
                            if consider_curvature else "Local planar cell-center visibility; curvature and refraction disabled. ")+"Buildings/vegetation depend on the input DEM/DSM; NoData along rays is unknown."
+    elif operation=="viewshed_multi":
+        # A count raster preserves observer overlap, not merely the union
+        # polygon. Unknown rays stay NoData rather than becoming invisible.
+        if point is not None:
+            raise RasterError("Use observer_points, not point, for multi-observer visibility.")
+        if not isinstance(observer_points,(list,tuple)) or not 2<=len(observer_points)<=4:
+            raise RasterError("Multi-observer visibility requires 2–4 observer points.")
+        origins=[_origin(observer,crs,affine,valid) for observer in observer_points]
+        if len(set(origins))!=len(origins):
+            raise RasterError("Multi-observer points must occupy distinct DEM cells.")
+        rows,cols=np.nonzero(valid)
+        # Preflight total ray steps across all observers before tracing any.
+        total_steps=sum(
+            int(np.maximum(np.abs(rows-r),np.abs(cols-c)).sum())
+            for r,c in origins)
+        if total_steps>100_000_000:
+            raise RasterError("Multi-observer visibility exceeds 100 million ray samples; reduce the area.")
+        count=np.zeros(z.shape,dtype=np.uint8)
+        known=np.zeros(z.shape,dtype=bool)
+        for origin in origins:
+            checkpoint(cancel)
+            visible,available=_visibility(z,valid,origin,affine,
+                observer_height,target_height,cancel,consider_curvature,
+                refraction_coeff)
+            count+=visible.astype(np.uint8)
+            known|=available
+        union=count>0
+        result["raster"]=raster_product(
+            np.where(known,count.astype(float),np.nan),
+            "viewshed_multi",affine,crs,cancel,source_datum=source_datum)
+        result["features"]=_mask_features(union,affine,crs,
+                                          "Visible from any observer",cancel)
+        result["metrics"]={
+            "observer_count":len(origins),
+            "visible_cells":int(union.sum()),
+            "visible_by_all_cells":int((count==len(origins)).sum()),
+            "visible_grid_area_m2":int(union.sum())*cell,
+            "unknown_cells":int((valid&~known).sum()),
+        }
+        result["warning"]=(
+            "Multi-observer cell-center viewshed: raster values count the "
+            "observers with unobstructed sightlines; zero means known but "
+            "unseen, NoData means visibility could not be determined. "
+            "Terrain/DSM only, without independently verified buildings.")
     elif operation=="watershed":
         origin=_origin(point,crs,affine,valid)
         mask=_watershed(flow_z,valid,origin,affine,cancel)

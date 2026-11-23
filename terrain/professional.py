@@ -41,6 +41,7 @@ RASTER_UNITS = {
     "flow_accumulation":"cells", "flow_accumulation_mfd":"cell_equivalents",
     "streams":"binary", "stream_order":"Strahler_order",
     "suitability":"binary", "least_cost":"binary",
+    "viewshed_multi":"observer_count",
 }
 
 def derivatives(z, valid, dx, dy):
@@ -178,6 +179,16 @@ def classification(values,operation):
         classes=np.full(values.shape,-1,dtype=np.int16)
         for i,code in enumerate(codes):classes[finite&(values==code)]=i
         return classes,["Sink/flat","N","NE","E","SE","S","SW","W","NW"],DIRECTION_COLORS
+    elif operation=="viewshed_multi":
+        # A small bounded observer set gives stable, exact integer classes.
+        levels=np.unique(values[finite].astype(np.int32))
+        if np.any(levels<0) or np.any(levels>4):
+            raise RasterError("Invalid multi-observer count raster.")
+        classes=np.full(values.shape,-1,dtype=np.int16)
+        for i,level in enumerate(levels):
+            classes[finite&(values==level)]=i
+        palette=("#a6adb4","#80c6bb","#4496b7","#316caa","#183c85")
+        return classes,[f"{int(level)} observers" for level in levels],tuple(palette[int(level)] for level in levels)
     elif operation=="stream_order":
         # Exact integer Strahler levels remain categorical instead of
         # being grouped into arbitrary continuous elevation bins.

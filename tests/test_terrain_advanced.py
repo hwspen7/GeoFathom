@@ -220,3 +220,50 @@ def test_surface_output_datum_is_declared_not_assumed(dem):
         with mem.open() as product:
             assert product.tags()["TERRAIN_UNIT"]=="degree"
             assert product.tags()["TERRAIN_SOURCE_VERTICAL_DATUM"]=="NAVD88"
+
+
+def test_multi_observer_visibility_counts_and_nodata_match_single_ray_model(dem):
+    import base64
+    from rasterio.io import MemoryFile
+    from terrain.advanced import _window,_origin,_visibility
+    path,polygon=dem
+    t=Transformer.from_crs("EPSG:32617","EPSG:4326",always_xy=True)
+    observers=[t.transform(500035,4499965),t.transform(500165,4499835)]
+    result=run_terrain(path,polygon,"viewshed_multi",observer_points=observers)
+    assert result["metrics"]["observer_count"]==2
+    assert result["raster"]["unit"]=="observer_count"
+    values,mask,_,affine,crs,_,_=_window(path,polygon,512,262144)
+    first=_origin(observers[0],crs,affine,mask)
+    second=_origin(observers[1],crs,affine,mask)
+    visible_a,known_a=_visibility(values,mask,first,affine,1.7,0.)
+    visible_b,known_b=_visibility(values,mask,second,affine,1.7,0.)
+    expected=np.where(known_a|known_b,
+                      visible_a.astype(float)+visible_b.astype(float),np.nan)
+    with MemoryFile(base64.b64decode(result["raster"]["geotiff"])) as mem:
+        with mem.open() as dst:
+            actual=dst.read(1)
+            np.testing.assert_allclose(actual,expected,rtol=0,atol=0,equal_nan=True)
+            assert dst.tags()["TERRAIN_UNIT"]=="observer_count"
+    assert result["metrics"]["visible_cells"]==int(np.count_nonzero(
+        visible_a|visible_b))
+    assert result["metrics"]["visible_by_all_cells"]==int(np.count_nonzero(
+        visible_a&visible_b))
+    assert result["metrics"]["unknown_cells"]==int(np.count_nonzero(
+        mask&~(known_a|known_b)))
+
+
+def test_multi_viewshed_rejects_unusable_observer_inputs(dem):
+    path,polygon=dem
+    t=Transformer.from_crs("EPSG:32617","EPSG:4326",always_xy=True)
+    point=t.transform(500035,4499965)
+    with pytest.raises(RasterError,match="2–4"):
+        run_terrain(path,polygon,"viewshed_multi",observer_points=[point])
+    with pytest.raises(RasterError,match="distinct DEM cells"):
+        run_terrain(path,polygon,"viewshed_multi",
+                    observer_points=[point,point])
+    with pytest.raises(RasterError,match="not point"):
+        run_terrain(path,polygon,"viewshed_multi",point=point,
+                    observer_points=[point,t.transform(500165,4499835)])
+    with pytest.raises(RasterError,match="valid selected DEM cell"):
+        run_terrain(path,polygon,"viewshed_multi",
+                    observer_points=[point,(0.,0.)])
