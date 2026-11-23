@@ -1779,3 +1779,16 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .desktop-gis .terrain-output-downloads button{
   min-height:27px;font-size:10px;
 }
+
+/* Run parameter manifest mirrors the exact engine inputs without JSON clutter. */
+.desktop-gis .terrain-parameter-grid{display:grid;gap:3px;min-width:0}
+.desktop-gis .terrain-parameter-grid>div{
+  display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+  gap:6px;padding:3px 0;border-bottom:1px solid #e9eef2;
+}
+.desktop-gis .terrain-parameter-grid span{
+  color:#72889a;text-transform:capitalize;overflow-wrap:anywhere;
+}
+.desktop-gis .terrain-parameter-grid strong{
+  color:#33586c;font-weight:600;text-align:right;overflow-wrap:anywhere;
+}
