@@ -133,6 +133,12 @@ export default function App() {
   const [terrainLineDrawing,setTerrainLineDrawing]=useState(false);
   const [terrainVisible,setTerrainVisible]=useState(true);
   const [showLayers,setShowLayers]=useState(false);
+  // Keep project management, map layers and place discovery on independent fixed pages.
+  const [drawerTab,setDrawerTab]=useState<'project'|'layers'|'search'>('project');
+  const [scratchPage,setScratchPage]=useState(0);
+  const [pinPage,setPinPage]=useState(0);
+  const [candidatePage,setCandidatePage]=useState(0);
+  const scratchSize=6,pinSize=5,candidateSize=5;
   // Fixed-size workbench docks: map takes all remaining viewport width.
   // No draggable splitters, scrolling side panels, or stored widths.
   // Exceptional long controls open as an expanded workspace, not as a scrolling sidebar.
@@ -1044,8 +1050,8 @@ export default function App() {
         <details className="gis-header-menu gis-workspace-menu">
           <summary aria-label="Workspace menu">Workspace</summary>
           <div className="gis-header-popover">
-            <button type="button" aria-expanded={showLayers} onClick={()=>setShowLayers(v=>!v)}>Project / Layers</button>
-            <button type="button" onClick={()=>{setShowLayers(false);revealPanel('tools-survey');}}>Find a place</button>
+            <button type="button" aria-expanded={showLayers} onClick={()=>{setDrawerTab('project');setShowLayers(v=>!v);}}>Project / Layers</button>
+            <button type="button" onClick={()=>{setDrawerTab('search');setShowLayers(true);}}>Find a place</button>
             <button type="button" onClick={()=>setShortcutHelp(true)}>Shortcuts</button>
           </div>
         </details>
@@ -1054,6 +1060,16 @@ export default function App() {
           <div className="gis-header-popover" aria-label="Unified save and export actions">
             <div className="gis-project-actions" ref={setProjectActionsTarget}/>
             <button type="button" disabled={!geometry} onClick={exportGeoJSON}>Selection GeoJSON</button>
+            <button type="button" disabled={!scratch.length} onClick={()=>{
+              const collection:GeoJSON.FeatureCollection={type:'FeatureCollection',
+                features:scratch.map(f=>({type:'Feature',geometry:f.geometry,
+                  properties:{name:f.name,measurement:f.measurement}}))};
+              const url=URL.createObjectURL(new Blob([JSON.stringify(collection)],
+                {type:'application/geo+json'}));
+              const link=document.createElement('a');link.href=url;
+              link.download='geofathom-local-drawings.geojson';link.click();
+              window.setTimeout(()=>URL.revokeObjectURL(url),1000);
+            }}>Local drawings GeoJSON</button>
             <div className="gis-terrain-export-action" ref={setTerrainExportTarget}/>
           </div>
         </details>
@@ -1075,9 +1091,14 @@ export default function App() {
       <div className="gis-body">
         {expandedDock&&<div className="workspace-dock-backdrop" role="presentation" onClick={()=>setExpandedDock(null)}/>}
         <aside className="sidebar gis-layers gis-project-drawer" hidden={!showLayers} aria-label="Project and layers" style={{width:340}}>
-          <WorkspaceDockHeading><Layers3 size={15}/> Project / Layers</WorkspaceDockHeading>
+          <WorkspaceDockHeading><Layers3 size={15}/> Workspace</WorkspaceDockHeading>
+          <nav className="gis-drawer-tabs" role="tablist" aria-label="Workspace pages">
+            {([['project','Project'],['layers','Layers'],['search','Search']] as const).map(([key,label])=>
+              <button key={key} type="button" role="tab" aria-selected={drawerTab===key}
+                onClick={()=>setDrawerTab(key)}>{label}</button>)}
+          </nav>
           <div className="sidebar-scroll">
-          <section className="panel-section">
+          <section className="panel-section" hidden={drawerTab!=='project'}>
             <div className="section-heading"><Layers3 size={16} /><span>Projects</span></div>
             {!capabilities&&connectionError&&<div className="discovery-error" role="alert">{connectionError} <button onClick={()=>setConnectionRetry(v=>v+1)}>Reconnect</button></div>}
             <ProjectsPanel toolbarTarget={projectToolbarTarget} toolbarActionsTarget={projectActionsTarget} treeTarget={objectTreeTarget}
@@ -1153,12 +1174,12 @@ export default function App() {
           </section>
 
 
-            <section className="panel-section scratch-layer">
+            <section className="panel-section scratch-layer" hidden={drawerTab!=='layers'}>
               <div className="section-heading"><Layers3 size={15}/><span>Local drawings · {scratch.length}</span></div>
               {scratchStorageError&&<p className="discovery-error">Browser storage unavailable. Export drawings before closing.</p>}
               {!scratch.length&&<small className="compact-notice">No drawings</small>}
               <div className="scratch-list" aria-label="Local drawings">
-                {scratch.map(item=><div key={item.id} className={'scratch-row '+(scratchId===item.id?'active':'')}>
+                {scratch.slice(scratchPage*scratchSize,(scratchPage+1)*scratchSize).map(item=><div key={item.id} className={'scratch-row '+(scratchId===item.id?'active':'')}>
                   <input type="checkbox" aria-label={'Show '+item.name} checked={item.visible} onChange={event=>{
                     if(!event.target.checked&&scratchId===item.id)deselect();
                     setScratch(old=>old.map(f=>f.id===item.id?{...f,visible:event.target.checked}:f));
@@ -1169,15 +1190,17 @@ export default function App() {
                   }}>×</button>
                 </div>)}
               </div>
+              {scratch.length>scratchSize&&<div className="gis-record-pager">
+                <button type="button" disabled={scratchPage===0} onClick={()=>setScratchPage(v=>Math.max(0,v-1))}>Previous</button>
+                <span>{Math.min(scratchPage*scratchSize+1,scratch.length)}–{Math.min((scratchPage+1)*scratchSize,scratch.length)} / {scratch.length}</span>
+                <button type="button" disabled={(scratchPage+1)*scratchSize>=scratch.length}
+                  onClick={()=>setScratchPage(v=>v+1)}>Next</button>
+              </div>}
               {scratchId&&<input aria-label="Rename local drawing" value={scratch.find(f=>f.id===scratchId)?.name??''} maxLength={80}
                 onChange={e=>setScratch(old=>old.map(f=>f.id===scratchId?{...f,name:e.target.value}:f))}/>}
-              {scratch.length>0&&<button onClick={()=>{
-                const collection:GeoJSON.FeatureCollection={type:'FeatureCollection',features:scratch.map(f=>({type:'Feature',geometry:f.geometry,properties:{name:f.name,measurement:f.measurement}}))};
-                const url=URL.createObjectURL(new Blob([JSON.stringify(collection)],{type:'application/geo+json'}));
-                const link=document.createElement('a');link.href=url;link.download='geofathom-local-drawings.geojson';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
-              }}>Export local drawings</button>}
+
             </section>
-            <section className="panel-section gis-basemaps">
+            <section className="panel-section gis-basemaps" hidden={drawerTab!=='layers'}>
               <div className="section-heading"><Globe2 size={15}/><span>Basemap</span></div>
               <select aria-label="Basemap" value={basemap} onChange={event=>setBasemap(event.target.value as BasemapId)}>
                 {BASEMAPS.map(item=><option key={item.id} value={item.id} disabled={item.id==='custom'&&!custom}>{item.name}</option>)}
@@ -1200,7 +1223,7 @@ export default function App() {
                 }}>Remove</button></div>
               </div>)}
             </section>
-          <section className="panel-section">
+          <section className="panel-section" hidden={drawerTab!=='search'}>
             <div className="section-heading"><Search size={16} /><span>Find a place</span></div>
             <form onSubmit={runSearch} className="search-form">
               <input aria-label="Search for a place" placeholder="Airport, landmark, city, address…" value={locationInput}
@@ -1212,17 +1235,23 @@ export default function App() {
             {pinStorageError&&<small role="alert" className="discovery-error">Pinned locations cannot be saved in browser storage.</small>}
             {!!pinnedPlaces.length&&<div className="pinned-places" aria-label="Pinned places">
               <small>Retained locations · remove manually ({pinnedPlaces.length}/{PIN_LIMIT})</small>
-              {pinnedPlaces.map(place=><div key={place.id} className="survey-action-bar">
+              {pinnedPlaces.slice(pinPage*pinSize,(pinPage+1)*pinSize).map(place=><div key={place.id} className="survey-action-bar">
                 <button aria-label={'Select pinned '+place.name} aria-pressed={selectedPlace?.id===place.id}
                   onClick={()=>void selectPlace(place)}>{place.name}</button>
                 <button aria-label={'Remove pinned '+place.name} title="Remove this retained location"
                   onClick={()=>removePinnedPlace(place.id)}>Remove</button>
               </div>)}
+              {pinnedPlaces.length>pinSize&&<div className="gis-record-pager">
+                <button type="button" disabled={pinPage===0} onClick={()=>setPinPage(v=>Math.max(0,v-1))}>Previous</button>
+                <span>{Math.min(pinPage*pinSize+1,pinnedPlaces.length)}–{Math.min((pinPage+1)*pinSize,pinnedPlaces.length)} / {pinnedPlaces.length}</span>
+                <button type="button" disabled={(pinPage+1)*pinSize>=pinnedPlaces.length}
+                  onClick={()=>setPinPage(v=>v+1)}>Next</button>
+              </div>}
             </div>}
           </section>
 
 
-          <section className="panel-section">
+          <section className="panel-section" hidden={drawerTab!=='search'}>
             <div className="section-heading"><Search size={16} /><span>Find areas by size</span><span className="section-pill">Spatial query</span></div>
             <DiscoveryPanel viewport={viewport} busy={busy} onFound={(result: DiscoveryResponse) => {
               setDiscovered(result.results);
@@ -1237,10 +1266,10 @@ export default function App() {
 
 
           {candidates.length > 0 && (
-            <section className="panel-section">
+            <section className="panel-section" hidden={drawerTab!=='search'}>
               <div className="section-heading"><MapPin size={16} /><span>Search results</span><span className="result-count">{candidates.length}</span></div>
               <div className="results">
-                {candidates.map(place => (
+                {candidates.slice(candidatePage*candidateSize,(candidatePage+1)*candidateSize).map(place => (
                   <button key={place.id} className={selectedPlace?.id === place.id ? 'result active' : 'result'} onClick={() => { setError(''); void selectPlace(place); }}>
                     <MapPin size={15} />
                     <span className="result-text"><strong>{place.name}</strong><small>{place.display_name}</small></span>
@@ -1250,6 +1279,12 @@ export default function App() {
                   </button>
                 ))}
               </div>
+              {candidates.length>candidateSize&&<div className="gis-record-pager">
+                <button type="button" disabled={candidatePage===0} onClick={()=>setCandidatePage(v=>Math.max(0,v-1))}>Previous</button>
+                <span>{Math.min(candidatePage*candidateSize+1,candidates.length)}–{Math.min((candidatePage+1)*candidateSize,candidates.length)} / {candidates.length}</span>
+                <button type="button" disabled={(candidatePage+1)*candidateSize>=candidates.length}
+                  onClick={()=>setCandidatePage(v=>v+1)}>Next</button>
+              </div>}
             </section>
           )}
 
