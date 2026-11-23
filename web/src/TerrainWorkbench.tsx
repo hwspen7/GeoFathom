@@ -11,6 +11,7 @@ import {readTerrainRuns,writeTerrainRuns,insertTerrainRun,summarizeTerrainRun} f
 import {terrainParametersForOperation} from './terrainRunParameters';
 import {loadTerrainResults,cacheTerrainResult,deleteTerrainResult,markTerrainResultSaved,type PersistedTerrainResult} from './terrainResultStore';
 import WorkspaceToolShelf from './WorkspaceToolShelf';
+import TerrainResearchWorkbench from './TerrainResearchWorkbench';
 import {terrainFetchBounds,terrainGeometryBounds,terrainFetchBudget,terrainBoundsOverlap,terrainRasterMatchesTarget,describeTerrainBounds,preferredTerrainFetchScope,terrainSupportsUSGS,recommendDEMResolution,availableDEMResolutions,type FetchScope,type TerrainBBox} from './terrainSource';
 
 function MeshView({mesh}:{mesh:TerrainMesh}){
@@ -112,7 +113,7 @@ export default function TerrainWorkbench(p:Props){
  const [operation,setOperation]=useState<Operation|null>(null);
  const [category,setCategory]=useState('Quick');
  // One non-scrolling page at a time; form values remain mounted in their panels.
- const [leftTab,setLeftTab]=useState<'source'|'tools'|'setup'|'process'>('source');
+ const [leftTab,setLeftTab]=useState<'source'|'tools'|'setup'|'process'|'research'>('source');
  const [assets,setAssets]=useState<RasterAsset[]>([]),[token,setToken]=useState('');
  const [resolution,setResolution]=useState<1|3|10|30|90>(30),[fetching,setFetching]=useState(false),[sourceInfo,setSourceInfo]=useState('');
  // The displayed fetch choice tracks a genuine selected area automatically.
@@ -827,6 +828,9 @@ export default function TerrainWorkbench(p:Props){
        <button type="button" disabled={!dem}
          aria-label="Process DEM" aria-pressed={leftTab==='process'}
          onClick={()=>setLeftTab('process')}>Prepare</button>
+       <button type="button" disabled={!dem}
+         aria-label="Open research study" aria-pressed={leftTab==='research'}
+         onClick={()=>setLeftTab('research')}>Study</button>
      </div>
    </div>
    <section id="terrain-panel-source" className="terrain-source terrain-step terrain-control-page"
@@ -988,7 +992,12 @@ export default function TerrainWorkbench(p:Props){
 
      </>:<span>No DEM selected</span>}
    </section>
-   {info&&<p className="project-info">{info}</p>}{error&&<p className="discovery-error" role="alert">{error}</p>}
+   <section id="terrain-panel-research" className="terrain-step terrain-control-page terrain-research-page"
+      role="region" aria-label="Research study page" hidden={leftTab!=='research'}>
+     <TerrainResearchWorkbench dem={dem} geometry={p.geometry} assets={assets}
+       connected={p.connected}/>
+   </section>
+   {info&&<p className="project-info">{info}</p>}{error&&<p className="discovery-error" role="alert">{error}</p>
  </div>
  {p.resultsTarget?(p.active?createPortal(monitor,p.resultsTarget):null):monitor}
  {p.operationsFooterTarget?(p.active&&runActions?createPortal(runActions,p.operationsFooterTarget):null):null}
