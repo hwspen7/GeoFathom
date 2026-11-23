@@ -156,3 +156,27 @@ def test_mfd_exponent_is_a_real_model_choice_and_recorded_in_output(projected_de
     assert result["metrics"]["mfd_exponent"]==pytest.approx(2.5)
     assert result["algorithm_options"]["mfd_exponent"]==pytest.approx(2.5)
     assert "2.5" in result["warning"]
+
+
+
+def test_shreve_adds_tributary_magnitudes_and_handles_cycles():
+    from terrain.multiflow import shreve_magnitudes
+    destinations=np.array([[2,2,6,5,5,6,-1]],dtype=np.int64)
+    active=np.ones_like(destinations,bool)
+    np.testing.assert_array_equal(shreve_magnitudes(destinations,active),[[1,1,2,1,1,2,4]])
+    with pytest.raises(RasterError,match="cycle"):
+        shreve_magnitudes(np.array([[1,0]]),np.ones((1,2),bool))
+
+
+def test_shreve_real_geotiff_exports_true_integer_magnitudes(projected_dem):
+    path,polygon=projected_dem
+    result=run_terrain(path,polygon,"stream_order",stream_cells=2,
+                       stream_order_scheme="shreve")
+    assert result["algorithm_options"]["stream_order_scheme"]=="shreve"
+    assert result["raster"]["unit"]=="Shreve_magnitude"
+    assert result["metrics"]["max_stream_magnitude"]>=1
+    with MemoryFile(base64.b64decode(result["raster"]["geotiff"])) as mem:
+        with mem.open() as ds:
+            assert ds.tags()["TERRAIN_UNIT"]=="Shreve_magnitude"
+            values=ds.read(1)
+            assert np.all(values[np.isfinite(values)]>=1)

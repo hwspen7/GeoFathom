@@ -182,7 +182,7 @@ def circular_mean_degrees(angles):
 def _hex(value):
     return tuple(int(value[i:i+2],16) for i in (1,3,5))
 
-def classification(values,operation,slope_classes="standard"):
+def classification(values,operation,slope_classes="standard",stream_order_scheme="strahler"):
     """Stable engineering classes for angles and categorical products."""
     finite=np.isfinite(values)
     if not finite.any():raise RasterError("No valid cells for this terrain product.")
@@ -215,6 +215,21 @@ def classification(values,operation,slope_classes="standard"):
         palette=("#a6adb4","#80c6bb","#4496b7","#316caa","#183c85")
         return classes,[f"{int(level)} observers" for level in levels],tuple(palette[int(level)] for level in levels)
     elif operation=="stream_order":
+        if stream_order_scheme=="shreve":
+            levels=np.unique(values[finite].astype(np.int64))
+            if np.any(levels<1):raise RasterError("Invalid Shreve magnitude.")
+            classes=np.full(values.shape,-1,dtype=np.int16)
+            if len(levels)<=len(STREAM_ORDER_COLORS):
+                for i,level in enumerate(levels):classes[finite&(values==level)]=i
+                return classes,[f"Magnitude {int(level)}" for level in levels],STREAM_ORDER_COLORS[:len(levels)]
+            # Logarithmic display bins retain exact Shreve values in the TIFF.
+            magnitudes=values[finite].astype(np.int64)
+            group=np.minimum(np.floor(np.log2(magnitudes)).astype(np.int16),len(STREAM_ORDER_COLORS)-1)
+            classes[finite]=group
+            labels=[("1" if i==0 else f"{2**i}–{2**(i+1)-1}"
+                    if i<len(STREAM_ORDER_COLORS)-1 else f"{2**i}+")
+                    for i in range(len(STREAM_ORDER_COLORS))]
+            return classes,labels,STREAM_ORDER_COLORS
         # Exact integer Strahler levels remain categorical instead of
         # being grouped into arbitrary continuous elevation bins.
         orders=np.unique(values[finite].astype(np.int32))
@@ -264,10 +279,10 @@ def classification(values,operation,slope_classes="standard"):
     return classes,labels,palette[:len(labels)]
 
 def raster_product(values,operation,affine,crs,cancel=None,
-                   source_datum=None,reference_datum=None,slope_classes="standard"):
+                   source_datum=None,reference_datum=None,slope_classes="standard",stream_order_scheme="strahler"):
     """Export exact source-grid GeoTIFF and a Web Mercator map preview with alpha nodata."""
     checkpoint(cancel)
-    classes,labels,colors=classification(values,operation,slope_classes)
+    classes,labels,colors=classification(values,operation,slope_classes,stream_order_scheme)
     finite=np.isfinite(values)
     legend=[{"label":label,"color":color,"cells":int((classes==i).sum())}
             for i,(label,color) in enumerate(zip(labels,colors))]
@@ -285,7 +300,7 @@ def raster_product(values,operation,affine,crs,cancel=None,
                 datum_tags["TERRAIN_REFERENCE_VERTICAL_DATUM"]=(
                     reference_datum or "not_declared")
             dst.update_tags(TERRAIN_OPERATION=operation,
-                            TERRAIN_UNIT=RASTER_UNITS[operation],
+                            TERRAIN_UNIT=("Shreve_magnitude" if operation=="stream_order" and stream_order_scheme=="shreve" else RASTER_UNITS[operation]),
                             TERRAIN_NODATA_POLICY="NaN",
                             TERRAIN_GRID_BASIS="projected_cell_centers",
                             **datum_tags)
@@ -316,7 +331,7 @@ def raster_product(values,operation,affine,crs,cancel=None,
     return {"png":"data:image/png;base64,"+base64.b64encode(sink.getvalue()).decode("ascii"),
             "geotiff":tif,"corners":[[x,y] for x,y in zip(xs,ys)],"legend":legend,
             "width":width,"height":height,"valid_cells":int(finite.sum()),
-            "unit":RASTER_UNITS[operation]}
+            "unit":("Shreve_magnitude" if operation=="stream_order" and stream_order_scheme=="shreve" else RASTER_UNITS[operation])}
 
 def _derived_surface_tiled(z,valid,dx,dy,operation,max_slope=30.,
                            min_elevation=-12000.,max_elevation=12000.,max_tri=100.,
@@ -386,7 +401,7 @@ def _derived_surface_tiled(z,valid,dx,dy,operation,max_slope=30.,
 
 def surface(z,valid,affine,crs,operation,reference,point,end_point,max_slope,
             min_elevation,max_elevation,max_tri,stream_cells,azimuth,altitude,feature,origin,cancel=None,
-            source_datum=None,gradient_method="horn",slope_classes="standard",mfd_exponent=1.1,neighborhood_radius=1,route_model="surface"):
+            source_datum=None,gradient_method="horn",slope_classes="standard",mfd_exponent=1.1,neighborhood_radius=1,route_model="surface",stream_order_scheme="strahler"):
     """Return the exact source-grid derivative and product-specific statistics."""
     dx,dy=abs(affine.a),abs(affine.e);cell=dx*dy
     features=[];metrics={}
@@ -406,13 +421,14 @@ def surface(z,valid,affine,crs,operation,reference,point,end_point,max_slope,
         if operation=="flow_direction":values=direction
         elif operation=="flow_accumulation":values=accum
         elif operation=="stream_order":
-            from .multiflow import strahler_orders
+            from .multiflow import strahler_orders,shreve_magnitudes
             if not 1<=stream_cells<=1_000_000:
                 raise RasterError("Invalid stream accumulation threshold.")
-            values=strahler_orders(dst,valid&(accum>=stream_cells),cancel)
+            values=(strahler_orders if stream_order_scheme=="strahler" else shreve_magnitudes)(
+                dst,valid&(accum>=stream_cells),cancel)
             metrics={"stream_threshold_cells":stream_cells,
                      "channel_cells":int(np.isfinite(values).sum()),
-                     "max_stream_order":int(np.nanmax(values))}
+                     ("max_stream_order" if stream_order_scheme=="strahler" else "max_stream_magnitude"):int(np.nanmax(values))}
         else:
             if not 1<=stream_cells<=1_000_000:raise RasterError("Invalid stream accumulation threshold.")
             values=np.where(valid,(accum>=stream_cells).astype(float),np.nan)
@@ -471,7 +487,7 @@ def surface(z,valid,affine,crs,operation,reference,point,end_point,max_slope,
                 values=np.where(np.isfinite(d["slope_map"])&~np.isfinite(d["aspect_map"]),-1,d["aspect_map"])
             else:values=d[operation]
     if not np.isfinite(values).any():raise RasterError("No valid cells for this terrain product.")
-    product=raster_product(values,operation,affine,crs,cancel,source_datum=source_datum,slope_classes=slope_classes)
+    product=raster_product(values,operation,affine,crs,cancel,source_datum=source_datum,slope_classes=slope_classes,stream_order_scheme=stream_order_scheme)
     if operation in {"tri","tpi"}:
         metrics["neighborhood_radius_cells"]=neighborhood_radius
     if operation in {"flow_direction","streams","suitability","least_cost"}:

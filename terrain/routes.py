@@ -136,6 +136,7 @@ class AdvancedTerrainInput(BaseModel):
     view_width:float=Field(default=360,gt=0,le=360)
     route_model:Literal['surface','distance','gentle']='surface'
     mesh_samples:int=Field(default=256,ge=64,le=512)
+    stream_order_scheme:Literal['strahler','shreve']='strahler'
 
 @router.post("/advanced")
 async def advanced(request:Request,body:AdvancedTerrainInput):
@@ -150,6 +151,6 @@ async def advanced(request:Request,body:AdvancedTerrainInput):
             body.observer_points,body.gradient_method,body.slope_classes,
             body.mfd_exponent,body.neighborhood_radius,
             body.max_distance_m,body.view_azimuth,body.view_width,
-            body.route_model,body.mesh_samples)
+            body.route_model,body.mesh_samples,body.stream_order_scheme)
     except (GeometryError,RasterError,ValueError,OverflowError) as error:
         raise HTTPException(status_code=422,detail=str(error)) from error

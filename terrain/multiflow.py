@@ -116,3 +116,37 @@ def strahler_orders(receivers,channel,cancel=None):
     result=np.full(channel.shape,np.nan,dtype=np.float64)
     result.ravel()[nodes]=order[nodes]
     return result
+
+
+def shreve_magnitudes(receivers,channel,cancel=None):
+    """Additive Shreve stream magnitude on a validated acyclic D8 network."""
+    receivers=np.asarray(receivers);channel=np.asarray(channel,dtype=bool)
+    if receivers.ndim!=2 or receivers.shape!=channel.shape:
+        raise RasterError("Shreve magnitude requires an aligned receiver grid.")
+    nodes=np.flatnonzero(channel.ravel())
+    if not nodes.size:raise RasterError("No channel cells meet the stream threshold.")
+    flat=receivers.ravel();mask=channel.ravel();size=mask.size
+    incoming=np.zeros(size,dtype=np.int32)
+    values=np.zeros(size,dtype=np.int64)
+    for count,index in enumerate(nodes):
+        if count%4096==0:checkpoint(cancel)
+        dest=int(flat[index])
+        if dest<-1 or dest>=size:
+            raise RasterError("Invalid D8 receiver index in channel network.")
+        if dest>=0 and mask[dest]:incoming[dest]+=1
+    queue=deque(int(i) for i in nodes if incoming[i]==0)
+    for index in queue:values[index]=1
+    visited=0
+    while queue:
+        if visited%2048==0:checkpoint(cancel)
+        index=queue.popleft();visited+=1
+        dest=int(flat[index])
+        if dest>=0 and mask[dest]:
+            values[dest]+=values[index]
+            incoming[dest]-=1
+            if incoming[dest]==0:queue.append(dest)
+    if visited!=len(nodes):
+        raise RasterError("Stream network contains a cycle; cannot assign Shreve magnitude.")
+    result=np.full(channel.shape,np.nan,dtype=np.float64)
+    result.ravel()[nodes]=values[nodes]
+    return result

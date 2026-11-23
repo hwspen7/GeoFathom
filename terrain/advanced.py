@@ -270,7 +270,7 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
                 stream_cells=100,azimuth=315.,altitude=45.,section_spacing=50.,section_width=20.,texture_path=None,
                 fill_sinks=False,consider_curvature=False,refraction_coeff=0.13,comparison_path=None,observer_points=None,gradient_method="horn",slope_classes="standard",mfd_exponent=1.1,neighborhood_radius=1,
                 max_distance_m=0.,view_azimuth=0.,view_width=360.,
-                route_model="surface",mesh_samples=256,cancel=None):
+                route_model="surface",mesh_samples=256,stream_order_scheme="strahler",cancel=None):
     checkpoint(cancel)
     if gradient_method not in {"horn","zevenbergen_thorne"}:
         raise RasterError("Unsupported terrain gradient method.")
@@ -290,6 +290,8 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
         raise RasterError("Unsupported route cost model.")
     if not isinstance(mesh_samples,int) or not 64<=mesh_samples<=512:
         raise RasterError("3D mesh budget must be 64–512 samples per axis.")
+    if stream_order_scheme not in {"strahler","shreve"}:
+        raise RasterError("Unsupported stream hierarchy algorithm.")
     if operation=="cross_sections":
         from .corridor import cross_sections
         return cross_sections(path,geometry,section_spacing,section_width,cancel)
@@ -320,6 +322,7 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
                              "mfd_exponent":mfd_exponent if operation=="flow_accumulation_mfd" else None,
                              "neighborhood_radius_cells":neighborhood_radius if operation in {"tri","tpi"} else None,
                              "route_model":route_model if operation=="least_cost" else None,
+                             "stream_order_scheme":stream_order_scheme if operation=="stream_order" else None,
                              "mesh_samples":mesh_samples if operation=="mesh" else None,
                              "maximum_distance_m":max_distance_m if operation in {"visibility","viewshed_multi"} else None,
                              "view_azimuth_deg":view_azimuth if operation in {"visibility","viewshed_multi"} else None,
@@ -331,7 +334,7 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
             max_slope,min_elevation,max_elevation,max_tri,stream_cells,azimuth,altitude,
             _feature,_origin,cancel,source_datum=source_datum,
             gradient_method=gradient_method,slope_classes=slope_classes,mfd_exponent=mfd_exponent,
-            neighborhood_radius=neighborhood_radius,route_model=route_model)
+            neighborhood_radius=neighborhood_radius,route_model=route_model,stream_order_scheme=stream_order_scheme)
         result["warning"]="Projected source-grid product; nodata and incomplete neighborhoods excluded. Unconditioned D8 terminates at sinks/flats; suitability and path costs are screening estimates, not engineering certification."
         if operation=="flow_accumulation_mfd":
             result["warning"]=(
@@ -341,7 +344,7 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
                 "NoData cannot be a flow receiver; this is screening hydrology.")
         elif operation=="stream_order":
             result["warning"]=(
-                "Strahler stream orders on the thresholded D8 channel network. "
+                f"{stream_order_scheme.title()} channel hierarchy on the thresholded D8 network. "
                 "Unknown upstream regions outside the selected DEM are excluded; "
                 "orders are screening estimates, not a surveyed stream inventory.")
         if operation=="streams" and result["metrics"]["drainage_edges"]>result["metrics"]["vector_edges"]:
