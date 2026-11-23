@@ -1381,3 +1381,95 @@ button:disabled { opacity: .45; cursor: not-allowed; }
   font-size:11px;line-height:1.4;box-shadow:0 2px 8px #1e354114;
   pointer-events:none;
 }
+
+
+/* Data / Export are fixed application workbenches, not long secondary forms.
+   One visible task surface at a time; no redundant export ribbons. */
+.desktop-gis .data-workbench,.desktop-gis .export-workbench{
+  display:flex;flex-direction:column;gap:10px;min-width:0;width:100%;
+  box-sizing:border-box;color:#2c4a5e;font-size:11px;
+}
+.desktop-gis .data-page-buttons,.desktop-gis .data-choice-buttons{
+  display:flex;align-items:center;gap:4px;flex-wrap:wrap;
+}
+.desktop-gis .data-page-buttons button,.desktop-gis .data-choice-buttons>button{
+  min-width:0;flex:1 1 auto;border:1px solid #dde7ee;border-radius:5px;
+  background:#f8fafc;color:#4e6677;font-weight:600;
+  min-height:31px;padding:5px 8px;font-size:10.5px;
+}
+.desktop-gis .data-page-buttons button[aria-pressed=true],
+.desktop-gis .data-choice-buttons>button[aria-pressed=true]{
+  border-color:#5299bc;background:#e8f4fa;color:#1c6286;
+}
+.desktop-gis .data-page,.desktop-gis .export-layout-options{
+  display:flex;flex-direction:column;gap:8px;min-height:0;min-width:0;
+}
+.desktop-gis .data-workbench .data-page[hidden]{display:none!important}
+.desktop-gis .data-workbench label,.desktop-gis .export-workbench label{
+  display:flex;flex-direction:column;gap:4px;min-width:0;color:#617a8b;
+  font-size:10px;font-weight:600;
+}
+.desktop-gis .data-workbench :is(input,select):not([type=checkbox]),
+.desktop-gis .export-workbench :is(input,select):not([type=checkbox]){
+  width:100%;min-width:0;box-sizing:border-box;background:#fff;
+  color:#24465c;border:1px solid #d5e2ea;border-radius:6px;
+  min-height:32px;padding:6px 8px;font-size:11px;
+}
+.desktop-gis .data-workbench button,.desktop-gis .export-workbench button{
+  cursor:pointer;
+}
+.desktop-gis .data-workbench button:disabled,.desktop-gis .export-workbench button:disabled{
+  cursor:not-allowed;opacity:.48;
+}
+.desktop-gis .data-workbench .data-primary,.desktop-gis .export-workbench .data-primary{
+  min-height:34px;border:1px solid #205f85;border-radius:6px;background:#276a91;
+  color:white;font-size:11px;font-weight:700;padding:7px 10px;
+}
+.desktop-gis .data-input-pair,.desktop-gis .data-metric-band{
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;
+}
+.desktop-gis .data-metric-band>div{
+  padding:9px;background:#f4f8fa;border:1px solid #e2ebef;
+  border-radius:7px;min-width:0;display:flex;flex-direction:column;gap:4px;
+}
+.desktop-gis .data-metric-band small{color:#718897;font-size:10px;}
+.desktop-gis .data-metric-band strong{
+  font-size:15px;color:#1f4f6a;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums;
+}
+.desktop-gis .data-quality-strip{display:flex;gap:7px;flex-wrap:wrap;font-size:10px;color:#718697}
+.desktop-gis .data-quality-strip span{padding:4px 5px;background:#f3f6f9;border-radius:4px}
+.desktop-gis .data-area-rows,.desktop-gis .data-network-results{display:flex;flex-direction:column;gap:5px}
+.desktop-gis .data-area-rows>div,.desktop-gis .data-network-result-row{
+  display:grid;grid-template-columns:1fr auto;gap:3px 6px;align-items:center;
+  background:#f6f9fb;border:1px solid #ebf0f3;border-radius:6px;padding:7px 9px;
+  font-variant-numeric:tabular-nums;
+}
+.desktop-gis .data-area-rows strong,.desktop-gis .data-network-result-row strong{
+  color:#234f68;font-size:11px;
+}
+.desktop-gis .data-area-rows span,.desktop-gis .data-network-result-row span{
+  color:#275f82;font-weight:700;font-size:11px;
+}
+.desktop-gis .data-area-rows small,.desktop-gis .data-network-result-row small{
+  grid-column:1/-1;color:#738996;font-size:10px;
+}
+.desktop-gis .data-services-page>.professional-panel>details[hidden]{display:none!important}
+.desktop-gis .data-services-page>.professional-panel>details{border:0;padding:0}
+.desktop-gis .data-services-page>.professional-panel>details>summary{display:none}
+.desktop-gis .data-services-page .project-hint{display:none}
+.desktop-gis .export-workbench .data-choice-buttons>label{
+  display:flex;flex-direction:row;align-items:center;gap:5px;
+}
+.desktop-gis .data-network-results{margin-top:5px}
+.desktop-gis .map-face-dimension{
+  color:#125a67!important;font-weight:650;font-size:11px;
+  background:rgba(246,253,251,.88);
+  border:1px solid rgba(49,135,131,.2);
+  border-radius:5px;padding:3px 6px;white-space:pre-line;
+  text-align:center;pointer-events:none;
+}
+.desktop-gis .workspace-module-bar button{padding-left:7px;padding-right:7px}
+@media(max-width:1440px){
+  .desktop-gis .workspace-module-bar button{padding-left:6px;padding-right:6px;font-size:10px}
+}
