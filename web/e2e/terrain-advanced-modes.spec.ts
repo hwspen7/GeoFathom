@@ -87,11 +87,9 @@ test('advanced surface families retain distinct real results and scientific expo
   await expect(page.getByLabel('Analysis result layers').locator('.scratch-row'))
    .toHaveCount(oldCount+1,{timeout:15000});
   await expect(page.getByLabel('Terrain results')).toBeVisible();
-  // Match the literal title: names like "Ruggedness (TRI)" have regex
-  // metacharacters, which must not change accessible-name matching.
+  // Match literal operation titles without treating punctuation as regex.
   await expect(page.getByLabel('Analysis result layers')
-    .getByRole('button',{name:new RegExp('^'+title.replace(/[.*+?^${}()|[\]\\]/g,'\\  await expect(page.getByLabel('Analysis result layers')
-    .getByRole('button',{name:new RegExp('^'+title+' ·')})).toBeVisible();')+' ·')})).toBeVisible();
+    .getByRole('button',{name:title,exact:false})).toBeVisible();
  };
  for(const name of [
   'Elevation map','Aspect map','Ruggedness (TRI)','Position (TPI)',
