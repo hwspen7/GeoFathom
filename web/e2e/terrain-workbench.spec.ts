@@ -1,3 +1,4 @@
+import {activateWorkspaceModule,expectWorkspaceModule} from './workspace-ui';
 import {test,expect} from './coverage-fixture';
 import {execFileSync} from 'node:child_process';
 import {resolve} from 'node:path';
@@ -31,7 +32,7 @@ with tempfile.TemporaryDirectory() as directory:
  expect(feature.status(),await feature.text()).toBe(201);
  await page.goto('/');
  await page.getByLabel('Active project').selectOption(id);
- await page.getByRole('navigation',{name:'Workspace tools'}).getByRole('button',{name:'Terrain',exact:true}).click();
+ await activateWorkspaceModule(page,'Terrain');
  await page.getByRole('button',{name:'Get DEM',exact:true}).click();
  await page.getByLabel('DEM elevation layer').selectOption(fixture.id);
  await page.getByLabel('Confirm DEM meter elevations').check();
@@ -44,8 +45,7 @@ with tempfile.TemporaryDirectory() as directory:
  await page.getByRole('button',{name:'Use selected area',exact:true}).click();
  await expect(page.getByLabel('DEM fetch area')).toHaveValue('selection');
  await expect(page.getByLabel('DEM download target')).toContainText('Selected geometry');
- const terrainTab=page.getByRole('navigation',{name:'Workspace tools'}).getByRole('button',{name:'Terrain',exact:true});
- await expect(terrainTab).toHaveAttribute('aria-pressed','true');
+ await expectWorkspaceModule(page,'Terrain');
  await expect(page.getByRole('complementary',{name:'Operations'})).toBeVisible();
  await expect(page.getByLabel('Results monitor')).toBeVisible();
  await expect(page.getByLabel('Project and layers',{exact:true})).toBeHidden();
@@ -75,8 +75,7 @@ with tempfile.TemporaryDirectory() as directory:
  // Survey commands must not remain in the global toolbar while Terrain runs.
  await expect(page.getByLabel('Survey toolbar').getByRole('button',{name:'Polygon',exact:true})).toHaveCount(0);
  // Repeated module activation must preserve the fixed Tools panel and active analysis.
- await terrainTab.click();
- await expect(terrainTab).toHaveAttribute('aria-pressed','true');
+ await activateWorkspaceModule(page,'Terrain');
  await expect(page.getByRole('complementary',{name:'Operations'})).toBeVisible();
  await page.getByRole('button',{name:'Browse terrain tools',exact:true}).click();
  const tools=page.getByLabel('Terrain tools');
@@ -226,7 +225,7 @@ with tempfile.TemporaryDirectory() as directory:
  expect(line.status(),await line.text()).toBe(201);
  // Reload the workspace instead of relying on a stale list from a different query.
  await page.reload();
- await page.getByRole('navigation',{name:'Workspace tools'}).getByRole('button',{name:'Terrain',exact:true}).click();
+ await activateWorkspaceModule(page,'Terrain');
  await page.getByRole('button',{name:'Get DEM',exact:true}).click();
  await page.getByLabel('DEM elevation layer').selectOption(fixture.id);
  await page.getByLabel('Confirm DEM meter elevations').check();
@@ -274,7 +273,7 @@ with tempfile.TemporaryDirectory() as directory:
  // Full scientific outputs, not only run receipts, survive a hard reload.
  // Restored layers are hidden until explicitly enabled on the map.
  await page.reload();
- await page.getByRole('navigation',{name:'Workspace tools'}).getByRole('button',{name:'Terrain',exact:true}).click();
+ await activateWorkspaceModule(page,'Terrain');
  const restored=page.getByLabel('Analysis result layers');
  const resultSelect=page.getByLabel('Choose terrain result');
  await expect(resultSelect.locator('option').filter({hasText:'Cross sections'})).toHaveCount(1);
@@ -297,7 +296,7 @@ with tempfile.TemporaryDirectory() as directory:
  await restored.getByRole('button',{name:'Remove result Slope map'}).click();
  await expect(restored.getByRole('button',{name:/Slope map ·/})).toHaveCount(0);
  await page.reload();
- await page.getByRole('navigation',{name:'Workspace tools'}).getByRole('button',{name:'Terrain',exact:true}).click();
+ await activateWorkspaceModule(page,'Terrain');
  await outputs();
  await expect(page.getByLabel('Analysis result layers').getByRole('button',{name:/Slope map ·/})).toHaveCount(0);
  // Results from one project must never be visible in a different project.

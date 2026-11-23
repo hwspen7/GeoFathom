@@ -1,5 +1,5 @@
 import {expect,test} from './coverage-fixture';
-import {openProjectDrawer,openFileMenu} from './workspace-ui';
+import {openProjectDrawer,openFileMenu,expectWorkspaceModule,activateWorkspaceModule} from './workspace-ui';
 const API='http://127.0.0.1:8000';
 const tile='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/ZecAAAAASUVORK5CYII=';
 
@@ -57,7 +57,8 @@ test('delayed authoritative geometry validation cannot publish after project swi
   const select=page.getByLabel('Active project');
   await expect(select.locator('option[value="'+first+'"]')).toHaveCount(1);
   await select.selectOption(first);
-  await expect(page.getByRole('navigation',{name:'Workspace tools'}).getByRole('button',{name:'Survey',exact:true})).toBeVisible();
+  await expectWorkspaceModule(page,'Survey');
+  await activateWorkspaceModule(page,'Survey',true);
   let release!:()=>void;
   const gate=new Promise<void>(resolve=>{release=resolve;});
   let requested!:()=>void;
@@ -76,6 +77,7 @@ test('delayed authoritative geometry validation cannot publish after project swi
     await page.getByLabel('Opposite latitude').fill('20.01');
     await page.getByRole('button',{name:'Apply exact geometry'}).click();
     await received;
+    await page.getByRole('button',{name:'Close full operations view',exact:true}).click();
     await select.selectOption(second);
     await expect(select).toHaveValue(second);
     await openFileMenu(page);

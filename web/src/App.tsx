@@ -157,7 +157,7 @@ export default function App() {
   // Fixed-size workbench docks: map takes all remaining viewport width.
   // No draggable splitters, scrolling side panels, or stored widths.
   // Exceptional long controls open as an expanded workspace, not as a scrolling sidebar.
-  const [expandedDock,setExpandedDock]=useState<'operations'|'results'|null>(null);
+  const [expandedDock,setExpandedDock]=useState<'operations'|'results'|'project'|null>(null);
   useEffect(()=>{
     if(!expandedDock)return;
     const onKey=(event:KeyboardEvent)=>{if(event.key==='Escape')setExpandedDock(null);};
@@ -1203,8 +1203,14 @@ export default function App() {
       </div>
       <div className="gis-body">
         {expandedDock&&<div className="workspace-dock-backdrop" role="presentation" onClick={()=>setExpandedDock(null)}/>}
-        <aside className="sidebar gis-layers gis-project-drawer" hidden={!showLayers} aria-label="Project and layers" style={{width:340}}>
-          <WorkspaceDockHeading><Layers3 size={15}/> Workspace</WorkspaceDockHeading>
+        <aside className={'sidebar gis-layers gis-project-drawer'+(expandedDock==='project'?' workspace-dock-expanded':'')}
+          hidden={!showLayers} aria-label="Project and layers" style={{width:340}}>
+          <WorkspaceDockHeading actions={<button className="workspace-dock-expand-button"
+            aria-label={expandedDock==='project'?'Close full project view':'Open full project view'}
+            title={expandedDock==='project'?'Return to workspace':'Open larger workspace'}
+            onClick={()=>setExpandedDock(v=>v==='project'?null:'project')}>
+            {expandedDock==='project'?<Minimize2 size={14}/>:<Maximize2 size={14}/>}
+          </button>}><Layers3 size={15}/> Workspace</WorkspaceDockHeading>
           <nav className="gis-drawer-tabs" role="tablist" aria-label="Workspace pages">
             {([['project','Project'],['layers','Layers'],['search','Search']] as const).map(([key,label])=>
               <button key={key} type="button" role="tab" aria-selected={drawerTab===key}

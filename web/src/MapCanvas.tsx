@@ -1347,7 +1347,8 @@ export default function MapCanvas({
     // Region labels use a guaranteed interior point produced by GEOS;
     // their values come from the server's ellipsoidal measurement, never
     // from the map viewport or a bounding-box estimate.
-    for(const face of networkFaces.slice(0,50)){
+    // A live draft takes priority over the previously committed network.
+    for(const face of (draft?[]:networkFaces).slice(0,50)){
       const m=face.measurement;
       const before=labels.length;
       label(face.name+' · '+areaText(m.area_m2??0,display.area)+'\n'+
@@ -1360,7 +1361,7 @@ export default function MapCanvas({
       if(anchor){
         // Suppress the combined selection total once separate enclosed faces
         // are available. Their independent labels take priority on the map.
-        if(totals.area_m2!==null&&(networkFaces.length<=1||Boolean(draft)))
+        if(totals.area_m2!==null&&(networkFaces.length===0||Boolean(draft)))
           label(prefix+areaText(totals.area_m2,display.area)+'\n'+prefix+distanceText(totals.perimeter_m??0,display.distance)+' perimeter',anchor);
         else if(totals.length_m!==null)label(prefix+distanceText(totals.length_m??0,display.distance)+' total',anchor);
         else if(g.type==='Point')label(anchor[0].toFixed(6)+'°, '+anchor[1].toFixed(6)+'°',anchor);

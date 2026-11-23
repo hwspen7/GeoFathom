@@ -1,3 +1,4 @@
+import {activateWorkspaceModule} from './workspace-ui';
 /** Real-browser acceptance for previously unexercised Terrain analysis modes.
  *
  * Uses a small georeferenced DEM in the same file store as the API. No result,
@@ -64,7 +65,7 @@ with tempfile.TemporaryDirectory() as directory:
   route.fulfill({contentType:'image/png',body:png}));
  await page.goto('/');
  await page.getByLabel('Active project').selectOption(id);
- await page.getByRole('navigation',{name:'Workspace tools'}).getByRole('button',{name:'Terrain',exact:true}).click();
+ await activateWorkspaceModule(page,'Terrain');
  await page.getByLabel('DEM elevation layer').selectOption(fixture.ids[0]);
  await page.getByLabel('Confirm DEM meter elevations').check();
  await page.getByRole('button',{name:/Advanced terrain study area/}).click();

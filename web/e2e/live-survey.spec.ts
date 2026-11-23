@@ -18,6 +18,7 @@ test('toolbar offers live area, exact dimensions and basemap switching',async({p
  await toolbar.getByRole('button',{name:'Finish',exact:true}).click();
  await expect(page.getByText(/Drawing completed and measured/)).toBeVisible();
  const label=page.getByLabel('Live map dimensions').locator('.map-dimension-total');
+ await expect(label).toHaveCount(1);
  await expect(label).not.toContainText('~ ');
  const exact=await label.textContent();
  await openProjectDrawer(page,'layers');

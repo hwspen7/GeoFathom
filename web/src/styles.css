@@ -808,9 +808,6 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .desktop-gis .gis-project-actions{display:flex;align-items:center;flex:none}
 .desktop-gis .gis-project-actions .project-actions{margin:0;gap:4px}
 .desktop-gis .gis-project-actions .project-actions button{width:auto;flex:none;min-height:29px;white-space:nowrap;padding:5px 8px;font-size:11px}
-@media(max-width:1300px){
- .desktop-gis .gis-project-actions .project-actions button:last-child{display:none}
-}
 
 
 /* GIS and spatial analysis reuse the same research results monitor instead of

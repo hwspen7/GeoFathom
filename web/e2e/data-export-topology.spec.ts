@@ -1,14 +1,19 @@
 import {expect,test} from './coverage-fixture';
+import {activateWorkspaceModule,expectWorkspaceModule} from './workspace-ui';
 
 const edge=(a:[number,number],b:[number,number])=>({
  type:'LineString',coordinates:[a,b],
 });
-test('Data and Export are independent fixed top modules with real GIS operations',async({page})=>{
+for(const width of [1280,1600])test('Data and Export are independent fixed top modules with real GIS operations at '+width+'px',async({page})=>{
+ await page.setViewportSize({width,height:900});
  await page.goto('/');
+ await page.getByLabel('Active project').selectOption('');
  const modules=page.getByRole('navigation',{name:'Workspace tools'});
- await expect(modules.getByRole('button',{name:'Data',exact:true})).toBeVisible();
- await expect(modules.getByRole('button',{name:'Export',exact:true})).toBeVisible();
- await modules.getByRole('button',{name:'Data',exact:true}).click();
+ if(width===1600){
+  await expect(modules.getByRole('button',{name:'Data',exact:true})).toBeVisible();
+  await expect(modules.getByRole('button',{name:'Export',exact:true})).toBeVisible();
+ }else await expect(modules.getByLabel('Workspace module')).toBeVisible();
+ await activateWorkspaceModule(page,'Data');
  await expect(page.getByLabel('Data operations')).toBeVisible();
  await expect(page.getByRole('button',{name:'Detect enclosed areas'})).toBeVisible();
  await expect(page.getByRole('button',{name:'Detect enclosed areas'})).toBeDisabled();
@@ -17,11 +22,11 @@ test('Data and Export are independent fixed top modules with real GIS operations
  await page.getByRole('button',{name:'Sources',exact:true}).click();
  await page.getByRole('button',{name:'Add source'}).click();
  await expect(page.getByLabel('New OGC service type')).toBeVisible();
- await modules.getByRole('button',{name:'Export',exact:true}).click();
+ await activateWorkspaceModule(page,'Export');
  await expect(page.getByLabel('Export scope')).toBeVisible();
  await expect(page.getByLabel('Export format')).toBeVisible();
  await expect(page.getByRole('button',{name:'Export GEOJSON'})).toBeDisabled();
- await expect(page.getByRole('button',{name:'Export',exact:true})).toHaveCount(1);
+ await expectWorkspaceModule(page,'Export');
 });
 
 test('noded network derives three independently measurable areas through the live API',async({request})=>{
