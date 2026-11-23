@@ -244,7 +244,7 @@ export function terrainClassesCsv(bins:readonly {label:string;color:string;cells
    '"'+row.label.replaceAll('"','""')+'"',row.cells,
    row.sharePct.toFixed(8),row.areaM2.toFixed(4),
    row.cumulativePct.toFixed(8),row.cumulativeAreaM2.toFixed(4),
-  ].join(','))].join('\\n')+'\\n';
+  ].join(','))].join('\n')+'\n';
 }
 /** Dual-axis class-share bars and cumulative share line. Class order comes from
  * the analytical legend, never from ranked or sorted display categories. */
