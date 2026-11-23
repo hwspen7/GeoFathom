@@ -64,8 +64,12 @@ export default function DataWorkbench(p:Props){
   setError('');setStatus('');
  }
  async function saveProjectFaces(){
-  const selected=p.network?.faces??[],scope=p.projectId;
-  if(!scope||!selected.length)throw Error('Create a project and detect enclosed areas first.');
+  const faces=p.network?.faces??[],scope=p.projectId;
+  if(!scope||!faces.length)throw Error('Create a project and detect enclosed areas first.');
+  const selected=faces.filter(face=>!(p.workspace?.features??[]).some(saved=>
+   saved.properties?.source_type==='polygonized_network'&&
+   JSON.stringify(saved.geometry)===JSON.stringify(face.geometry)));
+  if(!selected.length){setStatus('These enclosed areas are already saved in this project.');return;}
   if(selected.length>100)throw Error('Save up to 100 polygon faces at a time; subdivide the network first.');
   const output=await saveFeatureBatch(scope,selected.map(f=>({
    name:f.name,source:'GeoFathom network polygonization',geometry:f.geometry,
