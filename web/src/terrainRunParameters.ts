@@ -23,6 +23,7 @@ export interface TerrainParameterForm {
  designEastGrade?:string;designNorthGrade?:string;designMaxGrade?:string;elevationSigma?:string;
  optimizeObservers?:string;dsmImageId?:string;meshLod?:boolean;
  suitabilityModel?:'binary'|'weighted';suitabilitySlopeWeight?:string;suitabilityTriWeight?:string;suitabilityElevationWeight?:string;
+ externalInflowImageId?:string;
 }
 
 export function terrainParametersForOperation(
@@ -130,7 +131,10 @@ export function terrainParametersForOperation(
   params.gradient_method=form.gradientMethod;
  if(operation==='slope_map')params.slope_classes=form.slopeClasses;
  // P1 method controls are attached only to the analyses they actually change.
- if(operation==='flow_accumulation'&&form.flowRoutingMethod==='dinf')params.flow_routing_method='dinf';
+ if(operation==='flow_accumulation'&&form.flowRoutingMethod==='dinf'){
+  params.flow_routing_method='dinf';
+  if(form.externalInflowImageId)params.external_inflow_image_id=form.externalInflowImageId;
+ }
  if(['flow_direction','flow_accumulation','flow_accumulation_mfd','streams','stream_order','watershed'].includes(operation)
     &&form.fillSinks&&form.depressionMethod==='breach')params.depression_method='breach';
  if(['curvature','plan_curvature','profile_curvature'].includes(operation)&&form.curvatureMethod==='quadratic'){
