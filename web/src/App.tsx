@@ -1649,8 +1649,9 @@ export default function App() {
             onClick={()=>setExpandedDock(v=>v==='operations'?null:'operations')}>
             {expandedDock==='operations'?<Minimize2 size={14}/>:<Maximize2 size={14}/>}
           </button>}><Compass size={15}/> Tools</WorkspaceDockHeading>
-          <div className="sidebar-scroll" tabIndex={0} aria-label="Operations scrolling region">
-          <details className="workspace-objects" open>
+          <div className={'sidebar-scroll'+(['tools-services','tools-export'].includes(activeTool)?' data-fixed-operations':'')}
+            tabIndex={0} aria-label="Operations scrolling region">
+          <details className="workspace-objects" hidden={['tools-services','tools-export'].includes(activeTool)} open>
             <summary>Objects</summary>
             <div ref={setObjectTreeTarget}/>
             {geometry&&<details className="geometry-edit-controls">
