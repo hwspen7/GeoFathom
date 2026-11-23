@@ -457,7 +457,7 @@ def surface(z,valid,affine,crs,operation,reference,point,end_point,max_slope,
         from .p1_science import design_surface
         values,metrics=design_surface(z,valid,dx,dy,reference,
             design_east_grade,design_north_grade,elevation_sigma_m,design_max_grade,
-            design_curvature_east,design_curvature_cross,design_curvature_north)
+            design_curvature_east,design_curvature_cross,design_curvature_north,cancel=cancel)
     elif operation=="suitability" and suitability_model=="weighted" and z.size<=1_000_000:
         from .p1_science import weighted_suitability
         d=derivatives(z,valid,dx,dy,gradient_method)
