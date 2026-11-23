@@ -34,12 +34,18 @@ export function WorkspaceModuleBar({active,open,onActivate}:{
   active:string;open:boolean;onActivate:(id:string)=>void;
 }){
   return <nav aria-label="Workspace tools" className="gis-menu workspace-module-bar">
-    {WORKSPACE_MODULES.map(module=>
-      <button key={module.id} type="button"
-        aria-controls={module.id}
-        aria-pressed={open&&active===module.id}
-        title={module.description}
-        onClick={()=>onActivate(module.id)}>{module.label}</button>)}
+    <div className="workspace-module-buttons">
+      {WORKSPACE_MODULES.map(module=>
+        <button key={module.id} type="button"
+          aria-controls={module.id}
+          aria-pressed={open&&active===module.id}
+          title={module.description}
+          onClick={()=>onActivate(module.id)}>{module.label}</button>)}
+    </div>
+    <select className="workspace-module-compact" aria-label="Workspace module"
+      value={active} onChange={event=>onActivate(event.target.value)}>
+      {WORKSPACE_MODULES.map(module=><option key={module.id} value={module.id}>{module.label}</option>)}
+    </select>
   </nav>;
 }
 
