@@ -1028,3 +1028,51 @@ export function getProjectTrash(id:string):Promise<{items:TrashedFeature[];total
 export function restoreDeletedFeature(projectId:string,featureId:string):Promise<WorkspaceFeature>{
  return request('/projects/'+encodeURIComponent(projectId)+'/trash/'+encodeURIComponent(featureId)+'/restore',{method:'POST'});
 }
+
+
+/** Research-grade raster MCDA models. Non-elevation factors may be continuous or categorical
+ * rasters; categorical data must use nearest-neighbor alignment.
+ */
+export interface TerrainResearchCriterion{
+ image_id:string;name:string;direction:'increasing'|'decreasing'|'target';
+ low:number;high:number;target?:number;weight:number;sigma:number;weight_sigma:number;
+ allowed_min?:number|null;allowed_max?:number|null;
+ sampling:'nearest'|'bilinear';vertical_elevation:boolean;
+}
+export interface TerrainResearchInput{
+ image_id:string;geometry:GeoJSON.Geometry;criteria:TerrainResearchCriterion[];
+ threshold:number;sensitivity_fraction:number;trials:number;seed:number;
+ pairwise?:number[][]|null;
+}
+export interface TerrainResearchResult{
+ schema:string;metrics:Record<string,number>;
+ model:{weights:number[];ahp:{consistency_ratio:number}|null;
+  uncertainty:{trials:number;seed:number;score_sd_mean?:number;above_threshold_frequency_mean?:number}};
+ sensitivity:Array<{criterion:string;direction:'up'|'down';weight:number;mean_score:number;
+  eligible_above_threshold_pct:number;mean_score_delta:number}>;
+ archive_base64:string;archive_sha256:string;
+ raster_names:string[];warning:string;
+}
+export function runTerrainResearch(body:TerrainResearchInput,signal?:AbortSignal){
+ return request<TerrainResearchResult>('/terrain/research',{
+  method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal,
+ });
+}
+export interface ElevationCheckpoint{longitude:number;latitude:number;elevation_m:number}
+export interface CheckpointReport{
+ sample_count:number;unavailable_count:number;mean_error_m:number;rmse_m:number;mae_m:number;
+ median_error_m:number;nmad_m:number;absolute_error_p95_m:number;
+ minimum_error_m:number;maximum_error_m:number;datum_verified:boolean;warning:string;
+}
+export function checkTerrainCheckpointAccuracy(image_id:string,
+ points:ElevationCheckpoint[],vertical_datum?:string,signal?:AbortSignal){
+ return request<CheckpointReport>('/terrain/research/checkpoints',{
+  method:'POST',headers:{'Content-Type':'application/json'},
+  body:JSON.stringify({image_id,points,vertical_datum:vertical_datum||null}),signal,
+ });
+}
+export function verifyTerrainResearchArchive(archive_base64:string){
+ return request<{valid:boolean;files:number;source_sha256:string[]}>('/terrain/research/verify',{
+  method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({archive_base64}),
+ });
+}
