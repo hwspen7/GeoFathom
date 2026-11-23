@@ -163,7 +163,7 @@ def quadratic_curvature(z,valid,dx,dy,radius=2,kind="curvature",cancel=None,bloc
 
 def design_surface(z,valid,dx,dy,reference,east_grade=0.,north_grade=0.,
                    sigma_z=0.,max_grade=.3,curvature_east=0.,curvature_cross=0.,
-                   curvature_north=0.):
+                   curvature_north=0.,cancel=None):
     """Grade-constrained design plane and cut/fill uncertainty bounds.
 
     sigmaz is a supplied one-sigma *assumption*, not a calibration claim.
@@ -199,7 +199,7 @@ def design_surface(z,valid,dx,dy,reference,east_grade=0.,north_grade=0.,
     area=dx*dy;count=int(valid.sum())
     cut=float(np.nansum(np.maximum(diff,0))*area)
     fill=float(np.nansum(np.maximum(-diff,0))*area)
-    return diff,{
+    metrics={
         "cut_m3":cut,"fill_m3":fill,"net_cut_m3":cut-fill,
         "design_east_grade":east_grade,"design_north_grade":north_grade,
         "design_max_grade":max_grade,"design_reference_m":reference,
@@ -211,6 +211,10 @@ def design_surface(z,valid,dx,dy,reference,east_grade=0.,north_grade=0.,
         "net_volume_independent_sigma_m3":sigma_z*area*math.sqrt(count),
         "net_volume_correlated_sigma_m3":sigma_z*area*count,
         "covered_grid_area_m2":area*count}
+    if sigma_z>0:
+        from .uncertainty import gaussian_earthwork_uncertainty
+        metrics.update(gaussian_earthwork_uncertainty(diff,valid,area,sigma_z,cancel))
+    return diff,metrics
 
 
 def greedy_coverage(visible_masks,known_masks,max_sites,cancel=None):
