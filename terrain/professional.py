@@ -417,17 +417,25 @@ def _derived_surface_tiled(z,valid,dx,dy,operation,max_slope=30.,
 
 def surface(z,valid,affine,crs,operation,reference,point,end_point,max_slope,
             min_elevation,max_elevation,max_tri,stream_cells,azimuth,altitude,feature,origin,cancel=None,
-            source_datum=None,gradient_method="horn",slope_classes="standard",mfd_exponent=1.1,neighborhood_radius=1,route_model="surface",stream_order_scheme="strahler",hillshade_mode="single"):
+            source_datum=None,gradient_method="horn",slope_classes="standard",mfd_exponent=1.1,neighborhood_radius=1,route_model="surface",stream_order_scheme="strahler",hillshade_mode="single",
+            flow_routing_method="d8",curvature_method="finite_difference",curvature_radius=2,
+            design_east_grade=0.,design_north_grade=0.,design_max_grade=.3,elevation_sigma_m=0.):
     """Return the exact source-grid derivative and product-specific statistics."""
     dx,dy=abs(affine.a),abs(affine.e);cell=dx*dy
     features=[];metrics={}
+    if flow_routing_method!="d8" and operation!="flow_accumulation":
+        raise RasterError("D-infinity routing currently applies only to the flow accumulation raster.")
     if operation=="elevation":
         values=np.where(valid,z,np.nan)
     elif operation=="cutfill_map":
-        if not math.isfinite(reference):raise RasterError("Reference elevation must be finite.")
-        values=np.where(valid,z-reference,np.nan)
-        metrics={"cut_m3":float(np.nansum(np.maximum(values,0))*cell),
-                 "fill_m3":float(np.nansum(np.maximum(-values,0))*cell)}
+        from .p1_science import design_surface
+        values,metrics=design_surface(z,valid,dx,dy,reference,
+            design_east_grade,design_north_grade,elevation_sigma_m,design_max_grade)
+    elif operation=="flow_accumulation" and flow_routing_method=="dinf":
+        from .p1_science import dinfinity_accumulation
+        values,angles=dinfinity_accumulation(z,valid,dx,dy,cancel=cancel)
+        metrics={"dinf_direction_valid_cells":int(np.isfinite(angles).sum()),
+                 "flow_routing_method":"dinf"}
     elif operation=="flow_accumulation_mfd":
         from .multiflow import mfd_accumulation
         values=mfd_accumulation(z,valid,dx,dy,exponent=mfd_exponent,cancel=cancel)
@@ -477,7 +485,11 @@ def surface(z,valid,affine,crs,operation,reference,point,end_point,max_slope,
                      for (r1,c1),(r2,c2),a,b in zip(route,route[1:],coordinates,coordinates[1:])))}
     else:
         # Large-area surfaces avoid keeping nine full-sized derived arrays.
-        if operation in {"tri","tpi"} and neighborhood_radius>1:
+        if operation in {"curvature","plan_curvature","profile_curvature"} and curvature_method=="quadratic":
+            from .p1_science import quadratic_curvature
+            values=quadratic_curvature(z,valid,dx,dy,curvature_radius,operation,cancel)
+            metrics={"curvature_fit_radius_cells":curvature_radius}
+        elif operation in {"tri","tpi"} and neighborhood_radius>1:
             from .multiscale import multiscale_terrain
             values=multiscale_terrain(z,valid,neighborhood_radius,operation,cancel)
         elif z.size>1_000_000:
