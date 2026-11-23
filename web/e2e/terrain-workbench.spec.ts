@@ -130,6 +130,11 @@ with tempfile.TemporaryDirectory() as directory:
  await page.getByRole('button',{name:'Run terrain operation'}).click();
  await visual();
  await expect(page.getByAltText('Derived terrain raster')).toBeVisible();
+ await page.getByLabel('Terrain chart measure').selectOption('percent');
+ await expect(page.getByRole('img',{name:'Terrain class distribution (valid %)'})).toBeVisible();
+ await page.getByLabel('Terrain chart measure').selectOption('area');
+ await expect(page.getByRole('img',{name:'Terrain class distribution (projected km²)'})).toBeVisible();
+ await page.getByLabel('Terrain chart measure').selectOption('cells');
  await page.getByRole('button',{name:'Composition',exact:true}).click();
  await expect(page.getByRole('img',{name:'Terrain class composition'})).toBeVisible();
  await page.getByRole('button',{name:'Cumulative',exact:true}).click();
