@@ -312,3 +312,15 @@ def test_advanced_spatial_oracles(kind):
     else:
         r=run(kind,rasters=[raster()],vectors=[vectors(box(X,Y-10,X+15,Y))],parameters={'quantile':.5})
         assert r['rows'][0][-1]==1
+
+
+def test_overlay_shared_edges_preserve_area_and_valid_inverse_projection():
+    # Shared projected boundaries survive WGS84 round trips and all overlays.
+    a=vectors(box(X,Y-100,X+100,Y));b=vectors(box(X+50,Y-100,X+150,Y))
+    results={kind:run(kind,vectors=[a,b]) for kind in ('intersection','union','difference','symmetric_difference')}
+    for result in results.values():
+        assert result['receipt']['metrics']['overlay_precision_m']==1e-6
+        assert all(shape(f['geometry']).is_valid for f in result['features']['features'])
+    areas={k:v['receipt']['metrics']['area_m2'] for k,v in results.items()}
+    assert areas['difference']+areas['intersection']==pytest.approx(10000,abs=1e-6)
+    assert areas['symmetric_difference']+areas['intersection']==pytest.approx(areas['union'],abs=1e-6)

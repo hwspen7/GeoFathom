@@ -4,7 +4,7 @@ import numpy as np
 from pyproj import CRS,Transformer
 from shapely.geometry import shape,mapping,Point,box
 from shapely.ops import transform,unary_union
-from shapely import STRtree,get_num_coordinates
+from shapely import STRtree,get_num_coordinates,set_precision
 from rasterio.features import geometry_mask,shapes
 from rasterio.transform import rowcol
 from .science_raster import require
@@ -55,10 +55,19 @@ def vector_operation(method,groups,reverse,params):
     ga=[g for _,g in a];gb=[g for _,g in b]
     meta={};rows=[];headers=[];out=[]
     if method in {'intersection','union','difference','symmetric_difference','convex_hull'}:
+        # Overlay in a common one-micrometre metric precision model. PROJ
+        # round trips may otherwise create sub-nanometre slivers that collapse
+        # on inverse projection. Reject meaningful precision loss explicitly.
+        def snap(g):
+            q=set_precision(g,1e-6,mode='valid_output')
+            require(not q.is_empty and q.geom_type==g.geom_type and (not g.area or abs(q.area-g.area)<=max(1e-12,g.area*1e-6)) and (not g.length or abs(q.length-g.length)<=max(1e-9,g.length*1e-6)), 'Geometry is too small or sensitive for the micrometre overlay precision model.')
+            return q
+        ga=[snap(g) for g in ga];gb=[snap(g) for g in gb]
         first=unary_union(ga)
         if method=='convex_hull':g=first.convex_hull
         elif method=='union':g=unary_union(ga+gb)
         else:g=getattr(first,method)(unary_union(gb))
+        meta['overlay_precision_m']=1e-6
         meta['area_m2']=float(g.area);meta['length_m']=float(g.length)
         out=[(g,{'operation':method,'area_m2':meta['area_m2']})]
     elif method in {'buffer','centroid','simplify'}:
