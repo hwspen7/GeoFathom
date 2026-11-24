@@ -49,6 +49,25 @@ def test_every_spacetime_method_reference(kind):
     elif kind.startswith('kalman_'):params={'horizon':2,'process_variance':.01,'observation_variance':.1,'initial_velocity_variance':1}
     elif kind.startswith('forecast_'):params={'horizon':2}
     elif kind=='exceedance':params={'threshold':10}
+    if kind.startswith(('gev_','gpd_')):
+        from scipy.stats import genextreme,genpareto
+        prob=(np.arange(30)+.5)/30
+        if kind.startswith('gev_'):
+            vals=genextreme.ppf(prob,c=0,loc=4,scale=2);a=np.broadcast_to(np.repeat(vals,2)[:,None,None],(60,3,4)).copy();params={'block_length':2,'return_period':10}
+        else:
+            vals=genpareto.ppf(prob,c=0,scale=2);a=np.broadcast_to(np.r_[np.full(30,-1),vals][:,None,None],(60,3,4)).copy();params={'threshold':0,'return_period':20}
+        z=grid(run(kind,a,None,params));assert np.isfinite(z).all()
+        if kind.endswith('_shape'):assert np.max(abs(z))<.4
+        else:assert np.min(z)>2
+        return
+    if kind.startswith('tracked_'):
+        a=np.zeros((8,3,4));a[1:4,0,0:2]=4;a[6:,2,3]=5
+        r=run(kind,a,None,{'threshold':2,'maximum_gap':2});z=grid(r);assert r['receipt']['metrics']['events']==2
+        assert r['rows'][0][5:]==[2.,200.,200.] and r['rows'][1][5:]==[1.,100.,100.]
+        if kind.endswith('_id'):assert z[2,3]==2 and z[0,0]==0
+        elif kind.endswith('_span'):assert z[0,0]==2 and z[2,3]==1
+        else:assert z[0,0]==200 and z[2,3]==100
+        return
     if kind.startswith('multi_harmonic_'):
         t=np.arange(48.);y=2+np.where(t>=16,7,0)-np.where(t>=32,4,0)+2*np.cos(2*np.pi*t/6)
         a=np.broadcast_to(y[:,None,None],(48,3,4)).copy();r=run(kind,a,t,{'period':6,'min_segment':8,'max_breaks':2});z=grid(r)
@@ -305,3 +324,17 @@ def test_gtwr_direct_weighted_reference_and_holdout():
     changed=v.copy();changed[-2:]+=100;changed[:,:,4:]+=100
     result=gtwr(changed,[a,b],np.arange(8.),g,cfg,'gtwr_holdout_rmse')[3]
     assert original['training_indices']==result['training_indices'] and original['rmse']<1e-10 and result['rmse']>100
+
+
+def test_extreme_likelihood_and_event_gap_reference():
+    from analysis.spacetime_extremes import fit_gpd,fit_gev,track
+    from scipy.stats import genpareto,genextreme
+    from types import SimpleNamespace
+    p=(np.arange(120)+.5)/120
+    a=fit_gpd(genpareto.ppf(p,c=.15,scale=2))
+    assert a is not None and abs(a[0]-.15)<.12 and abs(a[1]-2)<.25
+    b=fit_gev(genextreme.ppf(p,c=-.15,loc=4,scale=2))
+    assert b is not None and abs(b[0]-.15)<.12 and abs(b[1]-4)<.25 and abs(b[2]-2)<.25
+    cube=np.zeros((6,2,2));cube[:,0,0]=5
+    _,_,rows,meta=track(cube,np.array([0,1,2,10,11,12.]),SimpleNamespace(is_meter=True,transform=AFF),{'threshold':2,'maximum_gap':2,'minimum_voxels':1},'tracked_span')
+    assert meta['events']==2 and [r[5] for r in rows]==[2.,2.]
