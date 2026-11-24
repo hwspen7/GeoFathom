@@ -120,10 +120,10 @@ def d8_flow(z, valid, dx, dy, cancel=None):
     order=cells[np.argsort(z.ravel()[cells],kind="stable")[::-1]]
     accum=valid.ravel().astype(np.int64)
     flat=dst.ravel()
-    for i,index in enumerate(order):
-        if i%4096==0:checkpoint(cancel)
-        target=flat[index]
-        if target>=0:accum[target]+=accum[index]
+    from .graph_kernels import accumulate_d8_chunk
+    for i in range(0,len(order),4096):
+        checkpoint(cancel)
+        accumulate_d8_chunk(accum,flat,order[i:i+4096])
     return dst,direction,np.where(valid,accum.reshape(z.shape),np.nan)
 
 def least_cost(z,valid,start,end,dx,dy,max_grade,cancel=None,route_model="surface"):
@@ -134,6 +134,11 @@ def least_cost(z,valid,start,end,dx,dy,max_grade,cancel=None,route_model="surfac
     if valid.size>limit:raise RasterError(f"Route grid exceeds {limit:,} cells under the effective compute budget.")
     if not math.isfinite(max_grade) or not 0<max_grade<=90:
         raise RasterError("Route slope limit must be in (0, 90] degrees.")
+    if active_limits() is not None and z.size>=65536:
+        from .graph_kernels import exact_route
+        from imagery.store import imagery_dir
+        scratch=imagery_dir()/".terrain-scratch" if z.size>=262144 else None
+        return exact_route(z,valid,start,end,dx,dy,max_grade,route_model,D8,cancel,scratch)
     h,w=z.shape
     dist=np.full(z.shape,np.inf);dist[start]=0
     prev=np.full(z.shape,-1,dtype=np.int64)
@@ -489,7 +494,7 @@ def surface(z,valid,affine,crs,operation,reference,point,end_point,max_slope,
         elif operation=="flow_accumulation":values=accum
         elif operation=="stream_order":
             from .multiflow import strahler_orders,shreve_magnitudes
-            if not 1<=stream_cells<=1_000_000:
+            if not 1<=stream_cells<=current_limits().global_cells:
                 raise RasterError("Invalid stream accumulation threshold.")
             values=(strahler_orders if stream_order_scheme=="strahler" else shreve_magnitudes)(
                 dst,valid&(accum>=stream_cells),cancel)

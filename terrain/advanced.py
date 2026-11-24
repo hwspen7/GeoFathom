@@ -358,6 +358,10 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
     max_cells=8_000_000 if extended else 262_144 if operation in {"visibility","viewshed_multi"} else 1_000_000
     if active_limits() is not None:
         maximum,max_cells=limits.grid(operation)
+    # Breaching still uses a bounded pit search. Enforce its real ceiling
+    # before opening the full raster rather than after allocation.
+    if fill_sinks and depression_method=="breach" and operation in {"flow_direction","flow_accumulation","flow_accumulation_mfd","streams","stream_order","watershed"}:
+        max_cells=min(max_cells,262_144)
     z,valid,covered,affine,crs,boundary,coverage=_window(path,geometry,maximum,max_cells)
     # Read declared vertical datum metadata independently of numerical
     # heights. Missing metadata remains unknown; never invent NAVD88/EGM96.

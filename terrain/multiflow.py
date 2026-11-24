@@ -10,6 +10,7 @@ from math import hypot, isfinite
 import numpy as np
 from imagery.raster import RasterError
 from .cancellation import checkpoint
+from .compute_resources import current_limits, active_limits
 
 _NEIGHBORS=((-1,0),(-1,1),(0,1),(1,1),(1,0),(1,-1),(0,-1),(-1,-1))
 
@@ -25,8 +26,8 @@ def mfd_accumulation(z,valid,dx,dy,exponent=1.1,cancel=None):
         raise RasterError("Invalid MFD cell spacing or routing exponent.")
     if not np.isfinite(z[valid]).all():
         raise RasterError("MFD valid elevations must be finite.")
-    if valid.size>1_000_000:
-        raise RasterError("MFD grid exceeds the bounded one-million-cell budget.")
+    if valid.size>current_limits().global_cells:
+        raise RasterError("MFD grid exceeds the effective global cell budget.")
     checkpoint(cancel)
     h,w=z.shape
     flat_valid=valid.ravel()
@@ -35,6 +36,13 @@ def mfd_accumulation(z,valid,dx,dy,exponent=1.1,cancel=None):
     # Strict downhill receivers form a DAG even with equal-height plateaus.
     order=cells[np.argsort(elevations[cells],kind="stable")[::-1]]
     accumulation=flat_valid.astype(np.float64)
+    if active_limits() is not None or z.size>=65536:
+        from .graph_kernels import accumulate_mfd_chunk
+        offsets=np.asarray(_NEIGHBORS,dtype=np.int64)
+        for start in range(0,len(order),4096):
+            checkpoint(cancel)
+            accumulate_mfd_chunk(z,valid,accumulation,order[start:start+4096],dx,dy,exponent,offsets)
+        return np.where(valid,accumulation.reshape(z.shape),np.nan)
     for iteration,index in enumerate(order):
         if iteration%2048==0:
             checkpoint(cancel)
