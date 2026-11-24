@@ -37,3 +37,23 @@ def cloud_candidates(v,p):
     # This intentionally conservative spectral test is not a learned cloud mask.
     return np.where(valid,cloud.astype(float),np.nan),{'candidate_cloud_cells':int(cloud.sum()),
         'interpretation':'Bright spectrally neutral visible and SWIR candidate mask. Snow, bright surfaces and thin cloud can be misclassified; needs reference validation.'}
+
+
+def cloud_shadow(v,grid,p,clear=False):
+    """Solar geometry projection of explicit candidate-cloud mask and dark land."""
+    cloud=v['cloud'];nir=v['nir'];land=v['land']
+    require(grid.is_meter,'Shadow projection requires a projected metre grid.')
+    valid=np.isfinite(cloud)&np.isfinite(nir)&np.isfinite(land)
+    require(np.all(np.isin(cloud[np.isfinite(cloud)],[0,1])) and np.all(np.isin(land[np.isfinite(land)],[0,1])),'Cloud and land masks must be binary.')
+    zen=np.deg2rad(p['solar_zenith']);az=np.deg2rad(p['solar_azimuth'])
+    distance=p['cloud_height_m']*np.tan(zen)
+    dx=int(np.rint(-distance*np.sin(az)/grid.transform.a));dy=int(np.rint(distance*np.cos(az)/abs(grid.transform.e)))
+    h,w=cloud.shape;require(abs(dx)<w and abs(dy)<h,'Shadow displacement exceeds scene dimensions.')
+    def slices(d,n):return slice(max(d,0),min(n+d,n)),slice(max(-d,0),min(n-d,n))
+    ry,cy=slices(dy,h);rx,cx=slices(dx,w)
+    projected=np.zeros(cloud.shape,bool);projected[ry,rx]=(cloud[cy,cx]==1)
+    shadow=valid&projected&(cloud==0)&(land==1)&(nir<=p['dark_nir'])
+    result=~(shadow|(cloud==1)) if clear else shadow
+    return np.where(valid,result.astype(float),np.nan),{'row_displacement':dy,'column_displacement':dx,
+        'candidate_shadow_cells':int(shadow.sum()),'cloud_height_m':p['cloud_height_m'],
+        'interpretation':'Single cloud-height geometric projection and dark-land screening. Clouds outside the scene and uncertain cloud heights are not modeled; this is a candidate mask, not validated cloud truth.'}

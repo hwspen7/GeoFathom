@@ -66,6 +66,9 @@ def run_managed(payload,job_id,progress,check):
             uid=str(p.bindings[role].image_id);require(entry['sha256']==hashes[uid],'Snapshot hash changed.')
             entry.pop('path',None);entry['image_id']=uid
         for entry,q in zip(result['quality_masks'],p.quality):
-            uid=str(q.image_id);entry.pop('path',None);entry['image_id']=uid
-        check()
+            uid=str(q.image_id);require(entry['sha256']==hashes[uid],'Quality snapshot hash changed.');entry.pop('path',None);entry['image_id']=uid
+        try:check()
+        except BaseException:
+            output.unlink(missing_ok=True)
+            raise
         return result

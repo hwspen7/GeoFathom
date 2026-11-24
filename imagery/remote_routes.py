@@ -15,7 +15,7 @@ from analysis.science_raster import require
 from analysis.science_routes import raster_product,raster_preview,csv_output
 from analysis.science_figures import figure_sources,csv_text
 from .remote_catalog import BY_ID,catalog,SERIES_IDS,HYPER_IDS
-from .remote_sar_complex import complex_products,calibrated_power,cloud_candidates
+from .remote_sar_complex import complex_products,calibrated_power,cloud_candidates,cloud_shadow
 from .remote_temporal_models import seasonal_metrics,segmented_means
 from .remote_hyperspectral import continuum_features
 from .remote_physics import thermal_uncertainty,angular_sar,register_translation,register_subpixel
@@ -224,6 +224,7 @@ def execute(body):
     elif kind=='dualpol_rvi':out=4*ratio(v['cross'],v['co']+v['cross'])
     elif kind=='sar_calibrated_power':out,meta=calibrated_power(v)
     elif kind in {'insar_wrapped_phase','insar_coherence'}:out,meta=complex_products(v,params,kind)
+    elif kind in {'cloud_shadow_candidates','cloud_shadow_clear'}:out,meta=cloud_shadow(v,first,params,kind=='cloud_shadow_clear')
     elif kind=='cloud_candidates':out,meta=cloud_candidates(v,params)
     elif kind=='sar_gamma_map':out,meta=gamma_map(v['power'],params['radius'],params['enl'])
     elif kind=='sar_log_change':

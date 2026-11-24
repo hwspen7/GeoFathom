@@ -189,7 +189,7 @@ def test_remote_invalid_inputs_and_recovery():
         response=client.post('/analysis/remote-sensing/run',json=bad);assert response.status_code==422,response.text
     response=client.post('/analysis/remote-sensing/run',json=good);assert response.status_code==200,response.text
     np.testing.assert_allclose(grid(response.json()),.5)
-    assert client.get('/analysis/remote-sensing/catalog').json()['operation_count']==len(BY_ID)==101
+    assert client.get('/analysis/remote-sensing/catalog').json()['operation_count']==len(BY_ID)==103
 
 def test_temporal_independent_quality_masks():
     # Cloud at one date does not erase the other valid acquisitions.
@@ -696,3 +696,16 @@ def test_managed_disk_job_snapshot_and_cancellation(tmp_path,monkeypatch):
     def cancel(value):raise RuntimeError('cancelled')
     with pytest.raises(RuntimeError,match='cancelled'):run_managed(payload,str(uuid4()),cancel,lambda:None)
     assert not target.exists()
+
+
+@pytest.mark.parametrize('kind',['cloud_shadow_candidates','cloud_shadow_clear'])
+def test_cloud_shadow_reference(kind):
+    cloud=np.zeros((9,9));cloud[3,5]=1;nir=np.full(cloud.shape,.4);nir[3,3]=.1;nir[3,2]=.1
+    land=np.ones_like(cloud);land[3,2]=0;nir[0,0]=np.nan
+    result=run(kind,{'cloud':cloud,'nir':nir,'land':land},{'solar_zenith':45,'solar_azimuth':90,'cloud_height_m':20})
+    out=grid(result);m=result['receipt']['metrics'];assert m['column_displacement']==-2 and m['row_displacement']==0
+    assert m['candidate_shadow_cells']==1 and np.isnan(out[0,0])
+    if kind=='cloud_shadow_candidates':
+        assert out[3,3]==1 and out[3,5]==0 and np.nansum(out)==1
+    else:
+        assert out[3,3]==0 and out[3,5]==0 and out[3,2]==1 and np.count_nonzero(out==0)==2
