@@ -34,7 +34,7 @@ def windows(width,height,tile):
         for col in range(0,width,tile):
             yield Window(col,row,min(tile,width-col),min(tile,height-row))
 
-def process(operation,bindings,output,parameters=None,quality=(),tile=512):
+def process(operation,bindings,output,parameters=None,quality=(),tile=512,progress=None):
     method=BY_ID.get(operation)
     require(method is not None and method.group=='Optical' and operation!='ndvi_uncertainty',
             'Windowed processing currently supports the twenty original pointwise optical indices.')
@@ -60,7 +60,10 @@ def process(operation,bindings,output,parameters=None,quality=(),tile=512):
             if first is None:first=ds
             else:require(same_grid(first,ds),'All band grids must match exactly.')
             if categorical:scale,offset=1.,0.
-            elif spec.get('encoding','metadata')=='landsat_sr':scale,offset=.0000275,-.2
+            elif spec.get('encoding','metadata')=='landsat_sr':
+                scale,offset=.0000275,-.2
+                native=(ds.scales[b-1],ds.offsets[b-1])
+                require(native==(1.,0.) or (math.isclose(native[0],scale,rel_tol=1e-7) and math.isclose(native[1],offset,abs_tol=1e-7)),'Raster metadata conflicts with selected Landsat preset.')
             elif spec.get('encoding','metadata')=='custom':scale,offset=float(spec['scale']),float(spec['offset'])
             else:
                 require(spec.get('encoding','metadata') in {'metadata','raw'},'Unknown encoding.')
@@ -75,6 +78,7 @@ def process(operation,bindings,output,parameters=None,quality=(),tile=512):
             item=open_band(spec,True);mask_inputs.append((item,spec['scheme']))
         quality_receipt=[{'path':item[-1],'band':item[1],'scheme':scheme,'sha256':digest(item[-1])} for item,scheme in mask_inputs]
         count=0;total=0.;minimum=np.inf;maximum=-np.inf;tiles=0
+        total_tiles=math.ceil(first.width/tile)*math.ceil(first.height/tile)
         try:
             fd,name=tempfile.mkstemp(prefix='.remote-',suffix='.tif',dir=output.parent);os.close(fd);tmp=Path(name)
             profile=dict(driver='GTiff',width=first.width,height=first.height,count=1,dtype='float64',crs=first.crs,
@@ -100,6 +104,7 @@ def process(operation,bindings,output,parameters=None,quality=(),tile=512):
                     good=z[np.isfinite(z)];count+=len(good);tiles+=1
                     if len(good):total+=float(good.sum());minimum=min(minimum,float(good.min()));maximum=max(maximum,float(good.max()))
                     dst.write(z,1,window=window)
+                    if progress is not None:progress(tiles/total_tiles)
             require(count>0,'No valid output pixels.')
             receipt={'operation':operation,'parameters':params,'bands':provenance,'quality_masks':quality_receipt,
                      'width':first.width,'height':first.height,'tile_size':tile,'windows':tiles,'valid_cells':count,

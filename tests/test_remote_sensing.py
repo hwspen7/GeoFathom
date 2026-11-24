@@ -675,3 +675,24 @@ def test_new_research_figure_rendering():
             assert image.startswith(b'\x89PNG') and len(image)>100
             titles.add(figure['title'])
     assert {'Nested spatial outer-fold accuracy','Nested spatial selected C','Acquisition mean time series','Canonical correlation convergence'}<=titles
+
+
+def test_managed_disk_job_snapshot_and_cancellation(tmp_path,monkeypatch):
+    import rasterio
+    from imagery.remote_managed import run_managed
+    from imagery import remote_managed
+    from uuid import uuid4
+    ids=[str(uuid4()),str(uuid4())]
+    monkeypatch.setenv('GEOFATHOM_IMAGERY_DIR',str(tmp_path))
+    for uid,z in zip(ids,(np.full((130,130),.6),np.full((130,130),.2))):
+        (tmp_path/(uid+'.tif')).write_bytes(base64.b64decode(source(z)['data']))
+    target=tmp_path/'out.tif';monkeypatch.setattr(remote_managed,'result_path',lambda _:target)
+    payload={'operation':'ndvi','bindings':{'nir':{'image_id':ids[0]},'red':{'image_id':ids[1]}},'tile':64}
+    progress=[];r=run_managed(payload,str(uuid4()),progress.append,lambda:None)
+    assert progress[-1]==1 and r['windows']==9
+    assert r['bands']['nir']['image_id']==ids[0] and 'path' not in r['bands']['nir']
+    with rasterio.open(target) as ds:np.testing.assert_allclose(ds.read(1),.5)
+    target.unlink()
+    def cancel(value):raise RuntimeError('cancelled')
+    with pytest.raises(RuntimeError,match='cancelled'):run_managed(payload,str(uuid4()),cancel,lambda:None)
+    assert not target.exists()

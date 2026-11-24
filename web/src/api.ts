@@ -933,7 +933,7 @@ export function getVisionModels():Promise<VisionModels>{
 
 export type GISJobKind='topology_qa'|'spatial_select'|'export_geojson'|
   'postgis_sync'|'rebuild_index'|'spectral_index'|'spectral_change'|
-  'semantic_segmentation'|'stac_ndvi'|'vector_import'|'vector_export';
+  'semantic_segmentation'|'stac_ndvi'|'vector_import'|'vector_export'|'remote_windowed';
 export interface GISJob {
   id:string;project_id:string;kind:GISJobKind;
   status:'queued'|'running'|'completed'|'failed'|'cancelled'|'interrupted';
@@ -1252,10 +1252,20 @@ export function getSpatialRasterSource(imageId:string):Promise<StudioRaster>{ret
 
 export type RemoteEncoding='metadata'|'raw'|'landsat_sr'|'landsat_st'|'custom';
 export type RemoteQualityScheme='binary'|'sentinel_clear'|'landsat_clear'|'landsat_unsaturated';
-export interface RemoteSource {name:string;data:string}
+export interface RemoteSource {name:string;data:string;assetId?:string}
 export interface RemoteBinding {source:number;band:number;encoding:RemoteEncoding;scale:number;offset:number;unit:string}
 export interface RemoteQuality {source:number;band:number;scheme:RemoteQualityScheme;roles:string[]}
 export interface RemoteMethod {id:string;group:string;title:string;roles:Array<{id:string;quantity:string}>;parameters:SpatialScienceMethod['parameters'];unit:string;assumption:string;variable_series?:boolean;axis?:'time'|'wavelength'}
 export interface RemoteInput {operation:string;sources:RemoteSource[];bindings:Record<string,RemoteBinding>;quality:RemoteQuality[];parameters:Record<string,number>;times?:number[]}
 export function getRemoteCatalog(signal?:AbortSignal):Promise<{operations:RemoteMethod[];operation_count:number}>{return request('/analysis/remote-sensing/catalog',{signal});}
 export function runRemoteScience(body:RemoteInput,signal?:AbortSignal):Promise<SpatialScienceResult>{return request('/analysis/remote-sensing/run',{method:'POST',signal,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});}
+
+export function queueRemoteDiskJob(projectId:string,payload:Record<string,unknown>):Promise<GISJob>{
+ return request('/projects/'+encodeURIComponent(projectId)+'/jobs',{method:'POST',headers:{'Content-Type':'application/json','X-GeoFathom-Local-Import':'1'},body:JSON.stringify({kind:'remote_windowed',payload})});
+}
+export async function downloadRemoteDiskJob(projectId:string,id:string):Promise<void>{
+ const response=await rawRequest('/projects/'+encodeURIComponent(projectId)+'/jobs/'+encodeURIComponent(id)+'/download');
+ if(!response.ok)throw Error('Completed remote raster required.');
+ const url=URL.createObjectURL(await response.blob());
+ try{const a=document.createElement('a');a.href=url;a.download='remote-sensing.tif';document.body.appendChild(a);a.click();a.remove();}finally{window.setTimeout(()=>URL.revokeObjectURL(url),1000);}
+}

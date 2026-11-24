@@ -24,7 +24,7 @@ from .leases import (PROCESS_ID,LEASE_SECONDS,ensure_lease_schema,
 
 KINDS={"vector_import","vector_export","topology_qa","spatial_select","export_geojson","postgis_sync",
        "rebuild_index","spectral_index","spectral_change","semantic_segmentation",
-       "stac_ndvi"}
+       "stac_ndvi","remote_windowed"}
 _POOL=ThreadPoolExecutor(max_workers=2,thread_name_prefix="geofathom-gis")
 _LOCK=Lock()
 _INITIALIZED=set()
@@ -145,6 +145,9 @@ def queue_job(project_id,kind,payload):
     if not isinstance(payload,dict):raise StorageError("Job payload must be a JSON object.")
     if kind=="stac_ndvi":
         payload={**payload,"full_resolution":True}
+    if kind=="remote_windowed":
+        from imagery.remote_managed import validate
+        payload=validate(payload).model_dump(mode="json")
     serialized=json.dumps(payload,allow_nan=False)
     if len(serialized.encode("utf-8"))>100_000:
         raise StorageError("Job request exceeds 100 KB.")
@@ -274,6 +277,9 @@ def _execute_impl(kind,project_id,payload):
     if kind=="vector_export":
         from storage.exchange import execute_export
         return execute_export(project_id,payload,_progress,check_cancelled)
+    if kind=="remote_windowed":
+        from imagery.remote_managed import run_managed
+        return run_managed(payload,_ACTIVE_JOB.get(),_progress,check_cancelled)
     if kind=="stac_ndvi":
         from imagery.remote import run_stac_ndvi
         return run_stac_ndvi(payload["collection"],payload["item_id"],
@@ -429,8 +435,8 @@ def _worker(uid,path):
             owner_token=_ACTIVE_OWNER.set(owner)
             try:
                 if (kind in {"spectral_index","spectral_change",
-                             "semantic_segmentation","stac_ndvi"}
-                        and ((payload.get("full_resolution") is True
+                             "semantic_segmentation","stac_ndvi","remote_windowed"}
+                        and (((payload.get("full_resolution") is True or kind=="remote_windowed")
                              and os.getenv("GEOFATHOM_RASTER_ISOLATE","1")=="1")
                              or os.getenv("GEOFATHOM_WORKER_MEMORY_MB","0")!="0")):
                     from .isolation import run_isolated
@@ -497,6 +503,10 @@ def _worker(uid,path):
                 # a row that still carries its exact unique token.
                 with _connect() as c:
                     release_slot(c,owner)
+                    row=c.execute('SELECT kind,status FROM gis_jobs WHERE id=?',(uid,)).fetchone()
+                    if row and row['kind']=='remote_windowed' and row['status']!='completed':
+                        from imagery.remote_managed import result_path
+                        result_path(uid).unlink(missing_ok=True)
         finally:
             # Even a database failure during slot cleanup must not poison the
             # next job's ContextVar on this executor thread.

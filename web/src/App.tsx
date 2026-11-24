@@ -2100,7 +2100,7 @@ export default function App() {
 
           <section id="tools-remote-sensing" hidden={activeTool!=='tools-remote-sensing'} className="panel-section">
             <div className="section-heading"><Layers3 size={16}/><span>Remote Sensing</span></div>
-            <RemoteSensingPanel key={activeProjectId??'no-project'} active={activeTool==='tools-remote-sensing'} connected={Boolean(capabilities)} resultsTarget={resultsTarget} assets={rasterLayers.map(l=>l.asset)} onPreview={layer=>{if(projectCurrent()){setRemoteRaster(layer);setRemoteVisible(true);}}}/>
+            <RemoteSensingPanel key={activeProjectId??'no-project'} projectId={activeProjectId} active={activeTool==='tools-remote-sensing'} connected={Boolean(capabilities)} resultsTarget={resultsTarget} assets={rasterLayers.map(l=>l.asset)} onPreview={layer=>{if(projectCurrent()){setRemoteRaster(layer);setRemoteVisible(true);}}}/>
           </section>
 
           <section id="tools-spatial" hidden={activeTool!=='tools-spatial'} className="panel-section">

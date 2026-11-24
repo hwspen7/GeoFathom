@@ -37,7 +37,7 @@ def expected_tests():
 def required_tests():
     return ['test_sensor_calibration_and_quality_roles','test_thermal_landsat_surface_temperature_preset',
             'test_remote_invalid_inputs_and_recovery','test_temporal_independent_quality_masks',
-            'test_remote_to_spatial_and_figure_workflow','test_remote_medium_grid_and_undefined_ratio','test_remote_gdal_reference','test_rgb_actual_figure_workflow','test_windowed_scene_above_inline_budget','test_external_reference_comparison','test_new_research_figure_rendering']
+            'test_remote_to_spatial_and_figure_workflow','test_remote_medium_grid_and_undefined_ratio','test_remote_gdal_reference','test_rgb_actual_figure_workflow','test_windowed_scene_above_inline_budget','test_external_reference_comparison','test_new_research_figure_rendering','test_managed_disk_job_snapshot_and_cancellation']
 
 def evaluate(path):
     results={}
