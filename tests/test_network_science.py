@@ -201,3 +201,31 @@ def test_enhanced_catchment_mass_conservation():
     assert r['rows'][0][1]==pytest.approx(ratio*math.exp(-.4))
     assert r['rows'][1][1]==pytest.approx(ratio+4.5)
     assert r['rows'][2][1]==0 and metrics(r)['allocated_supply']==pytest.approx(30)
+
+
+def test_extreme_decay_preserves_supply():
+    n=collection(edge('ab','A','B',1000))
+    r=run('enhanced_two_step_fca',n,origins=['A'],destinations=['B'],demand={'A':2},supply={'B':10},threshold=2000,beta=1000)
+    assert r['rows']==[['A',5.]]
+    assert metrics(r)['allocated_supply']==10 and metrics(r)['unserved_supply']==0
+
+def test_advanced_network_result_figures_and_lineage():
+    from terrain.studio_routes import StudioInput
+    from terrain.studio_render import render
+    n=collection(edge('ab','A','B',1),edge('bc','B','C',1),edge('ad','A','D',3),edge('dc','D','C',3))
+    for feature,c in zip(n['features'],[5,5,1,1]):feature['properties']['risk']=c
+    kw={'origins':['A','B'],'destinations':['B','C'],'demand':{'A':2,'B':4}}
+    outputs=[
+        run('pareto_path',n,origins=['A'],destinations=['C'],secondary_cost_field='risk'),
+        run('raster_impedance',collection(edge('ab','A','B',1),edge('bc','B','C',1)),raster=raster([1,3,5]),spacing_m=60),
+        run('correlated_reliability',origins=['A','B'],destinations=['C'],failure_probability={'bc':.2,'ad':.3},trials=100),
+        run('enhanced_two_step_fca',**kw,supply={'B':3,'C':1},threshold=10),
+        run('p_median',**kw),run('maximum_coverage',**kw,threshold=1),
+        run('capacitated_allocation',**kw,supply={'B':3,'C':1},threshold=10)]
+    assert outputs[1]['features']['geofathom_lineage']['raster_sha256']==metrics(outputs[1])['raster_sha256']
+    for result in outputs:
+        assert result['figures']
+        for figure in result['figures']:
+            req=StudioInput(recipe=figure['recipe'],csv=figure['csv'],**figure['bindings'])
+            png,_,_=render(req);assert png.startswith(b'\x89PNG')
+            svg,_,_=render(req.model_copy(update={'format':'svg'}));assert svg.startswith(b'<?xml')

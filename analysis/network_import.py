@@ -53,6 +53,6 @@ def build_osm(data,speeds):
                 'length_m':length}})
             require(len(features)<=10000,'Road graph exceeds 10,000 segments; use a smaller study area.')
     require(features,'No roads matched the selected highway classes.')
-    return {'network':{'type':'FeatureCollection','features':features},'receipt':{
-        'source_sha256':hashlib.sha256(raw).hexdigest(),'segments':len(features),'excluded_ways':excluded,'speed_kmh_by_class':speeds,
-        'restriction_relations_present':restrictions,'assumption':'OSM shared node IDs only; class-based scenario speeds, no observed traffic, turn restrictions or conditional access. Review tags and data completeness before inference.'}}
+    receipt={'source_sha256':hashlib.sha256(raw).hexdigest(),'segments':len(features),'excluded_ways':excluded,'speed_kmh_by_class':speeds,
+        'restriction_relations_present':restrictions,'assumption':'OSM shared node IDs only; class-based scenario speeds, no observed traffic, turn restrictions or conditional access. Review tags and data completeness before inference.'}
+    return {'network':{'type':'FeatureCollection','features':features,'geofathom_lineage':receipt},'receipt':receipt}

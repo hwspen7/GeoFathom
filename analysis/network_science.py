@@ -212,6 +212,7 @@ def execute(body):
     origins=body.origins;destinations=body.destinations
     for ids in (origins,destinations,list(body.demand),list(body.supply)):
         require(len(ids)==len(set(ids)) and set(ids)<=set(g.nodes),"Unknown or duplicated node ID.")
+    require(all(x>=1e-8 for x in [*body.demand.values(),*body.supply.values()]),"Rescale demand and supply to at least 1e-8 per location.")
     for e,m in body.multipliers.items():require(e in g.ids and 1<=m<=1000,"Invalid edge multiplier.")
     require(set(body.closed_edges)<=g.ids,"Unknown closed edge ID.")
     require(not (body.closed_edges or body.multipliers) or kind=="scenario_impact","Closures and multipliers are scenario-only parameters.")
@@ -415,6 +416,7 @@ def execute(body):
                 features=[node_feature(g,s,facility=t,cost=z,demand=q,covered=covered,color="#31876d" if covered else "#b94f46") for s,t,z,q,covered in rows]
                 features.extend(node_feature(g,t,selected_facility=True,color="#215fa5",display_radius=9) for t in metrics["selected_facilities"])
                 plot("Facility coverage by origin","basic_column","origin","covered_demand",values=(["origin","covered_demand"],[[s,q if covered else 0] for s,_,_,q,covered in rows]))
+                rows=[[*r[:4],int(r[4])] for r in rows]
         elif kind=="nearest_facility":
             cols=["origin","facility","cost"]
             for s in origins:
@@ -426,18 +428,21 @@ def execute(body):
             supply=body.supply
             if kind in ("two_step_fca","enhanced_two_step_fca"):
                 require(set(body.demand)==set(origins),"Provide explicit positive demand for every origin.")
-                def weight(s,t):
-                    z=ds[s].get(t,math.inf)
-                    return (math.exp(-body.beta*z) if kind=="enhanced_two_step_fca" else 1.) if z<=body.threshold else 0.
-                weights={(s,t):weight(s,t) for s in origins for t in destinations}
-                ratios={}
+                # A facility-specific common factor cancels from the two-step
+                # ratio. Shift by minimum reachable cost to prevent all weights
+                # underflowing and falsely reporting an unserved facility.
+                score={s:0. for s in origins};unserved=0.
                 for t in destinations:
-                    demand=sum(body.demand[s]*weights[s,t] for s in origins)
-                    ratios[t]=supply[t]/demand if demand else 0.
-                    require(math.isfinite(ratios[t]),"Demand decay underflow; reduce beta or change cost units.")
-                score={s:sum(ratios[t]*weights[s,t] for t in destinations) for s in origins}
-                metrics["unserved_supply"]=sum(supply[t] for t in destinations if ratios[t]==0)
+                    eligible=[(s,ds[s][t]) for s in origins if ds[s].get(t,math.inf)<=body.threshold]
+                    if not eligible:
+                        unserved+=supply[t];continue
+                    offset=min(z for _,z in eligible)
+                    weights={s:math.exp(-body.beta*(z-offset)) if kind=="enhanced_two_step_fca" else 1. for s,z in eligible}
+                    denominator=sum(body.demand[s]*w for s,w in weights.items())
+                    for s,w in weights.items():score[s]+=supply[t]*w/denominator
+                metrics["unserved_supply"]=unserved
                 metrics["allocated_supply"]=sum(body.demand[s]*score[s] for s in origins)
+                metrics["supply_balance_error"]=metrics["allocated_supply"]+unserved-sum(supply.values())
             else:score={s:sum(supply[t]*math.exp(-body.beta*ds[s][t]) for t in destinations if t in ds[s]) for s in origins}
             cols=["origin","accessibility"];rows=[[s,score[s]] for s in origins];features=[node_feature(g,s,accessibility=score[s]) for s in origins]
             plot("Origin accessibility","basic_column","origin","accessibility")
@@ -456,4 +461,12 @@ def execute(body):
                 else:p['display_width']=2+4*t
             metrics['display_scale']={'field':field,'minimum':lo,'maximum':hi,'description':'Linear display scale only; raw attribute retained.'}
     receipt={"schema":"geofathom-network-science","operation":kind,"assumption":METHODS[kind][1],"network_sha256":hashlib.sha256(serialized.encode()).hexdigest(),"cost_field":body.cost_field,"cost_unit":body.cost_unit if body.cost_field!="length_m" else "m","nodes":n,"edges":len(g.edges),"directed_arcs":arcs,"parameters":body.model_dump(exclude={"network","raster"}),"metrics":metrics}
-    return {"operation":kind,"columns":cols,"rows":rows,"csv":table_csv(cols,rows),"features":{"type":"FeatureCollection","features":features},"figures":figures,"receipt":receipt}
+    product={"type":"FeatureCollection","features":features}
+    if kind=="raster_impedance":
+        product["geofathom_lineage"]={"source_network_sha256":receipt["network_sha256"],"raster_sha256":metrics["raster_sha256"],
+            "model":metrics["model"],"parameters":receipt["parameters"],"cost_unit":receipt["cost_unit"]}
+    result={"operation":kind,"columns":cols,"rows":rows,"csv":table_csv(cols,rows),"features":product,"figures":figures,"receipt":receipt}
+    # Reject nonfinite scientific products rather than silently corrupting
+    # the JSON transport or a research export.
+    json.dumps(result,allow_nan=False)
+    return result
