@@ -338,3 +338,26 @@ def test_extreme_likelihood_and_event_gap_reference():
     cube=np.zeros((6,2,2));cube[:,0,0]=5
     _,_,rows,meta=track(cube,np.array([0,1,2,10,11,12.]),SimpleNamespace(is_meter=True,transform=AFF),{'threshold':2,'maximum_gap':2,'minimum_voxels':1},'tracked_span')
     assert meta['events']==2 and [r[5] for r in rows]==[2.,2.]
+
+
+def test_disk_cube_window_reference_and_global_fit(tmp_path):
+    import rasterio
+    from analysis.spacetime_disk import execute as disk
+    from analysis.spacetime_kriging import fit
+    rng=np.random.default_rng(24);t=np.arange(8.);rr,cc=np.indices((19,21));a=3+rr*.1+cc*.2+t[:,None,None]*2+rng.normal(0,.1,(8,19,21));a[:,0,0]=np.nan
+    src=tmp_path/'cube.tif';out=tmp_path/'sen.tif'
+    with rasterio.open(src,'w',driver='GTiff',width=21,height=19,count=8,dtype='float64',crs=CRS,transform=AFF,nodata=np.nan) as ds:
+        ds.write(a);ds.update_tags(TERRAIN_UNIT='index')
+    receipt=disk(src,out,t,'sen',{},tile=16)
+    with rasterio.open(out) as ds:z=ds.read(1)
+    np.testing.assert_allclose(z,grid(run('sen',a,t)),equal_nan=True,atol=1e-9)
+    assert receipt['output_sha256']==hashlib.sha256(out.read_bytes()).hexdigest()
+    with pytest.raises(FigureInputError,match='new file'):disk(src,out,t,'sen',{},tile=16)
+    p={'sample_limit':24,'seed':12,'horizon':1,'spatial_range':100,'temporal_range':10,'interaction':.5}
+    out=tmp_path/'global.tif';receipt=disk(src,out,t,'st_universal_mean',p,tile=16)
+    coords=np.array(receipt['metrics']['global_training_coordinates'])
+    ids=np.column_stack((coords[:,2],coords[:,1]/10-.5,coords[:,0]/10-.5)).astype(int)
+    predict,_=fit(coords,a[tuple(ids.T)],{**p,'fit_covariance':0,'universal':1,'nugget_ratio':.1})
+    xyz=np.column_stack(((cc.ravel()+.5)*10,(rr.ravel()+.5)*10,np.full(rr.size,8.)))
+    expected=predict(xyz)[0].reshape(rr.shape)
+    with rasterio.open(out) as ds:np.testing.assert_allclose(ds.read(1),expected,atol=1e-10)
