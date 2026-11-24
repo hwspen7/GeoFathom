@@ -23,13 +23,19 @@ from .spacetime_models import trend,temporal,forecast,spatial_lag,variogram
 
 router=APIRouter(prefix='/analysis/spatiotemporal',tags=['spatiotemporal science'])
 # parameter = (default,minimum,maximum,integer)
-P={'minimum_observations':(6,3,64,True),'lag':(1,1,32,True),'threshold':(0,-1e50,1e50,False),'horizon':(30,.000001,1e7,False),'radius':(3,1,20,True),'period':(365,.000001,1e7,False),'fraction':(.5,.01,.99,False),'minimum_amplitude':(.01,0,1e50,False),'min_segment':(3,2,32,True),'penalty':(1,.000001,1e50,False),'process_variance':(.01,1e-20,1e50,False),'observation_variance':(.1,1e-20,1e50,False),'initial_velocity_variance':(1,1e-20,1e50,False),'permutations':(199,19,999,True),'seed':(42,0,2147483647,True),'mode':(1,1,64,True),'block_length':(3,2,21,True),'spatial_range':(100,1e-6,1e8,False),'temporal_range':(30,1e-6,1e8,False),'nugget_ratio':(.1,1e-6,10,False),'sample_limit':(128,12,256,True),'fit_covariance':(0,0,1,True),'holdout_dates':(2,2,32,True),'buffer_cells':(0,0,100,True),'bic_threshold':(6,0,1000,False),'maximum_gap':(30,.000001,1e9,False),'alpha':(.05,.001,.2,False),'block_cells':(2,1,1000,True)}
+P={'minimum_observations':(6,3,64,True),'lag':(1,1,32,True),'threshold':(0,-1e50,1e50,False),'horizon':(30,.000001,1e7,False),'radius':(3,1,20,True),'period':(365,.000001,1e7,False),'fraction':(.5,.01,.99,False),'minimum_amplitude':(.01,0,1e50,False),'min_segment':(3,2,32,True),'penalty':(1,.000001,1e50,False),'process_variance':(.01,1e-20,1e50,False),'observation_variance':(.1,1e-20,1e50,False),'initial_velocity_variance':(1,1e-20,1e50,False),'permutations':(199,19,999,True),'seed':(42,0,2147483647,True),'mode':(1,1,64,True),'block_length':(3,2,21,True),'spatial_range':(100,1e-6,1e8,False),'temporal_range':(30,1e-6,1e8,False),'nugget_ratio':(.1,1e-6,10,False),'sample_limit':(128,12,256,True),'fit_covariance':(0,0,1,True),'holdout_dates':(2,2,32,True),'buffer_cells':(0,0,100,True),'bic_threshold':(6,0,1000,False),'maximum_gap':(30,.000001,1e9,False),'alpha':(.05,.001,.2,False),'block_cells':(2,1,1000,True),'interaction':(.5,.05,1,False)}
 KALMAN_P=('minimum_observations','horizon','process_variance','observation_variance','initial_velocity_variance')
 KRIGING_P=('spatial_range','temporal_range','nugget_ratio','sample_limit','fit_covariance','seed')
 BREAK_P=('period','min_segment','bic_threshold')
 EVENT_P=('threshold','maximum_gap','minimum_observations')
 HOT_P=('radius','permutations','seed','alpha')
+UNIVERSAL_P=KRIGING_P+('interaction',)
 METHODS={
+ 'st_universal_mean':('Joint geostatistics','Nonseparable universal kriging forecast',UNIVERSAL_P+('horizon',)),
+ 'st_universal_sd':('Joint geostatistics','Nonseparable universal kriging observation SD',UNIVERSAL_P+('horizon',)),
+ 'st_universal_holdout_rmse':('Joint validation','Universal kriging joint holdout RMSE',UNIVERSAL_P+('holdout_dates','buffer_cells')),
+ 'st_universal_holdout_coverage':('Joint validation','Universal kriging joint holdout coverage',UNIVERSAL_P+('holdout_dates','buffer_cells')),
+ 'st_universal_holdout_bias':('Joint validation','Universal kriging joint holdout bias',UNIVERSAL_P+('holdout_dates','buffer_cells')),
  'hotspot_latest_z':('Space-time hotspots','Latest local Gi-star score',HOT_P),
  'hotspot_latest_p':('Space-time hotspots','Latest trajectory-permutation maxT probability',HOT_P),
  'hotspot_hot_fraction':('Space-time hotspots','Significant hot-date fraction',HOT_P),
@@ -179,9 +185,9 @@ def execute(body):
         out,cols,rows,meta=events(stack,t,p,kind)
         unit='count' if kind=='event_count' else unit+'*'+body.time_unit if kind=='event_integrated_excess' else body.time_unit
         plot('Observed event starts and active cells','multi_line',cols,rows,x='time',columns=['event_starts','active_cells'])
-    elif kind.startswith(('st_kriging_','st_holdout_')):
-        out,cols,rows,meta=kriging(stack,t,first,p,kind)
-        if kind=='st_holdout_coverage':unit='fraction'
+    elif kind.startswith(('st_kriging_','st_holdout_','st_universal_')):
+        out,cols,rows,meta=kriging(stack,t,first,{**p,'universal':1} if kind.startswith('st_universal_') else p,kind)
+        if kind.endswith('_coverage'):unit='fraction'
         if len(rows)>=2:plot('Joint holdout kriging versus training mean','multi_line',cols,rows,x='time',columns=['kriging_rmse','training_mean_rmse'])
         if rows:plot('Joint holdout empirical prediction coverage','basic_column',cols,rows,x='time',y='coverage_95')
     elif kind.startswith('eof_'):

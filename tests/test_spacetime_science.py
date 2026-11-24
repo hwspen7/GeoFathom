@@ -70,6 +70,13 @@ def test_every_spacetime_method_reference(kind):
     if kind.startswith('event_'):
         t=np.array([0.,1.,2.,3.,4.,10.,11.,12.]);a=np.broadcast_to(np.array([0,3,5,np.nan,4,4,6,0])[:,None,None],(8,3,4)).copy()
         r=run(kind,a,t,{'threshold':2,'maximum_gap':2});np.testing.assert_allclose(grid(r),{'event_count':3,'event_longest_span':1,'event_total_span':2,'event_integrated_excess':5}[kind]);return
+    if kind.startswith('st_universal_'):
+        rng=np.random.default_rng(42);a=a+rng.normal(0,.4,a.shape)
+        r=run(kind,a,t,{'sample_limit':24});z=grid(r)
+        assert np.isfinite(z).any() and r['receipt']['metrics']['drift_rank']==4
+        if 'holdout' in kind:assert np.isnan(z[:,:3]).all()
+        if kind.endswith('_sd'):assert np.min(z)>0
+        return
     if kind.startswith(('st_kriging_','st_holdout_')):
         r=run(kind,a,t,{'sample_limit':24});z=grid(r)
         assert np.isfinite(z).any()
@@ -228,3 +235,23 @@ def test_advanced_figures_actual_products():
             req=StudioInput(recipe=figure['recipe'],csv=figure['csv'] or '',rasters=rasters,**figure['bindings'])
             for fmt,magic in [('png',b'\x89PNG'),('svg',b'<?xml')]:
                 data,_,_=render(req.model_copy(update={'format':fmt}));assert data.startswith(magic)
+
+
+def test_universal_kriging_augmented_reference():
+    from analysis.spacetime_kriging import fit
+    from scipy.spatial.distance import cdist
+    rng=np.random.default_rng(15);x=rng.uniform(0,8,(25,3));target=rng.uniform(0,8,(5,3));y=3+x@np.array([.2,-.3,.7])+rng.normal(0,.4,len(x))
+    p={'spatial_range':4.,'temporal_range':3.,'nugget_ratio':.15,'fit_covariance':0,'interaction':.7,'universal':1}
+    prediction,meta=fit(x,y,p);mu,sd=prediction(target)
+    def corr(a,b):
+        u=1+cdist(a[:,2:],b[:,2:])/3
+        return np.exp(-cdist(a[:,:2],b[:,:2])/4/u**.35)/u**.7
+    K=corr(x,x)+.15*np.eye(len(x));cross=corr(x,target)
+    assert np.linalg.eigvalsh(K).min()>0
+    H=np.column_stack((np.ones(len(x)),x));D=np.column_stack((np.ones(len(target)),target))
+    aug=np.block([[K,H],[H.T,np.zeros((4,4))]])
+    sol=np.linalg.solve(aug,np.vstack((cross,D.T)))
+    np.testing.assert_allclose(mu,y@sol[:len(x)],atol=1e-10)
+    var=1.15-np.sum(sol[:len(x)]*cross,axis=0)-np.sum(sol[len(x):]*D.T,axis=0)
+    np.testing.assert_allclose(sd,np.sqrt(meta['sill']*var),atol=1e-10)
+    np.testing.assert_allclose(H.T@sol[:len(x)],D.T,atol=1e-10)
