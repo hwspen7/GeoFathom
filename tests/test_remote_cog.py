@@ -84,7 +84,7 @@ def test_stac_ndvi_streams_separate_bands_and_excludes_scl_clouds(
            for name in images}
     item={"id":"S2_2024_demo","collection":"sentinel-2-c1-l2a",
           "properties":{"datetime":"2024-10-01T00:00:00Z"},
-          "assets":{name:{"href":href} for name,href in hrefs.items()}}
+          "assets":{name:{"href":href,**({"raster:bands":[{"scale":.001,"offset":.1}]} if name!="scl" else {})} for name,href in hrefs.items()}}
     monkeypatch.setattr(remote,"fetch_stac_item",
                         lambda collection,item_id:item)
     actual_open=remote.rasterio.open
@@ -104,6 +104,10 @@ def test_stac_ndvi_streams_separate_bands_and_excludes_scl_clouds(
     assert result["resolution_reduced"] is False
     assert result["engine"].startswith("gdal-vsicurl+")
     assert result["acquired_at"]=="2024-10-01T00:00:00Z"
+    assert result["band_calibration"]["nir"]=={"scale":.001,"offset":.1,"source":"stac"}
+    # Raw DN NDVI=.6, calibrated NDVI=1/3. A threshold of .5 must reject all.
+    second=remote.run_stac_ndvi("sentinel-2-c1-l2a","S2_2024_demo",threshold=.5,max_side=128,tile_size=64,max_pixels=20000,memory_mb=16)
+    assert second["classified_pixels"]==0
 
 
 def test_quality_confusion_and_sentinel_scl_masks():
@@ -118,3 +122,18 @@ def test_quality_confusion_and_sentinel_scl_masks():
     assert result["overall_accuracy"]==.5
     assert result["mean_iou_present_classes"]==pytest.approx(1/3)
     assert all(x["f1"]==.5 for x in result["classes"])
+
+
+def test_stac_calibration_rejects_ambiguous_and_conflicting_metadata():
+    from types import SimpleNamespace
+    from imagery.remote_calibration import stac_reflectance_calibration,apply_reflectance
+    ds=SimpleNamespace(scales=[1.],offsets=[0.])
+    with pytest.raises(RasterError,match='No explicit'):
+        stac_reflectance_calibration({},ds,{},'earth-search')
+    asset={'bands':[{'raster:scale':.0001,'raster:offset':-.1}]}
+    c=stac_reflectance_calibration(asset,ds,{},'earth-search')
+    np.testing.assert_allclose(apply_reflectance([2000,6000,np.nan],c),[.1,.5,np.nan],equal_nan=True)
+    with pytest.raises(RasterError,match='applied BOA'):
+        stac_reflectance_calibration(asset,ds,{'earthsearch:boa_offset_applied':True},'earth-search')
+    with pytest.raises(RasterError,match='disagree'):
+        stac_reflectance_calibration(asset,SimpleNamespace(scales=[.0001],offsets=[.1]),{},'earth-search')

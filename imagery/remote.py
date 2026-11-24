@@ -21,7 +21,8 @@ from rasterio.vrt import WarpedVRT
 
 from geometry.spectral import normalized_difference
 from imagery.raster import RasterError,_check
-from vision.quality import sentinel2_clear_mask
+from imagery.remote_kernels import quality_mask
+from imagery.remote_calibration import stac_reflectance_calibration,apply_reflectance
 from vision.tiled import TilePlan,_scratch,_disk_features,_check_scratch,_transitions,MAX_BOUNDARY_TRANSITIONS
 
 _CATALOG="https://earth-search.aws.element84.com/v1"
@@ -139,6 +140,7 @@ def run_stac_ndvi(collection,item_id,threshold=.25,max_side=4096,
                 _check(dataset)
                 if dataset.count<1:
                     raise RasterError("A STAC spectral asset has no raster band.")
+            calibration={name:stac_reflectance_calibration(assets[config['assets'][name]],dataset, item.get('properties') or {},provider) for name,dataset in [('nir',nir),('red',red)]}
             output_width=min(nir.width,max_side)
             output_height=max(1,round(nir.height*output_width/nir.width))
             if output_height>max_side:
@@ -174,9 +176,9 @@ def run_stac_ndvi(collection,item_id,threshold=.25,max_side=4096,
                         n=nir_aligned.read(1,window=window,masked=True)
                         r=red_aligned.read(1,window=window,masked=True)
                         q=scl_aligned.read(1,window=window,masked=True)
-                        n_values=np.ma.asarray(n,dtype=np.float32).filled(np.nan)
-                        r_values=np.ma.asarray(r,dtype=np.float32).filled(np.nan)
-                        clear=sentinel2_clear_mask(np.asarray(q.filled(0),np.uint8))
+                        n_values=apply_reflectance(np.ma.asarray(n,dtype=np.float64).filled(np.nan),calibration['nir'])
+                        r_values=apply_reflectance(np.ma.asarray(r,dtype=np.float64).filled(np.nan),calibration['red'])
+                        clear=quality_mask(np.ma.asarray(q,dtype=np.float64).filled(np.nan),'sentinel_clear')==1
                         valid=(~np.ma.getmaskarray(n) &
                                ~np.ma.getmaskarray(r) &
                                np.isfinite(n_values) & np.isfinite(r_values))
@@ -209,7 +211,7 @@ def run_stac_ndvi(collection,item_id,threshold=.25,max_side=4096,
             "stac_provider":provider,
             "source_images":[],"stac_collection":collection,
             "stac_item_id":item_id,
-            "asset_urls":hrefs,"acquired_at":(item.get("properties") or {}).get("datetime"),
+            "asset_urls":hrefs,"band_calibration":calibration,"acquired_at":(item.get("properties") or {}).get("datetime"),
             "source_crs":original_crs,"geometry_crs":"EPSG:4326",
             "pixel_grid":[output_width,output_height],
             "original_pixel_grid":[original_width,original_height],
