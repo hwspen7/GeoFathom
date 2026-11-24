@@ -389,9 +389,20 @@ def test_joint_parameter_selection_and_nested_validation():
     from types import SimpleNamespace
     rng=np.random.default_rng(52);coords=rng.uniform(0,8,(24,3));y=coords@np.array([.2,-.3,.7])+rng.normal(0,.5,len(coords))
     p={'spatial_range':4.,'temporal_range':3.,'nugget_ratio':.2,'interaction':.5,'universal':1,'fit_covariance':1,'fit_interaction':1}
-    _,m=fit(coords,y,p)
+    predict,m=fit(coords,y,p)
     assert m['interaction_fitted'] and .05<=m['interaction']<=1 and m['optimization_starts']==3
     assert m['reml_objective']<=m['initial_reml_objective']+1e-7
+    from scipy.spatial.distance import cdist
+    target=rng.uniform(0,8,(5,3));mu,sd=predict(target)
+    def corr(a,b):
+        u=1+cdist(a[:,2:],b[:,2:])/m['temporal_range'];q=m['interaction']
+        return np.exp(-cdist(a[:,:2],b[:,:2])/m['spatial_range']/u**(q/2))/u**q
+    ratio=m['nugget_ratio'];K=corr(coords,coords)+ratio*np.eye(len(coords));C=corr(coords,target)
+    H=np.column_stack((np.ones(len(coords)),coords));D=np.column_stack((np.ones(len(target)),target))
+    sol=np.linalg.solve(np.block([[K,H],[H.T,np.zeros((4,4))]]),np.vstack((C,D.T)))
+    np.testing.assert_allclose(mu,y@sol[:len(coords)],atol=1e-10)
+    variance=1+ratio-np.sum(sol[:len(coords)]*C,axis=0)-np.sum(sol[len(coords):]*D.T,axis=0)
+    np.testing.assert_allclose(sd,np.sqrt(m['sill']*variance),atol=1e-10)
     x=rng.normal(size=(12,6,9));z=2*x+rng.normal(0,.1,x.shape)
     cfg={'spatial_range':100.,'temporal_range':20.,'local_sample_limit':512,'effective_samples':5,'seed':3,'holdout_dates':2,'buffer_cells':1,'auto_bandwidth':1}
     g=SimpleNamespace(is_meter=True,transform=AFF)
@@ -425,14 +436,15 @@ def test_disk_pixel_method_parity(kind,tmp_path):
     disk(src,dst,t,kind,p,tile=16)
     with rasterio.open(dst) as ds:np.testing.assert_allclose(ds.read(1),grid(run(kind,a,t,p)),equal_nan=True,atol=1e-9)
 
-def test_global_disk_priority_tile_invariance(tmp_path):
+@pytest.mark.parametrize('kind',['st_universal_mean','st_universal_sd'])
+def test_global_disk_priority_tile_invariance(kind,tmp_path):
     import rasterio
     from analysis.spacetime_disk import execute as disk
     rng=np.random.default_rng(23);a=rng.normal(size=(8,17,19));src=tmp_path/'cube.tif'
     with rasterio.open(src,'w',driver='GTiff',width=19,height=17,count=8,dtype='float64',crs=CRS,transform=AFF,nodata=np.nan) as ds:
         ds.write(a);ds.update_tags(TERRAIN_UNIT='index')
     p={'sample_limit':24,'seed':42,'horizon':1}
-    m=disk(src,tmp_path/'a.tif',np.arange(8.),'st_universal_mean',p,tile=16)
-    n=disk(src,tmp_path/'b.tif',np.arange(8.),'st_universal_mean',p,tile=32)
+    m=disk(src,tmp_path/'a.tif',np.arange(8.),kind,p,tile=16)
+    n=disk(src,tmp_path/'b.tif',np.arange(8.),kind,p,tile=32)
     assert m['metrics']['global_training_coordinates']==n['metrics']['global_training_coordinates']
     with rasterio.open(tmp_path/'a.tif') as a,rasterio.open(tmp_path/'b.tif') as b:np.testing.assert_allclose(a.read(),b.read(),atol=1e-10)
