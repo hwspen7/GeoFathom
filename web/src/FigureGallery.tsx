@@ -5,6 +5,7 @@ import type {PersistedTerrainResult} from './terrainResultStore';
 import {researchBase} from './terrainResearch';
 import {availableFigures,defaultFigure,figureTable,localPlotData,makeFigure,metricUnit,tableCSV,type FigureSettings,type Primitive} from './figureLibrary';
 import {exportScenePNG,pythonFigure,saveFigureBlob} from './figureExport';
+import ScientificFigureStudio from './ScientificFigureStudio';
 
 function PrimitiveView({p}:{p:Primitive}){
  const common={stroke:p.stroke??'#000000',fill:p.fill??'none',strokeWidth:p.line_width??1,strokeDasharray:p.dashed?'5 4':undefined};
@@ -21,6 +22,7 @@ export default function FigureGallery(p:{record?:PersistedTerrainResult;research
  const [data,setData]=useState<PlotData|null>(()=>research?.data??(record?localPlotData(record):null));
  const [loading,setLoading]=useState(!data),[error,setError]=useState(''),[exporting,setExporting]=useState(false);
  const [settings,setSettings]=useState<FigureSettings|null>(()=>data?defaultFigure(data):null);
+ const [studioOpen,setStudioOpen]=useState(false);
  const [page,setPage]=useState<'charts'|'appearance'|'axes'|'data'>('charts');
  const [dataPage,setDataPage]=useState(0),[styleName,setStyleName]=useState(''),[threshold,setThreshold]=useState('');
  const styleKey='geofathom-figure-styles:'+(p.projectId??'local');
@@ -77,7 +79,7 @@ export default function FigureGallery(p:{record?:PersistedTerrainResult;research
    else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus();}
   }
  }}>
-  <header><div><strong>Scientific figure library</strong><small>{research?.title??record?.title} {record&&' · '+record.source.name}</small></div><button type="button" onClick={p.onClose}>Close figure library</button></header>
+  <header><div><strong>Scientific figure library</strong><small>{research?.title??record?.title} {record&&' · '+record.source.name}</small></div><span><button type="button" onClick={()=>setStudioOpen(true)}>Extended figure studio</button> <button type="button" onClick={p.onClose}>Close figure library</button></span></header>
   {loading&&<p role="status">Preparing numerical plot tables from the recorded terrain input…</p>}
   {error&&<p role="alert" className="discovery-error">{error}</p>}
   {scene?.error&&<p role="alert">{scene.error}</p>}
@@ -122,5 +124,6 @@ export default function FigureGallery(p:{record?:PersistedTerrainResult;research
    </section>
   </div>}
   {settings&&<footer><div className="figure-size-controls"><label>Width (mm)<input aria-label="Width (mm)" type="number" min="60" max="300" value={settings.width_mm} onChange={e=>change('width_mm',Math.max(60,Math.min(300,Number(e.target.value)||160)))}/></label><label>Height (mm)<input aria-label="Height (mm)" type="number" min="40" max="300" value={settings.height_mm} onChange={e=>change('height_mm',Math.max(40,Math.min(300,Number(e.target.value)||110)))}/></label><label>PNG resolution<select aria-label="PNG resolution" value={settings.dpi} onChange={e=>change('dpi',Number(e.target.value))}><option value="300">300 DPI</option><option value="600">600 DPI</option></select></label></div><div className="figure-downloads">{['SVG','PDF','PNG','CSV','JSON','Python'].map(format=><button type="button" key={format} disabled={exporting||(!!scene?.error&&!['CSV','JSON'].includes(format))} onClick={()=>void download(format)}>{format==='Python'?'Python script':format}</button>)}</div></footer>}
+ {studioOpen&&<ScientificFigureStudio source={{name:research?.title??record?.title??'Selected result',csv:table?tableCSV(table):undefined,rasters:record?.advanced?.raster?[{name:record.title,data:record.advanced.raster.geotiff,unit:record.advanced.raster.unit??''}]:[],provenance:metadata}} onClose={()=>setStudioOpen(false)}/>}
  </div></div>,document.body);
 }

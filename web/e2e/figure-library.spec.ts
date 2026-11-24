@@ -7,7 +7,7 @@ const API='http://127.0.0.1:8000';
 const tile=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/ZecAAAAASUVORK5CYII=','base64');
 
 test('a real slope result opens the scientific figure library and exports numerical data and publication figures',async({page},testInfo)=>{
- test.setTimeout(120000);
+ test.setTimeout(180000);
  const fixture=JSON.parse(execFileSync('python',['-c',`
 import json,tempfile
 from pathlib import Path
@@ -72,5 +72,24 @@ with tempfile.TemporaryDirectory() as directory:
  expect(png.data.indexOf(Buffer.from('pHYs'))).toBeGreaterThan(0);
  const json=await getFile('JSON');const payload=JSON.parse(json.data.toString('utf8'));expect(payload.data.valid_cells).toBe(result.raster.valid_cells);expect(payload.metadata.source.sha256).toHaveLength(64);
  const python=await getFile('Python script');expect(python.data.toString('utf8')).toContain('base64.b64decode');
+ await dialog.getByRole('button',{name:'Extended figure studio'}).click();
+ const studio=page.getByRole('dialog',{name:'Scientific figure studio'});
+ await expect(studio).toBeVisible();
+ await studio.getByRole('button',{name:/Continuous georeferenced map/}).click();
+ await studio.getByRole('button',{name:'Render figure'}).click();
+ await expect(studio.getByAltText('Continuous georeferenced map preview')).toBeVisible({timeout:30000});
+ await studio.getByLabel('Figure category').selectOption('Scenarios');
+ await studio.getByRole('button',{name:/Pareto dominance and trade-offs/}).click();
+ await studio.getByLabel('Figure CSV data').fill('cost,benefit\n1,1\n2,3\n3,2\n4,5');
+ await studio.getByLabel('Figure field x').selectOption('cost');
+ await studio.getByLabel('Figure field y').selectOption('benefit');
+ await studio.getByText('Maximize Y objective',{exact:true}).click();
+ await studio.getByRole('button',{name:'Render figure'}).click();
+ await expect(studio.getByAltText('Pareto dominance and trade-offs preview')).toBeVisible({timeout:30000});
+ const studioDownload=page.waitForEvent('download');
+ await studio.getByRole('button',{name:'PDF',exact:true}).click();
+ expect((await studioDownload).suggestedFilename()).toBe('geofathom-pareto.pdf');
+ await page.screenshot({path:testInfo.outputPath('extended-scientific-figure.png')});
+ await studio.getByRole('button',{name:'Close studio'}).click();
  await dialog.getByRole('button',{name:'Close figure library'}).click();
 });

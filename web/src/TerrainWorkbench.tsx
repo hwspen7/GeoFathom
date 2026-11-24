@@ -13,6 +13,8 @@ import {loadTerrainResults,cacheTerrainResult,deleteTerrainResult,markTerrainRes
 import WorkspaceToolShelf from './WorkspaceToolShelf';
 import TerrainResearchPanel from './TerrainResearchPanel';
 import FigureGallery from './FigureGallery';
+import ScientificFigureStudio from './ScientificFigureStudio';
+import {tableCSV as studioTableCSV} from './figureLibrary';
 import {terrainFetchBounds,terrainGeometryBounds,terrainFetchBudget,terrainBoundsOverlap,terrainRasterMatchesTarget,describeTerrainBounds,preferredTerrainFetchScope,terrainSupportsUSGS,recommendDEMResolution,availableDEMResolutions,type FetchScope,type TerrainBBox} from './terrainSource';
 
 function MeshView({mesh}:{mesh:TerrainMesh}){
@@ -112,6 +114,7 @@ interface Props{
 export default function TerrainWorkbench(p:Props){
  // Opening Terrain never preselects a calculation.
  const [figureGalleryOpen,setFigureGalleryOpen]=useState(false);
+ const [studioOpen,setStudioOpen]=useState(false);
  const [researchOpen,setResearchOpen]=useState(false);
  const [researchLayer,setResearchLayer]=useState<TerrainRasterLayer|null>(null);
  const [operation,setOperation]=useState<Operation|null>(null);
@@ -924,6 +927,7 @@ export default function TerrainWorkbench(p:Props){
 
  </div>;
  return <>
+ {studioOpen&&<ScientificFigureStudio source={{name:selected?.title??'Terrain workspace',csv:selected?.profile?studioTableCSV({columns:['distance_m','elevation_m'],rows:selected.profile.samples.map(s=>[s.distance_m,s.elevation_m]),x_label:'',y_label:'',unit:'m'}):selected?.advanced?studioTableCSV({columns:Object.keys(selected.advanced.metrics),rows:[Object.values(selected.advanced.metrics)],x_label:'',y_label:'',unit:''}):undefined,rasters:selected?.advanced?.raster?[{name:selected.title,data:selected.advanced.raster.geotiff,unit:selected.advanced.raster.unit??''}]:[],provenance:selected?{id:selected.id,source:selected.source,geometry:selected.geometry,parameters:selected.parameters}:undefined}} onClose={()=>setStudioOpen(false)}/>}
  {figureGalleryOpen&&selected&&<FigureGallery record={selected} projectId={p.projectId} onClose={()=>setFigureGalleryOpen(false)}/>}
  {researchOpen&&<TerrainResearchPanel projectId={p.projectId} record={selected??null} connected={p.connected}
    onClose={()=>setResearchOpen(false)} onLayer={setResearchLayer}/>}
@@ -947,6 +951,7 @@ export default function TerrainWorkbench(p:Props){
        <button className={leftTab==='source'?'terrain-linked-active':''} type="button"
          aria-label="Get DEM" aria-pressed={leftTab==='source'} onClick={()=>setLeftTab('source')}>Get DEM</button>
        <button type="button" aria-label="Research analysis" onClick={()=>setResearchOpen(true)}>Research</button>
+       <button type="button" onClick={()=>setStudioOpen(true)}>Figure studio</button>
      </div>
      <div className="terrain-linked-row">
        <label className="terrain-linked-select">Analysis

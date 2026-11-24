@@ -1858,3 +1858,31 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 @media(max-width:850px){.figure-gallery-body{grid-template-columns:230px 1fr}.figure-gallery footer{flex-direction:column;align-items:flex-start}.figure-gallery-backdrop{padding:8px}.figure-gallery{height:calc(100dvh - 16px)}.figure-recipe-grid{gap:4px}.figure-gallery-stage{padding:8px}}
 .figure-recipe-grid button svg{width:100%;height:48px;background:white;border-radius:3px}.figure-gallery aside>small{display:block;margin-bottom:12px}
 .figure-gallery aside{overflow:hidden}.figure-recipe-grid button svg{height:32px}.figure-recipe-grid button{min-height:52px}.figure-chart-pages{display:flex;justify-content:space-between;align-items:center;gap:5px;font-size:10px;margin:4px 0 10px}.figure-chart-pages button{font-size:10px;padding:5px}.figure-gallery aside nav button{padding:7px 5px;font-size:11px}
+
+/* Independent scientific studio; preserve the compact fixed terrain workspace. */
+.figure-studio-backdrop{position:fixed;inset:0;z-index:5300;background:#102a3a77;display:grid;place-items:center;padding:18px}
+.figure-studio{width:min(1450px,100%);height:min(900px,calc(100dvh - 36px));background:#fff;color:#22333e;display:flex;flex-direction:column;border-radius:10px;box-shadow:0 12px 55px #102a3a44;overflow:hidden}
+.figure-studio header,.figure-studio footer{display:flex;align-items:center;justify-content:space-between;gap:9px;padding:12px 18px;border-bottom:1px solid #dce4e8}
+.figure-studio header small,.studio-recipe-list small,.figure-studio label>small{display:block;color:#687983;font-size:11px}
+.figure-studio header strong{display:block;font-size:17px}
+.figure-studio footer{border-bottom:0;border-top:1px solid #dce4e8;justify-content:flex-start;flex-wrap:wrap}
+.figure-studio button,.figure-studio select,.figure-studio input,.figure-studio textarea{font:inherit;color:#22333e;border:1px solid #c8d4dc;border-radius:5px;background:white;padding:6px 8px;max-width:100%}
+.figure-studio button{cursor:pointer}.figure-studio button:disabled{opacity:.45;cursor:not-allowed}.figure-studio button[aria-pressed=true]{background:#dceaf3;border-color:#477eae}
+.figure-studio-layout{min-height:0;flex:1;display:grid;grid-template-columns:225px 285px minmax(0,1fr)}
+.studio-recipes,.studio-config{overflow:auto;padding:12px;border-right:1px solid #dce4e8;min-width:0;scrollbar-width:thin}
+.studio-recipes>label,.studio-config label{display:flex;flex-direction:column;gap:4px;margin:0 0 9px;font-size:12px}
+.studio-config label:has(input[type=checkbox]){flex-direction:row;align-items:center}
+.studio-config fieldset{border:0;min-width:0;padding:0;margin:0}.studio-config legend{font-weight:600;margin-bottom:8px}
+.studio-config small{display:block;color:#687983;margin-bottom:8px;line-height:1.4}
+.studio-config textarea{resize:vertical;width:100%;min-height:56px;box-sizing:border-box;font-family:monospace;font-size:11px}
+.studio-recipe-list{display:flex;flex-direction:column;gap:5px;margin-top:8px}.studio-recipe-list button{text-align:left;padding:8px}
+.studio-recipe-list strong{display:block;font-size:12px;font-weight:550}
+.studio-size{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.studio-raster{border-bottom:1px solid #e2e8ed;margin-bottom:6px}
+.studio-preview{background:#eff3f5;overflow:auto;min-width:0;padding:16px;display:flex;flex-direction:column;gap:12px}
+.studio-preview img{width:100%;height:auto;max-height:75%;object-fit:contain;background:white;box-shadow:0 2px 10px #24415214}
+.studio-empty{margin:auto;color:#647680;text-align:center}.studio-receipt{padding:10px;background:white;border:1px solid #dce4e8;border-radius:5px}
+.studio-preview details{overflow:auto;background:white;padding:8px}.studio-preview table{width:100%;border-collapse:collapse;font-size:11px}.studio-preview td,.studio-preview th{border-bottom:1px solid #dce4e8;text-align:left;padding:4px;white-space:nowrap}
+.figure-studio footer label{display:flex;align-items:center;gap:6px;font-size:12px}
+@media(max-width:900px){.figure-studio-backdrop{padding:6px}.figure-studio{height:calc(100dvh - 12px)}.figure-studio-layout{grid-template-columns:160px 220px minmax(0,1fr)}.studio-recipes,.studio-config,.studio-preview{padding:7px}}
+@media(max-width:650px){.figure-studio-layout{display:flex;flex-direction:column;overflow:auto}.studio-recipes,.studio-config{overflow:visible;border-bottom:1px solid #dce4e8}.studio-recipe-list{max-height:170px;overflow:auto}.studio-preview{min-height:250px;overflow:visible}.figure-studio footer{padding:8px}}

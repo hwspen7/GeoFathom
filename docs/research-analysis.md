@@ -142,3 +142,34 @@ The paired diagnostic gallery uses a square, shared-scale baseline/candidate plo
 ### Two-factor sensitivity
 
 Optionally select a second active numeric sweep parameter and two to four distinct values on each axis. The engine validates all combinations and evaluates the full Cartesian grid using the production operation, subject to the existing cell-evaluation budget. Select Research analysis → Figures → Scientific metric figures → Two-factor response heatmap. Every cell is an actual calculated metric, and unmatched populations remain N/A. Axes show the actual parameter settings as discrete design levels. The ZIP contains factorial.csv, all run receipts, source products, and the report. This is a bounded factorial experiment, not Sobol variance attribution.
+
+## Extended scientific figure studio
+
+The Figure studio button in Terrain, Extended figure studio in the original
+figure library, and the completed Research analysis Figures page open the
+data-driven extended studio. The 24 existing terrain recipes remain
+available; the extended catalog provides 51 additional recipes (75 total
+catalog entries, with some related plot families sharing numerical methods).
+Select an actual CSV or GeoTIFF dataset, bind the required columns or select
+the rasters in order, render a preview, then export PNG (300/600 DPI), SVG,
+PDF, TIFF, computed CSV or reproduction JSON. Source hashes, input/used
+population, assumptions and exact settings are preserved. The reproduction
+JSON embeds inputs; resubmit its input object to POST /terrain/studio/render
+with compatible software. Large inputs and invalid numerical designs fail
+explicitly rather than silently truncating data.
+
+The extended studio supports multivariate statistics, violin/KDE, Pearson
+matrices, regression diagnostics, Pareto dominance, parallel coordinates,
+radar, ranking, tornado, Sobol and Morris estimators, actual two-factor
+surfaces, regular time-series summaries, cartographic and ensemble maps,
+hypsometry and 3D visualization. Sobol and Morris require correctly designed
+evaluation tables; the studio does not generate their experiment designs
+or run a global terrain model automatically. Tornado requires measured
+low/high parameter responses. Conditional significant-change maps require
+a supplied difference standard deviation raster. Profile uncertainty
+bands require actual lower and upper bounds. Maps use aligned north-up
+GeoTIFFs, and terrain derivative operations require projected metre grids
+with declared metre elevations. The map north arrow indicates grid north.
+Only the 3D rendering is decimated; the source grid remains unchanged.
+The older terrain-engine outputs and experiments retain their own
+independent scientific validation limits.
