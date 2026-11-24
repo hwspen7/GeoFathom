@@ -46,6 +46,11 @@ class StudioInput(BaseModel):
     height_mm:float=Field(default=125,ge=40,le=250)
     dpi:Literal[120,300,600]=120
     format:Literal['png','pdf','svg','tiff']='png'
+    export_grid:bool=False
+    spatial_inference:Literal['statistic','p','q','cluster']='statistic'
+    permutations:int=Field(default=199,ge=99,le=9999)
+    random_seed:int=Field(default=42,ge=0,le=4294967295)
+    alpha:float=Field(default=.05,gt=0,lt=1)
     response_style:Literal['heatmap','filled','contour','surface']='surface'
     contour_levels:int=Field(default=12,ge=4,le=30)
     show_values:bool=True
@@ -82,14 +87,15 @@ def studio_catalog():
 @router.post('/render')
 async def studio_render(body:StudioInput):
     try:
-        payload,metadata,table=await run_in_threadpool(render,body)
+        grids=[] if body.export_grid else None
+        payload,metadata,table=await run_in_threadpool(render,body,grid_sink=grids)
         if body.csv:metadata['csv_sha256']=hashlib.sha256(body.csv.encode('utf-8')).hexdigest()
         metadata.update(schema='geofathom-studio-1',settings=body.model_dump(exclude={'csv','rasters'}))
         # Strict JSON serialization catches a broken numerical result before a successful response.
         json.dumps({'metadata':metadata,'table':table},allow_nan=False)
         return {'figure':base64.b64encode(payload).decode('ascii'),
                 'media_type':{'png':'image/png','pdf':'application/pdf','svg':'image/svg+xml','tiff':'image/tiff'}[body.format],
-                'metadata':metadata,'table':table}
+                'metadata':metadata,'table':table,'derived_rasters':grids or []}
     except (FigureInputError,ValueError,OverflowError,RuntimeError,OSError) as error:
         raise HTTPException(status_code=422,detail=str(error)) from error
 

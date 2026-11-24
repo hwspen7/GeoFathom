@@ -58,18 +58,21 @@ def aligned_bands(grids):
 def safe_ratio(a,b):
     return np.divide(a,b,out=np.full_like(a,np.nan,dtype=float),where=np.abs(b)>1e-15)
 
-def render_raster_domain(kind,req,fig,ax,grids,parameter,meta,cmap):
+def render_raster_domain(kind,req,fig,ax,grids,parameter,meta,cmap,grid_sink=None):
     g=grids[0];z=g.values;unit=g.unit or 'unspecified';derived=[]
     from matplotlib.colors import ListedColormap,BoundaryNorm
     from matplotlib.ticker import MaxNLocator
     def save(headers,*arr):
         derived.clear();derived.extend(numeric_rows(headers,*arr))
-    def show(out,label,cm=None,vmin=None,vmax=None):
+    def show(out,label,cm=None,vmin=None,vmax=None,output_unit=None):
         valid=np.isfinite(out);require(valid.any(),'No valid computed raster cells.')
         im=ax.imshow(out,extent=g.extent,origin='upper',interpolation='nearest',cmap=cm or cmap,vmin=vmin,vmax=vmax)
         fig.colorbar(im,ax=ax,label=label,shrink=.82)
         geo_axes()
         v=out[valid];meta.update(used_count=int(v.size),minimum=float(v.min()),maximum=float(v.max()),mean=float(v.mean()),output_unit=label)
+        if grid_sink is not None:
+            from .studio_inference import geotiff_product
+            grid_sink.append(geotiff_product(g,out,output_unit if output_unit is not None else label,kind,[item.sha256 for item in grids]))
         save(['valid_cells','minimum','maximum','mean'],[len(v)],[v.min()],[v.max()],[v.mean()])
     def geo_axes():
         ax.set_aspect('equal');ax.set_xlabel('Easting' if g.crs.is_projected else 'Longitude');ax.set_ylabel('Northing' if g.crs.is_projected else 'Latitude')
@@ -105,7 +108,7 @@ def render_raster_domain(kind,req,fig,ax,grids,parameter,meta,cmap):
             elif kind=='spectral_savi':v=(1+parameter)*safe_ratio(a[0]-a[1],a[0]+a[1]+parameter)
             elif kind=='spectral_evi':v=2.5*safe_ratio(a[0]-a[1],a[0]+6*a[1]-7.5*a[2]+1)
             else:v=safe_ratio(a[0]-a[1],a[0]+a[1])
-            out=np.full(z.shape,np.nan);out[mask]=v;show(out,'Angle (degrees)' if kind=='spectral_angle' else 'Index (unitless)','RdBu_r' if kind not in {'spectral_angle','spectral_ratio'} else None)
+            out=np.full(z.shape,np.nan);out[mask]=v;show(out,'Angle (degrees)' if kind=='spectral_angle' else 'Index (unitless)','RdBu_r' if kind not in {'spectral_angle','spectral_ratio'} else None,output_unit='degree' if kind=='spectral_angle' else 'unitless')
     elif kind.startswith('ensemble_'):
         stack,mask=aligned_grids(grids);a=stack[:,mask]
         if kind=='ensemble_mean':v=a.mean(axis=0)
@@ -115,7 +118,7 @@ def render_raster_domain(kind,req,fig,ax,grids,parameter,meta,cmap):
         elif kind=='ensemble_cv':v=safe_ratio(a.std(axis=0,ddof=1),np.abs(a.mean(axis=0)))
         elif kind=='ensemble_range':v=np.ptp(a,axis=0)
         else:v=np.maximum((a>0).mean(axis=0),(a<0).mean(axis=0))
-        out=np.full(z.shape,np.nan);out[mask]=v;show(out,'Fraction' if kind in {'ensemble_cv','ensemble_sign'} else unit)
+        out=np.full(z.shape,np.nan);out[mask]=v;show(out,'Fraction' if kind in {'ensemble_cv','ensemble_sign'} else unit,output_unit='unitless' if kind in {'ensemble_cv','ensemble_sign'} else g.unit)
         meta['realizations']=len(grids)
     elif kind.startswith('land_'):
         require(g.is_meter,'Land-cover area and patch analysis requires a projected metre grid.')
@@ -162,9 +165,9 @@ def render_raster_domain(kind,req,fig,ax,grids,parameter,meta,cmap):
         require(min(z.shape)>=3,'Terrain derivatives require at least 3 × 3 cells.')
         if kind in {'terrain_tpi','terrain_tri','terrain_roughness','terrain_relief_curve'}:
             mean,sd,span,rms,_=local_moments(z,True)
-            if kind=='terrain_tpi':show(z-mean,'Elevation minus eight-neighbor mean (m)','RdBu_r')
-            elif kind=='terrain_tri':show(rms,'RMS neighbor elevation difference (m)')
-            elif kind=='terrain_roughness':show(span,'Eight-neighbor elevation range (m)')
+            if kind=='terrain_tpi':show(z-mean,'Elevation minus eight-neighbor mean (m)','RdBu_r',output_unit='m')
+            elif kind=='terrain_tri':show(rms,'RMS neighbor elevation difference (m)',output_unit='m')
+            elif kind=='terrain_roughness':show(span,'Eight-neighbor elevation range (m)',output_unit='m')
             else:
                 valid=np.isfinite(z)&np.isfinite(span);v=z[valid];r=span[valid];require(v.size>0 and np.ptp(v)>0,'Relief curve needs varying elevation.')
                 edges=np.linspace(v.min(),v.max(),int(parameter)+1);idx=np.clip(np.searchsorted(edges,v,side='right')-1,0,len(edges)-2)
@@ -173,7 +176,7 @@ def render_raster_domain(kind,req,fig,ax,grids,parameter,meta,cmap):
         else:
             dy,dx=np.gradient(z,g.transform.e,g.transform.a);valid=np.isfinite(z)&np.isfinite(dx)&np.isfinite(dy)
             if kind=='terrain_aspect_map':
-                out=(np.degrees(np.arctan2(-dx,-dy))+360)%360;out[~valid|(np.hypot(dx,dy)==0)]=np.nan;show(out,'Downhill bearing (degrees)','twilight',0,360)
+                out=(np.degrees(np.arctan2(-dx,-dy))+360)%360;out[~valid|(np.hypot(dx,dy)==0)]=np.nan;show(out,'Downhill bearing (degrees)','twilight',0,360,output_unit='degree')
             elif kind=='terrain_gradient_east':show(np.where(valid,dx,np.nan),'East gradient (m/m)','RdBu_r')
             elif kind=='terrain_gradient_north':show(np.where(valid,dy,np.nan),'North gradient (m/m)','RdBu_r')
             elif kind=='terrain_surface_ratio':show(np.where(valid,np.sqrt(1+dx*dx+dy*dy),np.nan),'Local planar surface / horizontal area')
@@ -183,7 +186,7 @@ def render_raster_domain(kind,req,fig,ax,grids,parameter,meta,cmap):
         require(len(grids)==(3 if kind=='spatial_z_change' else 2),'Select baseline, candidate and, for standardized change, difference SD.')
         stack,mask=aligned_grids(grids);d=np.where(mask,stack[1]-stack[0],np.nan)
         if kind=='spatial_relative_change':show(100*safe_ratio(d,np.abs(stack[0])),'Relative change (%)','RdBu_r')
-        elif kind=='spatial_absolute_change':show(np.abs(d),'Absolute difference ('+unit+')')
+        elif kind=='spatial_absolute_change':show(np.abs(d),'Absolute difference ('+unit+')',output_unit=g.unit)
         elif kind=='spatial_z_change':
             require(np.all(stack[2][mask]>=0),'Difference SD cannot be negative.');show(safe_ratio(d,stack[2]),'Difference / supplied SD','RdBu_r')
         else:
@@ -210,14 +213,29 @@ def render_raster_domain(kind,req,fig,ax,grids,parameter,meta,cmap):
             ax.legend(frameon=False);ax.set(xlabel='Lag (m)',ylabel={'spatial_variogram':'Semivariance','spatial_covariogram':'Covariance','spatial_correlogram':'Correlation'}[kind]);derived.extend([['direction','lag_m','pairs','statistic'],*map(list,rows)])
         else:
             mean,sd,span,rms,count=local_moments(z)
-            if kind=='spatial_local_mean':show(mean,unit)
-            elif kind=='spatial_local_sd':show(sd,'Neighbor population SD ('+unit+')')
-            elif kind=='spatial_local_range':show(span,'Neighbor range ('+unit+')')
+            if kind=='spatial_local_mean':show(mean,unit,output_unit=g.unit)
+            elif kind=='spatial_local_sd':show(sd,'Neighbor population SD ('+unit+')',output_unit=g.unit)
+            elif kind=='spatial_local_range':show(span,'Neighbor range ('+unit+')',output_unit=g.unit)
             elif kind=='spatial_local_z':show(safe_ratio(z-mean,sd),'Local standardized anomaly','RdBu_r')
             else:
                 std=np.nanstd(z);require(std>0,'Spatial standardized statistics need varying data.')
                 u=(z-np.nanmean(z))/std;lag,_,_,rms,_=local_moments(u)
-                if kind=='spatial_local_moran':show(u*lag,'Local Moran I','RdBu_r')
+                if kind=='spatial_local_moran':
+                    view=req.spatial_inference
+                    if view=='statistic':show(u*lag,'Local Moran I','RdBu_r',output_unit='unitless')
+                    else:
+                        from .studio_inference import conditional_moran
+                        p,q=conditional_moran(u,lag,count,req.permutations,req.random_seed)
+                        meta.update(permutations=req.permutations,seed=req.random_seed,alpha=req.alpha,
+                            inference='Conditional randomization of other valid cells under exchangeability; BY adjustment across all tested cells.',
+                            tested_cells=int(np.isfinite(p).sum()),significant_cells=int((q<=req.alpha).sum()),minimum_p=1/(req.permutations+1))
+                        if view=='p':show(p,'Conditional Monte Carlo p',vmin=0,vmax=1,output_unit='probability')
+                        elif view=='q':show(q,'BY-adjusted p',vmin=0,vmax=1,output_unit='probability')
+                        else:
+                            codes=np.where(np.isfinite(q),0.,np.nan);significant=q<=req.alpha
+                            codes[significant&(u>0)&(lag>0)]=1;codes[significant&(u<0)&(lag<0)]=2
+                            codes[significant&(u>0)&(lag<0)]=3;codes[significant&(u<0)&(lag>0)]=4
+                            show(codes,'0 not significant; 1 HH; 2 LL; 3 HL; 4 LH',ListedColormap(['#eeeeee','#b33637','#3663a1','#e29e51','#7b75b4']),-.5,4.5,output_unit='class')
                 elif kind=='spatial_geary':show(rms*rms,'Local mean squared standardized difference')
                 else:
                     valid=np.isfinite(u)&np.isfinite(lag);x=u[valid];y=lag[valid];require(x.size>1,'No valid spatial lag pairs.')

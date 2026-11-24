@@ -20,7 +20,7 @@ def _require(condition,message):
 from .studio_publication import (response_grid, cell_edges, profile_data, raster_profiles,
                                  numeric_rows, layout_receipt)
 
-def render(req, container=None, panel_label=''):
+def render(req, container=None, panel_label='', grid_sink=None):
     from matplotlib.figure import Figure
     from matplotlib import rc_context
     from matplotlib.backends.backend_agg import FigureCanvasAgg
@@ -78,7 +78,7 @@ def render(req, container=None, panel_label=''):
             if source=='raster':
                 from .studio_domain_raster import render_raster_domain
                 if MIN_RASTERS.get(kind,1)==1:_require(len(grids)==1,'Select exactly one raster for this recipe.')
-                derived=render_raster_domain(kind,req,fig,ax,grids,parameter,meta,cmap)
+                derived=render_raster_domain(kind,req,fig,ax,grids,parameter,meta,cmap,grid_sink)
             else:
                 from .studio_domain_table import render_table_domain
                 derived=render_table_domain(kind,req,fig,ax,table,parameter,meta,palette,cmap,rows)
@@ -365,6 +365,10 @@ def render(req, container=None, panel_label=''):
                     ax0=xmin+(xmax-xmin)*.06;ay0=ymin+(ymax-ymin)*.06;a.plot([ax0,ax0+length],[ay0,ay0],color='black',linewidth=3);a.plot([ax0,ax0+length],[ay0,ay0],color='white',linewidth=1)
                     a.text(ax0+length/2,ay0+(ymax-ymin)*.025,f'{length/1000:g} km' if length>=1000 else f'{length:g} m',ha='center',fontsize=7,bbox={'facecolor':'white','alpha':.8,'edgecolor':'none','pad':1})
             def show(a,values,grid,cm=cmap,vmin=None,vmax=None,label=None):
+                if grid_sink is not None:
+                    from .studio_inference import geotiff_product
+                    units={'raster_slope':'degree','raster_hillshade':'unitless','raster_exceedance':'unitless'}
+                    grid_sink.append(geotiff_product(grid,values,units.get(kind,grid.unit),kind,[v.sha256 for v in grids]))
                 im=a.imshow(values,extent=grid.extent,origin='upper',interpolation='nearest',cmap=cm,vmin=vmin,vmax=vmax);map_axes(a,grid)
                 if label:fig.colorbar(im,ax=a,label=label,shrink=.85)
                 return im

@@ -161,7 +161,7 @@ NOTES={
  'spatial_covariogram':'Directional cardinal grid lags with full-population mean centering; descriptive covariance.',
  'spatial_correlogram':'Pairwise Pearson correlation by cardinal grid lag; no independence claim.',
  'time_crosscorr':'Positive lag pairs the first series at t with the second at t+lag; regular complete sampling required.',
- 'spatial_local_moran':'Four-neighbor row-standardized local Moran statistic; descriptive only, no p-values or significance classes.',
+ 'spatial_local_moran':'Four-neighbor row-standardized local Moran statistic. Optional conditional permutation p-values, BY-adjusted values and significance classes; requires exchangeability and enough permutations.',
  'spatial_moran_scatter':'Four-neighbor standardized spatial lag, valid neighbors only. Descriptive spatial dependence.',
  'spatial_geary':'Mean squared standardized difference to valid cardinal neighbors; not a significance test.',
  'spectral_ndvi':'Input order: NIR, red; aligned physical reflectance.',

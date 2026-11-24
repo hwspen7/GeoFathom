@@ -369,3 +369,32 @@ def test_domain_recipe_counts_and_tiers():
     entries=catalog()
     assert sum(r['tier']=='professional' for r in entries)==168
     assert sum(r['tier']=='basic' for r in entries)==12
+
+
+def test_conditional_local_inference_is_reproducible_and_adjusted():
+    from terrain.studio_inference import conditional_moran,adjust_by
+    from terrain.studio_domain_raster import local_moments
+    z=np.arange(25,dtype=float).reshape(5,5);z[0,0]=np.nan
+    u=(z-np.nanmean(z))/np.nanstd(z);lag,_,_,_,count=local_moments(u)
+    p,q=conditional_moran(u,lag,count,99,3)
+    p2,q2=conditional_moran(u,lag,count,99,3)
+    assert np.allclose(p,p2,equal_nan=True) and np.allclose(q,q2,equal_nan=True)
+    assert np.isnan(p[0,0]) and np.nanmin(p)>=.01
+    assert np.all(q[np.isfinite(q)]>=p[np.isfinite(p)])
+    assert adjust_by([.01,.04,.03]).tolist()==pytest.approx([.055,.07333333333333333,.07333333333333333])
+
+
+def test_computed_raster_roundtrip(raster_fixture):
+    from terrain.studio_data import read_grids
+    body=domain_input('spectral_ndvi',raster_fixture)
+    products=[]
+    _,meta,_=render(body,grid_sink=products)
+    assert len(products)==1 and products[0]['unit']=='unitless'
+    from terrain.studio_routes import RasterInput
+    product=products[0]
+    grid_out=read_grids([RasterInput(name=product['name'],data=product['data'],unit=product['unit'])])[0]
+    grids=read_grids(body.rasters)
+    expected=(grids[0].values-grids[1].values)/(grids[0].values+grids[1].values)
+    assert np.allclose(grid_out.values,expected,equal_nan=True)
+    assert grid_out.transform==grids[0].transform and grid_out.crs==grids[0].crs
+    assert grid_out.sha256==product['sha256']
