@@ -49,6 +49,18 @@ def test_every_spacetime_method_reference(kind):
     elif kind.startswith('kalman_'):params={'horizon':2,'process_variance':.01,'observation_variance':.1,'initial_velocity_variance':1}
     elif kind.startswith('forecast_'):params={'horizon':2}
     elif kind=='exceedance':params={'threshold':10}
+    if kind.startswith('panel_'):
+        t=np.arange(8.);rng=np.random.default_rng(19);x=rng.normal(size=(8,4,4));spatial=np.arange(16).reshape(4,4);y=2*x+spatial+t[:,None,None]
+        r=run(kind,y,t,{'block_cells':2},sources=[source(y),source(x)],covariates=[{'source':1,'band':i+1,'unit':'index'} for i in range(8)])
+        assert r['receipt']['metrics']['coefficient']==pytest.approx(2)
+        np.testing.assert_allclose(grid(r),spatial-spatial.mean() if kind=='panel_spatial_effect' else 0,atol=1e-10);return
+    if kind.startswith('hotspot_'):
+        r=run(kind,a+space,t,{'radius':1,'permutations':19})
+        z=grid(r);assert np.isfinite(z).all()
+        if kind.endswith('_p'):assert np.min(z)>=1/20 and np.max(z)<=1
+        if kind.endswith('_fraction'):assert np.min(z)>=0 and np.max(z)<=1
+        if kind=='hotspot_class':assert set(np.unique(z))<={0,1,2,3,4,5,6,7}
+        return
     if kind.startswith('harmonic_break_'):
         t=np.arange(36.);a=(2+np.where(t>=18,7,0)+(2+np.where(t>=18,1,0))*np.cos(2*np.pi*t/6))[:,None,None]+np.zeros((36,3,4))
         r=run(kind,a,t,{'period':6,'min_segment':8});z=grid(r)
@@ -168,3 +180,18 @@ def test_harmonic_no_change_and_gap_boundary():
     r=run('harmonic_break_flag',a,t,{'period':6,'min_segment':8});np.testing.assert_allclose(grid(r),0)
     t=np.array([0,1,2,3,9,10,11,12],float);a=np.full((8,3,4),4.)
     r=run('event_total_span',a,t,{'threshold':2,'maximum_gap':2});np.testing.assert_allclose(grid(r),6)
+
+
+def test_hotspot_independent_score_and_panel_absorbed_covariate():
+    from analysis.spacetime_hotspots import hotspot
+    from analysis.spacetime_panel import panel
+    space=np.arange(16.).reshape(4,4);a=np.stack([space+i for i in range(8)])
+    p={'radius':1,'permutations':39,'seed':7,'alpha':.05}
+    out,_,_,meta=hotspot(a,np.arange(8.),p,'hotspot_latest_z')
+    vals=space.ravel();neighbors=[space[1,1],space[0,1],space[2,1],space[1,0],space[1,2]]
+    oracle=(sum(neighbors)-5*vals.mean())/(vals.std()*np.sqrt((16*5-25)/15))
+    assert out[1,1]==pytest.approx(oracle)
+    q=hotspot(a,np.arange(8.),p,'hotspot_latest_p')[0]
+    np.testing.assert_array_equal(q,hotspot(a,np.arange(8.),p,'hotspot_latest_p')[0])
+    with pytest.raises(FigureInputError,match='absorbed'):
+        panel(a,a,{'block_cells':2},'panel_spatial_effect')

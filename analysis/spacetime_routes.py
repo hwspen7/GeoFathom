@@ -14,6 +14,8 @@ from .spacetime_state import kalman,permutation_lag
 from .spacetime_modes import eof,block_trend
 from .spacetime_kriging import kriging
 from .spacetime_change import harmonic_break,events
+from .spacetime_hotspots import hotspot
+from .spacetime_panel import panel
 from analysis.science_raster import require
 from analysis.science_routes import raster_product,raster_preview
 from analysis.science_figures import csv_text
@@ -21,12 +23,21 @@ from .spacetime_models import trend,temporal,forecast,spatial_lag,variogram
 
 router=APIRouter(prefix='/analysis/spatiotemporal',tags=['spatiotemporal science'])
 # parameter = (default,minimum,maximum,integer)
-P={'minimum_observations':(6,3,64,True),'lag':(1,1,32,True),'threshold':(0,-1e50,1e50,False),'horizon':(30,.000001,1e7,False),'radius':(3,1,20,True),'period':(365,.000001,1e7,False),'fraction':(.5,.01,.99,False),'minimum_amplitude':(.01,0,1e50,False),'min_segment':(3,2,32,True),'penalty':(1,.000001,1e50,False),'process_variance':(.01,1e-20,1e50,False),'observation_variance':(.1,1e-20,1e50,False),'initial_velocity_variance':(1,1e-20,1e50,False),'permutations':(199,19,999,True),'seed':(42,0,2147483647,True),'mode':(1,1,64,True),'block_length':(3,2,21,True),'spatial_range':(100,1e-6,1e8,False),'temporal_range':(30,1e-6,1e8,False),'nugget_ratio':(.1,1e-6,10,False),'sample_limit':(128,12,256,True),'fit_covariance':(0,0,1,True),'holdout_dates':(2,2,32,True),'buffer_cells':(0,0,100,True),'bic_threshold':(6,0,1000,False),'maximum_gap':(30,.000001,1e9,False)}
+P={'minimum_observations':(6,3,64,True),'lag':(1,1,32,True),'threshold':(0,-1e50,1e50,False),'horizon':(30,.000001,1e7,False),'radius':(3,1,20,True),'period':(365,.000001,1e7,False),'fraction':(.5,.01,.99,False),'minimum_amplitude':(.01,0,1e50,False),'min_segment':(3,2,32,True),'penalty':(1,.000001,1e50,False),'process_variance':(.01,1e-20,1e50,False),'observation_variance':(.1,1e-20,1e50,False),'initial_velocity_variance':(1,1e-20,1e50,False),'permutations':(199,19,999,True),'seed':(42,0,2147483647,True),'mode':(1,1,64,True),'block_length':(3,2,21,True),'spatial_range':(100,1e-6,1e8,False),'temporal_range':(30,1e-6,1e8,False),'nugget_ratio':(.1,1e-6,10,False),'sample_limit':(128,12,256,True),'fit_covariance':(0,0,1,True),'holdout_dates':(2,2,32,True),'buffer_cells':(0,0,100,True),'bic_threshold':(6,0,1000,False),'maximum_gap':(30,.000001,1e9,False),'alpha':(.05,.001,.2,False),'block_cells':(2,1,1000,True)}
 KALMAN_P=('minimum_observations','horizon','process_variance','observation_variance','initial_velocity_variance')
 KRIGING_P=('spatial_range','temporal_range','nugget_ratio','sample_limit','fit_covariance','seed')
 BREAK_P=('period','min_segment','bic_threshold')
 EVENT_P=('threshold','maximum_gap','minimum_observations')
+HOT_P=('radius','permutations','seed','alpha')
 METHODS={
+ 'hotspot_latest_z':('Space-time hotspots','Latest local Gi-star score',HOT_P),
+ 'hotspot_latest_p':('Space-time hotspots','Latest trajectory-permutation maxT probability',HOT_P),
+ 'hotspot_hot_fraction':('Space-time hotspots','Significant hot-date fraction',HOT_P),
+ 'hotspot_cold_fraction':('Space-time hotspots','Significant cold-date fraction',HOT_P),
+ 'hotspot_class':('Space-time hotspots','Hot and cold persistence classes',HOT_P),
+ 'panel_spatial_effect':('Space-time regression','Two-way panel spatial fixed effect',('block_cells',)),
+ 'panel_residual_rmse':('Space-time regression','Two-way panel residual RMSE',('block_cells',)),
+ 'panel_latest_residual':('Space-time regression','Two-way panel latest residual',('block_cells',)),
  'harmonic_break_bic':('Structural change','Seasonal structural break BIC improvement',BREAK_P),
  'harmonic_break_flag':('Structural change','Seasonally adjusted break selection',BREAK_P),
  'harmonic_break_time':('Structural change','Seasonal structural break time',BREAK_P),
@@ -86,6 +97,7 @@ class CubeInput(BaseModel):
     sources:list[Source]=Field(min_length=1,max_length=64)
     observations:list[Binding]=Field(min_length=6,max_length=64)
     times:list[float]=Field(min_length=6,max_length=64)
+    covariates:list[Binding]=Field(default_factory=list,max_length=64)
     quality:list[Quality]=Field(default_factory=list,max_length=64)
     parameters:dict[str,float]=Field(default_factory=dict,max_length=12)
     time_unit:str=Field(default='day',min_length=1,max_length=24)
@@ -93,7 +105,7 @@ class CubeInput(BaseModel):
 
 @router.get('/catalog')
 def catalog():
-    return {'operations':[{'id':k,'group':g,'title':title,'parameters':[{'name':p,'label':p.replace('_',' '),'default':6 if p=='min_segment' and k.startswith('harmonic_break_') else P[p][0],'minimum':P[p][1],'maximum':P[p][2],'integer':P[p][3]} for p in params]} for k,(g,title,params) in METHODS.items()],'operation_count':len(METHODS),'input_schema':CubeInput.model_json_schema()}
+    return {'operations':[{'id':k,'group':g,'title':title,'requires_covariate':k.startswith('panel_'),'parameters':[{'name':p,'label':p.replace('_',' '),'default':6 if p=='min_segment' and k.startswith('harmonic_break_') else P[p][0],'minimum':P[p][1],'maximum':P[p][2],'integer':P[p][3]} for p in params]} for k,(g,title,params) in METHODS.items()],'operation_count':len(METHODS),'input_schema':CubeInput.model_json_schema()}
 
 def execute(body):
     require(body.operation in METHODS,'Unknown space-time method.')
@@ -128,6 +140,16 @@ def execute(body):
         g=read(Binding(source=q.source,band=q.band,encoding='raw'),'class');clear=quality_mask(g.values,q.scheme)==1
         for i in set(names):arrays[int(i)-1][~clear]=np.nan
         quality_receipt.append({'source_sha256':sha[q.source],**q.model_dump()})
+    require(bool(body.covariates)==kind.startswith('panel_'),'Provide covariate observations only for panel regression.')
+    covariate=None;covariate_receipt=[]
+    if body.covariates:
+        require(len(body.covariates)==n and n*first.values.size<=2_000_000,'Panel needs one aligned covariate observation per date within work budget.')
+        cv=[];cu=None
+        for b in body.covariates:
+            quantity='reflectance' if b.encoding=='landsat_sr' else 'kelvin' if b.encoding=='landsat_st' else 'numeric'
+            g=read(b,quantity);cu=cu or g.unit;require(g.unit==cu,'Covariate units must match across dates.')
+            cv.append(g.values);covariate_receipt.append({'source_sha256':sha[b.source],'binding':b.model_dump(),'unit':g.unit,'scale':g.scale,'offset':g.offset})
+        covariate=np.stack(cv);require(np.isfinite(covariate).any() and np.max(np.abs(covariate[np.isfinite(covariate)]))<=1e50,'Invalid covariate values; rescale.')
     stack=np.stack(arrays);require(np.isfinite(stack).any(),'No valid cube observations.')
     require(np.max(np.abs(stack[np.isfinite(stack)]))<=1e50,'Rescale cube values to at most 1e50 before statistical analysis.')
     out=None;rows=[];cols=[];meta={};figures=[];unit=first.unit
@@ -140,6 +162,15 @@ def execute(body):
     elif kind.startswith(('forecast_','hindcast_')):
         out,cols,rows,meta=forecast(stack,t,kind,p);unit='index' if kind=='hindcast_skill' else unit
         if len(rows)>=2:plot('Expanding-window forecast versus persistence error','multi_line',cols,rows,x='time',columns=['trend_rmse','persistence_rmse'])
+    elif kind.startswith('hotspot_'):
+        out,cols,rows,meta=hotspot(stack,t,p,kind)
+        unit='class' if kind=='hotspot_class' else 'probability' if kind.endswith('_p') else 'fraction' if kind.endswith('_fraction') else 'index'
+        plot('Significant hot and cold cells through time','multi_line',cols,rows,x='acquisition',columns=['hot_cells','cold_cells'])
+        plot('Trajectory permutation maximum statistic quantiles','basic_line',['quantile','maximum'],meta['null_maximum_quantiles'],x='quantile',y='maximum')
+    elif kind.startswith('panel_'):
+        out,cols,rows,meta=panel(stack,covariate,p,kind)
+        plot('Time fixed effects','basic_line',cols,rows,x='acquisition',y='time_effect')
+        plot('Panel residual RMSE through time','basic_line',cols,rows,x='acquisition',y='residual_rmse')
     elif kind.startswith('harmonic_break_'):
         out,meta=harmonic_break(stack,t,p,kind)
         if kind=='harmonic_break_time':unit=body.time_unit
@@ -204,7 +235,7 @@ def execute(body):
         figures.insert(0,{'title':METHODS[kind][1]+' map','recipe':'raster_continuous','bindings':{},'csv':None,'raster':True})
         if not rows:cols=['quantile','value'];rows=product['summary']['quantiles']
     csv=csv_text(cols,rows)
-    receipt={'table_sha256':hashlib.sha256(csv.encode()).hexdigest(),'raster_sha256':product['sha256'] if product else None,'schema':'geofathom-spatiotemporal','operation':kind,'crs':str(first.crs),'unit':unit,'times':body.times,'time_unit':body.time_unit,'time_origin':body.time_origin,'parameters':p,'observations':bindings,'quality':quality_receipt,'metrics':meta}
+    receipt={'table_sha256':hashlib.sha256(csv.encode()).hexdigest(),'raster_sha256':product['sha256'] if product else None,'schema':'geofathom-spatiotemporal','operation':kind,'crs':str(first.crs),'unit':unit,'times':body.times,'time_unit':body.time_unit,'time_origin':body.time_origin,'parameters':p,'observations':bindings,'covariates':covariate_receipt,'quality':quality_receipt,'metrics':meta}
     result={'operation':kind,'receipt':receipt,'features':None,'raster':product,'preview':raster_preview(product) if product else None,'figures':figures,'columns':cols,'rows':rows,'csv':csv}
     json.dumps(result,allow_nan=False)
     return result
