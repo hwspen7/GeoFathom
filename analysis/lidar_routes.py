@@ -5,6 +5,7 @@ from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 from pyproj.exceptions import CRSError
 from .lidar_science import MAX_BYTES, MAX_POINTS, METHODS, analyze, metric_crs, read_cloud, _serialize
 from .lidar_disk import read_compressed, stream_voxels
+from .lidar_tiles import stream_radius
 import io
 import numpy as np
 from .lidar_exports import raster_grid
@@ -37,12 +38,16 @@ def run(operation: str, epsg: int, vertical_datum: str = Query(min_length=1,max_
                 p,meta=read_compressed(io.BytesIO(raw),epsg,MAX_POINTS)
                 return p,{**meta,"sha256":hashlib.sha256(raw).hexdigest(),"format":"LAS/LAZ XYZ","points":len(p)}
             return read_cloud(raw,name)
-        if operation=="stream_voxels":
+        if operation in ("stream_voxels","stream_radius"):
             if reference is not None:raise ValueError("Streaming voxel statistics accepts one cloud.")
             if not (cloud.filename or "").lower().endswith((".las",".laz")):raise ValueError("Streaming requires LAS or LAZ.")
-            table,metrics=stream_voxels(cloud.file,epsg,size)
+            if operation=="stream_radius":
+                table,metrics=stream_radius(cloud.file,epsg,size,radius)
+                columns=["x_m","y_m","z_m","count","mean_neighbors","min_neighbors","max_neighbors","mean_density_per_m3","directed_neighbor_pairs"]
+            else:
+                table,metrics=stream_voxels(cloud.file,epsg,size)
+                columns=["x_m","y_m","z_m","count","min_z_m","max_z_m"]
             source=metrics.pop("source");ref=None
-            columns=["x_m","y_m","z_m","count","min_z_m","max_z_m"]
             data,figure,rows=_serialize(columns,table)
             result={"operation":operation,"columns":columns,"rows":rows,"row_count":len(table),"csv":data,"figure_csv":figure,"metrics":metrics,"assumption":METHODS[operation][1]}
         else:

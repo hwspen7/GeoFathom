@@ -48,9 +48,13 @@ The cloth-inspired filter is a bounded inverted obstacle-constrained membrane re
 
 Screened uniform-grid Poisson augments the periodic discrete Laplacian with trilinear point evaluation S and the constraint penalty lambda times squared residual. A preconditioned conjugate-gradient solver reports residual, convergence and before/after sample errors. The bounded implementation is not octree Screened Poisson. Anisotropic covariance change propagates a horizontal/vertical measurement covariance floor, local Gaussian PCA eigenvector perturbation and independent registration variance into conditional change intervals and BY-adjusted probabilities. It does not model cross-covariance or spatial correlation of individual returns.
 
+## Exact tiled neighborhood density
+
+A disk-backed SQLite tile index streams LAS/LAZ records and evaluates all spherical neighborhoods with a complete 27-tile halo when tile width is at least radius. Each core point contributes exactly once and coincident returns are preserved. Output includes tile-wise count, mean/minimum/maximum neighbors, density and directed pair totals; no per-point export or survey-boundary correction. Explicit point, tile, halo and work budgets guard dense scenes. This is not a COPC octree query or EPT reader.
+
 ## Verification
 
-Run python -m pytest tests/test_lidar_science.py tests/test_lidar_advanced.py tests/test_lidar_geometry.py tests/test_lidar_disk_uncertainty.py tests/test_lidar_registration.py tests/test_lidar_reconstruction.py tests/test_lidar_inference.py tests/test_lidar_structures.py tests/test_lidar_covariance_screen.py -q. Tests cover analytical planes, degenerate neighborhoods, exact voxel counts, scaled LAS coordinates, partial overlap, directed distance, TIN interpolation, malformed input and HTTP contracts. These are synthetic reference tests, not real-flight validation.
+Run python -m pytest tests/test_lidar_science.py tests/test_lidar_advanced.py tests/test_lidar_geometry.py tests/test_lidar_disk_uncertainty.py tests/test_lidar_registration.py tests/test_lidar_reconstruction.py tests/test_lidar_inference.py tests/test_lidar_structures.py tests/test_lidar_covariance_screen.py tests/test_lidar_tiles.py -q. Tests cover analytical planes, degenerate neighborhoods, exact voxel counts, scaled LAS coordinates, partial overlap, directed distance, TIN interpolation, malformed input and HTTP contracts. These are synthetic reference tests, not real-flight validation.
 
 ## Remaining research work
 

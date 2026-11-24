@@ -67,7 +67,7 @@ def canopy_complexity(p,ground,size,vertical,threshold):
     table=np.asarray(rows)
     return table,{"columns":len(table),"supported_vegetation_returns":int(good.sum()),
         "unsupported_ground_returns":int((~np.isfinite(h)).sum()),
-        "occupied_voxel_volume_m3":float(table[:,6+1].sum()),
+        "occupied_voxel_volume_m3":float(table[:,7].sum()),
         "horizontal_cell_m":size,"vertical_bin_m":vertical,
         "assumption":"observed voxel occupancy; no pulse-path or leaf-area inference"}
 
@@ -79,7 +79,7 @@ def building_candidates(p,ground,size,k,threshold,roughness,minimum):
     if elevated.sum()<k:raise ValueError("Insufficient elevated points for roof candidate geometry.")
     q=p[elevated];height=h[elevated]
     geom=_local_geometry(q,k)
-    valid=np.isfinite(geom[:,2])&(np.abs(geom[:,2])>=.5)&(geom[:,3]<=roughness)&(geom[:,4]>=.35)
+    valid=np.isfinite(geom[:,2])&(np.abs(geom[:,2])>=.5)&(geom[:,3]<=roughness)&(geom[:,4]>=.2)
     if not valid.any():raise ValueError("No supported planar roof candidates.")
     q=q[valid];height=height[valid]
     keys,inv,n=np.unique(np.floor(q[:,:2]/size).astype(np.int64),axis=0,return_inverse=True,return_counts=True)

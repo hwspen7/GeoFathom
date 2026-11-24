@@ -27,6 +27,7 @@ from .lidar_covariance import covariance_change
 MAX_POINTS = 100_000
 MAX_BYTES = 16 * 1024 * 1024
 METHODS = {
+    "stream_radius": ("Disk-backed exact radius neighborhoods", "Complete 27-tile halos and exact spherical neighbor counts; tile statistics, not per-point export."),
     "screened_poisson": ("Screened uniform-grid Poisson", "Trilinear point constraints and preconditioned conjugate gradient; closed star-shaped input."),
     "covariance_change": ("Anisotropic covariance change", "Instrument covariance floor, PCA normal uncertainty propagation and conditional BY correction."),
     "cloth_filter": ("Cloth membrane ground filtering", "CSF-inspired inverted obstacle and damped membrane relaxation; not canonical CSF."),
@@ -217,7 +218,7 @@ def analyze(operation, p, reference=None, *, k=16, size=1., radius=2., max_edge=
         raise ValueError("Invalid diagnostic or uncertainty parameters.")
     if operation in ("cloud_distance","surface_change","ground_height","rigid_registration","normal_change","canopy_structure","point_plane_icp","crown_candidates","correlated_change","coarse_pca","generalized_icp","feature_registration","clustered_normal_change","canopy_watershed","canopy_complexity","building_candidates","covariance_change") and reference is None:
         raise ValueError("This method needs a reference cloud in the same CRS and vertical datum.")
-    if operation == "stream_voxels":
+    if operation in ("stream_voxels","stream_radius"):
         raise ValueError("Streaming operation requires the file-backed endpoint.")
     elif operation == "covariance_change":
         if not all(np.isfinite(x) and 0<=x<=1e6 for x in (horizontal_sigma,vertical_sigma)):
@@ -277,7 +278,10 @@ def analyze(operation, p, reference=None, *, k=16, size=1., radius=2., max_edge=
     elif operation in ("tin_mesh","alpha_boundary","poisson_grid","screened_poisson"):
         if operation=="tin_mesh":table,info=tin_mesh(p,max_edge)
         elif operation=="alpha_boundary":table,info=alpha_boundary(p,radius)
-        else:table,info=poisson_grid(p,k,size,screen_weight=threshold if operation=='screened_poisson' else 0.,iterations=max_iterations,tolerance=tolerance)
+        else:
+            if operation=='screened_poisson' and not .001<=threshold<=100:
+                raise ValueError('Screen weight must be between .001 and 100.')
+            table,info=poisson_grid(p,k,size,screen_weight=threshold if operation=='screened_poisson' else 0.,iterations=max_iterations,tolerance=tolerance)
         columns=[f"{axis}{i}_m" for i in (1,2,3) for axis in ("x","y","z")]+["surface_area_m2"]
         if operation=="tin_mesh":columns+=["projected_area_m2"]
         metrics.update(info)
