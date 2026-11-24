@@ -102,7 +102,10 @@ def render_vector(kind,req,fig,ax,grids,meta):
     ax.set(xlabel='X coordinate',ylabel='Y coordinate')
     if req.map_decoration=='minimal':ax.set(xlabel='',ylabel='',xticks=[],yticks=[])
     if norm is not None:
-        fig.colorbar(ScalarMappable(norm=norm,cmap=cmap),ax=ax,shrink=.75,label=req.vector_attribute)
+        cb=fig.colorbar(ScalarMappable(norm=norm,cmap=cmap),ax=ax,shrink=.75,label=req.vector_attribute)
+        # Matplotlib rasterizes dense colorbars by default. Keep the vector
+        # attribute scale as native paths in SVG/PDF, like the geometry.
+        if cb.solids is not None:cb.solids.set_rasterized(False)
         if len(vals)<len(records):ax.legend(handles=[Patch(facecolor='#909090',label='Missing attribute')])
     meta.update(used_count=len(records),missing_attribute_count=len(records)-len(vals) if req.vector_attribute else 0,rendered_extent=list(ax.get_xlim())+list(ax.get_ylim()),interpretation='Native projected features; vector overlay clipped to raster extent. Coordinates shown in display CRS, not a claim of equal-area or geodesic distance.')
     return [['feature_number','geometry_type','attribute_value'],*[[i,g.geom_type,v] for i,g,v in records]]
