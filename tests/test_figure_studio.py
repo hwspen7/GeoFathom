@@ -97,13 +97,22 @@ def test_every_recipe_renders_actual_data(recipe,raster_fixture):
         (folder/(recipe+'.png')).write_bytes(image)
         (folder/(recipe+'.json')).write_text(json.dumps(metadata,indent=2,allow_nan=False),encoding='utf-8')
     # Verify vector output for each recipe, not only one representative plot.
-    svg,_,_=render(body.model_copy(update={'format':'svg'}))
+    svg,svg_meta,svg_table=render(body.model_copy(update={'format':'svg'}))
+    assert svg_table==table and svg_meta['used_count']==metadata['used_count']
     assert svg.startswith(b'<?xml') and b'<svg' in svg
-    pdf,_,_=render(body.model_copy(update={'format':'pdf'}))
+    pdf,pdf_meta,pdf_table=render(body.model_copy(update={'format':'pdf'}))
+    assert pdf_table==table and pdf_meta['used_count']==metadata['used_count']
     assert pdf.startswith(b'%PDF')
     from pypdf import PdfReader
     page=PdfReader(io.BytesIO(pdf)).pages[0]
     assert float(page.mediabox.width)==pytest.approx(body.width_mm/25.4*72,abs=.01)
+    assert float(page.mediabox.height)==pytest.approx(body.height_mm/25.4*72,abs=.01)
+    from PIL import Image
+    with Image.open(io.BytesIO(image)) as rendered:
+        assert abs(rendered.width-body.width_mm/25.4*body.dpi)<=1
+        assert abs(rendered.height-body.height_mm/25.4*body.dpi)<=1
+        assert rendered.info['dpi'][0]==pytest.approx(body.dpi,abs=.1)
+        assert np.asarray(rendered.convert('RGB')).std()>1
     if BY_ID[recipe][3]=='table':assert len(table)>=2
     if recipe=='raster_difference':
         assert metadata['mean']==pytest.approx(2)
@@ -488,3 +497,16 @@ def test_domain_advanced_figures_actual_rendering():
     assert meta['spatial_validation']['overall']['rmse']<1e-10 and len(table)==37
     _,meta,table=render(StudioInput(recipe='point_density',csv='x,y,z\n0,0,0\n.2,.2,.2\n1.1,0,0',x='x',y='y',z='z',point_mode='voxel',voxel_size=1))
     assert meta['occupied_voxels']==2 and sum(row[3] for row in table[1:])==3
+
+
+def test_publication_preflight_measures_actual_tick_overlaps():
+    from matplotlib.figure import Figure
+    from matplotlib.backends.backend_agg import FigureCanvasAgg
+    from terrain.studio_publication import layout_receipt,fit_publication_text,publication_title
+    fig=Figure(figsize=(4,3),layout='constrained');FigureCanvasAgg(fig)
+    ax=fig.add_subplot(111);ax.bar(range(5),[1,2,3,4,5])
+    ax.set_xticks(range(5),['Long category '+str(i) for i in range(5)])
+    before=layout_receipt(fig)
+    fit_publication_text(fig);after=layout_receipt(fig)
+    assert len(after['tick_overlaps'])<=len(before['tick_overlaps'])
+    assert '\n' in publication_title('A long scientific title that cannot fit onto a narrow journal column',65,12)

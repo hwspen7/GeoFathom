@@ -171,7 +171,7 @@ def render_composition(body):
     from matplotlib.backends.backend_agg import FigureCanvasAgg
     from matplotlib import rc_context
     from .studio_render import LOCK
-    from .studio_publication import layout_receipt,draw_legacy_panel
+    from .studio_publication import layout_receipt,draw_legacy_panel,fit_publication_text,publication_title
     with LOCK,rc_context({'pdf.fonttype':42,'svg.fonttype':'none','font.family':'sans-serif','font.size':9}):
         fig=Figure(figsize=(body.width_mm/25.4,body.height_mm/25.4),layout='constrained',facecolor='white')
         FigureCanvasAgg(fig)
@@ -193,7 +193,8 @@ def render_composition(body):
                 _,meta,table=render(panel,container=containers.flat[i],panel_label=f'({chr(97+i)}) ')
                 meta['csv_sha256']=hashlib.sha256(panel.csv.encode()).hexdigest() if panel.csv else None
             receipts.append({'label':chr(97+i),'metadata':meta,'table':table})
-        if body.title:fig.suptitle(body.title,fontsize=12,fontweight='medium')
+        if body.title:fig.suptitle(publication_title(body.title,body.width_mm,12),fontsize=12,fontweight='medium')
+        fit_publication_text(fig)
         layout=layout_receipt(fig)
         buf=io.BytesIO()
         if body.format=='tiff':fig.savefig(buf,format='tiff',dpi=body.dpi,pil_kwargs={'compression':'tiff_lzw'})

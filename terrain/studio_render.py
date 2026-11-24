@@ -11,14 +11,14 @@ from .studio_data import (Table, read_grids, aligned_grids, normalized, pareto_m
                           FigureInputError)
 
 LOCK=threading.RLock()
-COLORS=['#24639b','#ca6946','#42916e','#8064a2','#b79835','#348a91','#a84d70','#6e737b']
+COLORS=['#0072B2','#D55E00','#009E73','#CC79A7','#E69F00','#56B4E9','#6B4C9A','#555555']
 MARKERS=['o','s','^','D','v','P','X','+']
 
 def _require(condition,message):
     if not condition:raise FigureInputError(message)
 
 from .studio_publication import (response_grid, cell_edges, profile_data, raster_profiles,
-                                 numeric_rows, layout_receipt)
+                                 numeric_rows, layout_receipt, fit_publication_text, publication_title)
 
 def render(req, container=None, panel_label='', grid_sink=None):
     from matplotlib.figure import Figure
@@ -66,6 +66,9 @@ def render(req, container=None, panel_label='', grid_sink=None):
     cmap={'mono':'Greys','earth':'terrain','color':'viridis'}[req.palette]
     color=palette[0]
     rc={'font.family':'serif' if req.font=='serif' else 'sans-serif','font.size':req.font_size,
+        'axes.labelsize':req.font_size,'xtick.labelsize':max(6,req.font_size-1),'ytick.labelsize':max(6,req.font_size-1),
+        'legend.fontsize':max(6,req.font_size-1),'legend.frameon':False,'axes.linewidth':.75,
+        'axes.axisbelow':True,'grid.linewidth':.55,'xtick.major.width':.75,'ytick.major.width':.75,
         'axes.spines.top':False,'axes.spines.right':False,'axes.titleweight':'normal',
         'svg.fonttype':'none','pdf.fonttype':42,'lines.linewidth':req.line_width,'axes.prop_cycle':__import__('cycler').cycler(color=palette)}
     with LOCK,rc_context(rc):
@@ -369,7 +372,9 @@ def render(req, container=None, panel_label='', grid_sink=None):
                     from .studio_inference import geotiff_product
                     units={'raster_slope':'degree','raster_hillshade':'unitless','raster_exceedance':'unitless'}
                     grid_sink.append(geotiff_product(grid,values,units.get(kind,grid.unit),kind,[{'sha256':v.sha256,'band':v.band} for v in grids]))
+                cm=colormaps[cm].copy() if isinstance(cm,str) else cm.copy();cm.set_bad('#e9e9e9')
                 im=a.imshow(values,extent=grid.extent,origin='upper',interpolation='nearest',cmap=cm,vmin=vmin,vmax=vmax);map_axes(a,grid)
+                meta.update(display_min=float(im.norm.vmin),display_max=float(im.norm.vmax),nodata_display='#e9e9e9')
                 if label:fig.colorbar(im,ax=a,label=label,shrink=.85)
                 return im
             if kind=='raster_profile':
@@ -493,14 +498,16 @@ def render(req, container=None, panel_label='', grid_sink=None):
             for axes in fig.axes:
                 legend=axes.get_legend()
                 if legend is not None and axes.name!='polar':legend.set_loc(req.legend_position)
-        fig.suptitle(panel_label+(req.title or title),fontsize=req.font_size+2,fontweight='medium')
+        fig.suptitle(publication_title(panel_label+(req.title or title),req.width_mm if container is None else max(40,container.bbox.width/container.get_figure(root=True).dpi*25.4),req.font_size+2),fontsize=req.font_size+2,fontweight='medium')
         if table and not derived:meta['derived_note']='The plot uses the selected complete observations; original CSV is retained in the request.'
         if table and req.x_label:meta['x_label']=req.x_label
         if table and req.y_label:meta['y_label']=req.y_label
         meta['omitted_count']=max(0,meta['input_count']-meta['used_count'])
         meta['plot_table_rows']=max(0,len(derived)-1)
         if container is not None:return b'',meta,derived
+        fit_publication_text(fig)
         meta['layout']=layout_receipt(fig)
+        meta['publication']={'width_mm':req.width_mm,'height_mm':req.height_mm,'export_dpi':req.dpi,'format':req.format,'font_size_pt':req.font_size,'line_width_pt':req.line_width,'palette':req.palette}
         buffer=io.BytesIO()
         dpi=req.dpi
         if req.format=='tiff':fig.savefig(buffer,format='tiff',dpi=dpi,pil_kwargs={'compression':'tiff_lzw'})

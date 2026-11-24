@@ -66,7 +66,10 @@ def render_raster_domain(kind,req,fig,ax,grids,parameter,meta,cmap,grid_sink=Non
         derived.clear();derived.extend(numeric_rows(headers,*arr))
     def show(out,label,cm=None,vmin=None,vmax=None,output_unit=None):
         valid=np.isfinite(out);require(valid.any(),'No valid computed raster cells.')
-        im=ax.imshow(out,extent=g.extent,origin='upper',interpolation='nearest',cmap=cm or cmap,vmin=vmin,vmax=vmax)
+        from matplotlib import colormaps
+        selected=cm or cmap;selected=colormaps[selected].copy() if isinstance(selected,str) else selected.copy();selected.set_bad('#e9e9e9')
+        im=ax.imshow(out,extent=g.extent,origin='upper',interpolation='nearest',cmap=selected,vmin=vmin,vmax=vmax)
+        meta.update(display_min=float(im.norm.vmin),display_max=float(im.norm.vmax),nodata_display='#e9e9e9')
         fig.colorbar(im,ax=ax,label=label,shrink=.82)
         geo_axes()
         v=out[valid];meta.update(used_count=int(v.size),minimum=float(v.min()),maximum=float(v.max()),mean=float(v.mean()),output_unit=label)
@@ -75,7 +78,7 @@ def render_raster_domain(kind,req,fig,ax,grids,parameter,meta,cmap,grid_sink=Non
             grid_sink.append(geotiff_product(g,out,output_unit if output_unit is not None else label,kind,[{'sha256':item.sha256,'band':item.band} for item in grids]))
         save(['valid_cells','minimum','maximum','mean'],[len(v)],[v.min()],[v.max()],[v.mean()])
     def geo_axes():
-        ax.set_aspect('equal');ax.set_xlabel('Easting' if g.crs.is_projected else 'Longitude');ax.set_ylabel('Northing' if g.crs.is_projected else 'Latitude')
+        ax.set_aspect('equal');ax.set_xlabel('Easting (m)' if g.is_meter else 'Easting' if g.crs.is_projected else 'Longitude');ax.set_ylabel('Northing (m)' if g.is_meter else 'Northing' if g.crs.is_projected else 'Latitude')
         ax.ticklabel_format(style='plain',useOffset=False);ax.xaxis.set_major_locator(MaxNLocator(4));ax.yaxis.set_major_locator(MaxNLocator(4))
         ax.annotate('Grid N',xy=(.94,.92),xytext=(.94,.8),xycoords='axes fraction',textcoords='axes fraction',ha='center',fontsize=7,arrowprops={'arrowstyle':'-|>'})
         if g.is_meter:

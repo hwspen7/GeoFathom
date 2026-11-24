@@ -81,22 +81,64 @@ def numeric_rows(headers,*arrays):
     return [list(headers),*[[None if isinstance(v,(float,np.floating)) and not np.isfinite(v) else
              v.item() if isinstance(v,np.generic) else v for v in row] for row in zip(*arrays)]]
 
+def fit_publication_text(fig):
+    """Rotate only demonstrably crowded tick labels, retaining numeric values."""
+    if not hasattr(fig,'canvas'):return
+    fig.canvas.draw()
+    renderer=fig.canvas.get_renderer()
+    for ax in fig.axes:
+        if not ax.get_visible() or ax.name!='rectilinear' or getattr(ax,'_colorbar',None) is not None:continue
+        ticks=[t for t in ax.get_xticklabels() if t.get_visible() and t.get_text()]
+        if len(ticks)<2:continue
+        bounds=[t.get_window_extent(renderer) for t in ticks]
+        ordered=sorted(bounds,key=lambda b:b.x0)
+        if any(a.x1>b.x0+2 and min(a.y1,b.y1)-max(a.y0,b.y0)>2 for a,b in zip(ordered,ordered[1:])):
+            if all(abs(t.get_rotation())<1 for t in ticks):
+                for t in ticks:t.set_rotation(35);t.set_ha('right');t.set_rotation_mode('anchor')
+    fig.canvas.draw()
+
+
 def layout_receipt(fig):
-    """Inspect axes and text tight bounds at the actual canvas dimensions."""
+    """Measure actual canvas, clipped text and same-axis tick overlaps.
+
+    Intentional text over data (e.g. map annotations) is not treated as a
+    collision. This is a mechanical preflight, not human publication approval.
+    """
     fig.canvas.draw()
     renderer=fig.canvas.get_renderer()
     width,height=fig.canvas.get_width_height()
-    clipped=[]
-    axes=[]
+    clipped=[];axes=[];text_clipped=[];tick_overlaps=[]
     for i,ax in enumerate(fig.axes):
         if not ax.get_visible():continue
         box=ax.get_tightbbox(renderer)
-        if box is None:continue
-        axes.append([round(v,3) for v in (box.x0/width,box.y0/height,box.x1/width,box.y1/height)])
-        if box.x0 < -2 or box.y0 < -2 or box.x1 > width+2 or box.y1 > height+2:
-            clipped.append(i+1)
+        if box is not None:
+            axes.append([round(v,3) for v in (box.x0/width,box.y0/height,box.x1/width,box.y1/height)])
+            if box.x0 < -2 or box.y0 < -2 or box.x1 > width+2 or box.y1 > height+2:clipped.append(i+1)
+        for direction,labels in [('x',ax.get_xticklabels()),('y',ax.get_yticklabels())]:
+            if ax.name!='rectilinear':continue
+            boxes=[(t.get_text(),t.get_window_extent(renderer)) for t in labels if t.get_visible() and t.get_text()]
+            for label,b in boxes:
+                if b.x0 < -2 or b.y0 < -2 or b.x1 > width+2 or b.y1 > height+2:
+                    text_clipped.append({'axis':i+1,'text':label[:100]})
+            for j,(first,a) in enumerate(boxes):
+                for second,b in boxes[j+1:]:
+                    overlap_x=min(a.x1,b.x1)-max(a.x0,b.x0)
+                    overlap_y=min(a.y1,b.y1)-max(a.y0,b.y0)
+                    if overlap_x>3 and overlap_y>3:
+                        tick_overlaps.append({'axis':i+1,'direction':direction,'labels':[first[:60],second[:60]]})
+                        if len(tick_overlaps)>=100:break
+                if len(tick_overlaps)>=100:break
     return {'canvas_pixels':[width,height],'axes_bounds_normalized':axes,
-            'potentially_clipped_axes':clipped,'layout_check':'canvas bounds only; visual review still required'}
+            'potentially_clipped_axes':clipped,'clipped_tick_text':text_clipped[:100],
+            'tick_overlaps':tick_overlaps[:100],
+            'layout_check':'canvas and tick bounding-box preflight; visual review still required'}
+
+
+def publication_title(text,width_mm,font_size):
+    import textwrap
+    # Conservative physical-width estimate, including long uninterrupted words.
+    columns=max(14,int(width_mm/25.4*72/(font_size*.62)))
+    return textwrap.fill(text,width=columns,break_long_words=True,break_on_hyphens=False)
 
 def draw_legacy_panel(container, scene, label):
     """Render the native gallery's validated vector scene without rasterizing it."""
