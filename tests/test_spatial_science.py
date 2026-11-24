@@ -180,7 +180,7 @@ def test_integrated_operators_analytic_spatial_fixture(kind):
 
 def test_contract_count_and_invalid_input_rejections():
     client=TestClient(app);response=client.get('/analysis/science/catalog')
-    assert response.status_code==200 and response.json()['operation_count']==len(BY_ID)==52
+    assert response.status_code==200 and response.json()['operation_count']==len(BY_ID)==60
     assert set(m['group'] for m in response.json()['operations'])=={'Vector','Raster','Sampling','Statistics','Decision','Integrated'}
     assert response.json()['ai_tool']['input_schema']['properties']['operation']
     bad=[
@@ -270,3 +270,45 @@ def test_spatial_gate_rejects_missing_or_skipped_method_evidence(tmp_path):
     ET.SubElement(root[0],'skipped')
     ET.ElementTree(root).write(path)
     assert not evaluate(path)['passed']
+
+
+@pytest.mark.parametrize('kind',['raster_distance','focal_quantile','directional_lag_scan','bivariate_moran','robust_overlay','blocked_regression','point_ellipse','zonal_quantiles'])
+def test_advanced_spatial_oracles(kind):
+    if kind=='raster_distance':
+        z=np.zeros((4,4));z[0,0]=1;z[1,1]=np.nan
+        result,_=result_grid(run(kind,rasters=[raster(z)]))
+        yy,xx=np.indices(z.shape);expected=10*np.sqrt(yy*yy+xx*xx);expected[1,1]=np.nan
+        np.testing.assert_allclose(result,expected,equal_nan=True)
+    elif kind=='focal_quantile':
+        result,_=result_grid(run(kind,rasters=[raster()],parameters={'radius':1,'quantile':.5}))
+        assert result[0,0]==3.5 and result[1,1]==6
+    elif kind=='directional_lag_scan':
+        r=run(kind,rasters=[raster()],parameters={'max_lag':1})
+        assert r['rows'][0][:4]==['E-W',1,10.,12] and r['rows'][0][4]==pytest.approx(.5)
+        assert r['rows'][1][4]==pytest.approx(8.)
+    elif kind=='bivariate_moran':
+        r=run(kind,rasters=[raster(),raster(Z*2)],parameters={'permutations':99,'seed':2})
+        u=(Z-Z.mean())/Z.std();terms=[]
+        for i,j in np.ndindex(Z.shape):
+            vals=[u[y,x] for y,x in [(i-1,j),(i+1,j),(i,j-1),(i,j+1)] if 0<=y<4 and 0<=x<4]
+            terms.append(u[i,j]*np.mean(vals))
+        assert r['receipt']['metrics']['observed']==pytest.approx(np.mean(terms)) and len(r['rows'])==99
+    elif kind=='robust_overlay':
+        inputs=[raster(),raster(2*Z)]
+        args={'rasters':inputs,'weights':[1,3],'directions':['benefit','benefit'],'parameters':{'draws':40,'seed':7,'concentration':10,'threshold':.5}}
+        mean,_=result_grid(run(kind,**args));sd,_=result_grid(run(kind,robust_view='sd',**args));prob,_=result_grid(run(kind,robust_view='probability',**args))
+        np.testing.assert_allclose(mean,(Z-1)/15,atol=1e-12);assert np.max(sd)<1e-12
+        np.testing.assert_array_equal(prob,((Z-1)/15>=.5).astype(float))
+    elif kind=='blocked_regression':
+        yy,xx=np.indices((8,8));predictor=xx+2*yy;target=3+2*predictor
+        result=run(kind,rasters=[raster(target),raster(predictor)],parameters={'block_size_m':20,'folds':4,'ridge_penalty':0,'buffer_m':1})
+        out,_=result_grid(result);np.testing.assert_allclose(out,target,atol=1e-10);assert result['receipt']['metrics']['rmse']<1e-10 and len(result['rows'])==64
+    elif kind=='point_ellipse':
+        points=vectors(Point(X-10,Y),Point(X+10,Y),Point(X,Y-5),Point(X,Y+5))
+        r=run(kind,vectors=[points]);m=r['receipt']['metrics']
+        assert m['major_sd_m']==pytest.approx(10/np.sqrt(2),abs=1e-6)
+        assert m['minor_sd_m']==pytest.approx(5/np.sqrt(2),abs=1e-6)
+        assert len(r['rows'])==129
+    else:
+        r=run(kind,rasters=[raster()],vectors=[vectors(box(X,Y-10,X+15,Y))],parameters={'quantile':.5})
+        assert r['rows'][0][-1]==1

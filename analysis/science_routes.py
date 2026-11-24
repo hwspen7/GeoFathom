@@ -21,6 +21,7 @@ from terrain.studio_routes import RasterInput
 from .science_catalog import BY_ID,catalog
 from .science_raster import require,raster_operation,sample_cells,permutation_stat,decision,local_stat
 from .science_vector import load_layers,vector_operation,integrated
+from .science_advanced import euclidean_distance,focal_quantile,lag_scan,bivariate_moran,robust_overlay,blocked_raster_regression
 
 router=APIRouter(prefix='/analysis/science',tags=['spatial science'])
 source_router=APIRouter(tags=['spatial science sources'])
@@ -38,6 +39,8 @@ class SpatialInput(BaseModel):
     breaks:list[float]=Field(default_factory=list,max_length=25)
     resampling:Literal['nearest','bilinear']='nearest'
     local_view:Literal['statistic','p','q','cluster']='statistic'
+    robust_view:Literal['mean','sd','probability']='mean'
+    regression_view:Literal['prediction','residual']='prediction'
 
 def raster_product(name,z,transform,crs,unit):
     valid=np.isfinite(z);require(valid.any(),'Operation produced no valid cells.')
@@ -108,6 +111,28 @@ def execute(body):
     features=None;headers=[];rows=[];product=None;meta={}
     if method.source=='vector':
         features,headers,rows,meta=vector_operation(kind,groups,reverse,params)
+    elif kind=='raster_distance':
+        require(g.is_meter,'Exact proximity requires a projected metre raster.')
+        out=euclidean_distance(g.values,g.transform.a,abs(g.transform.e));product=raster_product(kind,out,g.transform,g.crs,'m')
+        meta={'target_cells':int(np.count_nonzero(g.values==1)),'maximum_distance_m':float(np.nanmax(out))}
+    elif kind=='focal_quantile':
+        out=focal_quantile(g.values,params['radius'],params['quantile']);product=raster_product(kind,out,g.transform,g.crs,g.unit)
+    elif kind=='directional_lag_scan':
+        require(g.is_meter,'Directional distance scans require a projected metre grid.')
+        headers,rows=lag_scan(g.values,g.transform.a,abs(g.transform.e),params['max_lag'])
+    elif kind=='bivariate_moran':
+        stack,common=aligned_grids(grids,require_same_unit=False)
+        meta,null=bivariate_moran(stack[0],stack[1],params['permutations'],params['seed'])
+        headers=['permutation','null_statistic','observed_statistic'];rows=[[i+1,float(value),meta['observed']] for i,value in enumerate(null)]
+    elif kind=='robust_overlay':
+        stack,common=aligned_grids(grids,require_same_unit=False)
+        products,meta=robust_overlay(stack,common,body.weights,body.directions,params['draws'],params['concentration'],params['threshold'],params['seed'])
+        product=raster_product(kind,products[body.robust_view],g.transform,g.crs,'probability' if body.robust_view=='probability' else 'unitless')
+        meta['view']=body.robust_view
+    elif kind=='blocked_regression':
+        out,headers,rows,meta=blocked_raster_regression(grids,params)
+        if body.regression_view=='residual':out=g.values-out
+        product=raster_product(kind,out,g.transform,g.crs,g.unit);meta['view']=body.regression_view
     elif method.source=='integrated' or kind=='polygonize':
         if kind=='polygonize':require(g.is_meter,'Polygonization requires projected metre raster.')
         out,unit,headers,rows,features,meta=integrated(kind,g,groups if nv else [],params,reverse)
@@ -155,7 +180,7 @@ def execute(body):
     receipt={'schema':'geofathom-spatial-science-1','operation':kind,'assumption':method.assumption,'parameters':params,
              'crs':str(g.crs) if nr else 'EPSG:'+str(body.epsg),'raster_sources':[{'name':x.name,'sha256':x.sha256,'band':x.band,'unit':x.unit,'scale':x.scale,'offset':x.offset} for x in grids],
              'vector_sources':[hashlib.sha256(json.dumps(x,sort_keys=True,separators=(',',':'),allow_nan=False).encode()).hexdigest() for x in body.vectors],
-             'weights':body.weights,'directions':body.directions,'pairwise':body.pairwise,'breaks':body.breaks,'resampling':body.resampling,'local_view':body.local_view,'metrics':meta,
+             'weights':body.weights,'directions':body.directions,'pairwise':body.pairwise,'breaks':body.breaks,'resampling':body.resampling,'local_view':body.local_view,'robust_view':body.robust_view,'regression_view':body.regression_view,'metrics':meta,
              'vector_count':len(features['features']) if features else 0,'table_rows':len(rows),'raster_sha256':product['sha256'] if product else None}
     result={'operation':kind,'receipt':receipt,'features':features,'raster':product,'preview':raster_preview(product) if product else None,'columns':headers,'rows':rows,'csv':csv_output(headers,rows)}
     json.dumps(result,allow_nan=False)

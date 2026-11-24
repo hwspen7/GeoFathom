@@ -89,6 +89,15 @@ def vector_operation(method,groups,reverse,params):
         require(len(samples)>=n,'Polygon sampling did not reach requested population within budget.')
         out=[(Point(x,y),{'sample_id':i+1,'area_weight_m2':region.area/n}) for i,(x,y) in enumerate(samples[:n])]
         meta['study_area_m2']=float(region.area)
+    elif method=='point_ellipse':
+        from shapely.geometry import Polygon
+        require(len(ga)>=3 and all(g.geom_type=='Point' for g in ga),'Covariance ellipse requires at least three points.')
+        coords=np.array([(g.x,g.y) for g in ga]);center=coords.mean(axis=0);d=coords-center
+        eig,axes=np.linalg.eigh(d.T@d/len(d));require(eig[0]>0,'Noncollinear points required.')
+        angle=np.linspace(0,2*np.pi,129);boundary=center+(np.column_stack((np.cos(angle),np.sin(angle)))*np.sqrt(eig))@axes.T
+        out=[(Polygon(boundary),{'major_sd_m':float(np.sqrt(eig[1])),'minor_sd_m':float(np.sqrt(eig[0]))})]
+        meta={'major_sd_m':float(np.sqrt(eig[1])),'minor_sd_m':float(np.sqrt(eig[0])),'major_axis_azimuth_deg':float(np.degrees(np.arctan2(axes[0,1],axes[1,1]))%180),'point_count':len(ga)}
+        headers=['easting','northing'];rows=boundary.tolist()
     elif method in {'point_centers','point_nearest_neighbor'}:
         require(all(g.geom_type=='Point' for g in ga),'Use individual point features.')
         coords=np.array([(g.x,g.y) for g in ga]);n=len(coords)
@@ -107,8 +116,9 @@ def vector_operation(method,groups,reverse,params):
     else:raise ValueError('Unknown vector method.')
     return collection(out,reverse) if out or not headers else None,headers,rows,meta
 
-def zonal(grid,groups,classes=False):
+def zonal(grid,groups,classes=False,quantile=None):
     z=grid.values;a=grid.transform;h,w=z.shape;header=['zone_index','class_code','area_m2','fraction_of_valid_area'] if classes else ['zone_index','zone_area_m2','covered_area_m2','valid_area_m2','weighted_mean','weighted_sd','minimum','maximum']
+    if quantile is not None:header=['zone_index','zone_area_m2','covered_area_m2','valid_area_m2','quantile','weighted_quantile']
     rows=[];budget=0
     for i,g in groups[0]:
         require(g.geom_type in {'Polygon','MultiPolygon'},'Zonal analysis requires polygons.')
@@ -117,16 +127,22 @@ def zonal(grid,groups,classes=False):
         r0=max(0,int(math.floor((a.f-ymax)/abs(a.e))));r1=min(h,int(math.ceil((a.f-ymin)/abs(a.e))))
         budget+=max(0,c1-c0)*max(0,r1-r0);require(budget<=250000,'Exact zonal intersection budget exceeded.')
         values=[];weights=[];covered=0.
+        # Vectorized GEOS exact intersection in bounded row chunks.
+        from shapely import box as boxes, intersection, area
         for r in range(r0,r1):
-            for c in range(c0,c1):
-                x,y=a*(c,r);cell=box(x,y+a.e,x+a.a,y)
-                overlap=g.intersection(cell).area
-                # Remove only sub-numerical slivers introduced by round-trip projection.
-                if overlap<=abs(a.a*a.e)*1e-8:continue
-                covered+=overlap
-                if np.isfinite(z[r,c]):values.append(z[r,c]);weights.append(overlap)
+            cols=np.arange(c0,c1);x=a.c+cols*a.a;y=a.f+r*a.e
+            if not len(cols):continue
+            overlap=area(intersection(g,boxes(x,np.full(len(cols),y+a.e),x+a.a,np.full(len(cols),y))))
+            overlap=np.where(overlap>abs(a.a*a.e)*1e-8,overlap,0.)
+            covered+=float(overlap.sum());ok=(overlap>0)&np.isfinite(z[r,cols])
+            values.extend(z[r,cols][ok]);weights.extend(overlap[ok])
         v=np.asarray(values);weight=np.asarray(weights);valid_area=float(weight.sum())
-        if classes:
+        if quantile is not None:
+            estimate=None
+            if valid_area:
+                order=np.argsort(v,kind='stable');cdf=np.cumsum(weight[order]);j=min(len(v)-1,int(np.searchsorted(cdf,quantile*valid_area,side='left')));estimate=float(v[order[j]])
+            rows.append([i,float(g.area),covered,valid_area,quantile,estimate])
+        elif classes:
             require(np.all(v==np.floor(v)),'Class coverage requires integer class values.')
             codes=np.unique(v);require(len(codes)<=256,'Too many class codes.')
             rows.extend([i,float(code),float(weight[v==code].sum()),float(weight[v==code].sum()/valid_area)] for code in codes)
@@ -138,7 +154,7 @@ def zonal(grid,groups,classes=False):
 
 def integrated(method,grid,groups,params,reverse):
     z=grid.values;a=grid.transform;valid=np.isfinite(z);out=None;unit=grid.unit;headers=[];rows=[];features=None;meta={}
-    if method in {'zonal_statistics','zonal_classes'}:headers,rows=zonal(grid,groups,method=='zonal_classes')
+    if method in {'zonal_statistics','zonal_classes','zonal_quantiles'}:headers,rows=zonal(grid,groups,method=='zonal_classes',params['quantile'] if method=='zonal_quantiles' else None)
     elif method in {'clip_raster','rasterize'}:
         geoms=[g for _,g in groups[0]];require(all(g.geom_type in {'Polygon','MultiPolygon'} for g in geoms),'Polygon inputs required.')
         inside=geometry_mask(geoms,out_shape=z.shape,transform=a,invert=True,all_touched=False)

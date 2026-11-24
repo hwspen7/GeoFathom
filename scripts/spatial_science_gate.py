@@ -19,6 +19,7 @@ def expected_tests():
         'test_integrated_operators_analytic_spatial_fixture':'zonal_statistics zonal_classes clip_raster rasterize extract_points point_kernel_density polygonize',
         'test_explicit_resampling_and_class_breaks':'resample_grid reclassify',
         'test_local_statistics_and_multiplicity':'local_moran getis_ord_gi_star',
+        'test_advanced_spatial_oracles':'raster_distance focal_quantile directional_lag_scan bivariate_moran robust_overlay blocked_regression point_ellipse zonal_quantiles',
     }
     out={method:f'{test}[{method}]' for test,methods in groups.items() for method in methods.split()}
     if set(out)!=set(BY_ID):raise RuntimeError('Every registered method must have an explicit numeric oracle.')
