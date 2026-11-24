@@ -112,3 +112,76 @@ def classify(stack,labels):
         pred[i:i+len(delta)]=classes[np.argmin(np.sum(delta**2,axis=2),axis=1)]
     out=np.full(valid.shape,np.nan);out[valid]=pred
     return out,['class','training_cells','blue','green','red','nir'],rows,{'classes':classes.astype(int).tolist(),'training_cells':int(train.sum()),'classified_cells':len(x),'tie_break':'lowest class code'}
+
+
+def sen_slope(stack,p):
+    t=np.array([p['time'+str(i)] for i in range(1,5)])
+    require(np.all(np.diff(t)>0),'Acquisition times must be strictly increasing.')
+    good=np.isfinite(stack).sum(axis=0)>=3
+    out=np.full(good.shape,np.nan)
+    pairs=np.stack([(stack[j,good]-stack[i,good])/(t[j]-t[i]) for i in range(4) for j in range(i+1,4)])
+    if good.any():out[good]=np.nanmedian(pairs,axis=0)
+    return out,{'minimum_observations':3,'acquisition_times':t.tolist()}
+
+
+def temporal_slope_se(stack,p):
+    slope,meta=temporal('temporal_trend',stack,p)
+    valid=np.isfinite(stack);count=valid.sum(axis=0);t=np.array(meta['acquisition_times']);t=(t-t[0])[:,None,None]
+    mean=np.divide(np.nansum(stack,axis=0),count,out=np.zeros(count.shape),where=count>0)
+    tm=np.divide(np.sum(valid*t,axis=0),count,out=np.zeros(count.shape),where=count>0)
+    dx=t-tm;den=np.sum(np.where(valid,dx**2,0),axis=0)
+    residual=np.where(valid,stack-mean-np.nan_to_num(slope,nan=0)*dx,0)
+    rss=np.sum(residual**2,axis=0)
+    se=np.sqrt(np.divide(rss,(count-2)*den,out=np.full(count.shape,np.nan),where=(count>=3)&(den>0)))
+    meta['assumption']='Classical residual variance / Sxx; independent homoscedastic residuals, conditional on times.'
+    return se,meta
+
+
+def lee_filter(z,r,enl):
+    from analysis.science_raster import focal
+    mean=focal(z,r,'focal_mean');variance=focal(z,r,'focal_sd')**2
+    # Multiplicative unit-mean speckle variance is 1/ENL.
+    signal=np.maximum((variance-mean**2/enl)/(1+1/enl),0)
+    weight=np.divide(signal,variance,out=np.zeros_like(signal),where=variance>0)
+    return mean+weight*(z-mean)
+
+
+def unmix(stack,labels,target=None):
+    from terrain.studio_calibrated_models import spectral_unmix
+    valid=np.isfinite(stack).all(axis=0);train=valid&np.isfinite(labels)&(labels>0)
+    classes=np.unique(labels[train]);require(2<=len(classes)<=5,'Provide 2–5 linearly identifiable labeled endmembers.')
+    require(valid.sum()<=20000,'Spectral unmixing is bounded to 20,000 complete pixels; crop the region explicitly.')
+    means=[];rows=[]
+    for c in classes:
+        data=stack[:,train&(labels==c)].T;require(len(data)>=2,'Each endmember requires at least two complete labeled pixels.')
+        center=data.mean(axis=0);means.append(center);rows.append([int(c),len(data),*center.tolist()])
+    if target is not None:require(target in classes,'Target endmember class is not present.')
+    abundance,error,meta=spectral_unmix(stack[:,valid].T,np.asarray(means))
+    out=np.full(valid.shape,np.nan)
+    out[valid]=error if target is None else abundance[:,int(np.flatnonzero(classes==target)[0])]
+    meta.update(classes=classes.astype(int).tolist(),complete_pixels=int(valid.sum()),
+                mean_reconstruction_rmse=float(error.mean()),target_class=target,
+                maximum_fraction_sum_error=float(np.max(np.abs(abundance.sum(axis=1)-1))))
+    return out,['class','training_cells','blue','green','red','nir'],rows,meta
+
+
+def stratified_accuracy(prediction,reference):
+    valid=np.isfinite(prediction);sample=np.isfinite(reference)
+    require(valid.any() and sample.any() and np.all(~sample|valid),'Reference samples must fall within valid mapped pixels.')
+    labels=np.union1d(prediction[valid],reference[sample]);require(2<=len(labels)<=64,'Use 2–64 distinct classes.')
+    classes=np.unique(prediction[valid]);population=int(valid.sum());matrix=np.zeros((len(labels),len(labels)))
+    rows=[];variance=0.
+    for label in classes:
+        region=valid&(prediction==label);n=int(region.sum());ref=reference[region&sample];k=len(ref)
+        require(k>=2,'Each mapped stratum requires at least two reference samples.')
+        weight=n/population;i=int(np.searchsorted(labels,label))
+        counts=np.bincount(np.searchsorted(labels,ref),minlength=len(labels))
+        matrix[i]=weight*counts/k;correct=float(np.mean(ref==label))
+        variance+=weight**2*(1-k/n)*correct*(1-correct)/(k-1)
+        rows.append([int(label),n,k,weight,correct])
+    oa=float(np.trace(matrix));se=float(np.sqrt(max(0,variance)))
+    return ['map_class','population_cells','reference_samples','map_area_fraction','within_stratum_accuracy'],rows,{
+        'classes':labels.astype(int).tolist(),'area_adjusted_matrix_map_rows':matrix.tolist(),
+        'reference_area_fractions':matrix.sum(axis=0).tolist(),'area_adjusted_overall_accuracy':oa,
+        'overall_accuracy_standard_error':se,'approximate_95_interval':[max(0,oa-1.95996398454*se),min(1,oa+1.95996398454*se)],
+        'warning':'Assumes independent simple random sampling without replacement within mapped strata. Design validity and reference labels require independent verification.'}

@@ -15,7 +15,7 @@ from analysis.science_raster import require
 from analysis.science_routes import raster_product,raster_preview,csv_output
 from analysis.science_figures import figure_sources,csv_text
 from .remote_catalog import BY_ID,catalog
-from .remote_kernels import ratio,optical,quality_mask,transition,agreement,temporal,pca,classify
+from .remote_kernels import ratio,nd,optical,quality_mask,transition,agreement,temporal,pca,classify,sen_slope,temporal_slope_se,lee_filter,unmix,stratified_accuracy
 
 router=APIRouter(prefix='/analysis/remote-sensing',tags=['remote sensing'])
 
@@ -106,16 +106,18 @@ def execute(body):
         data=base64.b64decode(source.data,validate=True);require(len(data)<=24_000_000,'Source exceeds inline GeoTIFF budget.')
         raw.append(data);hashes.append(hashlib.sha256(data).hexdigest())
     grids={};provenance={};first=None;cells=0
-    def load(binding,quantity):
+    aligning=method.id in {'align_continuous','align_categorical'}
+    if aligning:require(not body.quality,'Apply QA before or after explicit alignment, not during reprojection.')
+    def load(binding,quantity,allow_mismatch=False):
         nonlocal first,cells
         i=binding.source;require(i<len(raw),'Source index does not exist.')
         g=read_band(body.sources[i],binding,quantity,raw[i],hashes[i])
         cells+=g.values.size;require(cells<=8_000_000,'Combined decoded cell budget exceeded.')
         if first is None:first=g
-        else:require(g.crs==first.crs and g.transform==first.transform and g.values.shape==first.values.shape,'All bands and QA rasters must be explicitly aligned to the same grid.')
+        elif not allow_mismatch:require(g.crs==first.crs and g.transform==first.transform and g.values.shape==first.values.shape,'All bands and QA rasters must be explicitly aligned to the same grid.')
         return g
     for name,quantity in method.roles:
-        b=body.bindings[name];g=load(b,quantity);grids[name]=g
+        b=body.bindings[name];g=load(b,quantity,aligning and name=='source');grids[name]=g
         provenance[name]={'source':g.name,'sha256':g.sha256,'band':g.band,'quantity':quantity,'unit':g.unit,'scale':g.scale,'offset':g.offset,'encoding':b.encoding}
     quality=[]
     for q in body.quality:
@@ -129,10 +131,24 @@ def execute(body):
     if any(q=='numeric' for q in roles.values()):
         units={grids[r].unit for r,q in roles.items() if q=='numeric'}
         require(len(units)==1,'Comparable numerical bands must share physical units.')
+    if aligning:
+        from rasterio.warp import reproject,Resampling
+        target=grids['target'];source=grids['source'];out=np.full(target.values.shape,np.nan)
+        if method.id=='align_continuous':require(source.unit!='class','Categorical rasters require nearest neighbor alignment.')
+        reproject(source.values,out,src_transform=source.transform,src_crs=source.crs,src_nodata=np.nan,
+                  dst_transform=target.transform,dst_crs=target.crs,dst_nodata=np.nan,
+                  resampling=Resampling.bilinear if method.id=='align_continuous' else Resampling.nearest)
+        out[~np.isfinite(target.values)]=np.nan
+        v['source']=out
     common=np.logical_and.reduce([np.isfinite(z) for z in v.values()])
     unit=method.unit;rows=[];headers=[];meta={};out=None
     if unit in {'source','source/time'}:unit=next(iter(grids.values())).unit+('/time' if unit=='source/time' else '')
-    if method.group=='Optical':
+    if aligning:
+        out=v['source'];unit=grids['source'].unit;meta['resampling']='bilinear' if kind=='align_continuous' else 'nearest'
+    elif kind=='calibrated_reflectance':out=v['band']
+    elif kind=='ndvi_change':out=nd(v['nir_after'],v['red_after'])-nd(v['nir_before'],v['red_before'])
+    elif kind=='dnbr':out=nd(v['nir_before'],v['swir_before'])-nd(v['nir_after'],v['swir_after'])
+    elif method.group=='Optical':
         out=optical(kind,v,params);out[~common]=np.nan
         meta['reflectance_outside_0_1']={r:int(np.count_nonzero(np.isfinite(z)&((z<0)|(z>1)))) for r,z in v.items()}
     elif method.group=='Quality':out=quality_mask(v['qa'],kind)
@@ -154,6 +170,9 @@ def execute(body):
     elif kind=='sar_linear':out=np.power(10,v['backscatter']/10)
     elif kind=='sar_ratio':out=ratio(v['cross'],v['co'])
     elif kind=='dualpol_rvi':out=4*ratio(v['cross'],v['co']+v['cross'])
+    elif kind=='sar_lee':out=lee_filter(v['power'],params['radius'],params['enl'])
+    elif kind=='temporal_sen':out,meta=sen_slope(np.stack(list(v.values())),params)
+    elif kind=='temporal_trend_se':out,meta=temporal_slope_se(np.stack(list(v.values())),params)
     elif kind.startswith('temporal_'):
         out,meta=temporal(kind,np.stack(list(v.values())),params)
     elif kind=='pca':
@@ -165,6 +184,10 @@ def execute(body):
         out=np.degrees(np.arccos(np.clip(cosine,-1,1)))
     elif kind=='minimum_distance':
         out,headers,rows,meta=classify(np.stack([v[r] for r in ('blue','green','red','nir')]),v['training'])
+    elif kind in {'spectral_unmix','spectral_unmix_rmse'}:
+        out,headers,rows,meta=unmix(np.stack([v[r] for r in ('blue','green','red','nir')]),v['training'],params.get('target_class'))
+    elif kind=='stratified_accuracy':
+        headers,rows,meta=stratified_accuracy(v['prediction'],v['reference'])
     elif kind=='classification_accuracy':
         require(common.any(),'No common valid reference cells.')
         headers,rows,meta=agreement(v['prediction'][common],v['reference'][common])
@@ -185,8 +208,10 @@ def execute(body):
     if kind=='classification_accuracy':
         for key in ('precision','recall'):
             if any(r[headers.index(key)] is not None for r in rows):add('Class '+key,'basic_column',{'x':'class','y':key})
-    if kind=='minimum_distance':
+    if kind in {'minimum_distance','spectral_unmix','spectral_unmix_rmse'}:
         add('Training support by class','basic_column',{'x':'class','y':'training_cells'})
+        add('Mean spectral signature by class','multi_line',{'x':'band','columns':[str(r[0]) for r in rows]},csv_text(['band',*[str(r[0]) for r in rows]],[[b,*[r[i+2] for r in rows]] for i,b in enumerate([1,2,3,4])]))
+    if kind=='stratified_accuracy':add('Validation accuracy by mapped stratum','basic_column',{'x':'map_class','y':'within_stratum_accuracy'})
     result['figures']=plots
     json.dumps(result,allow_nan=False)
     return result

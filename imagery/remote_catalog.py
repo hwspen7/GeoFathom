@@ -25,6 +25,17 @@ TIMES=numeric('date1','date2','date3','date4')
 CLASSES=(('before','class'),('after','class'))
 SPECTRUM=refl('blue','green','red','nir')
 METHODS=(
+m('calibrated_reflectance','Preprocessing','Calibrated reflectance export',refl('band'),'reflectance','Explicit source scale and offset; no atmospheric correction.'),
+m('align_continuous','Preprocessing','Align continuous band (bilinear)',(('target','template'),('source','numeric')),'source_band','Explicit reprojection to target grid; target NoData retained; no QA in this alignment operation.'),
+m('align_categorical','Preprocessing','Align categorical band (nearest)',(('target','template'),('source','class')),'class','Nearest-neighbor reprojection to target grid; target NoData retained; no QA in this alignment operation.'),
+m('ndvi_change','Change','NDVI change (after minus before)',refl('nir_before','red_before','nir_after','red_after'),'index','Paired comparable surface reflectance; separate acquisition quality masks recommended.'),
+m('dnbr','Change','Differenced NBR (before minus after)',refl('nir_before','swir_before','nir_after','swir_after'),'index','Pre-fire NBR minus post-fire NBR; not automatically calibrated burn severity.'),
+m('sar_lee','Radar','Lee-type adaptive speckle filter',(('power','power'),),'linear_power','Local multiplicative noise model with supplied equivalent number of looks; not a terrain correction.',(p('radius','Window radius (cells)',2,1,10,True),p('enl','Equivalent number of looks',4,1,1000))),
+m('temporal_sen','Time Series','Theil–Sen temporal slope',TIMES,'source/time','Median pairwise slope at supplied acquisition times; requires at least three valid observations.',TIME),
+m('temporal_trend_se','Time Series','OLS temporal slope standard error',TIMES,'source/time','Conditional classical OLS standard error, at least three valid observations; independent homoscedastic residual assumption.',TIME),
+m('spectral_unmix','Spectral','Fully constrained spectral abundance',SPECTRUM+(('training','class'),),'fraction','Endmember class means from labeled pixels; nonnegative fractions sum to one, selected class abundance.',(p('target_class','Target endmember class',1,1,65535,True),)),
+m('spectral_unmix_rmse','Spectral','Spectral mixture reconstruction RMSE',SPECTRUM+(('training','class'),),'reflectance','Residual RMSE of fully constrained linear mixture fit; not independent classification accuracy.'),
+m('stratified_accuracy','Classification','Map-stratified area-adjusted accuracy',(('prediction','class'),('reference','class')),'','Reference NoData outside validation sample; assumes simple random sampling within each mapped class, reports area-adjusted matrix and OA SE; design must be user-verified.'),
 m('ndvi','Optical','NDVI — vegetation',refl('nir','red'),'index',OPT),
 m('evi','Optical','EVI — enhanced vegetation',refl('nir','red','blue'),'index',OPT),
 m('evi2','Optical','EVI2 — two-band enhanced vegetation',refl('nir','red'),'index',OPT),

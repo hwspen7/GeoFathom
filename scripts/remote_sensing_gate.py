@@ -10,6 +10,7 @@ from imagery.remote_catalog import BY_ID
 
 def expected_tests():
     groups={
+        'test_advanced_remote_reference':'calibrated_reflectance align_continuous align_categorical ndvi_change dnbr sar_lee temporal_sen temporal_trend_se spectral_unmix spectral_unmix_rmse stratified_accuracy',
         'test_optical_reference':'ndvi evi evi2 savi msavi2 gndvi ndre ndwi mndwi ndmi nbr nbr2 ndbi bsi ndsi arvi osavi simple_ratio nirv ci_green',
         'test_quality_reference':'sentinel_clear landsat_clear landsat_unsaturated',
         'test_change_reference':'difference relative_change change_classes transition_matrix',
