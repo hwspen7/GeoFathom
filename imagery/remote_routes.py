@@ -17,6 +17,7 @@ from analysis.science_figures import figure_sources,csv_text
 from .remote_catalog import BY_ID,catalog,SERIES_IDS,HYPER_IDS,LUT_IDS,GLOBAL_HYPER_IDS
 from .remote_spectral_inference import spectral_covariance,matched_filter,library_retrieval
 from .remote_advanced_models import dualpol,brdf,support_fusion,cloud_model
+from .remote_phase import reconstruct
 from .remote_validation import aggregate_nested,continuous_reference,binary_reference
 from .remote_band import read_calibrated
 from .remote_fusion import fusion,canopy,unsupervised
@@ -143,6 +144,9 @@ def execute(body):
     elif aligning:
         out=v['source'];unit='fraction' if kind=='align_area_coverage' else grids['source'].unit
         meta.update(alignment_meta);meta['resampling']='nested_area' if kind.startswith('align_area_') else 'bilinear' if kind=='align_continuous' else 'nearest'
+    elif kind in {'insar_phase_wls','insar_relative_range'}:
+        if kind=='insar_relative_range':require(params['range_sign'] in (-1,1),'Range sign must be +1 or -1.')
+        out,meta=reconstruct(v,params,kind)
     elif kind in {'sar_dual_entropy','sar_dual_purity','sar_dual_minor_fraction'}:out,meta=dualpol(v,kind)
     elif kind=='brdf_ross_li':out,meta=brdf(v,params)
     elif kind=='fusion_support_temporal':

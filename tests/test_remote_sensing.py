@@ -189,7 +189,7 @@ def test_remote_invalid_inputs_and_recovery():
         response=client.post('/analysis/remote-sensing/run',json=bad);assert response.status_code==422,response.text
     response=client.post('/analysis/remote-sensing/run',json=good);assert response.status_code==200,response.text
     np.testing.assert_allclose(grid(response.json()),.5)
-    assert client.get('/analysis/remote-sensing/catalog').json()['operation_count']==len(BY_ID)==127
+    assert client.get('/analysis/remote-sensing/catalog').json()['operation_count']==len(BY_ID)==129
 
 def test_temporal_independent_quality_masks():
     # Cloud at one date does not erase the other valid acquisitions.
@@ -1017,3 +1017,19 @@ def test_advanced_analysis_ready_reference(kind):
         assert np.mean(z[label==target])>.9 and np.mean(z[label!=target])<.1
         assert m['oof_cells']==900 and m['oof_accuracy']>.98
         assert m['oof_multiclass_brier']<.05 and m['oof_log_loss']<.15
+
+
+@pytest.mark.parametrize('kind',['insar_phase_wls','insar_relative_range'])
+def test_anchored_phase_reference(kind):
+    row,col=np.indices((12,14));truth=.8*row+.65*col
+    phase=np.angle(np.exp(1j*truth));coherence=np.full(truth.shape,.9)
+    coherence[:,9]=0
+    params={'reference_row':0,'reference_col':0,'reference_phase':0}
+    if kind=='insar_relative_range':params.update(wavelength_m=.06,range_sign=-1)
+    r=run(kind,{'phase':phase,'coherence':coherence},params);z=grid(r);m=r['receipt']['metrics']
+    expected=truth[:,:9] if kind=='insar_phase_wls' else -truth[:,:9]*.06/(4*np.pi)
+    np.testing.assert_allclose(z[:,:9],expected,atol=1e-7)
+    assert np.isnan(z[:,9:]).all() and m['excluded_disconnected_cells']==48
+    assert m['wrapped_consistency_rmse_rad']<1e-7
+    with pytest.raises(FigureInputError,match='congruent'):
+        run(kind,{'phase':phase,'coherence':coherence},{**params,'reference_phase':.5})
