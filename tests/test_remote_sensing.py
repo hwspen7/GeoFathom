@@ -1033,3 +1033,21 @@ def test_anchored_phase_reference(kind):
     assert m['wrapped_consistency_rmse_rad']<1e-7
     with pytest.raises(FigureInputError,match='congruent'):
         run(kind,{'phase':phase,'coherence':coherence},{**params,'reference_phase':.5})
+
+
+def test_prosail_library_response_integration():
+    from scripts.build_prosail_library import simulate,WAVELENGTH,BOUNDS
+    responses={r:[[w-10,0],[w,1],[w+10,0]] for r,w in zip(('blue','green','red','nir'),(480,550,660,840))}
+    sample={name:(lo+hi)/2 for name,(lo,hi) in BOUNDS.items()}
+    config={'sensor':'synthetic response fixture','responses':responses,'samples':[{**sample,'lai':1,'prior':2},{**sample,'lai':3,'prior':1}]}
+    calls=[]
+    def model(**kwargs):
+        calls.append(kwargs)
+        return .1+WAVELENGTH*.0001+kwargs['lai']*.02
+    rows=simulate(config,model)
+    assert len(calls)==2 and calls[0]['prospect_version']=='D' and calls[0]['factor']=='SDR'
+    np.testing.assert_allclose(rows,[[1,2,.168,.175,.186,.204],[3,1,.208,.215,.226,.244]],atol=1e-12)
+    with pytest.raises(ValueError,match='two distinct'):
+        simulate({**config,'samples':[config['samples'][0]]*2},model)
+    bad={**responses,'blue':[[470,1],[480,1],[490,0]]}
+    with pytest.raises(ValueError,match='zero'):simulate({**config,'responses':bad},model)

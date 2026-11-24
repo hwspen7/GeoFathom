@@ -181,6 +181,7 @@ def execute(body):
     elif kind in LUT_IDS:
         out,meta=library_retrieval(v,body.library,params,kind)
         meta['library_sha256']=hashlib.sha256(json.dumps(body.library,separators=(',',':'),allow_nan=False).encode()).hexdigest()
+        meta['library_inputs']={'columns':['lai','prior','blue','green','red','nir'],'rows':body.library}
     elif kind=='spectral_matched_filter':out,meta=matched_filter(v,params)
     elif kind in GLOBAL_HYPER_IDS:out,headers,rows,meta=spectral_covariance(np.stack(list(v.values())),body.times,kind,params)
     elif kind in HYPER_IDS:
