@@ -54,7 +54,7 @@ def run(operation: str, epsg: int, vertical_datum: str = Query(min_length=1,max_
             "source":source,"reference":ref,"parameters":{"k":k,"size_m":size,"radius_m":radius,"max_edge_m":max_edge,"trim_fraction":trim_fraction,"max_iterations":max_iterations,"tolerance_m":tolerance,"registration_sigma_m":registration_sigma,"min_neighbors":min_neighbors,"threshold":threshold},
             "result_sha256":hashlib.sha256(result["csv"].encode()).hexdigest(),
             "figure_sampling":"evenly spaced result rows, maximum 10000"}
-        raster_fields={"surface_change":"delta_z_m","correlated_change":"delta_z_m","canopy_structure":"p95_m","canopy_watershed":"canopy_height_m"}
+        raster_fields={"surface_change":"delta_z_m","correlated_change":"delta_z_m","canopy_structure":"p95_m","canopy_watershed":"canopy_height_m","canopy_complexity":"height_entropy","building_candidates":"height_m"}
         if operation in raster_fields:
             table=np.genfromtxt(io.StringIO(result["csv"]),delimiter=",",skip_header=1,ndmin=2)
             field=raster_fields[operation]

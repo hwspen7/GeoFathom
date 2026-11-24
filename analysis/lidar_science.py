@@ -20,9 +20,14 @@ from .lidar_reconstruction import poisson_grid, progressive_tin
 
 from .lidar_inference import feature_registration, clustered_normal_change, canopy_watershed, multiscale_geometry
 
+from .lidar_structures import cloth_filter, canopy_complexity, building_candidates
+
 MAX_POINTS = 100_000
 MAX_BYTES = 16 * 1024 * 1024
 METHODS = {
+    "cloth_filter": ("Cloth membrane ground filtering", "CSF-inspired inverted obstacle and damped membrane relaxation; not canonical CSF."),
+    "canopy_complexity": ("Canopy vertical complexity", "Ground-normalized return entropy, effective layers and occupied voxel volume; not LAD."),
+    "building_candidates": ("Planar roof footprint metrics", "Ground-normalized planar candidates, observed area, perimeter and height-volume proxy."),
     "feature_registration": ("Reciprocal feature RANSAC registration", "Rigid-invariant kNN distances, reciprocal ratio matches, bounded RANSAC and bidirectional overlap."),
     "clustered_normal_change": ("Cluster-aware normal change inference", "Tangent-block variance, conditional t inference and Benjamini–Yekutieli FDR adjustment."),
     "canopy_watershed": ("Sparse CHM marker watershed", "Maximum-bottleneck graph watershed on observed canopy cells; no gap bridging."),
@@ -206,10 +211,22 @@ def analyze(operation, p, reference=None, *, k=16, size=1., radius=2., max_edge=
     metrics = {"input_points":len(p)}
     if not (np.isfinite(threshold) and 0 <= threshold <= 1e6 and np.isfinite(registration_sigma) and 0 <= registration_sigma <= 1e6 and 3 <= min_neighbors <= 1000):
         raise ValueError("Invalid diagnostic or uncertainty parameters.")
-    if operation in ("cloud_distance","surface_change","ground_height","rigid_registration","normal_change","canopy_structure","point_plane_icp","crown_candidates","correlated_change","coarse_pca","generalized_icp","feature_registration","clustered_normal_change","canopy_watershed") and reference is None:
+    if operation in ("cloud_distance","surface_change","ground_height","rigid_registration","normal_change","canopy_structure","point_plane_icp","crown_candidates","correlated_change","coarse_pca","generalized_icp","feature_registration","clustered_normal_change","canopy_watershed","canopy_complexity","building_candidates") and reference is None:
         raise ValueError("This method needs a reference cloud in the same CRS and vertical datum.")
     if operation == "stream_voxels":
         raise ValueError("Streaming operation requires the file-backed endpoint.")
+    elif operation == "cloth_filter":
+        table,info=cloth_filter(p,size,radius,threshold,max_iterations,tolerance)
+        columns += ["ground_z_m","height_m","ground_flag"]
+        metrics.update(info)
+    elif operation == "canopy_complexity":
+        table,info=canopy_complexity(p,_ground(p,reference,max_edge),size,radius,threshold)
+        columns=["x_m","y_m","count","p95_m","occupied_layers","height_entropy","effective_layers","occupied_volume_m3","height_range_m"]
+        metrics.update(info)
+    elif operation == "building_candidates":
+        table,info=building_candidates(p,_ground(p,reference,max_edge),size,k,threshold,radius,min_neighbors)
+        columns=["x_m","y_m","z_m","height_m","component_id","count","boundary_length_m"]
+        metrics.update(info)
     elif operation == "feature_registration":
         table,info=feature_registration(p,reference,k,radius,threshold,max_iterations,min_neighbors)
         columns += ["residual_m","inlier_flag"]

@@ -40,9 +40,13 @@ Progressive TIN densification admits lower-envelope candidates using current sup
 
 Reciprocal k-nearest-distance descriptor matching and bounded RANSAC provide a partial-overlap initializer under comparable sampling density. Registration quality includes independently computed forward and reverse nearest-distance overlap. The cluster-aware normal change operation uses tangent-plane blocks, return-weighted cluster sandwich variance, conservative conditional t intervals and Benjamini–Yekutieli adjusted p values. Blocks are assumed independent; the method does not estimate full measurement covariance or normal uncertainty. Zero-variance tests are withheld. Sparse CHM marker watershed identifies true regional maxima, collapses connected equal-height plateaus, applies suppression independently within observed connected components, then uses a maximum-bottleneck graph flood without filling missing cells. Occupied footprint is not full crown area. Multiscale covariance geometry selects an identifiable neighborhood via normalized eigenentropy, a heuristic rather than validated optimal scale.
 
+## Terrain and structural metrics
+
+The cloth-inspired filter is a bounded inverted obstacle-constrained membrane relaxation, with a reported convergence flag. Canopy vertical complexity reports observed return-height Shannon entropy, effective layers, and occupied voxel volume. Planar roof candidates combine ground-normalized heights, local covariance geometry, connected occupied cells, grid perimeter, compactness and a height-volume proxy. Neither physical leaf area density nor semantic buildings nor enclosed volume can be recovered from these metrics alone.
+
 ## Verification
 
-Run python -m pytest tests/test_lidar_science.py tests/test_lidar_advanced.py tests/test_lidar_geometry.py tests/test_lidar_disk_uncertainty.py tests/test_lidar_registration.py tests/test_lidar_reconstruction.py tests/test_lidar_inference.py -q. Tests cover analytical planes, degenerate neighborhoods, exact voxel counts, scaled LAS coordinates, partial overlap, directed distance, TIN interpolation, malformed input and HTTP contracts. These are synthetic reference tests, not real-flight validation.
+Run python -m pytest tests/test_lidar_science.py tests/test_lidar_advanced.py tests/test_lidar_geometry.py tests/test_lidar_disk_uncertainty.py tests/test_lidar_registration.py tests/test_lidar_reconstruction.py tests/test_lidar_inference.py tests/test_lidar_structures.py -q. Tests cover analytical planes, degenerate neighborhoods, exact voxel counts, scaled LAS coordinates, partial overlap, directed distance, TIN interpolation, malformed input and HTTP contracts. These are synthetic reference tests, not real-flight validation.
 
 ## Remaining research work
 
