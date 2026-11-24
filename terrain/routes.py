@@ -191,7 +191,7 @@ async def mesh_tile(request:Request,body:MeshTileInput):
     from .mesh_tiles import stream_mesh_tile
     try:
         return await run_cancelable(request,stream_mesh_tile,raster(body.image_id),
-            body.geometry,body.level,body.tile_row,body.tile_col,body.tile_cells)
+            body.geometry,body.level,body.tile_row,body.tile_col,body.tile_cells,budgeted=True)
     except (GeometryError,RasterError,ValueError,OverflowError) as error:
         raise HTTPException(status_code=422,detail=str(error)) from error
 

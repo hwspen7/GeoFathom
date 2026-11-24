@@ -35,6 +35,8 @@ LOCAL_OPERATIONS = frozenset({"dem_difference", "elevation", "slope_map", "aspec
 class ComputePolicy(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
     mode: Literal["automatic", "manual"] = "automatic"
+    backend: Literal["auto", "cpu"] = "auto"
+    gpu_memory_percent: int = Field(default=60, ge=10, le=80)
     memory_percent: int = Field(default=65, ge=10, le=85)
     concurrent_tasks: int = Field(default=1, ge=1, le=4)
     tile_size: Literal[128, 256, 512, 1024] = 512
@@ -53,6 +55,8 @@ class Host:
     available_bytes: int
     logical_cpus: int
     scratch_free_bytes: int
+    gpu_free_bytes: int = 0
+    gpu_total_bytes: int = 0
 
 
 @dataclass(frozen=True)
@@ -68,6 +72,7 @@ class Limits:
     viewshed_distance_m: int
     ray_samples: int
     native_slope_cells: int
+    gpu_memory_bytes: int = 0
 
     def grid(self, operation):
         group = ("surface" if operation in LOCAL_OPERATIONS else
@@ -181,7 +186,9 @@ def detect_host():
     path = _settings_path().parent
     while not path.exists() and path != path.parent:
         path = path.parent
-    return Host(total, available, max(1, _cgroup_cpus(cpus)), int(shutil.disk_usage(path).free))
+    from .cuda_terrain import device_memory
+    gpu_free,gpu_total=device_memory()
+    return Host(total, available, max(1, _cgroup_cpus(cpus)), int(shutil.disk_usage(path).free),gpu_free,gpu_total)
 
 
 def resolve_limits(policy, host, reserved=0):
@@ -211,7 +218,8 @@ def resolve_limits(policy, host, reserved=0):
     distance = policy.viewshed_distance_m if manual else min(100000, max(10000, 10000*(usable//GiB)))
     rays = policy.ray_samples if manual else min(500_000_000, max(100_000_000, 25_000_000*host.logical_cpus))
     return Limits(budget, concurrency, tile, **caps, viewshed_distance_m=distance,
-                  ray_samples=rays, native_slope_cells=min(8_000_000, usable//128))
+                  ray_samples=rays, native_slope_cells=min(8_000_000, usable//128),
+                  gpu_memory_bytes=0 if policy.backend=='cpu' else min(host.gpu_free_bytes//2,host.gpu_total_bytes*policy.gpu_memory_percent//100,512*MiB))
 
 
 def current_limits():
@@ -273,5 +281,5 @@ def resource_status():
         return {"policy": policy.model_dump(), "hardware": asdict(host),
                 "effective": asdict(limits), "active_tasks": _running, "queued_tasks": _waiting, "reserved_bytes": _reserved,
                 "scope": "local_backend_process",
-                "terrain_gpu": "not_available",
+                "terrain_gpu": "available" if host.gpu_total_bytes else "not_available",
                 "memory_protection": "admission_and_cooperative_pressure_guard"}

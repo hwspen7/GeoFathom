@@ -561,8 +561,8 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
         total_steps=sum(
             int(np.maximum(np.abs(rows-r),np.abs(cols-c)).sum())
             for r,c in origins)
-        if total_steps>100_000_000:
-            raise RasterError("Multi-observer visibility exceeds 100 million ray samples; reduce the area.")
+        if total_steps>limits.ray_samples:
+            raise RasterError(f"Multi-observer visibility exceeds {limits.ray_samples/1_000_000:g} million ray samples; reduce the area.")
         cached=None
         if optimize_observers:
             from .coverage_exact import exact_maximum_coverage

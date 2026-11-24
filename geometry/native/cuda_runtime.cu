@@ -271,3 +271,61 @@ extern "C" GEOFATHOM_API int gf_cuda_device_semantic(int device,const void* inpu
     else semantic_ids<<<blocks,256>>>(static_cast<const unsigned char*>(input),n,classes,labels,conf);
     return cudaGetLastError()==cudaSuccess&&cudaDeviceSynchronize()==cudaSuccess?0:-1;
 }
+
+// Independent device-memory budget for exact Horn/Zevenbergen tile gradients.
+// Output is per-pixel east/south derivative in metres/metre and a valid mask.
+namespace {
+__global__ void terrain_gradient(const float* z,const unsigned char* valid,int w,int h,
+    double dx,double dy,int method,float* east,float* south,unsigned char* out){
+    const int i=blockIdx.x*blockDim.x+threadIdx.x;
+    if(i>=w*h)return;
+    out[i]=0;east[i]=south[i]=0;
+    const int r=i/w,c=i%w;
+    if(r==0||c==0||r==h-1||c==w-1)return;
+    for(int y=-1;y<=1;++y)for(int x=-1;x<=1;++x){
+        int k=i+y*w+x;if(!valid[k]||!isfinite(z[k]))return;
+    }
+    if(method==0){
+        east[i]=static_cast<float>((double(z[i-w+1])+2.*z[i+1]+z[i+w+1]-z[i-w-1]-2.*z[i-1]-z[i+w-1])/(8.*dx));
+        south[i]=static_cast<float>((double(z[i+w-1])+2.*z[i+w]+z[i+w+1]-z[i-w-1]-2.*z[i-w]-z[i-w+1])/(8.*dy));
+    }else{
+        east[i]=static_cast<float>((double(z[i+1])-z[i-1])/(2.*dx));
+        south[i]=static_cast<float>((double(z[i+w])-z[i-w])/(2.*dy));
+    }
+    out[i]=1;
+}
+std::mutex terrain_lock;
+}
+extern "C" GEOFATHOM_API int gf_cuda_terrain_memory(int device,std::size_t* out) noexcept {
+    if(!out||device<0||cudaSetDevice(device)!=cudaSuccess)return -1;
+    std::size_t free=0,total=0;
+    if(cudaMemGetInfo(&free,&total)!=cudaSuccess)return -1;
+    out[0]=free;out[1]=total;return 0;
+}
+extern "C" GEOFATHOM_API int gf_cuda_terrain_gradient(int device,const float* z,const unsigned char* valid,
+    int w,int h,double dx,double dy,int method,std::size_t budget,float* east,float* south,unsigned char* out) noexcept {
+    if(!z||!valid||!east||!south||!out||w<3||h<3||w>4096||h>4096||
+       !std::isfinite(dx)||!std::isfinite(dy)||dx<=0||dy<=0||method<0||method>1)return -1;
+    const std::size_t n=std::size_t(w)*h;
+    std::lock_guard<std::mutex> guard(terrain_lock);
+    std::size_t memory[2]{};
+    if(gf_cuda_terrain_memory(device,memory)!=0||n>budget/14||n>memory[0]/28)return -2;
+    float *a=nullptr,*e=nullptr,*s=nullptr;
+    unsigned char *v=nullptr,*m=nullptr;
+    bool ok=cudaMalloc(reinterpret_cast<void**>(&a),n*4)==cudaSuccess&&
+        cudaMalloc(reinterpret_cast<void**>(&e),n*4)==cudaSuccess&&
+        cudaMalloc(reinterpret_cast<void**>(&s),n*4)==cudaSuccess&&
+        cudaMalloc(reinterpret_cast<void**>(&v),n)==cudaSuccess&&
+        cudaMalloc(reinterpret_cast<void**>(&m),n)==cudaSuccess&&
+        cudaMemcpy(a,z,n*4,cudaMemcpyHostToDevice)==cudaSuccess&&
+        cudaMemcpy(v,valid,n,cudaMemcpyHostToDevice)==cudaSuccess;
+    if(ok){
+        terrain_gradient<<<(n+255)/256,256>>>(a,v,w,h,dx,dy,method,e,s,m);
+        ok=cudaGetLastError()==cudaSuccess&&cudaDeviceSynchronize()==cudaSuccess&&
+            cudaMemcpy(east,e,n*4,cudaMemcpyDeviceToHost)==cudaSuccess&&
+            cudaMemcpy(south,s,n*4,cudaMemcpyDeviceToHost)==cudaSuccess&&
+            cudaMemcpy(out,m,n,cudaMemcpyDeviceToHost)==cudaSuccess;
+    }
+    cudaFree(a);cudaFree(e);cudaFree(s);cudaFree(v);cudaFree(m);
+    return ok?0:-3;
+}
