@@ -16,6 +16,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+lidar = ["laspy[lazrs]>=2.5,<3"]
 dev = ["pytest>=8,<10", "pytest-asyncio>=0.24,<2", "pytest-cov>=7,<8", "coverage>=7.10.6,<8", "pypdf>=5,<8"]
 postgis = ["psycopg[binary]>=3.2,<4"]
 vision = ["onnxruntime>=1.18,<2"]

@@ -98,7 +98,7 @@ def test_api_contract():
     from analysis.lidar_routes import router
     app=FastAPI();app.include_router(router)
     client=TestClient(app)
-    assert len(client.get("/analysis/lidar/catalog").json()["operations"])==18
+    assert len(client.get("/analysis/lidar/catalog").json()["operations"])==20
     files={"cloud":("cloud.csv",b"x,y,z\n1,2,3\n","text/csv")}
     url="/analysis/lidar/run?operation=quality&epsg=32617&vertical_datum=local"
     r=client.post(url,files=files)

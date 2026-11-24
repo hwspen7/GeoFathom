@@ -8,11 +8,11 @@ from scipy.spatial import cKDTree, Delaunay, QhullError
 from scipy.spatial.transform import Rotation
 
 def ground_filter(p,size,radius,threshold):
-    """Progressively admit low-cell candidates with a local slope allowance.
+    """Select low-cell candidates with a local slope allowance.
 
     A lower-envelope seed is formed per coarse cell. Candidate elevations are
     compared to neighboring accepted seeds, with a maximum slope expressed
-    as rise/run. This is a progressive slope filter, not CSF or PMF.
+    as rise/run. This is a single-pass local slope filter, not progressive TIN, CSF or PMF.
     """
     if threshold<=0 or radius<size:
         raise ValueError("Ground tolerance must be positive and search radius at least one cell.")

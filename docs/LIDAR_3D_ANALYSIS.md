@@ -18,11 +18,17 @@ Trimmed rigid point-to-point ICP uses centered SVD, proper rotations, maximum co
 
 ## Geometry and structure extension
 
-Progressive slope ground filtering uses locally supported lower-envelope seeds and TIN heights, with unsupported points kept unknown. A 2.5D TIN exports every triangle, 3D and projected area, and rejects long edges. Regularized 3D alpha-complex boundaries export consistently outward-oriented triangles and tetrahedral volume. Robust point-to-plane ICP uses Huber weights, SVD observability checks, and centered six-dimensional increments. Deterministic sequential RANSAC with orthogonal refinement extracts planar candidates; sparse CHM peak suppression extracts candidate crown apices. Neither candidate method constitutes validated semantic classification.
+Local slope ground filtering uses locally supported lower-envelope seeds and TIN heights, with unsupported points kept unknown. A 2.5D TIN exports every triangle, 3D and projected area, and rejects long edges. Regularized 3D alpha-complex boundaries export consistently outward-oriented triangles and tetrahedral volume. Robust point-to-plane ICP uses Huber weights, SVD observability checks, and centered six-dimensional increments. Deterministic sequential RANSAC with orthogonal refinement extracts planar candidates; sparse CHM peak suppression extracts candidate crown apices. Neither candidate method constitutes validated semantic classification.
+
+## Disk-backed and covariance extensions
+
+Install the optional LiDAR extension with python -m pip install -e ".[lidar]". LAZ decoding uses laspy/lazrs. The streaming LAS/LAZ operation processes up to 10 million records in 100,000-point chunks, accumulates additive statistics in a temporary SQLite store, and rejects outputs above 100,000 occupied voxels. Counts, centroid coordinates, elevation extrema, classification and return-number counts are preserved. It validates embedded horizontal CRS when present; it does not transform vertical datums. The 512 MiB upload cap and bounded output are explicit. This is not an out-of-core implementation of all algorithms, nor a spatial-indexed COPC reader.
+
+The common-cell change operation estimates conditional volume uncertainty by combining within-cell mean sampling variances with an operator-specified exponential spatial covariance of registration error. All pairs are evaluated in bounded memory blocks. No empirical variogram calibration or autocorrelation adjustment to within-cell sampling error is claimed.
 
 ## Verification
 
-Run python -m pytest tests/test_lidar_science.py tests/test_lidar_advanced.py tests/test_lidar_geometry.py -q. Tests cover analytical planes, degenerate neighborhoods, exact voxel counts, scaled LAS coordinates, partial overlap, directed distance, TIN interpolation, malformed input and HTTP contracts. These are synthetic reference tests, not real-flight validation.
+Run python -m pytest tests/test_lidar_science.py tests/test_lidar_advanced.py tests/test_lidar_geometry.py tests/test_lidar_disk_uncertainty.py -q. Tests cover analytical planes, degenerate neighborhoods, exact voxel counts, scaled LAS coordinates, partial overlap, directed distance, TIN interpolation, malformed input and HTTP contracts. These are synthetic reference tests, not real-flight validation.
 
 ## Remaining research work
 

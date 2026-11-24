@@ -3,7 +3,9 @@ import csv
 import hashlib
 from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 from pyproj.exceptions import CRSError
-from .lidar_science import MAX_BYTES, METHODS, analyze, metric_crs, read_cloud
+from .lidar_science import MAX_BYTES, MAX_POINTS, METHODS, analyze, metric_crs, read_cloud, _serialize
+from .lidar_disk import read_compressed, stream_voxels
+import io
 
 router = APIRouter(prefix="/analysis/lidar", tags=["3D and LiDAR"])
 
@@ -23,10 +25,27 @@ def run(operation: str, epsg: int, vertical_datum: str = Query(min_length=1,max_
         crs = metric_crs(epsg)
         if not vertical_datum.strip():
             raise ValueError("Specify the common vertical datum or local height reference.")
-        p, source = read_cloud(cloud.file.read(MAX_BYTES+1),cloud.filename or "")
-        q, ref = read_cloud(reference.file.read(MAX_BYTES+1),reference.filename or "") if reference else (None,None)
-        result = analyze(operation,p,q,k=k,size=size,radius=radius,max_edge=max_edge,trim_fraction=trim_fraction,max_iterations=max_iterations,
-            tolerance=tolerance,registration_sigma=registration_sigma,min_neighbors=min_neighbors,threshold=threshold)
+        def load(upload):
+            name=upload.filename or ""
+            raw=upload.file.read(MAX_BYTES+1)
+            if len(raw)>MAX_BYTES:raise ValueError("Use streaming voxel statistics for files above 16 MiB.")
+            if name.lower().endswith(".laz"):
+                p,meta=read_compressed(io.BytesIO(raw),epsg,MAX_POINTS)
+                return p,{**meta,"sha256":hashlib.sha256(raw).hexdigest(),"format":"LAZ XYZ","points":len(p)}
+            return read_cloud(raw,name)
+        if operation=="stream_voxels":
+            if reference is not None:raise ValueError("Streaming voxel statistics accepts one cloud.")
+            if not (cloud.filename or "").lower().endswith((".las",".laz")):raise ValueError("Streaming requires LAS or LAZ.")
+            table,metrics=stream_voxels(cloud.file,epsg,size)
+            source=metrics.pop("source");ref=None
+            columns=["x_m","y_m","z_m","count","min_z_m","max_z_m"]
+            data,figure,rows=_serialize(columns,table)
+            result={"operation":operation,"columns":columns,"rows":rows,"row_count":len(table),"csv":data,"figure_csv":figure,"metrics":metrics,"assumption":METHODS[operation][1]}
+        else:
+            p,source=load(cloud)
+            q,ref=load(reference) if reference else (None,None)
+            result=analyze(operation,p,q,k=k,size=size,radius=radius,max_edge=max_edge,trim_fraction=trim_fraction,max_iterations=max_iterations,
+                tolerance=tolerance,registration_sigma=registration_sigma,min_neighbors=min_neighbors,threshold=threshold)
         result["receipt"] = {"schema":"geofathom-lidar-1","horizontal_crs":crs,
             "vertical_datum":vertical_datum.strip(),"vertical_unit":"m","crs_assignment":"operator supplied; no reprojection or datum transformation",
             "source":source,"reference":ref,"parameters":{"k":k,"size_m":size,"radius_m":radius,"max_edge_m":max_edge,"trim_fraction":trim_fraction,"max_iterations":max_iterations,"tolerance_m":tolerance,"registration_sigma_m":registration_sigma,"min_neighbors":min_neighbors,"threshold":threshold},

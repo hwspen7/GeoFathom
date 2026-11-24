@@ -12,10 +12,14 @@ from .lidar_advanced import robust_outlier, register, normal_change, canopy_stru
 
 from .lidar_geometry import ground_filter, tin_mesh, alpha_boundary, plane_icp, roof_planes, crown_candidates
 
+from .lidar_uncertainty import correlated_change
+
 MAX_POINTS = 100_000
 MAX_BYTES = 16 * 1024 * 1024
 METHODS = {
-    "ground_filter": ("Progressive slope ground filter", "Local lower-envelope seeds and slope allowance; TIN interpolation within supported area."),
+    "stream_voxels": ("Disk-backed LAS / LAZ voxel statistics", "Chunked LAS/LAZ decoding and exact count aggregation; 10 million input points, 100,000 occupied voxels."),
+    "correlated_change": ("Spatial covariance change uncertainty", "Common cell means with supplied exponential registration covariance; conditional volume uncertainty."),
+    "ground_filter": ("Local slope ground filter", "Local lower-envelope seeds and slope allowance; TIN interpolation within supported area."),
     "tin_mesh": ("2.5D surface TIN", "XY Delaunay triangles filtered by maximum 3D edge length; median duplicate XY elevations."),
     "alpha_boundary": ("3D alpha-complex boundary", "Regularized retained tetrahedra; no isolated alpha simplices or Poisson surface."),
     "point_plane_icp": ("Robust point-to-plane ICP", "Huber-weighted local registration; rejects unobservable six-parameter systems."),
@@ -182,9 +186,15 @@ def analyze(operation, p, reference=None, *, k=16, size=1., radius=2., max_edge=
     metrics = {"input_points":len(p)}
     if not (np.isfinite(threshold) and 0 <= threshold <= 1e6 and np.isfinite(registration_sigma) and 0 <= registration_sigma <= 1e6 and 3 <= min_neighbors <= 1000):
         raise ValueError("Invalid diagnostic or uncertainty parameters.")
-    if operation in ("cloud_distance","surface_change","ground_height","rigid_registration","normal_change","canopy_structure","point_plane_icp","crown_candidates") and reference is None:
+    if operation in ("cloud_distance","surface_change","ground_height","rigid_registration","normal_change","canopy_structure","point_plane_icp","crown_candidates","correlated_change") and reference is None:
         raise ValueError("This method needs a reference cloud in the same CRS and vertical datum.")
-    if operation == "ground_filter":
+    if operation == "stream_voxels":
+        raise ValueError("Streaming operation requires the file-backed endpoint.")
+    elif operation == "correlated_change":
+        table,info=correlated_change(p,reference,size,registration_sigma,radius,min_neighbors)
+        columns=["x_m","y_m","reference_z_m","current_z_m","delta_z_m","standard_error_m","lod95_m","lower95_m","upper95_m","above_lod","current_count","reference_count"]
+        metrics.update(info)
+    elif operation == "ground_filter":
         table,info=ground_filter(p,size,radius,threshold)
         columns += ["ground_z_m","height_m","ground_flag"]
         metrics.update(info)
