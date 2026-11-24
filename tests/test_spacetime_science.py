@@ -49,6 +49,15 @@ def test_every_spacetime_method_reference(kind):
     elif kind.startswith('kalman_'):params={'horizon':2,'process_variance':.01,'observation_variance':.1,'initial_velocity_variance':1}
     elif kind.startswith('forecast_'):params={'horizon':2}
     elif kind=='exceedance':params={'threshold':10}
+    if '_interval_' in kind:
+        from scipy.stats import genextreme,genpareto
+        prob=(np.arange(30)+.5)/30
+        if kind.startswith('gev_'):a=np.repeat(genextreme.ppf(prob,0,loc=4,scale=2),2)[:,None,None];params={'block_length':2}
+        else:a=np.r_[np.full(30,-1),genpareto.ppf(prob,0,scale=2)][:,None,None];params={'threshold':0}
+        params.update(bootstrap_replicates=39,seed=12,return_period=20,extreme_minimum=8)
+        r=run(kind,a,None,params);z=grid(r)
+        assert np.isfinite(z).all() and r['receipt']['metrics']['minimum_successful_refits']>=32
+        return
     if kind.startswith(('gev_','gpd_')):
         from scipy.stats import genextreme,genpareto
         prob=(np.arange(30)+.5)/30
@@ -391,3 +400,13 @@ def test_joint_parameter_selection_and_nested_validation():
     n=gtwr(changed,[x],np.arange(12.),g,cfg,'gtwr_holdout_rmse')[3]
     for key in ('bandwidth_candidates','inner_split','selected_spatial_range','selected_temporal_range','training_indices'):assert m[key]==n[key]
     assert n['rmse']>100 and m['rmse']<1
+
+
+def test_extreme_bootstrap_seed_and_order():
+    from analysis.spacetime_extremes import bootstrap_interval
+    from scipy.stats import genextreme,genpareto
+    q=(np.arange(40)+.5)/40
+    for x,gev in [(genextreme.ppf(q,0,loc=4,scale=2),True),(np.r_[np.full(40,-1),genpareto.ppf(q,0,scale=2)],False)]:
+        a=bootstrap_interval(x,gev,0,20,8,39,17)
+        assert a is not None and a[0]<a[1] and a[2]>=32
+        assert a==bootstrap_interval(x,gev,0,20,8,39,17)

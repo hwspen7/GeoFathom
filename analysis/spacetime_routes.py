@@ -19,7 +19,7 @@ from .spacetime_panel import panel
 from .spacetime_dynamic import dynamic
 from .spacetime_multibreak import multi_break
 from .spacetime_gtwr import gtwr
-from .spacetime_extremes import extremes,track
+from .spacetime_extremes import extremes,track,extreme_interval
 from analysis.science_raster import require
 from analysis.science_routes import raster_product,raster_preview
 from analysis.science_figures import csv_text
@@ -27,7 +27,7 @@ from .spacetime_models import trend,temporal,forecast,spatial_lag,variogram
 
 router=APIRouter(prefix='/analysis/spatiotemporal',tags=['spatiotemporal science'])
 # parameter = (default,minimum,maximum,integer)
-P={'minimum_observations':(6,3,64,True),'lag':(1,1,32,True),'threshold':(0,-1e50,1e50,False),'horizon':(30,.000001,1e7,False),'radius':(3,1,20,True),'period':(365,.000001,1e7,False),'fraction':(.5,.01,.99,False),'minimum_amplitude':(.01,0,1e50,False),'min_segment':(3,2,32,True),'penalty':(1,.000001,1e50,False),'process_variance':(.01,1e-20,1e50,False),'observation_variance':(.1,1e-20,1e50,False),'initial_velocity_variance':(1,1e-20,1e50,False),'permutations':(199,19,999,True),'seed':(42,0,2147483647,True),'mode':(1,1,64,True),'block_length':(3,2,21,True),'spatial_range':(100,1e-6,1e8,False),'temporal_range':(30,1e-6,1e8,False),'nugget_ratio':(.1,1e-6,10,False),'sample_limit':(128,12,256,True),'fit_covariance':(0,0,1,True),'holdout_dates':(2,2,32,True),'buffer_cells':(0,0,100,True),'bic_threshold':(6,0,1000,False),'maximum_gap':(30,.000001,1e9,False),'alpha':(.05,.001,.2,False),'block_cells':(2,1,1000,True),'interaction':(.5,.05,1,False),'target_date':(3,1,64,True),'trajectory_limit':(8,1,16,True),'max_breaks':(2,1,5,True),'effective_samples':(10,4,100,True),'local_sample_limit':(256,16,512,True),'coefficient_index':(1,1,3,True),'return_period':(20,1.01,10000,False),'minimum_voxels':(2,1,10000,True),'extreme_minimum':(10,8,64,True),'fit_interaction':(0,0,1,True),'auto_bandwidth':(0,0,1,True)}
+P={'minimum_observations':(6,3,64,True),'lag':(1,1,32,True),'threshold':(0,-1e50,1e50,False),'horizon':(30,.000001,1e7,False),'radius':(3,1,20,True),'period':(365,.000001,1e7,False),'fraction':(.5,.01,.99,False),'minimum_amplitude':(.01,0,1e50,False),'min_segment':(3,2,32,True),'penalty':(1,.000001,1e50,False),'process_variance':(.01,1e-20,1e50,False),'observation_variance':(.1,1e-20,1e50,False),'initial_velocity_variance':(1,1e-20,1e50,False),'permutations':(199,19,999,True),'seed':(42,0,2147483647,True),'mode':(1,1,64,True),'block_length':(3,2,21,True),'spatial_range':(100,1e-6,1e8,False),'temporal_range':(30,1e-6,1e8,False),'nugget_ratio':(.1,1e-6,10,False),'sample_limit':(128,12,256,True),'fit_covariance':(0,0,1,True),'holdout_dates':(2,2,32,True),'buffer_cells':(0,0,100,True),'bic_threshold':(6,0,1000,False),'maximum_gap':(30,.000001,1e9,False),'alpha':(.05,.001,.2,False),'block_cells':(2,1,1000,True),'interaction':(.5,.05,1,False),'target_date':(3,1,64,True),'trajectory_limit':(8,1,16,True),'max_breaks':(2,1,5,True),'effective_samples':(10,4,100,True),'local_sample_limit':(256,16,512,True),'coefficient_index':(1,1,3,True),'return_period':(20,1.01,10000,False),'minimum_voxels':(2,1,10000,True),'extreme_minimum':(10,8,64,True),'fit_interaction':(0,0,1,True),'auto_bandwidth':(0,0,1,True),'bootstrap_replicates':(99,39,399,True)}
 KALMAN_P=('minimum_observations','horizon','process_variance','observation_variance','initial_velocity_variance')
 KRIGING_P=('spatial_range','temporal_range','nugget_ratio','sample_limit','fit_covariance','seed')
 BREAK_P=('period','min_segment','bic_threshold')
@@ -39,6 +39,10 @@ FITTED_P=('minimum_observations','process_variance','observation_variance','init
 MULTI_P=('period','min_segment','max_breaks','bic_threshold')
 GTWR_P=('spatial_range','temporal_range','effective_samples','local_sample_limit','seed','auto_bandwidth')
 METHODS={
+ 'gev_interval_low':('Extreme value uncertainty','GEV pointwise bootstrap lower bound',('block_length','extreme_minimum','return_period','bootstrap_replicates','seed')),
+ 'gev_interval_high':('Extreme value uncertainty','GEV pointwise bootstrap upper bound',('block_length','extreme_minimum','return_period','bootstrap_replicates','seed')),
+ 'gpd_interval_low':('Extreme value uncertainty','GPD pointwise bootstrap lower bound',('threshold','extreme_minimum','return_period','bootstrap_replicates','seed')),
+ 'gpd_interval_high':('Extreme value uncertainty','GPD pointwise bootstrap upper bound',('threshold','extreme_minimum','return_period','bootstrap_replicates','seed')),
  'gev_shape':('Extreme value statistics','GEV block maxima shape',('block_length','extreme_minimum','return_period')),
  'gev_return_level':('Extreme value statistics','GEV block return level',('block_length','extreme_minimum','return_period')),
  'gpd_shape':('Extreme value statistics','GPD threshold excess shape',('threshold','extreme_minimum','return_period')),
@@ -197,6 +201,8 @@ def execute(body):
     elif kind.startswith(('forecast_','hindcast_')):
         out,cols,rows,meta=forecast(stack,t,kind,p);unit='index' if kind=='hindcast_skill' else unit
         if len(rows)>=2:plot('Expanding-window forecast versus persistence error','multi_line',cols,rows,x='time',columns=['trend_rmse','persistence_rmse'])
+    elif '_interval_' in kind:
+        out,meta=extreme_interval(stack,t,p,kind)
     elif kind.startswith(('gev_','gpd_')):
         out,meta=extremes(stack,t,{**p,'minimum_observations':p['extreme_minimum']},kind)
         if kind.endswith('_shape'):unit='index'

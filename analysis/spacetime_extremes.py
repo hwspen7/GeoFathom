@@ -32,6 +32,57 @@ def fit_gev(maxima):
     shape,loc,ls=fit.x
     return float(shape),float(center+scale*loc),float(scale*np.exp(ls)),bool(abs(shape)>.3999 or abs(loc)>4.999 or abs(ls)>5.999)
 
+def bootstrap_interval(samples,gev,threshold,period,minimum,replicates,seed):
+    """Parametric stationary iid bootstrap, including the GPD occurrence rate."""
+    from scipy.stats import genextreme,genpareto
+    rng=np.random.default_rng(seed);values=[];bound=0
+    if gev:
+        fitted=fit_gev(samples)
+        if fitted is None:return None
+        xi,mu,sigma,_=fitted
+    else:
+        excess=samples[samples>threshold]-threshold
+        if len(excess)<minimum or len(excess)==len(samples):return None
+        fitted=fit_gpd(excess)
+        if fitted is None:return None
+        xi,sigma,_=fitted;rate=len(excess)/len(samples)
+        if period*rate<=1:return None
+    for _ in range(replicates):
+        if gev:
+            simulated=genextreme.rvs(-xi,loc=mu,scale=sigma,size=len(samples),random_state=rng)
+            f=fit_gev(simulated)
+            if f is None:continue
+            s,l,v,b=f;level=float(genextreme.ppf(1-1/period,-s,loc=l,scale=v))
+        else:
+            count=int(rng.binomial(len(samples),rate))
+            if count<minimum or count==len(samples) or period*count/len(samples)<=1:continue
+            simulated=genpareto.rvs(xi,scale=sigma,size=count,random_state=rng)
+            f=fit_gpd(simulated)
+            if f is None:continue
+            s,v,b=f;level=float(threshold+genpareto.isf(1/(period*count/len(samples)),s,scale=v))
+        if np.isfinite(level):values.append(level);bound+=int(b)
+    if len(values)<max(30,int(np.ceil(.8*replicates))):return None
+    low,high=np.quantile(values,[.025,.975])
+    return float(low),float(high),len(values),bound
+
+def extreme_interval(stack,t,p,kind):
+    n,h,w=stack.shape;B=p['bootstrap_replicates'];gev=kind.startswith('gev_')
+    require(h*w*B<=1600,'Bootstrap limited to small study windows; reduce crop or replicates.')
+    require(np.allclose(np.diff(t),np.diff(t)[0],rtol=1e-7,atol=1e-10),'Extremes require a regular time axis.')
+    out=np.full((h,w),np.nan);counts=[];bound=0;minimum=p['extreme_minimum'];block=p.get('block_length',1)
+    for i,j in np.ndindex(h,w):
+        y=stack[:,i,j]
+        if gev:
+            a=y[:n//block*block].reshape(-1,block);a=a[np.isfinite(a).all(axis=1)]
+            samples=a.max(axis=1) if len(a) else np.empty(0)
+        else:samples=y[np.isfinite(y)]
+        if len(samples)<minimum:continue
+        interval=bootstrap_interval(samples,gev,p.get('threshold',0.),p['return_period'],minimum,B,np.random.SeedSequence([p['seed'],i,j]))
+        if interval is None:continue
+        low,high,count,b=interval;counts.append(count);bound+=b
+        out[i,j]=low if kind.endswith('_low') else high
+    return out,{'bootstrap_replicates':B,'supported_cells':len(counts),'minimum_successful_refits':min(counts) if counts else 0,'boundary_refits':bound,'confidence_level':.95,'interpretation':'Pointwise percentile parametric bootstrap of the fitted stationary iid model, with bounded likelihood refits and binomial occurrence uncertainty for GPD. No spatial simultaneous coverage, no declustering, no correction for serial dependence or model misspecification. Failed refits above 20% invalidate the cell; boundary estimates can distort intervals.'}
+
 def extremes(stack,t,p,kind):
     n,h,w=stack.shape;require(n*h*w<=16000,'Extreme value likelihood budget exceeded.')
     require(np.allclose(np.diff(t),np.diff(t)[0],rtol=1e-7,atol=1e-10),'Extremes need regular dates; use explicit complete blocks.')
