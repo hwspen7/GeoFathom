@@ -515,7 +515,7 @@ export default function App() {
       return;
     }
     setShowTools(true);setActiveTool(id);if(id!=='tools-terrain'){setTerrainPicking(false);setTerrainHover(null);}
-    setObjectsOpen(id!=='tools-terrain');
+    setObjectsOpen(!['tools-terrain','tools-spatial-science'].includes(id));
     // Tool activation, including keyboard shortcuts, dismisses the transient
     // drawer so it cannot intercept input intended for the operations dock.
     // Its project/search state stays mounted and the selected place is retained.
@@ -1785,7 +1785,7 @@ export default function App() {
                   onClick={()=>setNetworkPage(v=>v+1)}>Next</button>
               </div>}
             </section>,resultsTarget)}
-          {resultsTarget&&activeTool!=='tools-terrain'&&!(['tools-survey','tools-services'].includes(activeTool)&&(networkAreas?.count??0)>1)&&(geometry||measurement||preview)&&createPortal(<section className="panel-section results-summary">
+          {resultsTarget&&!['tools-terrain','tools-spatial-science'].includes(activeTool)&&!(['tools-survey','tools-services'].includes(activeTool)&&(networkAreas?.count??0)>1)&&(geometry||measurement||preview)&&createPortal(<section className="panel-section results-summary">
             <div className="section-heading"><Compass size={16} /><span>Selection</span></div>
             <div className="analysis-card">
               
@@ -2089,9 +2089,12 @@ export default function App() {
               onSaved={()=>{if(projectCurrent())setRefreshToken(v=>v+1);}}/>
           </section>
 
+          <section id="tools-spatial-science" hidden={activeTool!=='tools-spatial-science'} className="panel-section">
+            <div className="section-heading"><Layers3 size={16}/><span>Spatial Analysis</span></div>
+            <SpatialSciencePanel key={activeProjectId??'no-project'} active={activeTool==='tools-spatial-science'} resultsTarget={resultsTarget} geometry={preview||drawingMode?null:geometry} connected={Boolean(capabilities)} projectId={activeProjectId} layers={projectWorkspace?.layers??[]} assets={rasterLayers.map(l=>l.asset)} terrainProducts={terrainRasters.map(l=>({name:l.title,data:l.raster.geotiff,unit:l.raster.unit??'',band:1}))} onPreview={features=>{if(projectCurrent()){setSpatialResults(features);setSpatialVisible(true);}}} onRasterPreview={layer=>{if(projectCurrent()){setSpatialRaster(layer);setSpatialVisible(true);}}}/>
+          </section>
+
           <section id="tools-spatial" hidden={activeTool!=='tools-spatial'} className="panel-section">
-            <div className="section-heading"><Layers3 size={16}/><span>Spatial science</span></div>
-            <SpatialSciencePanel key={activeProjectId??'no-project'} geometry={preview||drawingMode?null:geometry} connected={Boolean(capabilities)} projectId={activeProjectId} layers={projectWorkspace?.layers??[]} assets={rasterLayers.map(l=>l.asset)} terrainProducts={terrainRasters.map(l=>({name:l.title,data:l.raster.geotiff,unit:l.raster.unit??'',band:1}))} onPreview={features=>{if(projectCurrent()){setSpatialResults(features);setSpatialVisible(true);}}} onRasterPreview={layer=>{if(projectCurrent()){setSpatialRaster(layer);setSpatialVisible(true);}}}/>
             <div className="section-heading"><Layers3 size={16}/><span>Geometry processing</span></div>
             <GeometryAnalysis geometry={preview||drawingMode?null:geometry} selectedId={selectedFeatureId??scratchId}
               features={[...scratch,...(projectWorkspace?.features??[])]} connected={Boolean(capabilities)}
