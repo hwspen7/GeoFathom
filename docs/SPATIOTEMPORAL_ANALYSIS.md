@@ -2,7 +2,7 @@
 
 Independent workbench for 6–64 explicitly dated, aligned GeoTIFF bands or scenes. The numerical cube is capped at four million dated cells and 48 MB encoded input, with tighter per-model work limits. Metadata/custom/Landsat physical calibration shares the remote-sensing reader; optional QA applies globally or per date. No automatic resampling or implicit missing-date compression. Calendar dates are UTC day offsets with a recorded origin.
 
-## Methods (37)
+## Methods (38)
 - Cube coverage, observed exceedance, lag correlation, median/count and actual-time OLS and Sen trends.
 - Tie-corrected asymptotic Mann–Kendall and BY adjustment; MK assumes temporal independence.
 - Circular residual block-bootstrap slopes with shared resample indices, BY adjustment; approximate inference for complete regular series with stationary residuals.
@@ -17,3 +17,5 @@ Independent map layer, native GeoTIFF, CSV, source/calibration/QA/time/provenanc
 
 ## Acceptance
 Run python -m pytest -q tests/test_spacetime_science.py . Every catalog method has a reference case, and explicit tests cover irregular dates, calibration, QA, alignment, independent batch Gaussian prediction and future-data isolation. Figure tests render actual result data to PNG and SVG. This is not proof of completed execution. Large disk-backed new-model computation, spatiotemporal kriging, spatial panel regression, external validation, and persistent cube storage remain outside this implementation.
+
+The isolated local checks verified the five EOF/bootstrap methods, independent batch Gaussian forecast mean and SD, future observation isolation, and reproducible conditional spatial randomization using byte-identical algorithm modules with a minimal error-check stub. These nine checks are not application or browser acceptance. The dedicated workflow uses the existing locked scientific environment and a strict JUnit per-method gate; the Playwright spec exercises a real six-band GeoTIFF, slope export and map preview.

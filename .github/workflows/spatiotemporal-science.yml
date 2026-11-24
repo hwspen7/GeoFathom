@@ -9,19 +9,21 @@ permissions:
   contents: read
 jobs:
   science:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: '3.11'
       - name: Install application dependencies
-        run: python -m pip install -r requirements.txt pytest
+        run: python -m pip install -c requirements/linux.lock -e ".[dev]"
       - name: Compile scientific modules
         run: python -m compileall -q analysis imagery terrain
       - name: Run space-time reference and actual figure tests
-        run: python -m pytest -q tests/test_spacetime_science.py --junitxml=spacetime-reference.xml
+        run: |
+          python -m pytest -q tests/test_spacetime_science.py --junitxml=spacetime-reference.xml
+          python scripts/spacetime_gate.py spacetime-reference.xml
       - uses: actions/upload-artifact@v4
         if: always()
         with:

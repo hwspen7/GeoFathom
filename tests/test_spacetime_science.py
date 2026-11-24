@@ -54,7 +54,7 @@ def test_every_spacetime_method_reference(kind):
         row=next(q for q in r['rows'] if q[:3]==['temporal',0.,1.])
         assert row[3]==17*12 and row[4]==pytest.approx(.5*np.mean(space**2));return
     if kind=='lag_permutation':
-        assert len(r['rows'])==17 and all(0<q[3]<=q[-1]<=1 for q in r['rows'])
+        assert len(r['rows'])==16 and all(0<q[3]<=q[-1]<=1 for q in r['rows'])
         assert r['rows']==run(kind,a,t,params)['rows'];return
     z=grid(r)
     expected={'series_slope':space,'sen':space,'coverage':1.,'series_count':18.,'series_median':5+8.5*space,

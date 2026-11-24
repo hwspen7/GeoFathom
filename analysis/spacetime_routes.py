@@ -110,6 +110,7 @@ def execute(body):
         for i in set(names):arrays[int(i)-1][~clear]=np.nan
         quality_receipt.append({'source_sha256':sha[q.source],**q.model_dump()})
     stack=np.stack(arrays);require(np.isfinite(stack).any(),'No valid cube observations.')
+    require(np.max(np.abs(stack[np.isfinite(stack)]))<=1e50,'Rescale cube values to at most 1e50 before statistical analysis.')
     out=None;rows=[];cols=[];meta={};figures=[];unit=first.unit
     def plot(title,recipe,cols,rows,**bindings):
         figures.append({'title':title,'recipe':recipe,'bindings':bindings,'csv':csv_text(cols,rows),'raster':False})
