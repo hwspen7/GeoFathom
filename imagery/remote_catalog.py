@@ -24,12 +24,17 @@ TIME=(p('time1','First acquisition time',0,-1e6,1e6),p('time2','Second acquisiti
 TIMES=numeric('date1','date2','date3','date4')
 CLASSES=(('before','class'),('after','class'))
 SPECTRUM=refl('blue','green','red','nir')
+HYPER_IDS={'spectral_absorption_depth','spectral_absorption_center','spectral_absorption_area','spectral_endmembers'}
 SERIES_IDS={'series_median','series_count','series_slope','series_amplitude','series_harmonic_rmse','series_break_time','series_break_jump','series_break_strength'}
 CV=(p('block_m','Block width (m)',100,1,100000),p('folds','Spatial fold count',5,3,10,True),p('buffer_blocks','Training exclusion buffer (blocks)',0,0,1,True))
 THERMAL_ROLES=(('radiance','radiance'),('emissivity','emissivity'),('transmittance','transmittance'),('upwelling','radiance'),('downwelling','radiance'))
 SAR_TERRAIN=(('sigma0','power'),('incidence','slope'),('slope','slope'),('aspect','aspect'))
 SAR_GEOM=(p('look_azimuth','Sensor-facing azimuth (grid degrees)',90,0,360),p('margin_deg','Layover/shadow margin (degrees)',1,0,10))
 METHODS=(
+m('spectral_absorption_depth','Spectral','Continuum-removed maximum absorption depth',refl('band1','band2','band3','band4','band5','band6'),'fraction','6–64 positive wavelength values in nm; complete spectra and upper convex continuum.'),
+m('spectral_absorption_center','Spectral','Continuum-removed absorption center',refl('band1','band2','band3','band4','band5','band6'),'nm','Deepest sampled absorption band; featureless spectra excluded.'),
+m('spectral_absorption_area','Spectral','Continuum-removed integrated absorption',refl('band1','band2','band3','band4','band5','band6'),'nm','Trapezoidal integration of continuum-removed absorption in physical wavelength units.'),
+m('spectral_endmembers','Spectral','Successive projection endmember candidates',refl('band1','band2','band3','band4','band5','band6'),'','Separable linear mixing and full rank assumptions; returns candidate spectra, not verified pure classes.',(p('endmembers','Number of endmember candidates',3,2,8,True),)),
 m('lst_uncertainty','Thermal','Physical LST propagated uncertainty',THERMAL_ROLES+(('radiance_sd','radiance_sd'),('emissivity_sd','fraction_sd'),('transmittance_sd','fraction_sd'),('upwelling_sd','radiance_sd'),('downwelling_sd','radiance_sd')),'K','Independent first-order input uncertainties; no covariance or structural model discrepancy.',(p('k1','K1 radiance constant',774.8853,.000001,1e7),p('k2','K2 temperature constant',1321.0789,.000001,1e7))),
 m('sar_terrain_volume','Radar','Angular SAR volume-scattering slope correction',SAR_TERRAIN,'linear_power','Angular volume scattering model with supplied sensor-facing azimuth; active layover and shadow removed; not area-based RTC.',SAR_GEOM),
 m('sar_terrain_validity','Radar','Angular SAR terrain validity mask',SAR_TERRAIN,'class','Local angular active layover/shadow mask; passive distortion not reconstructed.',SAR_GEOM),
@@ -121,4 +126,4 @@ assert len(BY_ID)==len(METHODS)
 def catalog():
     return [{'id':x.id,'group':x.group,'title':x.title,'roles':[{'id':r,'quantity':q} for r,q in x.roles],
              'parameters':[dict(zip(('name','label','default','minimum','maximum','integer'),v)) for v in x.parameters],
-             'unit':x.unit,'assumption':x.assumption,'variable_series':x.id in SERIES_IDS} for x in METHODS]
+             'unit':x.unit,'assumption':x.assumption,'variable_series':x.id in SERIES_IDS or x.id in HYPER_IDS,'axis':'wavelength' if x.id in HYPER_IDS else 'time'} for x in METHODS]

@@ -189,7 +189,7 @@ def test_remote_invalid_inputs_and_recovery():
         response=client.post('/analysis/remote-sensing/run',json=bad);assert response.status_code==422,response.text
     response=client.post('/analysis/remote-sensing/run',json=good);assert response.status_code==200,response.text
     np.testing.assert_allclose(grid(response.json()),.5)
-    assert client.get('/analysis/remote-sensing/catalog').json()['operation_count']==len(BY_ID)==84
+    assert client.get('/analysis/remote-sensing/catalog').json()['operation_count']==len(BY_ID)==88
 
 def test_temporal_independent_quality_masks():
     # Cloud at one date does not erase the other valid acquisitions.
@@ -537,3 +537,22 @@ def test_physical_depth_reference(kind):
         z=grid(r);np.testing.assert_allclose(z[:-2,3:],ref[:-2,3:])
         assert np.isnan(z[-2:]).all() and np.isnan(z[:,:3]).all()
         with pytest.raises(FigureInputError):run(kind,{'reference':np.ones_like(ref),'candidate':np.ones_like(ref),'calibration':mask})
+
+
+@pytest.mark.parametrize('kind',['spectral_absorption_depth','spectral_absorption_center','spectral_absorption_area','spectral_endmembers'])
+def test_hyperspectral_reference(kind):
+    w=[400,450,520,600,700,900];n=len(w)
+    if kind=='spectral_endmembers':
+        a=np.array([.8,.1,.1,.1,.1,.1]);b=np.array([.1,.8,.1,.1,.1,.1]);c=np.array([.1,.1,.8,.1,.1,.1])
+        spectra=np.stack([a,b,c,(a+b)/2,(b+c)/2,(a+c)/2]*2).T.reshape(n,3,4)
+    else:
+        y=np.array([.8,.72,.4,.64,.72,.8]);spectra=np.broadcast_to(y[:,None,None],(n,3,4)).copy();spectra[2,0,0]=np.nan
+    s=source(spectra);bindings={f'band{i+1}':{'source':0,'band':i+1} for i in range(n)}
+    r=checked(execute(RemoteInput(operation=kind,sources=[s],bindings=bindings,times=w,parameters={'endmembers':3} if kind=='spectral_endmembers' else {})))
+    if kind=='spectral_endmembers':
+        selected=np.array([row[-1] for row in r['rows']]).reshape(3,n)
+        assert {tuple(row) for row in selected}=={tuple(a),tuple(b),tuple(c)}
+        assert len(r['figures'])>=3
+    else:
+        z=grid(r);assert np.isnan(z[0,0]);expected={'spectral_absorption_depth':.5,'spectral_absorption_center':520,'spectral_absorption_area':np.trapezoid(1-y/.8,w)}[kind]
+        np.testing.assert_allclose(z[np.isfinite(z)],expected,atol=1e-12)

@@ -10,6 +10,7 @@ from imagery.remote_catalog import BY_ID
 
 def expected_tests():
     groups={
+        'test_hyperspectral_reference':'spectral_absorption_depth spectral_absorption_center spectral_absorption_area spectral_endmembers',
         'test_physical_depth_reference':'lst_uncertainty sar_terrain_volume sar_terrain_validity register_translation',
         'test_blocked_classifier_reference':'spatial_rf_cv spatial_svm_cv spatial_lda_cv',
         'test_inference_reference':'atmospheric_reflectance robust_harmonization irmad cloud_buffer series_break_time series_break_jump series_break_strength',

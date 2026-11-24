@@ -14,7 +14,8 @@ from terrain.studio_data import Grid,FigureInputError
 from analysis.science_raster import require
 from analysis.science_routes import raster_product,raster_preview,csv_output
 from analysis.science_figures import figure_sources,csv_text
-from .remote_catalog import BY_ID,catalog,SERIES_IDS
+from .remote_catalog import BY_ID,catalog,SERIES_IDS,HYPER_IDS
+from .remote_hyperspectral import continuum_features
 from .remote_physics import thermal_uncertainty,angular_sar,register_translation
 from .remote_classifiers import blocked_classifier
 from .remote_inference import atmospheric_reflectance,robust_harmonization,irmad,cloud_buffer,series_break
@@ -111,7 +112,10 @@ def execute(body):
     if method.id in SERIES_IDS:
         require(6<=len(body.times)<=64,'Supply 6–64 acquisition times.')
         roles={f'date{i+1}':'numeric' for i in range(len(body.times))}
-    else:require(not body.times,'Acquisition times are only accepted by variable series methods.')
+    elif method.id in HYPER_IDS:
+        require(6<=len(body.times)<=64,'Supply 6–64 wavelength values in nm.')
+        roles={f'band{i+1}':'reflectance' for i in range(len(body.times))}
+    else:require(not body.times,'Acquisition times or wavelengths are only accepted by variable-axis methods.')
     require(set(body.bindings)==set(roles),'Bind every required spectral role exactly once.')
     require(set(body.parameters)<=set(p[0] for p in method.parameters),'Unknown remote sensing parameter.')
     params={}
@@ -182,6 +186,8 @@ def execute(body):
     elif kind in {'change_vector','change_mahalanobis'}:out,meta=change_vectors(v,kind=='change_mahalanobis')
     elif kind in {'spatial_rf_cv','spatial_svm_cv','spatial_lda_cv'}:out,headers,rows,meta=blocked_classifier(v,first,params,kind)
     elif kind=='spatial_lda':out,headers,rows,meta=spatial_classifier(v,first,params)
+    elif kind in HYPER_IDS:
+        out,headers,rows,meta=continuum_features(np.stack(list(v.values())),body.times,kind,params)
     elif kind in SERIES_IDS:
         stack=np.stack(list(v.values()))
         if kind.startswith('series_break_'):out,meta=series_break(stack,body.times,params['min_segment'],kind)
@@ -253,6 +259,9 @@ def execute(body):
         add('Spatial fold accuracy','basic_column',{'x':'fold','y':'accuracy'})
         add('Spatial fold balanced accuracy','basic_column',{'x':'fold','y':'balanced_accuracy'})
         add('Spatial fold sample support','basic_column',{'x':'fold','y':'validation_cells'})
+    if kind=='spectral_endmembers':
+        for i in range(params['endmembers']):
+            add('Endmember '+str(i+1)+' candidate spectrum','basic_line',{'x':'wavelength_nm','y':'reflectance'},csv_text(headers,[r for r in rows if r[0]==i+1]))
     if kind=='pca':add('PCA explained variance','basic_column',{'x':'component','y':'explained_fraction'})
     if kind=='transition_matrix':add('Transition area by class pair','basic_column',{'x':'transition','y':'area_m2'},csv_text(['transition','area_m2'],[[str(a)+' → '+str(b),area] for a,b,_,area,_ in rows]) ) if len(rows)<=50 else None
     if kind in SERIES_IDS and any(row[2] is not None for row in rows):add('Acquisition mean time series','basic_line',{'x':'time','y':'mean'})

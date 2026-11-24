@@ -38,3 +38,6 @@ SAR now also provides Gamma MAP intensity filtering, paired log-ratio change, an
 
 ## Physical uncertainty, geometry and alignment
 84 catalog methods include independent-input first-order uncertainty for single-channel LST (finite-difference reference test), angular volume-scattering SAR slope correction and local active layover/shadow validity (Vollrath, Mullissa & Reiche, 2020, https://doi.org/10.3390/rs12111867), and stable-mask normalized cross-correlation integer translation with overlap and ambiguous-peak rejection. These do not implement area-based RTC, passive shadow modeling, subpixel control-point registration or complete thermal model uncertainty.
+
+## Wavelength-aware hyperspectral analysis
+88 catalog methods include 6–64 wavelength-aligned reflectance bands, upper-envelope continuum removal, maximum absorption depth, sampled absorption center, integrated absorption area and deterministic successive-projection endmember candidates. Candidate spectra are not validated pure materials. The existing variable-axis API field `times` carries wavelengths in nm only for catalog methods declaring `axis: wavelength`; the workbench labels it accordingly.
