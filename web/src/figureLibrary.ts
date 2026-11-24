@@ -1,7 +1,7 @@
 /** Plot recipes keep numerical tables, geometry and export styles in one model. */
 import type {PlotData} from './api';
 import type {PersistedTerrainResult} from './terrainResultStore';
-export type FigureKind='histogram'|'cdf'|'exceedance'|'density'|'box'|'quantile'|'qq'|'class_bar'|'class_dot'|'rose'|'profile'|'grade'|'metrics'|'scatter'|'joint_density'|'experiment_line'|'experiment_bar'|'experiment_dot'|'experiment_interval'|'regression'|'bland_altman'|'comparison_boxes'|'comparison_cdf';
+export type FigureKind='histogram'|'cdf'|'exceedance'|'density'|'box'|'quantile'|'qq'|'class_bar'|'class_dot'|'rose'|'profile'|'grade'|'metrics'|'scatter'|'joint_density'|'experiment_line'|'experiment_bar'|'experiment_dot'|'experiment_interval'|'regression'|'bland_altman'|'comparison_boxes'|'comparison_cdf'|'parameter_heatmap';
 export interface FigureRecipe {id:FigureKind;title:string;description:string;category:string}
 export const FIGURES:FigureRecipe[]=[
  {id:'histogram',title:'Histogram',description:'Exact counts or area within numerical bins',category:'Distribution'},
@@ -26,17 +26,19 @@ export const FIGURES:FigureRecipe[]=[
  {id:'bland_altman',title:'Bland–Altman difference',description:'Pair mean versus signed difference, descriptive mean and ±1.96 sample SD',category:'Diagnostics'},
  {id:'comparison_boxes',title:'Grouped box and whisker',description:'Observed quartiles and whiskers for compatible scenario products',category:'Experiments'},
  {id:'comparison_cdf',title:'Scenario cumulative distributions',description:'Compare empirical cumulative percentages on a shared physical axis',category:'Experiments'},
+ {id:'parameter_heatmap',title:'Two-factor response heatmap',description:'Actual evaluations on a parameter combination grid; missing and unmatched cells are not interpolated',category:'Experiments'},
  {id:'metrics',title:'Metric comparison',description:'Select quantities with the same physical unit',category:'Summary'},
 ];
 export interface FigureSettings {kind:FigureKind;title:string;x_label:string;y_label:string;bins:number;
  measure:'percent'|'cells'|'area';palette:'mono'|'blue'|'earth';font:'sans'|'serif';font_size:number;
  grid:boolean;x_log:boolean;y_log:boolean;width_mm:number;height_mm:number;dpi:number;series:number;sectors:number;metric_keys:string[];}
 export function defaultFigure(data:PlotData):FigureSettings{
- const kind:FigureKind=data.distribution_comparison?'comparison_boxes':data.experiment_series?(data.experiment_series.interval_label?'experiment_interval':data.experiment_series.numeric?'experiment_line':'experiment_bar'):data.histograms?'histogram':data.kind==='directional'?'rose':data.kind==='profile'?'profile':data.classes.length?'class_bar':'metrics';
+ const kind:FigureKind=data.parameter_grid?'parameter_heatmap':data.distribution_comparison?'comparison_boxes':data.experiment_series?(data.experiment_series.interval_label?'experiment_interval':data.experiment_series.numeric?'experiment_line':'experiment_bar'):data.histograms?'histogram':data.kind==='directional'?'rose':data.kind==='profile'?'profile':data.classes.length?'class_bar':'metrics';
  return {kind,title:data.quantity.replaceAll('_',' ')+': '+(availableFigures(data).find(f=>f.id===kind)?.title??'Summary'),x_label:'',y_label:'',bins:data.histograms?.['40']?40:Number(Object.keys(data.histograms??{})[0]??40),measure:'percent',palette:'mono',font:'sans',font_size:16,grid:true,x_log:false,y_log:false,width_mm:160,height_mm:110,dpi:300,series:0,sectors:16,metric_keys:[]};
 }
 export function availableFigures(data:PlotData):FigureRecipe[]{
  return FIGURES.filter(f=>{
+  if(f.id==='parameter_heatmap')return !!data.parameter_grid;
   if(f.id==='regression')return !!data.joint?.regression;
   if(f.id==='bland_altman')return !!data.joint?.agreement;
   if(f.id==='comparison_boxes'||f.id==='comparison_cdf')return (data.distribution_comparison?.series.length??0)>1;
@@ -86,6 +88,7 @@ export interface PlotTable {columns:string[];rows:Array<Array<string|number|null
 export function figureTable(data:PlotData,s:FigureSettings):PlotTable{
  const unit=data.unit==='degree'?'deg':data.unit||'',quantity=data.quantity.replaceAll('_',' ');
  const key=unit==='degree'?'deg':unit.replace(/[^a-zA-Z0-9]+/g,'_').replace(/^_|_$/g,'')||'value';
+ if(s.kind==='parameter_heatmap'&&data.parameter_grid)return {columns:[data.parameter_grid.x_label,data.parameter_grid.y_label,'response_'+key],rows:data.parameter_grid.cells.map(c=>[c.x,c.y,c.value]),x_label:data.parameter_grid.x_label,y_label:data.parameter_grid.y_label,unit,note:'Cell colors encode '+quantity+' ('+unit+'); no interpolation.'};
  if(s.kind==='bland_altman'&&data.joint?.agreement)return {columns:['pair_mean_'+key,'candidate_minus_baseline_'+key],rows:data.joint.samples.map(p=>[(p.x+p.y)/2,p.y-p.x]),x_label:'Pair mean ('+unit+')',y_label:'Candidate minus baseline ('+unit+')',unit,note:'Sampled markers; descriptive lines use every common valid pair.'};
  if(s.kind==='comparison_boxes'&&data.distribution_comparison)return {columns:['scenario','whisker_low_'+key,'q1_'+key,'median_'+key,'q3_'+key,'whisker_high_'+key,'valid_cells','lower_outliers','upper_outliers'],rows:data.distribution_comparison.series.map(r=>[r.label,r.box.whisker_low,r.box.q1,r.box.median,r.box.q3,r.box.whisker_high,r.valid_cells,r.box.lower_outliers,r.box.upper_outliers]),x_label:'Scenario',y_label:quantity+' ('+unit+')',unit};
  if(s.kind==='comparison_cdf'&&data.distribution_comparison)return {columns:['scenario','value_'+key,'cells_le','percent_le'],rows:data.distribution_comparison.series.flatMap(r=>r.cdf.map(c=>[r.label,c.value,c.cells_le,c.percent_le])),x_label:quantity+' ('+unit+')',y_label:'Cumulative area (%)',unit};
@@ -138,6 +141,22 @@ export function makeFigure(data:PlotData,s:FigureSettings):FigureScene{
  const title=s.title||FIGURES.find(f=>f.id===s.kind)?.title||data.quantity;
  p.push({kind:'rect',x:0,y:0,width,height,fill:'#ffffff',line_width:0});text(width/2,35,title,'middle',s.font_size+5);
  const fmt=(n:number)=>{if(n===0)return '0';return Math.abs(n)>=1e5||Math.abs(n)<.001?n.toExponential(1):Number(n.toPrecision(4)).toString();};
+ if(s.kind==='parameter_heatmap'&&data.parameter_grid){
+  const g=data.parameter_grid,xs=g.x_values,ys=g.y_values;
+  const values=g.cells.map(c=>c.value).filter((v):v is number=>typeof v==='number'&&Number.isFinite(v));
+  if(!values.length||!xs.length||!ys.length){text(450,280,'No comparable response cells.','middle');return {width,height,width_mm:s.width_mm,height_mm:s.height_mm,title,primitives:p,note:'Unmatched cells remain missing.',error:'No comparable response cells.'};}
+  const lo=Math.min(...values),hi=Math.max(...values),x0=125,y0=80,w=620/xs.length,h=380/ys.length;
+  const shade=(v:number)=>{const t=hi===lo?.5:Math.max(0,Math.min(1,(v-lo)/(hi-lo)));const a=s.palette==='mono'?[245,245,245]:s.palette==='earth'?[247,239,217]:[235,246,252],b=s.palette==='mono'?[30,30,30]:s.palette==='earth'?[104,61,30]:[26,68,118];return '#'+a.map((v,i)=>Math.round(v+(b[i]-v)*t).toString(16).padStart(2,'0')).join('');};
+  const cells=new Map(g.cells.map(c=>[c.x+':'+c.y,c.value]));
+  ys.forEach((yy,j)=>{const py=y0+(ys.length-1-j)*h;text(x0-12,py+h/2+5,fmt(yy),'end');xs.forEach((xx,i)=>{const px=x0+i*w,v=cells.get(xx+':'+yy);const valid=typeof v==='number'&&Number.isFinite(v);p.push({kind:'rect',x:px,y:py,width:w,height:h,fill:valid?shade(v):'#eeeeee',stroke:'#ffffff',line_width:1.5});p.push({kind:'text',x:px+w/2,y:py+h/2+5,text:valid?fmt(v):'N/A',anchor:'middle',font:s.font,font_size:Math.min(s.font_size,14),fill:valid&&hi!==lo&&(v-lo)/(hi-lo)>.58?'#ffffff':'#222222'});});});
+  xs.forEach((xx,i)=>text(x0+(i+.5)*w,y0+ys.length*h+24,fmt(xx),'middle'));
+  text(x0+310,535,s.x_label||g.x_label,'middle',s.font_size+1);text(35,y0+190,s.y_label||g.y_label,'middle',s.font_size+1,-90);
+  for(let i=0;i<32;i++)p.push({kind:'rect',x:770,y:y0+i*380/32,width:17,height:380/32+.5,fill:shade(hi-(hi-lo)*i/31),line_width:0});
+  text(795,y0+8,fmt(hi),'start',12);text(795,y0+380,fmt(lo),'start',12);text(779,64,data.unit||'Value','middle',12);
+  const note='Actual combinations; discrete axis positions; N/A = unmatched or missing response. n = '+values.length;
+  text(125,585,note,'start',11);
+  return {width,height,width_mm:s.width_mm,height_mm:s.height_mm,title,primitives:p,note};
+ }
  let xValues:number[]=[],yValues:number[]=[],categories:string[]=[],points:Array<[number,number|null]>=[];
  const col=s.measure==='cells'?1:s.measure==='area'?2:3;
  const categorical=['class_bar','class_dot','metrics','experiment_bar','experiment_dot','experiment_interval','comparison_boxes'].includes(s.kind);
@@ -164,7 +183,7 @@ export function makeFigure(data:PlotData,s:FigureSettings):FigureScene{
  if(!xValues.length)xValues=points.map(p=>p[0]).filter(finite);
  if(!yValues.length)yValues=points.map(p=>p[1]).filter(finite);
  const diagnostic=paired||['bland_altman','regression'].includes(s.kind);
- const logX=s.x_log&&!categorical&&!diagnostic&&s.kind!=='box'&&s.kind!=='rose',logY=s.y_log&&!diagnostic&&!['rose','experiment_interval','comparison_cdf'].includes(s.kind);
+ const logX=s.x_log&&!categorical&&!diagnostic&&s.kind!=='box'&&s.kind!=='rose',logY=s.y_log&&!diagnostic&&!['rose','experiment_interval','comparison_cdf','comparison_boxes'].includes(s.kind);
  const validX=xValues.filter(v=>!logX||v>0),validY=yValues.filter(v=>!logY||v>0);
  let xmin=categorical?-.5:Math.min(...validX),xmax=categorical?Math.max(.5,categories.length-.5):Math.max(...validX);
  let ymin=Math.min(...validY),ymax=Math.max(...validY);

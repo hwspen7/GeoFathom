@@ -115,6 +115,12 @@ def make_report(result, cancel=None):
             points=[(r['value'],r['metrics'][key]) for r in result['sensitivity'] if key in r['metrics']]
             if len(points)>1 and max(y for _,y in points)!=min(y for _,y in points):
                 story.append(response_figure(points,key,result['sensitivity'][0]['parameter']))
+    if result.get('factorial'):
+        grid=result['factorial']
+        paragraph('Two-factor response grid','Heading2')
+        paragraph('Every cell is a production-engine evaluation at the stated parameter combination. No interpolation or global variance attribution is claimed. Unmatched output populations are marked and excluded from comparative heatmaps.')
+        table([[grid['x_parameter'],grid['y_parameter'],'Matched population']]+[[c['x'],c['y'],str(c['matched_population'])] for c in grid['cells']],[150,150,150])
+        paragraph('All metric responses are in factorial.csv and the manifest.')
     if result['uncertainty']:
         uncertainty=result['uncertainty']
         paragraph('Uncertainty model and coverage intervals','Heading2')

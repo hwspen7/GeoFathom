@@ -64,6 +64,10 @@ def test_joint_density_uses_all_cells_and_scatter_sampling_is_explicit():
     assert sum(b['cells'] for b in data['density_cells'])==9999
     assert sum(b['area_m2'] for b in data['density_cells'])==9999*9
     assert data['pearson_r']==pytest.approx(1)
+    assert data['regression']['r_squared']==pytest.approx(1)
+    slope,intercept=np.polyfit(x[np.isfinite(x)&np.isfinite(y)],y[np.isfinite(x)&np.isfinite(y)],1)
+    assert data['regression']['slope']==pytest.approx(slope)
+    assert data['regression']['intercept']==pytest.approx(intercept)
     assert all(p['y']==2*p['x']+5 for p in data['samples'])
     assert joint_elevation_data(x,np.full_like(x,np.nan),'None','',1) is None
     constant=joint_elevation_data(np.ones((3,3)),np.ones((3,3)),'Constant','m',1)

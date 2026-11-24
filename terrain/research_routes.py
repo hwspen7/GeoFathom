@@ -24,6 +24,8 @@ class Experiment(BaseModel):
     scenarios: list[Scenario] = Field(default_factory=list, max_length=8)
     parameter: str | None = None
     values: list[float] = Field(default_factory=list, max_length=8)
+    secondary_parameter: str | None = None
+    secondary_values: list[float] = Field(default_factory=list, max_length=4)
     sigma_m: float = Field(default=1, gt=0, le=1000)
     samples: int = Field(default=100, ge=20, le=500)
     seed: int = Field(default=42, ge=0, le=4294967295)
@@ -63,15 +65,25 @@ class Experiment(BaseModel):
             names = [self.baseline_name.strip(), *[s.name.strip() for s in self.scenarios]]
             if any(not n for n in names) or len(set(names)) != len(names):
                 raise ValueError('Use unique, nonempty scenario names.')
+        if (self.secondary_parameter is not None or self.secondary_values) and self.mode != 'sensitivity':
+            raise ValueError('A secondary parameter is only valid in a sensitivity experiment.')
         if self.mode == 'sensitivity':
-            if self.parameter not in SWEEP_PARAMETERS[self.base.operation]:
-                raise ValueError('Choose a numeric parameter used by this operation.')
-            if self.parameter == 'curvature_radius' and self.base.curvature_method != 'quadratic':
-                raise ValueError('Curvature-radius sensitivity requires the quadratic method.')
-            if self.parameter == 'refraction_coeff' and not self.base.consider_curvature:
-                raise ValueError('Refraction sensitivity requires Earth curvature correction.')
-            if len(self.values) < 2 or len(set(self.values)) != len(self.values) or not all(map(math.isfinite,self.values)):
-                raise ValueError('Supply two to eight distinct finite sweep values.')
+            def validate_axis(parameter, values, maximum):
+                if parameter not in SWEEP_PARAMETERS[self.base.operation]:
+                    raise ValueError('Choose a numeric parameter used by this operation.')
+                if parameter == 'curvature_radius' and self.base.curvature_method != 'quadratic':
+                    raise ValueError('Curvature-radius sensitivity requires the quadratic method.')
+                if parameter == 'refraction_coeff' and not self.base.consider_curvature:
+                    raise ValueError('Refraction sensitivity requires Earth curvature correction.')
+                if not 2 <= len(values) <= maximum or len(set(values)) != len(values) or not all(map(math.isfinite,values)):
+                    raise ValueError(f'Supply two to {maximum} distinct finite sweep values.')
+            validate_axis(self.parameter, self.values, 4 if self.secondary_parameter else 8)
+            if self.secondary_parameter is not None:
+                if self.parameter == self.secondary_parameter:
+                    raise ValueError('Choose two different parameters for a factorial grid.')
+                validate_axis(self.secondary_parameter, self.secondary_values, 4)
+            elif self.secondary_values:
+                raise ValueError('Choose a secondary parameter for its values.')
         if self.mode == 'comparison':
             for scenario in self.scenarios:
                 unknown = scenario.parameters.keys() - set(SCENARIO_PARAMETERS[self.base.operation])

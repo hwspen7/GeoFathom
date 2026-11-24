@@ -9,7 +9,7 @@ function encodePayload(value:unknown){
 }
 /** Self-contained Matplotlib program with the exact selected table embedded. */
 export function pythonFigure(table:PlotTable,settings:FigureSettings,data:PlotData,provenance:unknown):string{
- const payload=encodePayload({table,settings,summary:data.summary,box:data.box,provenance,joint:data.joint,comparison:data.distribution_comparison});
+ const payload=encodePayload({table,settings,summary:data.summary,box:data.box,provenance,joint:data.joint,comparison:data.distribution_comparison,parameter_grid:data.parameter_grid});
  return `"""GeoFathom scientific figure. Requires matplotlib; embedded data are unchanged.
 Tables/metadata may also be exported separately as CSV/JSON.
 """
@@ -59,6 +59,25 @@ elif kind == "joint_density":
     collection.set_array([r[4] for r in occupied])
     ax.add_collection(collection); ax.autoscale_view()
     fig.colorbar(collection, ax=ax, label="Cell count (log color)")
+elif kind == "parameter_heatmap":
+    import numpy as np
+    from matplotlib.colors import LinearSegmentedColormap
+    grid = payload["parameter_grid"]
+    xs, ys = grid["x_values"], grid["y_values"]
+    cells = {(c["x"],c["y"]):c["value"] for c in grid["cells"]}
+    values = np.array([[float("nan") if cells.get((x,y)) is None else cells[(x,y)] for x in xs] for y in ys])
+    colors = {"mono":["#f5f5f5","#1e1e1e"],"blue":["#ebf6fc","#1a4476"],"earth":["#f7efd9","#683d1e"]}[settings["palette"]]
+    cmap = LinearSegmentedColormap.from_list("geofathom",colors)
+    cmap.set_bad("#eeeeee")
+    lo, hi = np.nanmin(values), np.nanmax(values)
+    if lo == hi: lo, hi = lo-.5, hi+.5
+    image = ax.imshow(np.ma.masked_invalid(values),origin="lower",aspect="auto",interpolation="nearest",cmap=cmap,vmin=lo,vmax=hi)
+    ax.set_xticks(range(len(xs)), [f"{v:g}" for v in xs]); ax.set_yticks(range(len(ys)), [f"{v:g}" for v in ys])
+    for j, y in enumerate(ys):
+        for i, x in enumerate(xs):
+            value = cells.get((x,y))
+            ax.text(i,j,"N/A" if value is None else f"{value:.4g}",ha="center",va="center",color="white" if value is not None and (value-lo)/(hi-lo)>.58 else "#222222")
+    fig.colorbar(image,ax=ax,label=table["unit"] or "Response")
 elif kind == "comparison_boxes":
     series = payload["comparison"]["series"]
     ax.bxp([{"label": r["label"], "whislo": r["box"]["whisker_low"], "q1": r["box"]["q1"],
@@ -129,8 +148,8 @@ elif kind == "rose":
 else:
     ax.plot([r[0] for r in rows], [float("nan") if r[1] is None else r[1] for r in rows], color=color, marker="o" if kind in ("profile", "grade") else None, markersize=2)
 if kind != "rose":
-    if settings["x_log"] and kind not in ("box", "class_bar", "class_dot", "metrics", "experiment_bar", "experiment_dot", "experiment_interval", "comparison_boxes", "regression", "bland_altman") and not (kind == "scatter" and (payload.get("joint") or {}).get("identity_line")): ax.set_xscale("log")
-    if settings["y_log"] and kind not in ("experiment_interval","comparison_cdf","regression","bland_altman") and not (kind == "scatter" and (payload.get("joint") or {}).get("identity_line")): ax.set_yscale("log")
+    if settings["x_log"] and kind not in ("box", "class_bar", "class_dot", "metrics", "experiment_bar", "experiment_dot", "experiment_interval", "comparison_boxes", "regression", "bland_altman", "parameter_heatmap") and not (kind == "scatter" and (payload.get("joint") or {}).get("identity_line")): ax.set_xscale("log")
+    if settings["y_log"] and kind not in ("experiment_interval","comparison_cdf","regression","bland_altman","comparison_boxes","parameter_heatmap") and not (kind == "scatter" and (payload.get("joint") or {}).get("identity_line")): ax.set_yscale("log")
     ax.set_xlabel(settings["x_label"] or table["x_label"])
     ax.set_ylabel(settings["y_label"] or table["y_label"])
 ax.set_title(settings["title"])

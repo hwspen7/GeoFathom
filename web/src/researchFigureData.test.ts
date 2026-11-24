@@ -40,3 +40,11 @@ it('uses the recorded paired moments rather than fitting a plotted sample',()=>{
  expect(makeFigure(data,{...defaultFigure(data),kind:'bland_altman'}).primitives.some(p=>p.text?.includes('Mean 1'))).toBe(true);
  expect(makeFigure(data,{...defaultFigure(data),kind:'regression'}).primitives.some(p=>p.text?.includes('R² = 1'))).toBe(true);
 });
+
+it('uses a full two-factor grid and leaves unmatched responses blank',()=>{
+ const factorial={x_parameter:'reference',y_parameter:'design_east_grade',x_values:[90,95],y_values:[0,.01],cells:[{x:90,y:0,metrics:{cut_m3:100},matched_population:true},{x:90,y:.01,metrics:{cut_m3:101},matched_population:true},{x:95,y:0,metrics:{cut_m3:50},matched_population:true},{x:95,y:.01,metrics:{cut_m3:51},matched_population:false}]};
+ const data=researchFigureData({...result,factorial},'cut_m3','factorial')!;
+ const settings=defaultFigure(data);expect(settings.kind).toBe('parameter_heatmap');
+ expect(figureTable(data,settings).rows).toEqual([[90,0,100],[90,.01,101],[95,0,50],[95,.01,null]]);
+ const scene=makeFigure(data,settings);expect(scene.error).toBeUndefined();expect(scene.primitives.some(p=>p.text==='N/A')).toBe(true);
+});

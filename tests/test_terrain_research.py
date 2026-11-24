@@ -59,6 +59,8 @@ def test_named_scenarios_and_exact_signed_grid_difference(experiment_source):
         assert sum(b['cells'] for b in plot['histograms']['40']) == 100
         assert plot['joint']['identity_line'] is True
         assert plot['joint']['x_quantity'] == 'Baseline'
+        assert plot['joint']['agreement']['bias'] == pytest.approx(-5*(i+1))
+        assert plot['joint']['agreement']['sample_std'] == 0
         assert sum(b['cells'] for b in plot['joint']['density_cells']) == 100
     assert result['manifest']['input']['expected_source_sha256']==file_sha256(path)
     with archive(result) as package:
@@ -344,3 +346,34 @@ def test_engine_version_fallback_and_source_mutation_detection(experiment_source
     monkeypatch.setattr(research,'execute',mutate_after_execution)
     with pytest.raises(RasterError,match='Source bytes changed'):
         run(base,scenarios=[{'name':'Higher design','parameters':{'reference':95}}])
+
+def test_two_factor_grid_uses_every_actual_parameter_combination(experiment_source):
+    base,_,_=experiment_source
+    result=run(base,mode='sensitivity',parameter='reference',values=[90,95],
+               secondary_parameter='design_east_grade',secondary_values=[0,.01])
+    grid=result['factorial']
+    assert grid['x_values']==[90,95] and grid['y_values']==[0,.01]
+    assert len(grid['cells'])==4 and len(result['runs'])==5
+    assert not result['sensitivity']
+    for cell in grid['cells']:
+        assert cell['matched_population']
+        assert cell['metrics']['cut_m3']==pytest.approx((100-cell['x'])*10000)
+    with archive(result) as package:
+        assert 'factorial.csv' in package.namelist()
+        assert b'design_east_grade' in package.read('factorial.csv')
+        assert json.loads(package.read('manifest.json'))['factorial']==grid
+        text=' '.join(page.extract_text() for page in PdfReader(io.BytesIO(package.read('report.pdf'))).pages)
+        assert 'Two-factor response grid' in text
+
+
+def test_two_factor_grid_validates_distinct_active_parameters_and_cardinality(experiment_source):
+    base,_,_=experiment_source
+    with pytest.raises(ValueError,match='different parameters'):
+        Experiment(base=base,mode='sensitivity',parameter='reference',values=[90,95],
+                   secondary_parameter='reference',secondary_values=[90,95])
+    with pytest.raises(ValueError,match='distinct finite'):
+        Experiment(base=base,mode='sensitivity',parameter='reference',values=[90,95],
+                   secondary_parameter='design_east_grade',secondary_values=[0,0])
+    with pytest.raises(ValueError,match='numeric parameter'):
+        Experiment(base=base,mode='sensitivity',parameter='reference',values=[90,95],
+                   secondary_parameter='stream_cells',secondary_values=[1,2])

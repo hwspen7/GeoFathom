@@ -1162,7 +1162,7 @@ export interface ResearchExperiment {
  title:string;baseline_name:string;mode:'comparison'|'sensitivity'|'uncertainty';
  base:Record<string,unknown> & {image_id:string;geometry:GeoJSON.Geometry;operation:string};
  scenarios:Array<{name:string;parameters:Record<string,unknown>}>;
- parameter?:string;values?:number[];sigma_m?:number;samples?:number;seed?:number;
+ parameter?:string;values?:number[];secondary_parameter?:string;secondary_values?:number[];sigma_m?:number;samples?:number;seed?:number;
  error_model?:'independent'|'common_offset';coverage?:number;expected_source_sha256?:string;
 }
 export interface ResearchProduct {name:string;role?:string;kind?:string;raster:TerrainRaster;
@@ -1172,6 +1172,7 @@ export interface ResearchResult {
  runs:Array<{label:string;input:Record<string,unknown>;metrics:Record<string,number>;warning:string;quality?:unknown}>;
  products:ResearchProduct[];differences:ResearchProduct[];
  metric_table:Array<{metric:string;values:number[];deltas:Array<number|null>;relative_pct:Array<number|null>}>;
+ factorial?:null|{x_parameter:string;y_parameter:string;x_values:number[];y_values:number[];cells:Array<{x:number;y:number;metrics:Record<string,number>;matched_population:boolean}>};
  sensitivity:Array<{parameter:string;value:number;baseline_value:number;metrics:Record<string,number>;derivatives:Record<string,number>}>;
  uncertainty:null|{model:string;sigma_m:number;seed:number;generator:string;samples:number;coverage:number;
   warning:string;interval_type:string;common_cells?:number;realizations?:Record<string,number[]>;
@@ -1201,6 +1202,7 @@ export interface PlotData {
  thresholds?:Array<{threshold_deg:number;cells_le:number;percent_le:number}>;
  roses?:Record<string,Array<{bearing_deg:number;cells:number;area_m2:number;percent:number}>>;
  profiles?:Array<{name:string;points:Array<{x:number;y:number|null}>}>;
+ parameter_grid?:{x_label:string;y_label:string;x_values:number[];y_values:number[];cells:Array<{x:number;y:number;value:number|null}>};
  distribution_comparison?:{series:Array<{label:string;valid_cells:number;box:NonNullable<PlotData['box']>;cdf:NonNullable<PlotData['cdf']>}>};
  experiment_series?:{x_label:string;numeric:boolean;interval_label?:string;points:Array<{label:string;x:number;value:number|null;low?:number;high?:number;baseline?:number|null}>};
  joint?:{x_quantity:string;x_unit:string;y_quantity:string;y_unit:string;population_cells:number;sample_cells:number;sampling:string;pearson_r:number|null;identity_line?:boolean;regression?:{slope:number;intercept:number;r_squared:number|null}|null;agreement?:{bias:number;sample_std:number;lower:number;upper:number};samples:Array<{x:number;y:number}>;density_cells:Array<{x_lower:number;x_upper:number;y_lower:number;y_upper:number;cells:number;area_m2:number}>;notes:string[]}|null;

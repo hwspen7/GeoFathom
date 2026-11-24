@@ -1,7 +1,7 @@
 /** Adapt completed experiments, not placeholder values, to the general figure library. */
 import type {PlotData,ResearchResult} from './api';
 import {metricUnit} from './figureLibrary';
-export type ResearchFigureSource='values'|'delta'|'relative'|'response'|'derivative'|'interval'|'realizations';
+export type ResearchFigureSource='values'|'delta'|'relative'|'response'|'derivative'|'interval'|'realizations'|'factorial';
 const finite=(v:unknown):v is number=>typeof v==='number'&&Number.isFinite(v);
 const label=(s:string)=>s.replaceAll('_',' ');
 function quantile(sorted:number[],p:number){const i=p*(sorted.length-1),lo=Math.floor(i),hi=Math.ceil(i);return sorted[lo]+(sorted[hi]-sorted[lo])*(i-lo);}
@@ -11,6 +11,12 @@ export function researchFigureData(result:ResearchResult,metric:string,source:Re
  const rawUnit=metricUnit(metric);
  const unit=rawUnit==='product'?(result.products[0]?.raster.unit??''):rawUnit===metric?'':rawUnit;
  const base:PlotData={schema:'geofathom-plot-data-1',kind:'summary',quantity:label(metric),unit,valid_cells:0,cell_area_m2:0,classes:[],notes:['Computed experiment values; no independent accuracy claim.']};
+ if(source==='factorial'){
+  const g=result.factorial;if(!g)return null;
+  const cells=g.cells.map(c=>({x:c.x,y:c.y,value:c.matched_population&&finite(c.metrics[metric])?c.metrics[metric]:null}));
+  const n=cells.filter(c=>c.value!==null).length;if(!n)return null;
+  return {...base,valid_cells:n,population:'experiment_observations',parameter_grid:{x_label:label(g.x_parameter),y_label:label(g.y_parameter),x_values:g.x_values,y_values:g.y_values,cells},notes:['Every cell is a real production-engine evaluation; unmatched output masks remain missing. No interpolation or global sensitivity attribution.']};
+ }
  if(source==='realizations'){
   const raw=result.uncertainty?.realizations?.[metric];if(!raw?.length||raw.some(v=>!finite(v)))return null;
   const sorted=[...raw].sort((a,b)=>a-b),n=sorted.length,lo=sorted[0],hi=sorted[n-1],q1=quantile(sorted,.25),median=quantile(sorted,.5),q3=quantile(sorted,.75),iqr=q3-q1;

@@ -29,7 +29,7 @@ from .cancellation import checkpoint
 from .professional import raster_product
 from .figure_data import continuous_data, figure_data_from_result, joint_elevation_data
 
-# Numeric one-at-a-time sweeps only vary parameters used by the operation.
+# Numeric one- and two-factor sweeps only vary parameters used by the operation.
 SWEEP_PARAMETERS = {
     'slope_map': [], 'aspect_map': [], 'elevation': [],
     'hillshade': ['azimuth', 'altitude'],
@@ -262,27 +262,37 @@ def analyze_experiment(body, resolve, cancel=None):
         products.append({'name': body.baseline_name, 'role': 'baseline', 'raster': baseline_raster,
                          'plot_data': figure_data_from_result(baseline, cancel)})
     result = {'title': body.title, 'mode': body.mode, 'runs': runs, 'products': products,
-              'differences': [], 'sensitivity': [], 'uncertainty': None}
+              'differences': [], 'sensitivity': [], 'factorial': None, 'uncertainty': None}
     variants = []
     populations = [True]
     if body.mode == 'sensitivity':
-        for value in body.values:
-            if body.parameter in INTEGER_PARAMETERS and not float(value).is_integer():
+        def apply_value(values, parameter, value):
+            if parameter in INTEGER_PARAMETERS and not float(value).is_integer():
                 raise RasterError('This parameter requires integer sweep values.')
-            values = body.base.model_dump()
-            values[body.parameter] = int(value) if body.parameter in INTEGER_PARAMETERS else value
-            variants.append((f'{body.parameter} = {value:g}', AdvancedTerrainInput.model_validate(values), value))
+            values[parameter] = int(value) if parameter in INTEGER_PARAMETERS else value
+        if body.secondary_parameter:
+            result['factorial'] = {'x_parameter':body.parameter, 'y_parameter':body.secondary_parameter,
+                                   'x_values':sorted(body.values), 'y_values':sorted(body.secondary_values), 'cells':[]}
+        for value in body.values:
+            for secondary in body.secondary_values if body.secondary_parameter else [None]:
+                values = body.base.model_dump()
+                apply_value(values, body.parameter, value)
+                name = f'{body.parameter} = {value:g}'
+                if secondary is not None:
+                    apply_value(values, body.secondary_parameter, secondary)
+                    name += f', {body.secondary_parameter} = {secondary:g}'
+                variants.append((name, AdvancedTerrainInput.model_validate(values), value, secondary))
     elif body.mode == 'comparison':
         for scenario in body.scenarios:
             variant = AdvancedTerrainInput.model_validate({**body.base.model_dump(), **scenario.parameters})
-            variants.append((scenario.name, variant, None))
+            variants.append((scenario.name, variant, None, None))
     else:
         if body.samples * z.size > MAX_ENSEMBLE_CELLS:
             raise RasterError('Uncertainty ensemble exceeds 12,000,000 cell realizations; reduce area or sample count.')
         _uncertainty(body, path, resolve, z, valid, affine, crs, baseline, result, cancel)
     if (len(variants) + 1) * z.size > MAX_ENSEMBLE_CELLS:
         raise RasterError('Scenario experiment exceeds 12,000,000 cell evaluations; reduce the area or scenario count.')
-    for name, variant, value in variants:
+    for name, variant, value, secondary in variants:
         checkpoint(cancel)
         output = execute(variant, path, resolve, cancel, include_plot_data=False)
         runs.append(_receipt(name, variant, output))
@@ -296,7 +306,10 @@ def analyze_experiment(body, resolve, cancel=None):
             stats = delta['statistics']
             matched_population = stats['common_cells'] == stats['reference_valid_cells'] == stats['candidate_valid_cells']
         populations.append(matched_population)
-        if value is not None:
+        if secondary is not None:
+            result['factorial']['cells'].append({'x':value,'y':secondary,
+                'metrics':_metrics(output),'matched_population':matched_population})
+        elif value is not None:
             base_value = getattr(body.base, body.parameter)
             dx = value - base_value
             derivatives = {k: (v-runs[0]['metrics'][k])/dx for k,v in _metrics(output).items()
@@ -437,6 +450,10 @@ def research_archive(result, cancel=None):
             archive.writestr('sensitivity.csv', _csv([['parameter','value','metric','response','derivative_from_baseline']] +
                 [[r['parameter'], r['value'], k,v,r['derivatives'].get(k)]
                  for r in result['sensitivity'] for k,v in r['metrics'].items()]))
+        if result.get('factorial'):
+            grid = result['factorial']
+            archive.writestr('factorial.csv', _csv([[grid['x_parameter'],grid['y_parameter'],'metric','response','matched_population']] +
+                [[c['x'],c['y'],key,value,c['matched_population']] for c in grid['cells'] for key,value in c['metrics'].items()]))
         archive.writestr('figure-tables.json', json.dumps([
             {'name': item['name'], 'role': item.get('role', item.get('kind')), 'plot_data': item['plot_data']}
             for item in result['products'] + result['differences'] if item.get('plot_data')], allow_nan=False))

@@ -6,7 +6,7 @@ const API='http://127.0.0.1:8000';
 const tile=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/ZecAAAAASUVORK5CYII=','base64');
 
 test('research scenarios, sensitivity, uncertainty, portable reports and restoration use real terrain calculations',async({page},testInfo)=>{
- test.setTimeout(180000);
+ test.setTimeout(240000);
  const fixture=JSON.parse(execFileSync('python',['-c',`
 import json,tempfile
 from pathlib import Path
@@ -65,6 +65,17 @@ with tempfile.TemporaryDirectory() as directory:
  await expect(dialog.getByRole('table')).toContainText('Higher design');
  await dialog.getByRole('button',{name:'Figures',exact:true}).click();
  await expect(dialog.getByAltText('Higher design map')).toBeVisible();
+ await dialog.getByRole('button',{name:'Open scientific figure library'}).click();
+ const gallery=page.getByRole('dialog',{name:'Scientific figure library'});
+ await expect(gallery.getByRole('img',{name:'Scientific figure: Histogram'})).toBeVisible();
+ await gallery.getByLabel('Chart type').selectOption('bland_altman');
+ await expect(gallery.getByRole('img',{name:'Scientific figure: Bland–Altman difference'})).toBeVisible();
+ await gallery.getByRole('button',{name:'Close figure library'}).click();
+ await dialog.getByRole('button',{name:'Compare scenario distributions'}).click();
+ await expect(gallery.getByRole('img',{name:'Scientific figure: Grouped box and whisker'})).toBeVisible();
+ await gallery.getByLabel('Chart type').selectOption('comparison_cdf');
+ await expect(gallery.getByRole('img',{name:'Scientific figure: Scenario cumulative distributions'})).toBeVisible();
+ await gallery.getByRole('button',{name:'Close figure library'}).click();
  await dialog.getByLabel('Figure',{exact:true}).selectOption('swipe');
  await expect(dialog.getByAltText('Baseline map',{exact:true})).toBeVisible();
  await dialog.getByLabel('Baseline reveal').fill('70');
@@ -99,6 +110,19 @@ with zipfile.ZipFile(sys.argv[1]) as archive:
  await dialog.getByLabel('Result metric').selectOption('cut_m3');
  await expect(dialog.getByRole('img',{name:'Sensitivity response: cut_m3'})).toBeVisible();
  await page.screenshot({path:testInfo.outputPath('research-sensitivity.png')});
+ await dialog.getByRole('button',{name:'Experiment',exact:true}).click();
+ await dialog.getByLabel('Sweep values').fill('90,95');
+ await dialog.getByLabel('Second sweep parameter').selectOption('design_east_grade');
+ await dialog.getByLabel('Second sweep values').fill('0,0.01');
+ const factorial=await run();
+ expect(factorial.factorial.cells).toHaveLength(4);
+ await dialog.getByRole('button',{name:'Figures',exact:true}).click();
+ await dialog.getByLabel('Figure',{exact:true}).selectOption('metric');
+ await dialog.getByLabel('Result metric').selectOption('cut_m3');
+ await dialog.getByRole('button',{name:'Open metric figure library'}).click();
+ await expect(gallery.getByRole('img',{name:'Scientific figure: Two-factor response heatmap'})).toBeVisible();
+ await page.screenshot({path:testInfo.outputPath('research-factorial-figure.png')});
+ await gallery.getByRole('button',{name:'Close figure library'}).click();
  await dialog.getByRole('button',{name:'Experiment',exact:true}).click();
  await dialog.getByLabel('Analysis method').selectOption('uncertainty');
  await dialog.getByLabel('Realizations').fill('20');
