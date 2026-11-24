@@ -1,10 +1,11 @@
 import {useEffect,useMemo,useRef,useState} from 'react';
 import {createPortal} from 'react-dom';
-import {getStudioCatalog,renderStudio,type StudioInput,type StudioOutput,type StudioRaster,type StudioRecipe} from './api';
+import {getStudioCatalog,getStudioRasterTable,renderStudio,type StudioInput,type StudioOutput,type StudioRaster,type StudioRecipe} from './api';
 import {saveFigureBlob} from './figureExport';
 import {tableCSV} from './figureLibrary';
 
-export interface StudioSource {name:string;csv?:string;rasters?:StudioRaster[];provenance?:unknown}
+export interface StudioTableSource {name:string;csv:string;provenance?:unknown}
+export interface StudioSource {name:string;csv?:string;tables?:StudioTableSource[];rasters?:StudioRaster[];provenance?:unknown}
 const empty:StudioInput={recipe:'',csv:'',rasters:[],x:'',y:'',z:'',group:'',low:'',high:'',columns:[],title:'',x_label:'',y_label:'',parameter:null,maximize_x:false,maximize_y:false,palette:'color',font:'sans',font_size:10,grid:true,width_mm:180,height_mm:125,dpi:120,format:'png'};
 const fieldLabels:Record<string,string>={x:'X / category / design A',y:'Y / response / design B',z:'Z / secondary quantity',group:'Group',low:'Lower bound / low-setting response',high:'Upper bound / high-setting response'};
 function columns(csv:string):string[]{
@@ -33,6 +34,8 @@ export default function ScientificFigureStudio({source,onClose}:{source:StudioSo
  const [rasters,setRasters]=useState<StudioRaster[]>(()=>source.rasters??[]),[selected,setSelected]=useState<number[]>(()=>source.rasters?.length?[0]:[]);
  const [output,setOutput]=useState<StudioOutput|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState(''),[dpi,setDpi]=useState<300|600>(300);
  const [completed,setCompleted]=useState<StudioInput|null>(null),[fileName,setFileName]=useState(source.csv?'Current result data table':'No CSV selected');
+ const [tableSource,setTableSource]=useState('current'),[tableProvenance,setTableProvenance]=useState<unknown>(source.provenance);
+ const [rasterReceipt,setRasterReceipt]=useState<Record<string,unknown>|null>(null);
  const active=recipes.find(r=>r.id===settings.recipe),headers=useMemo(()=>columns(settings.csv),[settings.csv]);
  const chosen=selected.flatMap(i=>rasters[i]?[rasters[i]]:[]);
  const dialog=useRef<HTMLDivElement>(null),controller=useRef<AbortController|null>(null);
@@ -43,7 +46,9 @@ export default function ScientificFigureStudio({source,onClose}:{source:StudioSo
  function change<K extends keyof StudioInput>(k:K,v:StudioInput[K]){setSettings(s=>({...s,[k]:v}));setOutput(null);setCompleted(null);setError('');}
  function selectRecipe(r:StudioRecipe){setSettings(s=>({...s,recipe:r.id,parameter:r.option?.[1]??null,title:'',x_label:'',y_label:''}));setOutput(null);setCompleted(null);setError('');}
  function invalidate(){setOutput(null);setCompleted(null);}
- async function csvFile(file?:File){if(!file)return;try{if(file.size>5_000_000)throw Error('CSV exceeds 5 MB.');const text=await file.text();setFileName(file.name);setSettings(s=>({...s,csv:text,x:'',y:'',z:'',group:'',low:'',high:'',columns:[]}));invalidate();setError('');}catch(e){setError((e as Error).message);}}
+ function loadTable(csv:string,name:string,provenance:unknown){setFileName(name);setTableProvenance(provenance);setRasterReceipt(null);setSettings(s=>({...s,csv,x:'',y:'',z:'',group:'',low:'',high:'',columns:[]}));invalidate();setError('');}
+ async function rasterCells(){if(!chosen.length||busy)return;const ac=new AbortController();controller.current=ac;setBusy(true);setError('');try{const out=await getStudioRasterTable(chosen,ac.signal);if(ac.signal.aborted)return;loadTable(out.csv,'Actual aligned raster cell table',out.metadata);setTableSource('raster');setRasterReceipt(out.metadata);const tableRecipe=recipes.find(r=>r.id==='kde');if(active?.source==='raster'&&tableRecipe)selectRecipe(tableRecipe);}catch(e){if(!ac.signal.aborted)setError((e as Error).message);}finally{if(controller.current===ac){controller.current=null;setBusy(false);}}}
+ async function csvFile(file?:File){if(!file)return;try{if(file.size>5_000_000)throw Error('CSV exceeds 5 MB.');const text=await file.text();loadTable(text,file.name,{file_name:file.name});setTableSource('imported');}catch(e){setError((e as Error).message);}}
  async function rasterFiles(files:FileList|null){if(!files)return;try{
   if(rasters.length+files.length>64)throw Error('Maximum 64 available raster inputs. Select at most eight per figure.');const add:StudioRaster[]=[];
   for(const file of Array.from(files)){if(file.size>24_000_000)throw Error('GeoTIFF exceeds 24 MB.');add.push({name:file.name,data:await readBase64(file),unit:''});}
@@ -76,7 +81,8 @@ export default function ScientificFigureStudio({source,onClose}:{source:StudioSo
    {active&&<fieldset disabled={busy}><legend>Data and figure settings</legend>{active.note&&<small>{active.note}</small>}
     {active.source==='table'?<>
       <label>Import CSV<input type="file" accept=".csv,text/csv" aria-label="Import figure CSV" onChange={e=>void csvFile(e.target.files?.[0])}/></label>
-      <small>{fileName}</small><label>CSV data<textarea aria-label="Figure CSV data" rows={4} value={settings.csv} onChange={e=>{change('csv',e.target.value);setFileName('Edited data table');}}/></label>
+      <label>Recorded data source<select aria-label="Recorded figure table" value={tableSource} onChange={e=>{const key=e.target.value;setTableSource(key);if(key==='current')loadTable(source.csv??'','Current result data table',source.provenance);else if(key.startsWith('table-')){const t=source.tables?.[Number(key.slice(6))];if(t)loadTable(t.csv,t.name,t.provenance);}}}><option value="current">Current result data table</option>{source.tables?.map((t,i)=><option value={'table-'+i} key={i}>{t.name}</option>)}{tableSource==='raster'&&<option value="raster">Actual raster cells</option>}{tableSource==='imported'&&<option value="imported">Imported CSV</option>}{tableSource==='edited'&&<option value="edited">Edited data table</option>}</select></label>
+      <small>{fileName}</small>{rasterReceipt&&<small>{String(rasterReceipt.sample_cells)} of {String(rasterReceipt.population_cells)} common cells; {String(rasterReceipt.sampling)}.</small>}<label>CSV data<textarea aria-label="Figure CSV data" rows={4} value={settings.csv} onChange={e=>{change('csv',e.target.value);setFileName('Edited data table');setTableSource('edited');setTableProvenance({edited:true,source:source.name});setRasterReceipt(null);}}/></label>
       {required.filter(f=>f!=='columns').map(f=><label key={f}>{fieldLabels[f]??f}<select aria-label={'Figure field '+f} value={String(settings[f as keyof StudioInput]??'')} onChange={e=>change(f as 'x'|'y'|'z'|'group'|'low'|'high',e.target.value)}><option value="">Select column</option>{headers.map(h=><option key={h}>{h}</option>)}</select></label>)}
       {required.includes('columns')&&<label>Numeric series<select multiple size={Math.min(6,Math.max(2,headers.length))} aria-label="Figure numeric series" value={settings.columns} onChange={e=>change('columns',Array.from(e.target.selectedOptions,o=>o.value))}>{headers.map(h=><option key={h}>{h}</option>)}</select></label>}
     </>:<>
@@ -85,6 +91,7 @@ export default function ScientificFigureStudio({source,onClose}:{source:StudioSo
       {rasters.map((r,i)=><div className="studio-raster" key={i}><label><input type="checkbox" checked={selected.includes(i)} disabled={!selected.includes(i)&&selected.length>=8} onChange={e=>{setSelected(s=>e.target.checked?[...s,i]:s.filter(n=>n!==i));invalidate();}}/>{selected.includes(i)?String(selected.indexOf(i)+1)+'. ':''}{r.name}</label>
        <label>Unit<input aria-label={'Raster unit '+(i+1)} value={r.unit} placeholder="e.g. m" onChange={e=>{setRasters(old=>old.map((item,j)=>j===i?{...item,unit:e.target.value}:item));invalidate();}}/></label></div>)}
       {chosen.length<active.minimum_rasters&&<small>Requires at least {active.minimum_rasters} raster inputs.</small>}
+      <button type="button" disabled={!chosen.length} onClick={()=>void rasterCells()}>Use actual raster cells as table</button>
     </>}
     {active.id==='pareto'&&<><label><input type="checkbox" checked={settings.maximize_x} onChange={e=>change('maximize_x',e.target.checked)}/> Maximize X objective</label><label><input type="checkbox" checked={settings.maximize_y} onChange={e=>change('maximize_y',e.target.checked)}/> Maximize Y objective</label></>}
     {active.option&&<label>{active.option[0]}<input aria-label="Figure parameter" type="number" step="any" min={active.option[2]} max={active.option[3]} value={settings.parameter??active.option[1]} onChange={e=>change('parameter',Number(e.target.value))}/></label>}
@@ -107,7 +114,7 @@ export default function ScientificFigureStudio({source,onClose}:{source:StudioSo
  <footer><button type="button" disabled={!canRender||busy} onClick={()=>void render()}>Render figure</button>{busy&&<button type="button" onClick={cancel}>Cancel render</button>}<label>Export resolution<select aria-label="Studio export DPI" value={dpi} onChange={e=>setDpi(Number(e.target.value) as 300|600)}><option value={300}>300 DPI</option><option value={600}>600 DPI</option></select></label>
   {(['png','svg','pdf','tiff'] as const).map(format=><button type="button" key={format} disabled={!output||busy} onClick={()=>void render(format,false)}>{format.toUpperCase()}</button>)}
   <button type="button" disabled={!output?.table.length||busy} onClick={exportData}>Plot CSV</button>
-  <button type="button" disabled={!output||!completed||busy} onClick={()=>jsonFile({schema:'geofathom-studio-reproduction-1',input:completed,metadata:output?.metadata,table:output?.table,provenance:source.provenance},'geofathom-'+active?.id+'-reproduction.json')}>Reproduction JSON</button>
+  <button type="button" disabled={!output||!completed||busy} onClick={()=>jsonFile({schema:'geofathom-studio-reproduction-1',input:completed,metadata:output?.metadata,table:output?.table,provenance:completed?.csv?tableProvenance:source.provenance},'geofathom-'+active?.id+'-reproduction.json')}>Reproduction JSON</button>
  </footer>
  </div></div>,document.body);
 }

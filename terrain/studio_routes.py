@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from starlette.concurrency import run_in_threadpool
 from .figure_routes import FigureValidationRoute
 from .studio_catalog import catalog, BY_ID
-from .studio_data import FigureInputError
+from .studio_data import FigureInputError, raster_table
 from .studio_render import render
 from typing import Literal
 
@@ -72,4 +72,21 @@ async def studio_render(body:StudioInput):
                 'media_type':{'png':'image/png','pdf':'application/pdf','svg':'image/svg+xml','tiff':'image/tiff'}[body.format],
                 'metadata':metadata,'table':table}
     except (FigureInputError,ValueError,OverflowError,RuntimeError,OSError) as error:
+        raise HTTPException(status_code=422,detail=str(error)) from error
+
+
+class RasterTableInput(BaseModel):
+    model_config=ConfigDict(extra='forbid')
+    rasters:list[RasterInput]=Field(min_length=1,max_length=8)
+    limit:int=Field(default=20000,ge=1,le=20000)
+
+    @model_validator(mode='after')
+    def validate_payload(self):
+        if sum(len(r.data) for r in self.rasters)>48_000_000:raise ValueError('Combined raster payload exceeds limit.')
+        return self
+
+@router.post('/raster-table')
+async def studio_raster_table(body:RasterTableInput):
+    try:return await run_in_threadpool(raster_table,body.rasters,body.limit)
+    except (FigureInputError,ValueError,RuntimeError,OSError) as error:
         raise HTTPException(status_code=422,detail=str(error)) from error

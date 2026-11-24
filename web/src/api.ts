@@ -1222,3 +1222,5 @@ export interface StudioInput {recipe:string;csv:string;rasters:StudioRaster[];x:
 export interface StudioOutput {figure:string;media_type:string;metadata:Record<string,unknown>;table:Array<Array<string|number|null>>}
 export function getStudioCatalog(signal?:AbortSignal):Promise<{legacy_recipe_count:number;additional_recipe_count:number;recipes:StudioRecipe[]}>{return request('/terrain/studio/catalog',{signal});}
 export function renderStudio(body:StudioInput,signal?:AbortSignal):Promise<StudioOutput>{return request('/terrain/studio/render',{method:'POST',signal,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});}
+
+export function getStudioRasterTable(rasters:StudioRaster[],signal?:AbortSignal):Promise<{csv:string;metadata:Record<string,unknown>}>{return request('/terrain/studio/raster-table',{method:'POST',signal,headers:{'Content-Type':'application/json'},body:JSON.stringify({rasters})});}

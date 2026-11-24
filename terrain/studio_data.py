@@ -180,3 +180,23 @@ def morris_effects(trajectory, y, matrix):
             j=int(changed[0]);seen.add(j);effects[j].append(float((y[b]-y[a])/dx[j]))
     if any(len(e)<2 for e in effects):raise FigureInputError('At least two complete Morris trajectories are required.')
     return [float(np.mean(np.abs(e))) for e in effects],[float(np.std(e,ddof=1)) for e in effects]
+
+
+def raster_table(items, limit=MAX_TABLE_ROWS):
+    """Export actual common valid cells, explicitly recording systematic sampling."""
+    grids=read_grids(items)
+    if not grids:raise FigureInputError('Select raster inputs.')
+    if not 1<=limit<=MAX_TABLE_ROWS:raise FigureInputError('Invalid cell sample limit.')
+    stack,common=aligned_grids(grids)
+    indexes=np.flatnonzero(common.ravel());n=int(indexes.size)
+    stride=max(1,math.ceil(n/limit));chosen=indexes[::stride]
+    row,col=np.unravel_index(chosen,common.shape)
+    g=grids[0];a=g.transform
+    east=a.c+(col+.5)*a.a;north=a.f+(row+.5)*a.e
+    names=['grid_x','grid_y',*[f'value_{i+1}'+(f' ({v.unit})' if v.unit else '') for i,v in enumerate(grids)]]
+    f=io.StringIO();writer=csv.writer(f);writer.writerow(names)
+    values=[v.ravel()[chosen] for v in stack]
+    for r in zip(east,north,*values):writer.writerow(r)
+    return {'csv':f.getvalue(),'metadata':{'population':'common finite raster cells',
+        'population_cells':n,'sample_cells':int(chosen.size),'sampling':'all_cells' if stride==1 else 'every_kth_common_cell_in_row_major_order',
+        'stride':stride,'coordinate_crs':str(g.crs),'columns':[{'column':name,'name':v.name,'sha256':v.sha256,'unit':v.unit} for name,v in zip(names[2:],grids)]}}

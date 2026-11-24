@@ -159,3 +159,18 @@ def test_api_catalog_render_metadata_and_validation():
         assert base64.b64decode(result['figure']).startswith(b'\x89PNG')
         assert client.post('/terrain/studio/render',json={'recipe':'missing'}).status_code==422
         assert client.post('/terrain/studio/render',json={'recipe':'pie','csv':'a,b\nX,-2','x':'a','y':'b'}).status_code==422
+
+
+def test_raster_table_exact_alignment_and_bounded_sampling(raster_fixture):
+    from terrain.studio_data import raster_table
+    rasters,_=raster_fixture
+    out=raster_table(rasters[:2],limit=20)
+    receipt=out['metadata']
+    assert receipt['population_cells']==168 and receipt['sample_cells']<=20 and receipt['stride']==9
+    data=Table(out['csv'])
+    assert len(data.rows)==receipt['sample_cells']
+    assert np.allclose(data.numeric(data.names[3])-data.numeric(data.names[2]),2)
+    assert data.numeric('grid_x')[0]==500005
+    assert data.numeric('grid_y')[0]==4499995
+    full=raster_table(rasters[:1])
+    assert full['metadata']['sampling']=='all_cells' and full['metadata']['sample_cells']==168

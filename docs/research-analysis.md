@@ -173,3 +173,13 @@ with declared metre elevations. The map north arrow indicates grid north.
 Only the 3D rendering is decimated; the source grid remains unchanged.
 The older terrain-engine outputs and experiments retain their own
 independent scientific validation limits.
+
+The raster input panel also has **Use actual raster cells as table**.
+It exports aligned cell-center coordinates and actual quantities from the
+common mask. Tables of at most 20,000 cells are exact; larger grids use
+every kth common cell in row-major order with explicit population size,
+sample size, stride, source checksums and CRS. These sampled tables are
+not claimed to be exact all-cell population statistics. The original
+terrain gallery remains the path for exact all-cell distributions.
+Research experiments also supply named response, factorial, actual Monte
+Carlo realization and coverage-interval tables directly to the studio.

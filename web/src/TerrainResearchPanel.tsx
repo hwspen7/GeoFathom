@@ -1,7 +1,7 @@
 import {useEffect,useRef,useState} from 'react';
 import {createPortal} from 'react-dom';
 import FigureGallery from './FigureGallery';
-import ScientificFigureStudio from './ScientificFigureStudio';
+import ScientificFigureStudio,{type StudioTableSource} from './ScientificFigureStudio';
 import {tableCSV} from './figureLibrary';
 import {researchFigureData,researchDistributionData,type ResearchFigureSource} from './researchFigureData';
 import {analyzeResearch,getResearchCatalog,type ResearchCatalog,type ResearchExperiment,type ResearchResult,type TerrainRasterLayer,type PlotData} from './api';
@@ -9,6 +9,14 @@ import type {PersistedTerrainResult} from './terrainResultStore';
 import {researchBase,parseParameter,parseSweep,downloadResearch,loadResearch,saveResearch} from './terrainResearch';
 const fmt=(n:number|null|undefined)=>n==null?'Undefined':n.toLocaleString('en-US',{maximumSignificantDigits:7});
 const label=(s:string)=>s.replaceAll('_',' ');
+function researchStudioTables(result:ResearchResult):StudioTableSource[]{
+ const entries:StudioTableSource[]=[];
+ const add=(name:string,columns:string[],rows:Array<Array<string|number|null>>)=>{if(rows.length)entries.push({name,csv:tableCSV({columns,rows,x_label:'',y_label:'',unit:''}),provenance:{experiment:result.title,manifest:result.manifest,table:name}});};
+ if(result.sensitivity.length){const keys=Array.from(new Set(result.sensitivity.flatMap(r=>Object.keys(r.metrics))));add('Numeric parameter responses',[result.sensitivity[0].parameter,...keys],result.sensitivity.map(r=>[r.value,...keys.map(k=>r.metrics[k]??null)]));}
+ if(result.factorial){const g=result.factorial,keys=Array.from(new Set(g.cells.flatMap(c=>Object.keys(c.metrics))));add('Two-factor evaluated combinations',[g.x_parameter,g.y_parameter,...keys],g.cells.filter(c=>c.matched_population).map(c=>[c.x,c.y,...keys.map(k=>c.metrics[k]??null)]));}
+ if(result.uncertainty){const u=result.uncertainty,keys=Object.keys(u.realizations??{});if(keys.length)add('Actual Monte Carlo realizations',['realization',...keys],Array.from({length:u.samples},(_,i)=>[i+1,...keys.map(k=>u.realizations?.[k]?.[i]??null)]));add('Model coverage intervals',['metric','mean','lower','upper','baseline','std'],Object.entries(u.metrics).map(([k,v])=>[k,v.mean,v.low,v.high,v.baseline??null,v.std]));}
+ return entries;
+}
 const initialFigureSource=(result:ResearchResult):ResearchFigureSource=>result.mode==='uncertainty'?'interval':result.mode==='sensitivity'?(result.factorial?'factorial':'response'):'values';
 type Page='experiment'|'comparison'|'figures'|'report';
 function ResponsePlot({points,parameter,metric}:{points:Array<[number,number]>;parameter:string;metric:string}){
@@ -159,7 +167,7 @@ export default function TerrainResearchPanel(p:{projectId:string|null;record:Per
  {page==='report'&&result&&<><h3>Research report and reproducibility package</h3><p>{result.title}</p><ul><li>PDF report with maps, figures, methods, parameters and quality information</li><li>GeoTIFF products, differences and preview maps</li><li>Scenario metrics and sensitivity / uncertainty tables</li><li>Source checksum, exact study geometry, software versions and experiment input</li></ul><p>The report describes the completed experiment. Form edits do not change this result.</p><div className="research-actions"><button type="button" onClick={()=>downloadResearch(result.archive_base64,'terrain-research.zip','application/zip')}>Download research package</button><button type="button" onClick={exportJson}>Download experiment input</button></div><p>Source accuracy is not independently validated. Scenario spread is descriptive. Model intervals depend on the error model and finite sampling.</p></>}
  </main>
  <footer><span>{result?'Completed: '+result.title:'Inputs from the selected terrain result'}</span>{busy?<><span role="status">Computing experiment…</span><button type="button" onClick={cancel}>Cancel experiment</button></>:<button type="button" disabled={!supported||!p.connected||!title.trim()} onClick={()=>void run()}>Run experiment</button>}</footer>
- {studioOpen&&result&&<ScientificFigureStudio source={{name:result.title,csv:tableCSV({columns:['Scenario',...result.metric_table.map(r=>r.metric)],rows:result.runs.map((r,i)=>[r.label,...result.metric_table.map(row=>row.values[i]??null)]),x_label:'',y_label:'',unit:''}),rasters:[...result.products,...result.differences].map(item=>({name:item.name+' · '+(item.role??item.kind??''),data:item.raster.geotiff,unit:item.raster.unit??''})),provenance:result.manifest}} onClose={()=>setStudioOpen(false)}/>}
+ {studioOpen&&result&&<ScientificFigureStudio source={{name:result.title,csv:tableCSV({columns:['Scenario',...result.metric_table.map(r=>r.metric)],rows:result.runs.map((r,i)=>[r.label,...result.metric_table.map(row=>row.values[i]??null)]),x_label:'',y_label:'',unit:''}),rasters:[...result.products,...result.differences].map(item=>({name:item.name+' · '+(item.role??item.kind??''),data:item.raster.geotiff,unit:item.raster.unit??''})),tables:researchStudioTables(result),provenance:result.manifest}} onClose={()=>setStudioOpen(false)}/>}
  {galleryData&&result&&<FigureGallery projectId={p.projectId} research={{id:result.title+'-'+galleryData.quantity,title:galleryData.quantity,data:galleryData,manifest:result.manifest}} onClose={()=>setGalleryData(null)}/>}
  </div></div>,document.body);
 }
