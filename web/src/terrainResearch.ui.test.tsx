@@ -5,7 +5,7 @@ import TerrainResearchPanel from './TerrainResearchPanel';
 import type {ResearchResult} from './api';
 import type {PersistedTerrainResult} from './terrainResultStore';
 const mocked=vi.hoisted(()=>({analyzeResearch:vi.fn(),getResearchCatalog:vi.fn(),loadResearch:vi.fn(),saveResearch:vi.fn(),downloadResearch:vi.fn()}));
-vi.mock('./api',()=>({analyzeResearch:mocked.analyzeResearch,getResearchCatalog:mocked.getResearchCatalog}));
+vi.mock('./api',()=>({analyzeResearch:mocked.analyzeResearch,getResearchCatalog:mocked.getResearchCatalog,exportFigurePDF:vi.fn(),getTerrainPlotData:vi.fn()}));
 vi.mock('./terrainResearch',async original=>({...await original<typeof import('./terrainResearch')>(),loadResearch:mocked.loadResearch,saveResearch:mocked.saveResearch,downloadResearch:mocked.downloadResearch}));
 const geometry={type:'Polygon',coordinates:[]} as GeoJSON.Polygon;
 const record={id:'run',title:'Cut / fill map',source:{id:'dem',name:'Measured DEM',sha256:'a'.repeat(64)},geometry,operation:'cutfill_map',parameters:{reference_elevation_m:90}} as unknown as PersistedTerrainResult;
@@ -81,4 +81,15 @@ it('uses enum choices, allows removing overrides, and surfaces server and storag
  expect((await screen.findByRole('alert')).textContent).toContain('Invalid source grid');
  mocked.saveResearch.mockRejectedValueOnce(new Error('Quota exceeded'));fireEvent.click(screen.getByRole('button',{name:'Run experiment'}));
  await waitFor(()=>expect(screen.getByRole('status').textContent).toContain('Quota exceeded')); 
+});
+
+it('opens actual experiment plot data in the shared scientific gallery without recomputing',async()=>{
+ const plot={schema:'test',kind:'continuous' as const,quantity:'Residual',unit:'m',valid_cells:1,cell_area_m2:100,classes:[],notes:[],histograms:{'10':[{lower:-1,upper:1,midpoint:0,cells:1,area_m2:100,percent:100,density:.5,cumulative_pct:100}]}};
+ mocked.analyzeResearch.mockResolvedValue({...output,differences:[{...output.differences[0],plot_data:plot}]});
+ setup();await scenario();fireEvent.click(screen.getByRole('button',{name:'Run experiment'}));await screen.findByRole('table');
+ fireEvent.click(screen.getByRole('button',{name:'Figures'}));fireEvent.click(screen.getByRole('button',{name:'Open scientific figure library'}));
+ expect(screen.getByRole('dialog',{name:'Scientific figure library'})).toBeTruthy();
+ expect(screen.getByRole('img',{name:'Scientific figure: Histogram'})).toBeTruthy();
+ fireEvent.click(screen.getByRole('button',{name:'Close figure library'}));
+ expect(screen.queryByRole('dialog',{name:'Scientific figure library'})).toBeNull();
 });

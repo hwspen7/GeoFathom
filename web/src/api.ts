@@ -1166,7 +1166,7 @@ export interface ResearchExperiment {
  error_model?:'independent'|'common_offset';coverage?:number;expected_source_sha256?:string;
 }
 export interface ResearchProduct {name:string;role?:string;kind?:string;raster:TerrainRaster;
- statistics?:Record<string,unknown>}
+ statistics?:Record<string,unknown>;plot_data?:PlotData|null}
 export interface ResearchResult {
  title:string;mode:ResearchExperiment['mode'];comparison_warning?:string;
  runs:Array<{label:string;input:Record<string,unknown>;metrics:Record<string,number>;warning:string;quality?:unknown}>;
@@ -1174,7 +1174,7 @@ export interface ResearchResult {
  metric_table:Array<{metric:string;values:number[];deltas:Array<number|null>;relative_pct:Array<number|null>}>;
  sensitivity:Array<{parameter:string;value:number;baseline_value:number;metrics:Record<string,number>;derivatives:Record<string,number>}>;
  uncertainty:null|{model:string;sigma_m:number;seed:number;generator:string;samples:number;coverage:number;
-  warning:string;interval_type:string;common_cells?:number;
+  warning:string;interval_type:string;common_cells?:number;realizations?:Record<string,number[]>;
   metrics:Record<string,{baseline:number;mean:number;std:number;low:number;high:number;mean_standard_error:number;split_half_endpoint_difference:number}>};
  manifest:Record<string,unknown>;archive_base64:string;
 }
@@ -1201,7 +1201,7 @@ export interface PlotData {
  thresholds?:Array<{threshold_deg:number;cells_le:number;percent_le:number}>;
  roses?:Record<string,Array<{bearing_deg:number;cells:number;area_m2:number;percent:number}>>;
  profiles?:Array<{name:string;points:Array<{x:number;y:number|null}>}>;
- joint?:{x_quantity:string;x_unit:string;y_quantity:string;y_unit:string;population_cells:number;sample_cells:number;sampling:string;pearson_r:number|null;samples:Array<{x:number;y:number}>;density_cells:Array<{x_lower:number;x_upper:number;y_lower:number;y_upper:number;cells:number;area_m2:number}>;notes:string[]}|null;
+ joint?:{x_quantity:string;x_unit:string;y_quantity:string;y_unit:string;population_cells:number;sample_cells:number;sampling:string;pearson_r:number|null;identity_line?:boolean;samples:Array<{x:number;y:number}>;density_cells:Array<{x_lower:number;x_upper:number;y_lower:number;y_upper:number;cells:number;area_m2:number}>;notes:string[]}|null;
 }
 export function getTerrainPlotData(base:ResearchExperiment['base'],expectedSourceSha256?:string,signal?:AbortSignal):Promise<PlotData>{
  return request('/terrain/figures/data',{method:'POST',signal,headers:{'Content-Type':'application/json'},body:JSON.stringify({base,expected_source_sha256:expectedSourceSha256})});

@@ -3,7 +3,7 @@ import {createPortal} from 'react-dom';
 import {exportFigurePDF,getTerrainPlotData,type PlotData} from './api';
 import type {PersistedTerrainResult} from './terrainResultStore';
 import {researchBase} from './terrainResearch';
-import {FIGURES,availableFigures,defaultFigure,figureTable,localPlotData,makeFigure,metricUnit,tableCSV,type FigureSettings,type Primitive} from './figureLibrary';
+import {availableFigures,defaultFigure,figureTable,localPlotData,makeFigure,metricUnit,tableCSV,type FigureSettings,type Primitive} from './figureLibrary';
 import {exportScenePNG,pythonFigure,saveFigureBlob} from './figureExport';
 
 function PrimitiveView({p}:{p:Primitive}){
@@ -16,8 +16,9 @@ function PrimitiveView({p}:{p:Primitive}){
 }
 interface StylePreset {name:string;settings:FigureSettings}
 function readStyles(project:string):StylePreset[]{try{const raw:unknown=JSON.parse(localStorage.getItem(project)??'[]');return Array.isArray(raw)?raw.filter((s):s is StylePreset=>!!s&&typeof s.name==='string'&&!!s.settings&&typeof s.settings.kind==='string'&&Number.isFinite(s.settings.width_mm)&&Number.isFinite(s.settings.height_mm)).slice(0,12):[];}catch{return [];}}
-export default function FigureGallery(p:{record:PersistedTerrainResult;projectId:string|null;onClose:()=>void}){
- const [data,setData]=useState<PlotData|null>(()=>localPlotData(p.record));
+export default function FigureGallery(p:{record?:PersistedTerrainResult;research?:{id:string;title:string;data:PlotData;manifest:unknown};projectId:string|null;onClose:()=>void}){
+ const record=p.record, research=p.research;
+ const [data,setData]=useState<PlotData|null>(()=>research?.data??(record?localPlotData(record):null));
  const [loading,setLoading]=useState(!data),[error,setError]=useState(''),[exporting,setExporting]=useState(false);
  const [settings,setSettings]=useState<FigureSettings|null>(()=>data?defaultFigure(data):null);
  const [page,setPage]=useState<'charts'|'appearance'|'axes'|'data'>('charts');
@@ -28,26 +29,27 @@ export default function FigureGallery(p:{record:PersistedTerrainResult;projectId
  const svg=useRef<SVGSVGElement>(null),dialog=useRef<HTMLDivElement>(null);
  useEffect(()=>{
   const previous=document.activeElement as HTMLElement|null;dialog.current?.focus();
-  const existing=localPlotData(p.record);if(existing){setData(existing);setSettings(defaultFigure(existing));setLoading(false);return()=>previous?.focus();}
+  const existing=research?.data??(record?localPlotData(record):null);if(existing){setData(existing);setSettings(defaultFigure(existing));setLoading(false);return()=>previous?.focus();}
+  if(!record){setLoading(false);setError('No recorded figure data.');return()=>previous?.focus();}
   const controller=new AbortController();setLoading(true);
-  getTerrainPlotData(researchBase(p.record),p.record.source.sha256,controller.signal).then(value=>{if(!controller.signal.aborted){setData(value);setSettings(defaultFigure(value));}})
+  getTerrainPlotData(researchBase(record),record.source.sha256,controller.signal).then(value=>{if(!controller.signal.aborted){setData(value);setSettings(defaultFigure(value));}})
    .catch(e=>{if(!controller.signal.aborted)setError(e.message??String(e));}).finally(()=>{if(!controller.signal.aborted)setLoading(false);});
   return()=>{controller.abort();previous?.focus();};
- },[p.record.id]);
+ },[record?.id,research?.id]);
  const recipes=data?availableFigures(data):[];
  const thumbnails=useMemo(()=>data&&settings?availableFigures(data).map(recipe=>({id:recipe.id,scene:makeFigure(data,{...settings,kind:recipe.id,x_log:false,y_log:false})})):[],[data,settings]);
  const scene=useMemo(()=>data&&settings?makeFigure(data,settings):null,[data,settings]);
  const table=useMemo(()=>data&&settings?figureTable(data,settings):null,[data,settings]);
- const metadata={schema:'geofathom-figure-1',run_id:p.record.id,operation:p.record.operation,
-  source:p.record.source,geometry:p.record.geometry,parameters:p.record.researchInput??p.record.parameters,
-  created_at:new Date(p.record.createdAt).toISOString(),settings,actual_histogram_bins:settings&&['histogram','density'].includes(settings.kind)?table?.rows.length:null,plot_population:data?.population,
-  valid_cells:data?.valid_cells,cell_area_m2:data?.cell_area_m2,notes:data?.notes,quality:p.record.advanced?.quality,joint_population:data?.joint?{cells:data.joint.population_cells,samples:data.joint.sample_cells,sampling:data.joint.sampling,pearson_r:data.joint.pearson_r,notes:data.joint.notes}:null,
+ const metadata={schema:'geofathom-figure-1',run_id:record?.id??research?.id,operation:record?.operation??data?.operation,research_manifest:research?.manifest,
+  source:record?.source,geometry:record?.geometry,parameters:record?.researchInput??record?.parameters,
+  created_at:record?new Date(record.createdAt).toISOString():undefined,settings,actual_histogram_bins:settings&&['histogram','density'].includes(settings.kind)?table?.rows.length:null,plot_population:data?.population,
+  valid_cells:data?.valid_cells,cell_area_m2:data?.cell_area_m2,notes:data?.notes,quality:record?.advanced?.quality??data?.quality,joint_population:data?.joint?{cells:data.joint.population_cells,samples:data.joint.sample_cells,sampling:data.joint.sampling,pearson_r:data.joint.pearson_r,notes:data.joint.notes}:null,
   axis_units:table?{x:table.x_label,y:table.y_label}:null};
  function change<K extends keyof FigureSettings>(key:K,value:FigureSettings[K]){setSettings(s=>s?{...s,[key]:value}:s);setDataPage(0);setError('');}
  async function download(format:string){
   if(!scene||!table||!settings||!data)return;setExporting(true);setError('');
   try{
-   const stem='terrain-'+p.record.operation+'-'+settings.kind;
+   const stem='terrain-'+(record?.operation??'research')+'-'+settings.kind;
    if(format==='CSV')saveFigureBlob(new Blob([tableCSV(table)],{type:'text/csv;charset=utf-8'}),stem+'.csv');
    if(format==='JSON')saveFigureBlob(new Blob([JSON.stringify({metadata,data,selected_table:table},null,2)],{type:'application/json'}),stem+'.json');
    if(format==='Python')saveFigureBlob(new Blob([pythonFigure(table,settings,data,metadata)],{type:'text/x-python'}),stem+'.py');
@@ -59,10 +61,10 @@ export default function FigureGallery(p:{record:PersistedTerrainResult;projectId
  function chooseChart(kind:FigureSettings['kind']){
   if(!settings||!data)return;
   setChartPage(Math.floor(Math.max(0,recipes.findIndex(r=>r.id===kind))/4));
-  const auto=data.quantity.replaceAll('_',' ')+': '+FIGURES.find(f=>f.id===settings.kind)?.title;
-  setSettings({...settings,kind,x_log:false,y_log:false,x_label:'',y_label:'',title:settings.title===auto?data.quantity.replaceAll('_',' ')+': '+FIGURES.find(f=>f.id===kind)!.title:settings.title});setDataPage(0);setError('');
+  const auto=data.quantity.replaceAll('_',' ')+': '+recipes.find(f=>f.id===settings.kind)?.title;
+  setSettings({...settings,kind,x_log:false,y_log:false,x_label:'',y_label:'',title:settings.title===auto?data.quantity.replaceAll('_',' ')+': '+recipes.find(f=>f.id===kind)!.title:settings.title});setDataPage(0);setError('');
  }
- const active=FIGURES.find(f=>f.id===settings?.kind);
+ const active=recipes.find(f=>f.id===settings?.kind);
  const plotValues=Object.keys(data?.metrics??{}).filter(k=>Number.isFinite(data!.metrics![k]));
  const pages=Math.max(1,Math.ceil((table?.rows.length??0)/8)),currentPage=Math.min(dataPage,pages-1);
  return createPortal(<div className="figure-gallery-backdrop"><div className="figure-gallery" role="dialog" aria-modal="true" aria-label="Scientific figure library" ref={dialog} tabIndex={-1} onKeyDown={e=>{
@@ -75,7 +77,7 @@ export default function FigureGallery(p:{record:PersistedTerrainResult;projectId
    else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus();}
   }
  }}>
-  <header><div><strong>Scientific figure library</strong><small>{p.record.title} · {p.record.source.name}</small></div><button type="button" onClick={p.onClose}>Close figure library</button></header>
+  <header><div><strong>Scientific figure library</strong><small>{research?.title??record?.title} {record&&' · '+record.source.name}</small></div><button type="button" onClick={p.onClose}>Close figure library</button></header>
   {loading&&<p role="status">Preparing numerical plot tables from the recorded terrain input…</p>}
   {error&&<p role="alert" className="discovery-error">{error}</p>}
   {scene?.error&&<p role="alert">{scene.error}</p>}

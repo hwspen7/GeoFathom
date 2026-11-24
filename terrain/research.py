@@ -27,6 +27,7 @@ from imagery.store import describe, file_sha256
 from .advanced import _window, run_terrain
 from .cancellation import checkpoint
 from .professional import raster_product
+from .figure_data import continuous_data, figure_data_from_result, joint_elevation_data
 
 # Numeric one-at-a-time sweeps only vary parameters used by the operation.
 SWEEP_PARAMETERS = {
@@ -151,7 +152,19 @@ def difference(reference, candidate, operation, cancel=None):
         pairs, counts = np.unique(np.column_stack((a[common], b[common])), axis=0, return_counts=True)
         stats['transitions'] = [{'reference': float(p[0]), 'candidate': float(p[1]), 'cells': int(n)}
                                 for p, n in zip(pairs, counts)]
-    return {'statistics': stats, 'kind': kind,
+    # Use the actual exported physical values for the residual distribution.
+    # Paired agreement is descriptive, not an independent accuracy validation.
+    plot_data = None
+    if not categorical:
+        area = abs(affine.a * affine.e - affine.b * affine.d)
+        plot_data = continuous_data(values.astype(np.float32), 'Candidate minus baseline', unit, area, cancel)
+        if plot_data is not None:
+            plot_data['classes'] = []
+            if operation != 'aspect_map':
+                joint = joint_elevation_data(a, b, 'Candidate', unit, area, cancel)
+                joint.update(x_quantity='Baseline', x_unit=unit, identity_line=True)
+                plot_data['joint'] = joint
+    return {'statistics': stats, 'kind': kind, 'plot_data': plot_data,
         'raster': research_raster(values, affine, crs, unit,
             'Candidate minus baseline' if not categorical else 'Category transitions', kind,
             {'sign': 'candidate_minus_baseline', 'operation': operation}, cancel)}
@@ -241,7 +254,8 @@ def analyze_experiment(body, resolve, cancel=None):
     products = []
     baseline_raster = baseline.get('raster')
     if baseline_raster:
-        products.append({'name': body.baseline_name, 'role': 'baseline', 'raster': baseline_raster})
+        products.append({'name': body.baseline_name, 'role': 'baseline', 'raster': baseline_raster,
+                         'plot_data': figure_data_from_result(baseline, cancel)})
     result = {'title': body.title, 'mode': body.mode, 'runs': runs, 'products': products,
               'differences': [], 'sensitivity': [], 'uncertainty': None}
     variants = []
@@ -268,7 +282,8 @@ def analyze_experiment(body, resolve, cancel=None):
         output = execute(variant, path, resolve, cancel, include_plot_data=False)
         runs.append(_receipt(name, variant, output))
         if output.get('raster'):
-            products.append({'name': name, 'role': 'scenario', 'raster': output['raster']})
+            products.append({'name': name, 'role': 'scenario', 'raster': output['raster'],
+                             'plot_data': figure_data_from_result(output, cancel)})
         matched_population = True
         if baseline_raster and output.get('raster'):
             delta = difference(baseline_raster, output['raster'], body.base.operation, cancel)
@@ -344,8 +359,10 @@ def _uncertainty(body, path, resolve, z, valid, affine, crs, baseline, result, c
                 arrays.append(unpack(output['raster'])[0])
     alpha = (1-body.coverage)/2
     summaries = {}
+    realizations = {}
     for key in sorted(set.intersection(*(set(m) for m in metrics))):
         data = np.array([m[key] for m in metrics])
+        realizations[key] = data.tolist()
         low, high = np.quantile(data, [alpha, 1-alpha], method='linear')
         half = body.samples // 2
         first = np.quantile(data[:half], [alpha,1-alpha])
@@ -357,6 +374,7 @@ def _uncertainty(body, path, resolve, z, valid, affine, crs, baseline, result, c
     result['uncertainty'] = {'model': body.error_model, 'sigma_m': body.sigma_m,
         'seed': body.seed, 'generator': 'PCG64', 'samples': body.samples, 'coverage': body.coverage,
         'interval_type': 'empirical_equal_tail_model_coverage', 'metrics': summaries,
+        'realizations': realizations,
         'warning': 'Assumed Gaussian vertical errors, not measured accuracy or a confidence interval of the mean. '
             'Pointwise intervals are not simultaneous spatial bounds. Split-half endpoint differences diagnose sampling instability; convergence is not certified.'}
     if arrays:
@@ -375,7 +393,12 @@ def _uncertainty(body, path, resolve, z, valid, affine, crs, baseline, result, c
             grid[common] = quantity
             product = research_raster(grid, affine, crs, unit, 'Uncertainty ' + key,
                 'uncertainty_' + key, result['uncertainty'] | {'metrics': 'see manifest'}, cancel)
-            result['products'].append({'name': 'Uncertainty ' + key, 'role': key, 'raster': product})
+            plot_data = continuous_data(grid.astype(np.float32), 'Uncertainty ' + key, unit,
+                abs(affine.a * affine.e - affine.b * affine.d), cancel)
+            if plot_data is not None:
+                plot_data['classes'] = []
+            result['products'].append({'name': 'Uncertainty ' + key, 'role': key, 'raster': product,
+                                       'plot_data': plot_data})
 
 
 def _csv(rows):
@@ -409,7 +432,13 @@ def research_archive(result, cancel=None):
             archive.writestr('sensitivity.csv', _csv([['parameter','value','metric','response','derivative_from_baseline']] +
                 [[r['parameter'], r['value'], k,v,r['derivatives'].get(k)]
                  for r in result['sensitivity'] for k,v in r['metrics'].items()]))
+        archive.writestr('figure-tables.json', json.dumps([
+            {'name': item['name'], 'role': item.get('role', item.get('kind')), 'plot_data': item['plot_data']}
+            for item in result['products'] + result['differences'] if item.get('plot_data')], allow_nan=False))
         if result['uncertainty']:
+            archive.writestr('uncertainty-realizations.csv', _csv([['realization', *result['uncertainty']['realizations']]] +
+                [[i+1, *[series[i] for series in result['uncertainty']['realizations'].values()]]
+                 for i in range(result['uncertainty']['samples'])]))
             fields = ['baseline','mean','std','low','high','mean_standard_error','split_half_endpoint_difference']
             archive.writestr('uncertainty.csv', _csv([['metric',*fields]] +
                 [[k,*[v[f] for f in fields]] for k,v in result['uncertainty']['metrics'].items()]))

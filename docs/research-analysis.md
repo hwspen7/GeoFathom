@@ -128,3 +128,7 @@ embeds the selected numerical table and regenerates SVG/PDF/PNG, allowing
 further analysis outside GeoFathom. Density curves are normalized frequency
 polygons, not fitted KDEs. Plot products are descriptive and retain the
 source DEM's validation limits.
+
+### Experiment figures
+
+Each continuous scenario, signed residual, and uncertainty map carries its own numerical plot tables. Open Research analysis → Figures → select a map → Open scientific figure library. The same editable gallery and SVG, vector PDF, high-resolution PNG, CSV, JSON and Python exports are used without rerunning the experiment. Signed residuals additionally expose paired baseline/candidate scatter with a 1:1 reference and all-cell joint frequency counts; circular and nominal quantities do not receive linear agreement statistics. The research ZIP contains `figure-tables.json` and, for Monte Carlo, `uncertainty-realizations.csv` with the actual scalar realizations. These distributions and agreement measures are descriptive, not independent accuracy validation.

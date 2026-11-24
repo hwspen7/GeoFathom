@@ -1,5 +1,6 @@
 import {useEffect,useRef,useState} from 'react';
 import {createPortal} from 'react-dom';
+import FigureGallery from './FigureGallery';
 import {analyzeResearch,getResearchCatalog,type ResearchCatalog,type ResearchExperiment,type ResearchResult,type TerrainRasterLayer} from './api';
 import type {PersistedTerrainResult} from './terrainResultStore';
 import {researchBase,parseParameter,parseSweep,downloadResearch,loadResearch,saveResearch} from './terrainResearch';
@@ -31,6 +32,7 @@ export default function TerrainResearchPanel(p:{projectId:string|null;record:Per
  const [errorModel,setErrorModel]=useState<'independent'|'common_offset'>('independent');
  const [result,setResult]=useState<ResearchResult|null>(null),[error,setError]=useState(''),[cacheWarning,setCacheWarning]=useState(''),[busy,setBusy]=useState(false);
  const [metric,setMetric]=useState(''),[productIndex,setProductIndex]=useState(0),[wipe,setWipe]=useState(50);
+ const [galleryOpen,setGalleryOpen]=useState(false);
  const [figureMode,setFigureMode]=useState<'difference'|'swipe'|'response'>('difference');
  const controller=useRef<AbortController|null>(null),dialog=useRef<HTMLDivElement>(null),interacted=useRef(false);
  const base=p.record?researchBase(p.record):null,supported=!!base&&!!catalog?.sweep_parameters[base.operation];
@@ -134,7 +136,8 @@ export default function TerrainResearchPanel(p:{projectId:string|null;record:Per
     {figureMode==='swipe'&&<label>Baseline reveal<input aria-label="Baseline reveal" type="range" min="0" max="100" value={wipe} onChange={e=>setWipe(Number(e.target.value))}/></label>}
     <small>{product.raster.unit} · {product.raster.valid_cells.toLocaleString()} valid cells · signed differences use candidate minus baseline</small>
     <div className="research-map-legend">{product.raster.legend.map((entry,i)=><span key={i}><i style={{background:entry.color}}/>{entry.label}</span>)}</div>
-    {product.statistics&&<p>Common cells: {String(product.statistics.common_cells)} · Coverage: {fmt(product.statistics.common_coverage_pct as number)}% · Changed: {fmt(product.statistics.changed_pct as number)}%</p>}
+    {product.plot_data&&<button type="button" onClick={()=>setGalleryOpen(true)}>Open scientific figure library</button>}
+   {product.statistics&&<p>Common cells: {String(product.statistics.common_cells)} · Coverage: {fmt(product.statistics.common_coverage_pct as number)}% · Changed: {fmt(product.statistics.changed_pct as number)}%</p>}
     <div className="research-actions"><button type="button" onClick={()=>{p.onLayer({id:'research-preview',title:product.name,raster:product.raster,opacity:.8,resampling:'nearest'});p.onClose();}}>Show on map</button><button type="button" onClick={()=>downloadResearch(product.raster.geotiff,'research-output.tif','image/tiff')}>Download GeoTIFF</button></div>
    </>:<p>This operation has metric outputs. Use the results table.</p>}
   </>}
@@ -142,5 +145,6 @@ export default function TerrainResearchPanel(p:{projectId:string|null;record:Per
  {page==='report'&&result&&<><h3>Research report and reproducibility package</h3><p>{result.title}</p><ul><li>PDF report with maps, figures, methods, parameters and quality information</li><li>GeoTIFF products, differences and preview maps</li><li>Scenario metrics and sensitivity / uncertainty tables</li><li>Source checksum, exact study geometry, software versions and experiment input</li></ul><p>The report describes the completed experiment. Form edits do not change this result.</p><div className="research-actions"><button type="button" onClick={()=>downloadResearch(result.archive_base64,'terrain-research.zip','application/zip')}>Download research package</button><button type="button" onClick={exportJson}>Download experiment input</button></div><p>Source accuracy is not independently validated. Scenario spread is descriptive. Model intervals depend on the error model and finite sampling.</p></>}
  </main>
  <footer><span>{result?'Completed: '+result.title:'Inputs from the selected terrain result'}</span>{busy?<><span role="status">Computing experiment…</span><button type="button" onClick={cancel}>Cancel experiment</button></>:<button type="button" disabled={!supported||!p.connected||!title.trim()} onClick={()=>void run()}>Run experiment</button>}</footer>
+ {galleryOpen&&product?.plot_data&&<FigureGallery projectId={p.projectId} research={{id:result!.title+'-'+product.name+'-'+(product.role??product.kind),title:product.name,data:product.plot_data,manifest:result!.manifest}} onClose={()=>setGalleryOpen(false)}/>}
  </div></div>,document.body);
 }

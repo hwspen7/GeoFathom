@@ -55,6 +55,11 @@ def test_named_scenarios_and_exact_signed_grid_difference(experiment_source):
         assert np.all(values==-5*(i+1))
         assert item['statistics']['common_cells']==100
         assert item['statistics']['changed_pct']==100
+        plot = item['plot_data']
+        assert sum(b['cells'] for b in plot['histograms']['40']) == 100
+        assert plot['joint']['identity_line'] is True
+        assert plot['joint']['x_quantity'] == 'Baseline'
+        assert sum(b['cells'] for b in plot['joint']['density_cells']) == 100
     assert result['manifest']['input']['expected_source_sha256']==file_sha256(path)
     with archive(result) as package:
         assert {'report.pdf','experiment.json','metrics.csv','manifest.json'}<=set(package.namelist())
@@ -100,6 +105,9 @@ def test_uncertainty_common_offset_matches_direct_seeded_normal_oracle(experimen
     assert repeat['products'][1]['raster']['geotiff']==result['products'][1]['raster']['geotiff']
     with archive(result) as package:
         assert 'uncertainty.csv' in package.namelist()
+        assert 'uncertainty-realizations.csv' in package.namelist()
+        assert len(result['uncertainty']['realizations']['product_mean']) == 100
+        assert 'figure-tables.json' in package.namelist()
         assert json.loads(package.read('manifest.json'))['uncertainty']['seed']==31
 
 

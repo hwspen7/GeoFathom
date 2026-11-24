@@ -25,7 +25,7 @@ export interface FigureSettings {kind:FigureKind;title:string;x_label:string;y_l
  grid:boolean;x_log:boolean;y_log:boolean;width_mm:number;height_mm:number;dpi:number;series:number;sectors:number;metric_keys:string[];}
 export function defaultFigure(data:PlotData):FigureSettings{
  const kind:FigureKind=data.histograms?'histogram':data.kind==='directional'?'rose':data.kind==='profile'?'profile':data.classes.length?'class_bar':'metrics';
- return {kind,title:data.quantity.replaceAll('_',' ')+': '+FIGURES.find(f=>f.id===kind)!.title,x_label:'',y_label:'',bins:data.histograms?.['40']?40:Number(Object.keys(data.histograms??{})[0]??40),measure:'percent',palette:'mono',font:'sans',font_size:16,grid:true,x_log:false,y_log:false,width_mm:160,height_mm:110,dpi:300,series:0,sectors:16,metric_keys:[]};
+ return {kind,title:data.quantity.replaceAll('_',' ')+': '+(availableFigures(data).find(f=>f.id===kind)?.title??'Summary'),x_label:'',y_label:'',bins:data.histograms?.['40']?40:Number(Object.keys(data.histograms??{})[0]??40),measure:'percent',palette:'mono',font:'sans',font_size:16,grid:true,x_log:false,y_log:false,width_mm:160,height_mm:110,dpi:300,series:0,sectors:16,metric_keys:[]};
 }
 export function availableFigures(data:PlotData):FigureRecipe[]{
  return FIGURES.filter(f=>{
@@ -40,7 +40,7 @@ export function availableFigures(data:PlotData):FigureRecipe[]{
   if(f.id==='rose')return !!data.roses;
   if(['profile','grade'].includes(f.id))return !!data.profiles?.length;
   return !!data.metrics&&Object.values(data.metrics).some(Number.isFinite);
- });
+ }).map(f=>data.joint?.identity_line&&f.id==='scatter'?{...f,title:'Baseline–candidate agreement',description:'Paired physical values with a 1:1 reference line'}:data.joint?.identity_line&&f.id==='joint_density'?{...f,title:'Paired frequency map'}:f);
 }
 export function localPlotData(record:PersistedTerrainResult):PlotData|null{
  if(record.profile){
@@ -72,8 +72,8 @@ export interface PlotTable {columns:string[];rows:Array<Array<string|number|null
 export function figureTable(data:PlotData,s:FigureSettings):PlotTable{
  const unit=data.unit==='degree'?'deg':data.unit||'',quantity=data.quantity.replaceAll('_',' ');
  const key=unit==='degree'?'deg':unit.replace(/[^a-zA-Z0-9]+/g,'_').replace(/^_|_$/g,'')||'value';
- if(s.kind==='scatter'&&data.joint)return {columns:['elevation_m','result_'+key],rows:data.joint.samples.map(p=>[p.x,p.y]),x_label:'Elevation (m)',y_label:data.joint.y_quantity+' ('+data.joint.y_unit+')',unit:data.joint.y_unit,note:'Systematic sample; see metadata for full population statistics.'};
- if(s.kind==='joint_density'&&data.joint)return {columns:['elevation_lower_m','elevation_upper_m','result_lower_'+key,'result_upper_'+key,'cells','area_m2'],rows:data.joint.density_cells.map(b=>[b.x_lower,b.x_upper,b.y_lower,b.y_upper,b.cells,b.area_m2]),x_label:'Elevation (m)',y_label:data.joint.y_quantity+' ('+data.joint.y_unit+')',unit:data.joint.y_unit};
+ if(s.kind==='scatter'&&data.joint)return {columns:[data.joint.identity_line?'baseline_'+key:'elevation_m',data.joint.identity_line?'candidate_'+key:'result_'+key],rows:data.joint.samples.map(p=>[p.x,p.y]),x_label:data.joint.x_quantity+' ('+data.joint.x_unit+')',y_label:data.joint.y_quantity+' ('+data.joint.y_unit+')',unit:data.joint.y_unit,note:'Systematic sample; see metadata for full population statistics.'};
+ if(s.kind==='joint_density'&&data.joint)return {columns:data.joint.identity_line?['baseline_lower_'+key,'baseline_upper_'+key,'candidate_lower_'+key,'candidate_upper_'+key,'cells','area_m2']:['elevation_lower_m','elevation_upper_m','result_lower_'+key,'result_upper_'+key,'cells','area_m2'],rows:data.joint.density_cells.map(b=>[b.x_lower,b.x_upper,b.y_lower,b.y_upper,b.cells,b.area_m2]),x_label:data.joint.x_quantity+' ('+data.joint.x_unit+')',y_label:data.joint.y_quantity+' ('+data.joint.y_unit+')',unit:data.joint.y_unit};
  const yTitle=s.measure==='area'?'Projected area (m2)':s.measure==='cells'?'Valid cells':'Area share (%)';
  if(s.kind==='histogram'||s.kind==='density'){
   const choices=data.histograms??{},bins=choices[String(s.bins)]??Object.values(choices)[0]??[];
@@ -209,6 +209,11 @@ export function makeFigure(data:PlotData,s:FigureSettings):FigureScene{
   });
   if(cumulative&&segment.length)segment.push([right,segment[segment.length-1][1]]);
   flush();
+  if(s.kind==='scatter'&&data.joint?.identity_line){
+   const lo=Math.max(xmin,ymin),hi=Math.min(xmax,ymax);
+   if(hi>lo)line(x(lo),y(lo),x(hi),y(hi),'#888888',true);
+   text(right,60,'Dashed: 1:1 agreement','end',12);
+  }
   if(s.kind==='qq'&&data.summary){
    const slope=(data.summary.q3-data.summary.q1)/(2*.6744897501960817),intercept=(data.summary.q1+data.summary.q3)/2;
    const start=slope>0?Math.max(xmin,(ymin-intercept)/slope):xmin;

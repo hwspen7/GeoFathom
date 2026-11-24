@@ -61,6 +61,11 @@ elif kind == "joint_density":
     fig.colorbar(collection, ax=ax, label="Cell count (log color)")
 elif kind in ("qq", "scatter"):
     ax.scatter([r[0] for r in rows], [r[1] for r in rows], s=8, color=color)
+    if kind == "scatter" and (payload.get("joint") or {}).get("identity_line"):
+        lo = max(min(r[0] for r in rows), min(r[1] for r in rows))
+        hi = min(max(r[0] for r in rows), max(r[1] for r in rows))
+        if hi > lo: ax.plot([lo, hi], [lo, hi], "--", color="0.5", label="1:1 agreement")
+        if hi > lo: ax.legend(frameon=False)
     summary = payload.get("summary")
     if summary and kind == "qq":
         slope = (summary["q3"]-summary["q1"])/(2*0.6744897501960817)
