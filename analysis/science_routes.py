@@ -132,6 +132,10 @@ def execute(body):
         headers,rows,meta=fitted_variogram(g,params)
     elif kind=='empirical_variogram':
         headers,rows,meta=empirical_variogram(g,params)
+    elif kind in {'blocked_reference_accuracy','blocked_model_comparison'}:
+        from .science_validation import blocked_accuracy
+        out,headers,rows,meta=blocked_accuracy(grids,params,kind)
+        product=raster_product(kind,out,g.transform,g.crs,g.unit)
     elif kind=='difference_uncertainty':
         stack,common=aligned_grids(grids);require(bool(g.unit),'Declare matching physical units for all four inputs.')
         out,meta=difference_uncertainty(stack,common,params['correlation']);product=raster_product(kind,out,g.transform,g.crs,g.unit)

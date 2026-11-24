@@ -108,8 +108,13 @@ m('spatial_error_regression','Integrated','Spatial error regression (Gaussian ML
 m('difference_probability','Integrated','Gaussian difference exceedance probability','raster',4,4,(('correlation','Same-cell error correlation',0,-1,1,False),T),'raster','A, B, standard uncertainty A, standard uncertainty B; strict exceedance of threshold under specified marginal Gaussian errors.'),
 m('sample_srs_estimation','Sampling','Finite-population simple random estimation','raster',1,1,(N,S),'table','SRS without replacement; design-based mean/total standard errors with finite population correction.'),
 )
+VALIDATION_P=(('block_m','Spatial block width (m)',100,1,1000000,False),('replicates','Bootstrap replicates',499,199,2000,True),S)
+METHODS=METHODS+(
+m('blocked_reference_accuracy','Statistics','Spatial block reference accuracy','raster',2,2,VALIDATION_P,'raster','Prediction and reference; paired block bootstrap confidence intervals for bias, MAE and RMSE.'),
+m('blocked_model_comparison','Statistics','Paired spatial block model comparison','raster',3,3,VALIDATION_P,'raster','First estimate, second estimate, reference; shared blocks and paired bootstrap for differences in accuracy.'),
+)
 BY_ID={method.id:method for method in METHODS}
-assert len(BY_ID)==len(METHODS)==73
+assert len(BY_ID)==len(METHODS)==75
 
 def catalog():
     return [{'id':m.id,'group':m.group,'title':m.title,'source':m.source,

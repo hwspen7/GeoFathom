@@ -22,6 +22,10 @@ def figure_sources(result,grids):
             add('Raster quantile profile (full valid grid)','basic_scatter',{'x':'quantile','y':'value'},csv_text(['quantile','value'],summary['quantiles']))
     if kind in {'global_moran','global_geary','join_count','bivariate_moran','distance_moran','knn_moran'}:
         table('Random-label permutation distribution','spatial_null_distribution',{'x':'null_statistic','y':'observed_statistic'})
+    if kind in {'blocked_reference_accuracy','blocked_model_comparison'}:
+        table('Block-wise validation error','basic_scatter',{'x':'first_bias','y':'first_rmse'})
+        if kind=='blocked_model_comparison':
+            table('Paired block RMSE','basic_scatter',{'x':'first_rmse','y':'second_rmse'})
     if kind=='directional_lag_scan':
         for field in ['semivariance','covariance','correlation']:
             if any(r[result['columns'].index(field)] is not None for r in result['rows']):

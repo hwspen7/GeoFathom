@@ -180,7 +180,7 @@ def test_integrated_operators_analytic_spatial_fixture(kind):
 
 def test_contract_count_and_invalid_input_rejections():
     client=TestClient(app);response=client.get('/analysis/science/catalog')
-    assert response.status_code==200 and response.json()['operation_count']==len(BY_ID)==73
+    assert response.status_code==200 and response.json()['operation_count']==len(BY_ID)==75
     assert set(m['group'] for m in response.json()['operations'])=={'Vector','Raster','Sampling','Statistics','Decision','Integrated'}
     assert response.json()['ai_tool']['input_schema']['properties']['operation']
     bad=[
@@ -634,3 +634,23 @@ def test_robust_overlay_wilson_endpoints():
     expected=1.95996398454**2/(100+1.95996398454**2)
     assert lo[0,0]==pytest.approx(0,abs=1e-12) and hi[0,0]==pytest.approx(expected)
     assert hi[-1,-1]==pytest.approx(1) and lo[-1,-1]==pytest.approx(1-expected)
+
+
+@pytest.mark.parametrize('kind',['blocked_reference_accuracy','blocked_model_comparison'])
+def test_blocked_reference_accuracy_oracle(kind):
+    truth=np.arange(36.,dtype=float).reshape(6,6)
+    first=truth+2
+    second=truth+1
+    rasters=[raster(first),raster(truth)] if kind=='blocked_reference_accuracy' else [raster(first),raster(second),raster(truth)]
+    params={'block_m':20,'replicates':199,'seed':42}
+    r=run(kind,rasters=rasters,parameters=params)
+    m=r['receipt']['metrics'];assert m['occupied_blocks']==9 and m['paired_cells']==36
+    assert m['first_metrics']=={'bias':2.,'mae':2.,'rmse':2.}
+    assert m['first_interval95']['rmse']==[2.,2.]
+    z,_=result_grid(r)
+    if kind=='blocked_model_comparison':
+        assert m['second_minus_first']['rmse']==-1.
+        assert m['paired_difference_interval95']['rmse']==[-1.,-1.]
+        np.testing.assert_allclose(z,-1)
+    else:np.testing.assert_allclose(z,2)
+    assert run(kind,rasters=rasters,parameters=params)['receipt']['metrics']==m

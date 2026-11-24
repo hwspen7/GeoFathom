@@ -8,6 +8,7 @@ from analysis.science_catalog import BY_ID
 
 def expected_tests():
     groups={
+        'test_blocked_reference_accuracy_oracle':'blocked_reference_accuracy blocked_model_comparison',
         'test_vector_area_oracles':'intersection union difference symmetric_difference convex_hull',
         'test_vector_metric_oracles':'buffer centroid simplify spatial_join nearest_join point_centers point_nearest_neighbor sample_polygon',
         'test_cell_arithmetic_oracles':'raster_sum raster_difference raster_ratio raster_mean raster_sd raster_min raster_max',
