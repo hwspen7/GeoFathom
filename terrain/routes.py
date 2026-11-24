@@ -109,7 +109,7 @@ async def prepare_dem_asset(request:Request,body:DEMPrepareInput,
     try:
         paths=[raster(identifier) for identifier in body.image_ids]
         return await run_cancelable(request,prepare_dem,paths,body.mode,
-                                    body.geometry,body.resolution_m,body.sampling)
+                                    body.geometry,body.resolution_m,body.sampling,budgeted=True)
     except (GeometryError,RasterError,ValueError) as error:
         raise HTTPException(status_code=422,detail=str(error)) from error
 

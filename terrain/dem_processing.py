@@ -8,6 +8,8 @@ from math import ceil, floor, isfinite
 from pathlib import Path
 from threading import BoundedSemaphore
 import tempfile
+import shutil
+from terrain.compute_resources import active_limits
 
 import numpy as np
 import rasterio
@@ -92,13 +94,20 @@ def prepare_dem(paths, mode, geometry=None, resolution_m=None, sampling='bilinea
             x0=anchor_x+c0*res
             y1=anchor_y-r0*res
             width=int(c1-c0);height=int(r1-r0)
-            if width<1 or height<1 or width>_MAX_SIDE or height>_MAX_SIDE or width*height>_MAX_PIXELS:
-                raise RasterError('DEM processing exceeds 32 million pixels or 8192 per side; choose a coarser output grid.')
+            limits=active_limits()
+            maximum=limits.slope_cells if limits else _MAX_PIXELS
+            side=32768 if limits else _MAX_SIDE
+            block=limits.tile_size if limits else _BLOCK
+            if width<1 or height<1 or width>side or height>side or width*height>maximum:
+                raise RasterError(f'DEM processing exceeds {maximum:,} pixels or {side:,} per side; choose a coarser output grid.')
             affine=from_origin(x0,y1,res,res)
             method={'nearest':Resampling.nearest,'bilinear':Resampling.bilinear,
                     'average':Resampling.average}[sampling]
             checkpoint(cancel)
             root=imagery_dir();root.mkdir(parents=True,exist_ok=True)
+            # Reserve space for both the temporary raster and the managed copy.
+            if shutil.disk_usage(root).free < width*height*16+128*1024**2:
+                raise RasterError('Insufficient free imagery storage for DEM preparation.')
             with tempfile.NamedTemporaryFile(prefix='.dem-work-',suffix='.tif',dir=root,delete=False) as handle:
                 temporary=Path(handle.name)
             # Record opaque managed-library source IDs, not private paths.
@@ -115,10 +124,10 @@ def prepare_dem(paths, mode, geometry=None, resolution_m=None, sampling='bilinea
                                dtype='float32',crs=crs,transform=affine,nodata=np.nan,
                                tiled=True,blockxsize=256,blockysize=256,
                                compress='deflate') as target:
-                for top in range(0,height,_BLOCK):
-                    for left in range(0,width,_BLOCK):
+                for top in range(0,height,block):
+                    for left in range(0,width,block):
                         checkpoint(cancel)
-                        h=min(_BLOCK,height-top);w=min(_BLOCK,width-left)
+                        h=min(block,height-top);w=min(block,width-left)
                         window=Window(left,top,w,h)
                         local_transform=window_transform(window,affine)
                         merged=np.full((h,w),np.nan,dtype=np.float32)

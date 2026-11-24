@@ -5,7 +5,7 @@ const GiB=1024**3;
 const gb=(n:number)=>(n/GiB).toFixed(1)+' GiB';
 const n=(x:number)=>x.toLocaleString('en-US');
 const groups=[
- ['slope_cells','Slope / aspect',256000000],
+ ['slope_cells','Slope / DEM preparation',256000000],
  ['surface_cells','Local surfaces',32000000],
  ['global_cells','Global algorithms',8000000],
  ['visibility_cells','Viewshed',1048576],
@@ -37,7 +37,7 @@ export default function ComputingResources(){
   <summary>Computing Resources</summary>
   {error&&<p role="alert" className="discovery-error">{error}</p>}
   {!status&&<button type="button" disabled={busy} onClick={()=>void refresh()}>{busy?'Detecting host…':'Detect host'}</button>}
-  {status&&draft&&e&&<form className="professional-form" aria-label="Terrain computing resources" onSubmit={event=>{event.preventDefault();void save();}}>
+  {status&&draft&&e&&<form className="professional-form compute-resource-form" aria-label="Terrain computing resources" onSubmit={event=>{event.preventDefault();void save();}}>
    <small>Backend CPU: {status.hardware.logical_cpus} logical cores · RAM: {gb(status.hardware.total_bytes)}</small>
    <small>Available: {gb(status.hardware.available_bytes)} · Disk: {gb(status.hardware.scratch_free_bytes)}</small>
    <small>Active tasks: {status.active_tasks} · Queued: {status.queued_tasks}</small>

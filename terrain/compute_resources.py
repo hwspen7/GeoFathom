@@ -149,6 +149,27 @@ def _cgroup_memory(total, available, root=Path("/sys/fs/cgroup")):
     return total, available
 
 
+def _cgroup_cpus(cpus):
+    try:
+        relative = next(line.split(":", 2)[2] for line in
+                        Path("/proc/self/cgroup").read_text().splitlines()
+                        if line.startswith("0::"))
+        root = Path("/sys/fs/cgroup").resolve()
+        directory = (root / relative.lstrip("/")).resolve()
+        for group in (directory, *directory.parents):
+            if group != root and root not in group.parents:
+                break
+            try:
+                quota, period = (group / "cpu.max").read_text().split()
+                if quota != "max":
+                    cpus = min(cpus, max(1, int(quota)//int(period)))
+            except (OSError, ValueError, ZeroDivisionError):
+                continue
+    except (OSError, ValueError, StopIteration):
+        pass
+    return cpus
+
+
 def detect_host():
     memory = psutil.virtual_memory()
     total, available = _cgroup_memory(int(memory.total), int(memory.available))
@@ -159,7 +180,7 @@ def detect_host():
     path = _settings_path().parent
     while not path.exists() and path != path.parent:
         path = path.parent
-    return Host(total, available, max(1, cpus), int(shutil.disk_usage(path).free))
+    return Host(total, available, max(1, _cgroup_cpus(cpus)), int(shutil.disk_usage(path).free))
 
 
 def resolve_limits(policy, host):

@@ -1826,3 +1826,11 @@ button:disabled { opacity: .45; cursor: not-allowed; }
  .desktop-gis .gis-quick-basemap{gap:3px;padding:0 5px!important}
  .desktop-gis .gis-quick-basemap select{width:160px;min-width:130px;font-size:11px}
 }
+
+/* Host settings stay in the existing compact, accessible header panel. */
+.compute-resource-form fieldset{min-width:0;border:1px solid #c9d3da;padding:6px;display:grid;gap:4px}
+.compute-resource-form label{display:flex;align-items:center;justify-content:space-between;gap:4px;font-size:11px}
+.compute-resource-form input[type=number]{width:110px;min-width:0}
+.compute-resource-form table{width:100%;font-size:11px;border-collapse:collapse}
+.compute-resource-form th,.compute-resource-form td{padding:3px 2px;border-bottom:1px solid #dce3e8;text-align:left}
+.compute-resource-form td{text-align:right;font-variant-numeric:tabular-nums}
