@@ -101,8 +101,8 @@ with zipfile.ZipFile(sys.argv[1]) as archive:
  expect(checked).toContain('verified');
  await dialog.getByRole('button',{name:'Experiment',exact:true}).click();
  await dialog.getByLabel('Analysis method').selectOption('sensitivity');
- await dialog.getByLabel('Sweep parameter').selectOption('reference');
- await dialog.getByLabel('Sweep values').fill('85, 90, 95');
+ await dialog.getByLabel('Sweep parameter',{exact:true}).selectOption('reference');
+ await dialog.getByLabel('Sweep values',{exact:true}).fill('85, 90, 95');
  const sensitivity=await run();
  expect(sensitivity.sensitivity[0].derivatives.cut_m3).toBe(-40000);
  await dialog.getByRole('button',{name:'Figures',exact:true}).click();
@@ -111,7 +111,7 @@ with zipfile.ZipFile(sys.argv[1]) as archive:
  await expect(dialog.getByRole('img',{name:'Sensitivity response: cut_m3'})).toBeVisible();
  await page.screenshot({path:testInfo.outputPath('research-sensitivity.png')});
  await dialog.getByRole('button',{name:'Experiment',exact:true}).click();
- await dialog.getByLabel('Sweep values').fill('90,95');
+ await dialog.getByLabel('Sweep values',{exact:true}).fill('90,95');
  await dialog.getByLabel('Second sweep parameter').selectOption('design_east_grade');
  await dialog.getByLabel('Second sweep values').fill('0,0.01');
  const factorial=await run();
