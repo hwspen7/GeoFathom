@@ -377,3 +377,31 @@ def test_two_factor_grid_validates_distinct_active_parameters_and_cardinality(ex
     with pytest.raises(ValueError,match='numeric parameter'):
         Experiment(base=base,mode='sensitivity',parameter='reference',values=[90,95],
                    secondary_parameter='stream_cells',secondary_values=[1,2])
+
+
+def test_global_design_reproducibility_and_morris_terrain_engine(experiment_source):
+    from terrain.global_sensitivity import design,evaluate_global
+    from terrain.research_routes import GlobalSensitivity
+    labels,a,u=design('sobol',[(0,1),(2,3)],8,4)
+    _,b,_=design('sobol',[(0,1),(2,3)],8,4)
+    assert np.array_equal(a,b) and len(labels)==32
+    A,B,H1,H2=u.reshape(4,8,2)
+    assert np.array_equal(H1[:,0],B[:,0]) and np.array_equal(H1[:,1],A[:,1])
+    assert np.array_equal(H2[:,1],B[:,1]) and np.array_equal(H2[:,0],A[:,0])
+    base,path,_=experiment_source
+    body=GlobalSensitivity(base=base,method='morris',factors=[{'name':'reference','minimum':88,'maximum':92},
+        {'name':'design_east_grade','minimum':0,'maximum':.01}],samples=8,metric='cut_m3',seed=3)
+    result=evaluate_global(body,image_file)
+    assert result['evaluations']==24
+    assert result['manifest']['source_sha256']==file_sha256(path)
+    assert result['indices'][0]['mu_star']==pytest.approx(40000,rel=1e-5)
+    assert result['indices'][0]['sigma']==pytest.approx(0,abs=1e-5)
+    assert result['bindings']['columns']==['reference','design_east_grade']
+    assert len(result['design_csv'].splitlines())==25
+
+
+def test_global_design_rejects_invalid_bounds_and_constant_response(experiment_source):
+    from terrain.research_routes import GlobalSensitivity
+    base,_,_=experiment_source
+    with pytest.raises(ValueError,match='distinct'):
+        GlobalSensitivity(base=base,metric='cut_m3',factors=[{'name':'reference','minimum':90,'maximum':95}]*2)

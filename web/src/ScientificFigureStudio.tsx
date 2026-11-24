@@ -5,7 +5,7 @@ import {saveFigureBlob} from './figureExport';
 import {tableCSV} from './figureLibrary';
 
 export interface StudioTableSource {name:string;csv:string;provenance?:unknown}
-export interface StudioSource {name:string;csv?:string;tables?:StudioTableSource[];rasters?:StudioRaster[];provenance?:unknown;nativePanel?:StudioLegacyPanel}
+export interface StudioSource {name:string;csv?:string;tables?:StudioTableSource[];rasters?:StudioRaster[];provenance?:unknown;nativePanel?:StudioLegacyPanel;initialRecipe?:string;initialBindings?:Pick<StudioInput,'x'|'y'|'columns'>}
 const empty:StudioInput={recipe:'',csv:'',rasters:[],x:'',y:'',z:'',group:'',low:'',high:'',columns:[],title:'',x_label:'',y_label:'',parameter:null,maximize_x:false,maximize_y:false,palette:'color',font:'sans',font_size:10,grid:true,width_mm:180,height_mm:125,dpi:120,format:'png'};
 const fieldLabels:Record<string,string>={x:'X / category / design A',y:'Y / response / design B',z:'Z / secondary quantity',group:'Group',low:'Lower bound / low-setting response',high:'Upper bound / high-setting response'};
 function columns(csv:string):string[]{
@@ -31,7 +31,7 @@ function jsonFile(value:unknown,name:string){saveFigureBlob(new Blob([JSON.strin
 export default function ScientificFigureStudio({source,onClose,initialTier='professional'}:{source:StudioSource;onClose:()=>void;initialTier?:'all'|'basic'|'professional'}){
  const [recipes,setRecipes]=useState<StudioRecipe[]>([]),[family,setFamily]=useState('All'),[search,setSearch]=useState('');
  const [tier,setTier]=useState<'all'|'basic'|'professional'>(initialTier);
- const [settings,setSettings]=useState<StudioInput>(()=>({...empty,csv:source.csv??'',title:''}));
+ const [settings,setSettings]=useState<StudioInput>(()=>({...empty,csv:source.csv??'',title:'',...source.initialBindings}));
  const [rasters,setRasters]=useState<StudioRaster[]>(()=>source.rasters??[]),[selected,setSelected]=useState<number[]>(()=>source.rasters?.length?[0]:[]);
  const [output,setOutput]=useState<StudioOutput|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState(''),[dpi,setDpi]=useState<300|600>(300);
  const [completed,setCompleted]=useState<StudioInput|null>(null),[fileName,setFileName]=useState(source.csv?'Current result data table':'No CSV selected');
@@ -45,7 +45,7 @@ export default function ScientificFigureStudio({source,onClose,initialTier='prof
  const chosen=selected.flatMap(i=>rasters[i]?[rasters[i]]:[]);
  const dialog=useRef<HTMLDivElement>(null),controller=useRef<AbortController|null>(null);
  useEffect(()=>{const previous=document.activeElement as HTMLElement|null;dialog.current?.focus();const ac=new AbortController();
-  getStudioCatalog(ac.signal).then(r=>{if(ac.signal.aborted)return;setRecipes(r.recipes);const eligible=r.recipes.filter(x=>initialTier==='all'||(x.tier??'professional')===initialTier);const first=(source.rasters?.length?eligible.find(x=>x.id==='raster_continuous'):undefined)??eligible.find(x=>x.source==='table')??eligible[0];if(first)setSettings(s=>({...s,recipe:first.id}));}).catch(e=>{if(!ac.signal.aborted)setError(String(e.message??e));});
+  getStudioCatalog(ac.signal).then(r=>{if(ac.signal.aborted)return;setRecipes(r.recipes);const eligible=r.recipes.filter(x=>initialTier==='all'||(x.tier??'professional')===initialTier);const first=eligible.find(x=>x.id===source.initialRecipe)??(source.rasters?.length?eligible.find(x=>x.id==='raster_continuous'):undefined)??eligible.find(x=>x.source==='table')??eligible[0];if(first)setSettings(s=>({...s,recipe:first.id}));}).catch(e=>{if(!ac.signal.aborted)setError(String(e.message??e));});
   return()=>{ac.abort();controller.current?.abort();previous?.focus();};
  },[]);
  function change<K extends keyof StudioInput>(k:K,v:StudioInput[K]){setSettings(s=>({...s,[k]:v}));setOutput(null);setCompleted(null);setError('');}

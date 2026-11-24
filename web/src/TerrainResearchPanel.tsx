@@ -2,6 +2,7 @@ import {useEffect,useRef,useState} from 'react';
 import {createPortal} from 'react-dom';
 import FigureGallery from './FigureGallery';
 import ScientificFigureStudio,{type StudioTableSource} from './ScientificFigureStudio';
+import GlobalSensitivityPanel from './GlobalSensitivityPanel';
 import {tableCSV} from './figureLibrary';
 import {researchFigureData,researchDistributionData,type ResearchFigureSource} from './researchFigureData';
 import {analyzeResearch,getResearchCatalog,type ResearchCatalog,type ResearchExperiment,type ResearchResult,type TerrainRasterLayer,type PlotData} from './api';
@@ -18,7 +19,7 @@ function researchStudioTables(result:ResearchResult):StudioTableSource[]{
  return entries;
 }
 const initialFigureSource=(result:ResearchResult):ResearchFigureSource=>result.mode==='uncertainty'?'interval':result.mode==='sensitivity'?(result.factorial?'factorial':'response'):'values';
-type Page='experiment'|'comparison'|'figures'|'report';
+type Page='experiment'|'comparison'|'figures'|'report'|'global';
 function ResponsePlot({points,parameter,metric}:{points:Array<[number,number]>;parameter:string;metric:string}){
  if(!points.length)return null;
  const sorted=[...points].sort((a,b)=>a[0]-b[0]),xs=sorted.map(p=>p[0]),ys=sorted.map(p=>p[1]);
@@ -114,9 +115,10 @@ export default function TerrainResearchPanel(p:{projectId:string|null;record:Per
   }
  }}>
  <header><div><strong>Research analysis</strong><small>{p.record?.title??'Select a terrain result to begin'} · {p.record?.source.name??'No source selected'}</small></div><button type="button" onClick={()=>{cancel();p.onClose();}} aria-label="Close research analysis">Close</button></header>
- <nav aria-label="Research analysis pages">{(['experiment','comparison','figures','report'] as Page[]).map(item=><button key={item} type="button" aria-pressed={page===item} disabled={item!=='experiment'&&!result} onClick={()=>setPage(item)}>{{experiment:'Experiment',comparison:'Results',figures:'Figures',report:'Report'}[item]}</button>)}</nav>
+ <nav aria-label="Research analysis pages">{(['experiment','comparison','figures','report','global'] as Page[]).map(item=><button key={item} type="button" aria-pressed={page===item} disabled={busy||(item!=='experiment'&&item!=='global'&&!result)||(item==='global'&&!supported)} onClick={()=>setPage(item)}>{{experiment:'Experiment',comparison:'Results',figures:'Figures',report:'Report',global:'Global sensitivity'}[item]}</button>)}</nav>
  {error&&<p role="alert" className="discovery-error">{error}</p>}{cacheWarning&&<p role="status">{cacheWarning}</p>}
  <main className="research-page">
+ {page==='global'&&base&&catalog&&<GlobalSensitivityPanel base={base} parameters={catalog.sweep_parameters[base.operation]??[]} connected={p.connected} sourceHash={p.record?.source.sha256}/>}
  {page==='experiment'&&<>
   <h3>Matched experiments</h3><p>Compare named scenarios, sweep one parameter, or propagate an assumed DEM error. Source and study boundary stay fixed.</p>
   {!supported&&<p role="status">Select a supported surface, hydrology, visibility or earthwork result before running an experiment.</p>}
@@ -166,7 +168,7 @@ export default function TerrainResearchPanel(p:{projectId:string|null;record:Per
  </>}
  {page==='report'&&result&&<><h3>Research report and reproducibility package</h3><p>{result.title}</p><ul><li>PDF report with maps, figures, methods, parameters and quality information</li><li>GeoTIFF products, differences and preview maps</li><li>Scenario metrics and sensitivity / uncertainty tables</li><li>Source checksum, exact study geometry, software versions and experiment input</li></ul><p>The report describes the completed experiment. Form edits do not change this result.</p><div className="research-actions"><button type="button" onClick={()=>downloadResearch(result.archive_base64,'terrain-research.zip','application/zip')}>Download research package</button><button type="button" onClick={exportJson}>Download experiment input</button></div><p>Source accuracy is not independently validated. Scenario spread is descriptive. Model intervals depend on the error model and finite sampling.</p></>}
  </main>
- <footer><span>{result?'Completed: '+result.title:'Inputs from the selected terrain result'}</span>{busy?<><span role="status">Computing experiment…</span><button type="button" onClick={cancel}>Cancel experiment</button></>:<button type="button" disabled={!supported||!p.connected||!title.trim()} onClick={()=>void run()}>Run experiment</button>}</footer>
+ {page!=='global'&&<footer><span>{result?'Completed: '+result.title:'Inputs from the selected terrain result'}</span>{busy?<><span role="status">Computing experiment…</span><button type="button" onClick={cancel}>Cancel experiment</button></>:<button type="button" disabled={!supported||!p.connected||!title.trim()} onClick={()=>void run()}>Run experiment</button>}</footer>}
  {studioOpen&&result&&<ScientificFigureStudio source={{name:result.title,csv:tableCSV({columns:['Scenario',...result.metric_table.map(r=>r.metric)],rows:result.runs.map((r,i)=>[r.label,...result.metric_table.map(row=>row.values[i]??null)]),x_label:'',y_label:'',unit:''}),rasters:[...result.products,...result.differences].map(item=>({name:item.name+' · '+(item.role??item.kind??''),data:item.raster.geotiff,unit:item.raster.unit??''})),tables:researchStudioTables(result),provenance:result.manifest}} onClose={()=>setStudioOpen(false)}/>}
  {galleryData&&result&&<FigureGallery projectId={p.projectId} research={{id:result.title+'-'+galleryData.quantity,title:galleryData.quantity,data:galleryData,manifest:result.manifest}} onClose={()=>setGalleryData(null)}/>}
  </div></div>,document.body);

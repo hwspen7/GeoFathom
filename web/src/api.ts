@@ -1229,3 +1229,7 @@ export function getStudioRasterTable(rasters:StudioRaster[],signal?:AbortSignal)
 export interface StudioLegacyPanel {scene:Omit<import('./figureLibrary').FigureScene,'note'|'error'>;table:Array<Array<string|number|null>>;provenance:Record<string,unknown>}
 export interface StudioComposition {panels:Array<StudioInput|StudioLegacyPanel>;title:string;caption:string;columns:number;width_mm:number;height_mm:number;dpi:120|300|600;format:StudioInput['format'];spacing:number}
 export function composeStudio(body:StudioComposition,signal?:AbortSignal):Promise<StudioOutput>{return request('/terrain/studio/compose',{method:'POST',signal,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});}
+
+export interface GlobalSensitivityInput {base:ResearchExperiment['base'];method:'sobol'|'morris';factors:Array<{name:string;minimum:number;maximum:number}>;metric:string;samples:number;seed:number;expected_source_sha256?:string}
+export interface GlobalSensitivityOutput {method:'sobol'|'morris';metric:string;evaluations:number;indices:Array<{factor:string;[key:string]:string|number|null}>;plot_csv:string;design_csv:string;bindings:{x:string;y:string;columns:string[]};method_note:string;manifest:Record<string,unknown>}
+export function analyzeGlobalSensitivity(body:GlobalSensitivityInput,signal?:AbortSignal):Promise<GlobalSensitivityOutput>{return request('/terrain/research/global-sensitivity',{method:'POST',signal,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});}

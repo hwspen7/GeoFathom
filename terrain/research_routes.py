@@ -128,3 +128,46 @@ async def analyze(request: Request, body: Experiment):
         return await run_cancelable(request, analyze_experiment, body, raster)
     except (RasterError, GeometryError, ValueError, OverflowError) as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+class GlobalFactor(BaseModel):
+    model_config=ConfigDict(extra='forbid',allow_inf_nan=False)
+    name:str=Field(min_length=1,max_length=80)
+    minimum:float
+    maximum:float
+
+class GlobalSensitivity(BaseModel):
+    model_config=ConfigDict(extra='forbid',allow_inf_nan=False)
+    base:AdvancedTerrainInput
+    method:Literal['sobol','morris']='sobol'
+    factors:list[GlobalFactor]=Field(min_length=2,max_length=6)
+    metric:str=Field(min_length=1,max_length=120)
+    samples:int=Field(default=16,ge=8,le=128)
+    seed:int=Field(default=42,ge=0,le=4294967295)
+    expected_source_sha256:str|None=Field(default=None,pattern=r'^[0-9a-f]{64}$')
+
+    @model_validator(mode='after')
+    def validate_design(self):
+        from .research import INTEGER_PARAMETERS
+        allowed=SWEEP_PARAMETERS.get(self.base.operation,[])
+        names=[f.name for f in self.factors]
+        if len(set(names))!=len(names):raise ValueError('Choose distinct factors.')
+        for factor in self.factors:
+            if factor.name not in allowed or factor.name in INTEGER_PARAMETERS:
+                raise ValueError('Global design requires active continuous numeric factors.')
+            if factor.minimum>=factor.maximum:raise ValueError('Factor bounds must increase.')
+            if factor.name=='refraction_coeff' and not self.base.consider_curvature:
+                raise ValueError('Refraction requires enabled Earth curvature.')
+            for value in (factor.minimum,factor.maximum):
+                AdvancedTerrainInput.model_validate({**self.base.model_dump(),factor.name:value})
+        if self.base.elevation_sigma_m!=0:
+            raise ValueError('Disable inner elevation uncertainty before global sensitivity.')
+        return self
+
+@router.post('/global-sensitivity')
+async def global_sensitivity(request:Request,body:GlobalSensitivity):
+    from .global_sensitivity import evaluate_global
+    try:
+        return await run_cancelable(request,evaluate_global,body,raster)
+    except (RasterError,GeometryError,ValueError,OverflowError) as error:
+        raise HTTPException(status_code=422,detail=str(error)) from error
