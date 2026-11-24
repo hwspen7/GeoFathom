@@ -10,6 +10,7 @@ from imagery.remote_catalog import BY_ID
 
 def expected_tests():
     groups={
+        'test_temporal_model_extension':'season_peak season_start season_end season_duration segmented_count segmented_first_break',
         'test_correlated_thermal_reference':'lst_correlated_uncertainty',
         'test_hyperspectral_reference':'spectral_absorption_depth spectral_absorption_center spectral_absorption_area spectral_endmembers',
         'test_physical_depth_reference':'lst_uncertainty sar_terrain_volume sar_terrain_validity register_translation',

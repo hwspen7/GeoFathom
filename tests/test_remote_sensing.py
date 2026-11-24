@@ -189,7 +189,7 @@ def test_remote_invalid_inputs_and_recovery():
         response=client.post('/analysis/remote-sensing/run',json=bad);assert response.status_code==422,response.text
     response=client.post('/analysis/remote-sensing/run',json=good);assert response.status_code==200,response.text
     np.testing.assert_allclose(grid(response.json()),.5)
-    assert client.get('/analysis/remote-sensing/catalog').json()['operation_count']==len(BY_ID)==89
+    assert client.get('/analysis/remote-sensing/catalog').json()['operation_count']==len(BY_ID)==95
 
 def test_temporal_independent_quality_masks():
     # Cloud at one date does not erase the other valid acquisitions.
@@ -572,3 +572,17 @@ def test_correlated_thermal_reference(kind):
     np.testing.assert_allclose(grid(run(kind,a,{'rho03':.5,'rho12':-.3})),np.sqrt(g@corr@g),rtol=1e-8)
     with pytest.raises(FigureInputError,match='positive semidefinite'):
         run(kind,a,{'rho01':1,'rho02':1,'rho12':-1})
+
+
+@pytest.mark.parametrize('kind',['season_peak','season_start','season_end','season_duration','segmented_count','segmented_first_break'])
+def test_temporal_model_extension(kind):
+    t=np.arange(18,dtype=float)
+    if kind.startswith('season_'):
+        y=10+.2*t+2*np.cos(2*np.pi*(t-2)/6);params={'period':6,'season_fraction':.5}
+        expected={'season_peak':2,'season_start':.5,'season_end':3.5,'season_duration':3}[kind]
+    else:
+        y=np.repeat([2.,8.,-2.],6);params={'penalty':1,'min_segment':3}
+        expected=2 if kind=='segmented_count' else 5.5
+    data=np.array([constant(v) for v in y]);s=source(data)
+    result=checked(execute(RemoteInput(operation=kind,sources=[s],bindings={f'date{i+1}':{'source':0,'band':i+1,'unit':'index'} for i in range(len(t))},times=t.tolist(),parameters=params)))
+    np.testing.assert_allclose(grid(result),expected,atol=1e-9)

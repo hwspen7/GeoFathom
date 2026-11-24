@@ -25,13 +25,21 @@ TIMES=numeric('date1','date2','date3','date4')
 CLASSES=(('before','class'),('after','class'))
 SPECTRUM=refl('blue','green','red','nir')
 HYPER_IDS={'spectral_absorption_depth','spectral_absorption_center','spectral_absorption_area','spectral_endmembers'}
-SERIES_IDS={'series_median','series_count','series_slope','series_amplitude','series_harmonic_rmse','series_break_time','series_break_jump','series_break_strength'}
+SERIES_IDS={'series_median','series_count','series_slope','series_amplitude','series_harmonic_rmse','series_break_time','series_break_jump','series_break_strength','season_peak','season_start','season_end','season_duration','segmented_count','segmented_first_break'}
 CV=(p('block_m','Block width (m)',100,1,100000),p('folds','Spatial fold count',5,3,10,True),p('buffer_blocks','Training exclusion buffer (blocks)',0,0,1,True))
 THERMAL_ROLES=(('radiance','radiance'),('emissivity','emissivity'),('transmittance','transmittance'),('upwelling','radiance'),('downwelling','radiance'))
 SAR_TERRAIN=(('sigma0','power'),('incidence','slope'),('slope','slope'),('aspect','aspect'))
 SAR_GEOM=(p('look_azimuth','Sensor-facing azimuth (grid degrees)',90,0,360),p('margin_deg','Layover/shadow margin (degrees)',1,0,10))
 CORRELATIONS=tuple(p('rho'+str(i)+str(j),'Correlation of thermal inputs '+str(i+1)+' and '+str(j+1),0,-1,1) for i in range(5) for j in range(i+1,5))
+SEASON=(p('period','Season period (time units)',365,.0001,1e6),p('season_fraction','Relative seasonal threshold',.2,.01,.99),p('min_amplitude','Minimum harmonic amplitude',.01,1e-10,1e6))
+SEGMENT=(p('min_segment','Minimum observations per segment',3,2,16,True),p('penalty','SSE penalty per breakpoint',.05,1e-12,1e100))
 METHODS=(
+m('season_peak','Time Series','Harmonic seasonal peak phase',numeric('date1','date2','date3','date4','date5','date6'),'time','Phase relative to first acquisition, modulo period; detrended seasonal model.',SEASON),
+m('season_start','Time Series','Harmonic season onset phase',numeric('date1','date2','date3','date4','date5','date6'),'time','Relative amplitude threshold rising crossing, modulo period.',SEASON),
+m('season_end','Time Series','Harmonic season end phase',numeric('date1','date2','date3','date4','date5','date6'),'time','Relative amplitude threshold falling crossing, modulo period.',SEASON),
+m('season_duration','Time Series','Harmonic season duration',numeric('date1','date2','date3','date4','date5','date6'),'time','Duration above relative seasonal threshold; detrended first harmonic approximation.',SEASON),
+m('segmented_count','Time Series','Penalized multiple mean-shift count',numeric('date1','date2','date3','date4','date5','date6'),'count','Exact penalized least-squares multiple mean shifts; not a significance test.',SEGMENT),
+m('segmented_first_break','Time Series','First penalized mean-shift time',numeric('date1','date2','date3','date4','date5','date6'),'time','First selected split midpoint; no break becomes NoData.',SEGMENT),
 m('lst_correlated_uncertainty','Thermal','Correlated physical LST uncertainty',THERMAL_ROLES+(('radiance_sd','radiance_sd'),('emissivity_sd','fraction_sd'),('transmittance_sd','fraction_sd'),('upwelling_sd','radiance_sd'),('downwelling_sd','radiance_sd')),'K','Constant 5x5 correlation matrix in order radiance, emissivity, transmittance, upwelling, downwelling; per-pixel SDs; first-order conditional.',(p('k1','K1 radiance constant',774.8853,.000001,1e7),p('k2','K2 temperature constant',1321.0789,.000001,1e7))+CORRELATIONS),
 m('spectral_absorption_depth','Spectral','Continuum-removed maximum absorption depth',refl('band1','band2','band3','band4','band5','band6'),'fraction','6–64 positive wavelength values in nm; complete spectra and upper convex continuum.'),
 m('spectral_absorption_center','Spectral','Continuum-removed absorption center',refl('band1','band2','band3','band4','band5','band6'),'nm','Deepest sampled absorption band; featureless spectra excluded.'),

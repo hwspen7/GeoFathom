@@ -15,6 +15,7 @@ from analysis.science_raster import require
 from analysis.science_routes import raster_product,raster_preview,csv_output
 from analysis.science_figures import figure_sources,csv_text
 from .remote_catalog import BY_ID,catalog,SERIES_IDS,HYPER_IDS
+from .remote_temporal_models import seasonal_metrics,segmented_means
 from .remote_hyperspectral import continuum_features
 from .remote_physics import thermal_uncertainty,angular_sar,register_translation
 from .remote_classifiers import blocked_classifier
@@ -190,7 +191,9 @@ def execute(body):
         out,headers,rows,meta=continuum_features(np.stack(list(v.values())),body.times,kind,params)
     elif kind in SERIES_IDS:
         stack=np.stack(list(v.values()))
-        if kind.startswith('series_break_'):out,meta=series_break(stack,body.times,params['min_segment'],kind)
+        if kind.startswith('season_'):out,meta=seasonal_metrics(stack,body.times,params,kind)
+        elif kind.startswith('segmented_'):out,meta=segmented_means(stack,body.times,params,kind)
+        elif kind.startswith('series_break_'):out,meta=series_break(stack,body.times,params['min_segment'],kind)
         else:out,meta=long_series(kind,stack,body.times,params.get('period',365))
         headers=['time','valid_cells','mean'];rows=[[t,int(np.isfinite(z).sum()),float(np.nanmean(z)) if np.isfinite(z).any() else None] for t,z in zip(body.times,v.values())]
     elif method.group=='Optical':
