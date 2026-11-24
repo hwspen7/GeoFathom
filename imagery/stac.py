@@ -10,7 +10,7 @@ import math
 import httpx
 
 STAC_API = "https://earth-search.aws.element84.com/v1/search"
-_COLLECTIONS = {"sentinel-2-l2a", "sentinel-2-l1c", "sentinel-1-grd"}
+_COLLECTIONS = {"sentinel-2-l2a", "sentinel-2-l1c", "sentinel-1-grd", "sentinel-2-c1-l2a", "landsat-c2-l2"}
 
 
 class CatalogSearchError(ValueError):

@@ -1269,3 +1269,7 @@ export async function downloadRemoteDiskJob(projectId:string,id:string):Promise<
  const url=URL.createObjectURL(await response.blob());
  try{const a=document.createElement('a');a.href=url;a.download='remote-sensing.tif';document.body.appendChild(a);a.click();a.remove();}finally{window.setTimeout(()=>URL.revokeObjectURL(url),1000);}
 }
+
+export function readRemoteSceneCrop(body:{collection:'sentinel-2-l2a'|'sentinel-2-c1-l2a';item_id:string;bbox:[number,number,number,number];roles:string[]}):Promise<{bands:Array<RemoteSource&{role:string;unit:string;shape:number[];transform:number[];crs:string}>;warning:string}>{
+ return request('/analysis/remote-sensing/scene-crop',{method:'POST',headers:{'Content-Type':'application/json','X-GeoFathom-Local-Import':'1'},body:JSON.stringify(body)});
+}

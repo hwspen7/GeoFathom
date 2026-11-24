@@ -918,3 +918,30 @@ def test_external_reference_streaming_across_windows(tmp_path):
     assert report['rmse']==pytest.approx(.5/np.sqrt(n))
     assert report['bias']==pytest.approx(.5/n)
     assert compare(a,b,.51)['passed']
+
+
+def test_native_public_scene_crop_calibration(tmp_path,monkeypatch):
+    import rasterio
+    from imagery import remote_scene
+    from rasterio.warp import transform_bounds
+    names={'red':2000.,'nir':6000.};paths={}
+    for role,value in names.items():
+        path=tmp_path/(role+'.tif');path.write_bytes(base64.b64decode(source(np.full((10,10),value))['data']));paths[role]=path
+    host='e84-earth-search-sentinel-data.s3.us-west-2.amazonaws.com'
+    hrefs={role:'https://'+host+'/'+role+'.tif' for role in names}
+    monkeypatch.setattr(remote_scene,'fetch_stac_item',lambda *args:{'properties':{'datetime':'2023-09-07T00:00:00Z'},'assets':{r:{'href':href,'raster:bands':[{'scale':.0001,'offset':-.1}]} for r,href in hrefs.items()}})
+    actual_open=rasterio.open
+    def mapped(path,*args,**kwargs):
+        for role,href in hrefs.items():
+            if path=='/vsicurl/'+href:return actual_open(paths[role],*args,**kwargs)
+        return actual_open(path,*args,**kwargs)
+    monkeypatch.setattr(remote_scene.rasterio,'open',mapped)
+    bbox=transform_bounds(CRS,'EPSG:4326',500020,4499920,500080,4499980)
+    result=remote_scene.read_scene('sentinel-2-c1-l2a','S2_test_scene',bbox,['red','nir'])
+    assert [b['role'] for b in result['bands']]==['red','nir']
+    for band,value in zip(result['bands'],(.1,.5)):
+        with MemoryFile(base64.b64decode(band['data'])) as mem,mem.open() as ds:
+            assert ds.transform.a==10 and ds.transform.e==-10
+            np.testing.assert_allclose(ds.read(1),value)
+        assert band['calibration']['offset']==-.1
+    with pytest.raises(ValueError):remote_scene.read_scene('sentinel-2-c1-l2a','S2_test_scene',bbox,['invalid'])

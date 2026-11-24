@@ -6,7 +6,7 @@ import math
 from typing import Literal
 
 import numpy as np
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException,Header,Request
 from pydantic import BaseModel,ConfigDict,Field
 from rasterio.io import MemoryFile
 from rasterio.errors import RasterioError
@@ -278,3 +278,20 @@ def run(body:RemoteInput):
     try:return execute(body)
     except (ValueError,TypeError,OverflowError,RuntimeError,OSError,RasterioError,np.linalg.LinAlgError) as e:
         raise HTTPException(422,detail=str(e)) from e
+
+
+class SceneCropInput(BaseModel):
+    model_config=ConfigDict(extra='forbid',allow_inf_nan=False)
+    collection:Literal['sentinel-2-l2a','sentinel-2-c1-l2a']
+    item_id:str=Field(min_length=8,max_length=140)
+    bbox:tuple[float,float,float,float]
+    roles:list[str]=Field(min_length=1,max_length=8)
+
+@router.post('/scene-crop')
+def scene_crop(body:SceneCropInput,request:Request,token:str|None=Header(default=None,alias='X-GeoFathom-Admin-Token')):
+    from imagery.routes import require_raster_import
+    from imagery.remote_scene import read_scene
+    import httpx
+    require_raster_import(request,token)
+    try:return read_scene(body.collection,body.item_id,body.bbox,body.roles)
+    except (ValueError,TypeError,RuntimeError,OSError,RasterioError,httpx.HTTPError) as e:raise HTTPException(422,detail=str(e)) from e
