@@ -1503,7 +1503,7 @@ export default function App() {
             preservePlaceSelection={!!selectedPlace}
             pinnedPlaces={pinnedPlaces.map(place=>({id:place.id,geometry:visibleGeometry(place)}))}
             onSelectPinnedPlace={id=>{const place=pinnedPlaces.find(p=>p.id===id);if(place)void selectPlace(place);}}
-            spatialResults={[...(spatialVisible?spatialResults:[]),...(networkVisible?networkResults:[])]} terrainResults={[...(terrainVisible?terrainFeatures:[]),...(terrainProfileLine?[{type:'Feature' as const,geometry:terrainProfileLine,properties:{name:'Profile measurement line',color:'#d26b2f'}}]:[])]} terrainRasters={[...(terrainVisible?terrainRasters:[]),...(spatialVisible&&spatialRaster?[spatialRaster]:[]),...(remoteVisible&&remoteRaster?[remoteRaster]:[])]}
+            spatialResults={spatialVisible?spatialResults:[]} networkResults={networkVisible?networkResults:[]} terrainResults={[...(terrainVisible?terrainFeatures:[]),...(terrainProfileLine?[{type:'Feature' as const,geometry:terrainProfileLine,properties:{name:'Profile measurement line',color:'#d26b2f'}}]:[])]} terrainRasters={[...(terrainVisible?terrainRasters:[]),...(spatialVisible&&spatialRaster?[spatialRaster]:[]),...(remoteVisible&&remoteRaster?[remoteRaster]:[])]}
             terrainFetchTarget={showTools&&activeTool==='tools-terrain'?terrainFetchTarget:null}
             onTerrainPick={position=>{setTerrainOrigin(position);setTerrainPicking(false);setMessage('Terrain point selected.');}}
             onContextMenu={(x,y)=>setContextMenu({x,y})} onDeselect={deselect}
@@ -2104,7 +2104,7 @@ export default function App() {
 
           <section id="tools-network-science" hidden={activeTool!=='tools-network-science'} className="panel-section">
             <div className="section-heading"><Layers3 size={16}/><span>Network Analysis</span></div>
-            <NetworkSciencePanel key={activeProjectId??'no-project'} active={activeTool==='tools-network-science'} connected={Boolean(capabilities)} resultsTarget={resultsTarget} projectId={activeProjectId} layers={projectWorkspace?.layers??[]} assets={rasterLayers.map(l=>l.asset)} onPreview={features=>{if(projectCurrent()){setNetworkResults(features);setNetworkVisible(true);}}}/>
+            <NetworkSciencePanel key={activeProjectId??'no-project'} active={activeTool==='tools-network-science'} connected={Boolean(capabilities)} resultsTarget={resultsTarget} projectId={activeProjectId} layers={projectWorkspace?.layers??[]} assets={rasterLayers.map(l=>l.asset)} derivedRasters={[...terrainRasters,...(spatialRaster?[spatialRaster]:[]),...(remoteRaster?[remoteRaster]:[])].map(l=>({name:l.title,data:l.raster.geotiff}))} onPreview={features=>{if(projectCurrent()){setNetworkResults(features);setNetworkVisible(true);}}}/>
           </section>
           <section id="tools-remote-sensing" hidden={activeTool!=='tools-remote-sensing'} className="panel-section">
             <div className="section-heading"><Layers3 size={16}/><span>Remote Sensing</span></div>

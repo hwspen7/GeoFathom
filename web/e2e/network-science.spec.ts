@@ -21,4 +21,5 @@ test('network workbench computes a directed route, exports and previews it',asyn
  const download=page.waitForEvent('download');await d.getByRole('button',{name:'GeoJSON',exact:true}).click();
  expect((await download).suggestedFilename()).toBe('network-result.geojson');
  await d.getByRole('button',{name:'Show network results on map'}).click();await expect(d).not.toBeVisible();
+ await expect(page.locator('[data-network-science-feature-count="2"]')).toBeVisible();
 });

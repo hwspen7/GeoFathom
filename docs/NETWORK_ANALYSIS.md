@@ -47,3 +47,5 @@ disconnection, partial geodesic length, supply conservation, seeded Monte
 Carlo, native GeoTIFF calibration and actual scientific rendering. The new
 branch is based on the unmerged remote-sensing development commit, not main;
 the inherited CI has its own outstanding acceptance.
+
+The map uses a separate network result source, numeric graduated symbols for exposure, accessibility, centrality and criticality, and explicit closure colors. Current Terrain, Spatial Analysis and Remote Sensing result rasters can be reused directly as exposure inputs, without exporting and re-uploading them. Display scaling is recorded separately from raw scientific values.

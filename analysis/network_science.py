@@ -362,5 +362,19 @@ def execute(body):
             else:score={s:sum(supply[t]*math.exp(-body.beta*ds[s][t]) for t in destinations if t in ds[s]) for s in origins}
             cols=["origin","accessibility"];rows=[[s,score[s]] for s in origins];features=[node_feature(g,s,accessibility=score[s]) for s in origins]
             plot("Origin accessibility","basic_column","origin","accessibility")
+    # Display styling is separate from raw values and never changes numerical products.
+    field={'harmonic_centrality':'score','betweenness':'score','gravity_access':'accessibility','two_step_fca':'accessibility','edge_criticality':'lost_fraction','hazard_exposure':'mean'}.get(kind)
+    if field:
+        values=[f['properties'][field] for f in features if f['properties'].get(field) is not None]
+        if values:
+            lo,hi=min(values),max(values)
+            for f in features:
+                p=f['properties'];value=p.get(field)
+                if value is None:p['color']='#909090';continue
+                t=(value-lo)/(hi-lo) if hi>lo else .5
+                p['color']='#%02x%02x%02x'%(round(38+165*t),round(117-52*t),round(165-98*t))
+                if f['geometry']['type']=='Point':p['display_radius']=4+5*t
+                else:p['display_width']=2+4*t
+            metrics['display_scale']={'field':field,'minimum':lo,'maximum':hi,'description':'Linear display scale only; raw attribute retained.'}
     receipt={"schema":"geofathom-network-science","operation":kind,"assumption":METHODS[kind][1],"network_sha256":hashlib.sha256(serialized.encode()).hexdigest(),"cost_field":body.cost_field,"cost_unit":body.cost_unit if body.cost_field!="length_m" else "m","nodes":n,"edges":len(g.edges),"directed_arcs":arcs,"parameters":body.model_dump(exclude={"network","raster"}),"metrics":metrics}
     return {"operation":kind,"columns":cols,"rows":rows,"csv":table_csv(cols,rows),"features":{"type":"FeatureCollection","features":features},"figures":figures,"receipt":receipt}
