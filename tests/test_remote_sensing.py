@@ -385,3 +385,35 @@ def test_research_depth_reference(kind):
         else:np.testing.assert_allclose(z,{'series_slope':2,'series_amplitude':5,'series_harmonic_rmse':0}[kind],atol=1e-10)
         assert result['receipt']['metrics']['acquisitions']==12
         assert len(result['rows'])==12
+
+
+def test_windowed_scene_above_inline_budget(tmp_path):
+    import rasterio
+    from imagery.remote_windowed import process
+    from rasterio.transform import from_origin
+    shape=(1501,1503)
+    # 2.25 million cells per band, larger than the inline API ceiling.
+    row,col=np.indices(shape);nir=.3+(col%97)/200;red=.1+(row%53)/200
+    nir[254:258,254:258]=np.nan
+    qa=np.ones(shape);qa[510:514,700:704]=0
+    inputs={}
+    for role,z in [('nir',nir),('red',red),('qa',qa)]:
+        path=tmp_path/(role+'.tif')
+        with rasterio.open(path,'w',driver='GTiff',width=shape[1],height=shape[0],count=1,dtype='float64',crs=CRS,transform=AFF,nodata=np.nan) as ds:ds.write(z,1)
+        inputs[role]={'path':str(path),'band':1}
+    bindings={k:inputs[k] for k in ('nir','red')};quality=[{**inputs['qa'],'scheme':'binary'}]
+    out=tmp_path/'ndvi.tif';receipt=process('ndvi',bindings,out,quality=quality,tile=256)
+    expected=(nir-red)/(nir+red);expected[qa==0]=np.nan
+    with rasterio.open(out) as ds:
+        actual=ds.read(1);assert ds.transform==AFF and ds.crs.to_string()==CRS
+    np.testing.assert_allclose(actual,expected,equal_nan=True,atol=1e-12)
+    assert receipt['valid_cells']==int(np.isfinite(expected).sum()) and receipt['windows']==36
+    assert receipt['sha256']==hashlib.sha256(out.read_bytes()).hexdigest()
+    assert receipt['mean']==pytest.approx(np.nanmean(expected))
+    with pytest.raises(FigureInputError):process('ndvi',bindings,out)
+    # A failure in a late tile cannot leave a partial destination.
+    with rasterio.open(inputs['nir']['path'],'r+') as ds:
+        ds.write(np.array([[100.]]),1,window=rasterio.windows.Window(1500,1500,1,1))
+    bad=tmp_path/'bad.tif'
+    with pytest.raises(FigureInputError):process('ndvi',bindings,bad,quality=quality,tile=256)
+    assert not bad.exists() and not list(tmp_path.glob('.remote-*'))
