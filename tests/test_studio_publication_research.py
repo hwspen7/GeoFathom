@@ -102,3 +102,32 @@ def test_research_lag_uses_observed_ticks_and_nonnegative_extent():
     render_table(q.recipe,q,fig,ax,table,{},['#0072B2'],rows)
     np.testing.assert_array_equal(fig.axes[0].get_xticks(),[0,2,5])
     assert fig.axes[0].get_xlim()[0]==0
+
+
+@pytest.mark.parametrize('kind',['research_vector_map','research_vector_overlay'])
+def test_native_vector_publication_reference(kind):
+    from pyproj import Transformer
+    from terrain.studio_vector import vector_inputs
+    # Construct known native coordinates by inverse projection; rendering
+    # must recover these coordinates rather than approximate a bounding box.
+    xy=Transformer.from_crs(32617,4326,always_xy=True)
+    def coord(x,y):return list(xy.transform(x,y))
+    ring=[coord(x,y) for x,y in [(500002,4499962),(500030,4499962),(500030,4499995),(500002,4499995),(500002,4499962)]]
+    hole=[coord(x,y) for x,y in [(500005,4499970),(500009,4499970),(500009,4499974),(500005,4499974),(500005,4499970)]]
+    def feat(typ,c,val):return {'type':'Feature','geometry':{'type':typ,'coordinates':c},'properties':{'risk':val}}
+    features={'type':'FeatureCollection','features':[feat('Polygon',[ring,hole],2),feat('LineString',[coord(499990,4499980),coord(500060,4499980)],3),feat('Point',coord(500020,4499985),None)]}
+    rows,meta=vector_inputs(features,32617,'risk')
+    assert len(rows[0][1].interiors)==1
+    assert rows[0][1].area==pytest.approx(28*33-16,abs=1e-5)
+    assert rows[1][1].length==pytest.approx(70,abs=1e-5)
+    body=StudioInput(recipe=kind,vector_geojson=features,vector_attribute='risk',vector_epsg=32617,rasters=[raster(np.arange(20.).reshape(4,5),'Risk')] if kind.endswith('overlay') else [])
+    for fmt in ('png','svg','pdf'):
+        data,m,t=render(body.model_copy(update={'format':fmt}));assert data and m['used_count']==3 and m['missing_attribute_count']==1
+        assert m['display_crs']=='EPSG:32617'
+        assert t[1:]==[[1,'Polygon',2.],[2,'LineString',3.],[3,'Point',None]]
+        if fmt=='svg':
+            assert b'<path' in data and b'<text' in data
+            if kind.endswith('overlay'):assert b'<image' in data
+            else:assert b'<image' not in data
+    bad={'type':'FeatureCollection','features':[feat('Point',[999,50],2)]}
+    with pytest.raises(FigureInputError,match='longitude'):vector_inputs(bad,32617,'risk')

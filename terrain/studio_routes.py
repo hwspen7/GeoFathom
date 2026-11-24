@@ -101,7 +101,7 @@ class StudioInput(BaseModel):
         if self.width_mm*self.height_mm*(self.dpi/25.4)**2>20_000_000:raise ValueError('Image exceeds 20 megapixels; reduce dimensions or DPI.')
         if any(not c or len(c)>120 for c in self.columns):raise ValueError('Invalid series column.')
         if self.vector_geojson is not None and len(json.dumps(self.vector_geojson,allow_nan=False).encode())>8_000_000:raise ValueError('Vector source exceeds 8 MB.')
-        if BY_ID[self.recipe][3]=='vector' and self.vector_geojson is None:raise ValueError('Supply GeoJSON vector features.')
+        if BY_ID[self.recipe][3]=='vector' and (self.vector_geojson is None or self.vector_geojson.get('type')!='FeatureCollection' or not isinstance(self.vector_geojson.get('features'),list) or not 1<=len(self.vector_geojson['features'])<=10000):raise ValueError('Supply 1–10,000 GeoJSON features.')
         if BY_ID[self.recipe][3]=='table' and not self.csv.strip():raise ValueError('Supply a CSV table.')
         return self
 
@@ -118,7 +118,7 @@ async def studio_render(body:StudioInput):
         payload,metadata,table=await run_in_threadpool(render,body,grid_sink=grids)
         metadata['figure_sha256']=hashlib.sha256(payload).hexdigest()
         if body.csv:metadata['csv_sha256']=hashlib.sha256(body.csv.encode('utf-8')).hexdigest()
-        metadata.update(schema='geofathom-studio-1',settings=body.model_dump(exclude={'csv','rasters'}))
+        metadata.update(schema='geofathom-studio-1',settings=body.model_dump(exclude={'csv','rasters','vector_geojson'}))
         # Strict JSON serialization catches a broken numerical result before a successful response.
         json.dumps({'metadata':metadata,'table':table},allow_nan=False)
         return {'figure':base64.b64encode(payload).decode('ascii'),

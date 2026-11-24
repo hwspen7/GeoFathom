@@ -20,22 +20,28 @@ def vector_inputs(collection,target,field):
     from shapely.geometry import shape
     from shapely.ops import transform
     from pyproj import CRS,Transformer
+    from pyproj.exceptions import CRSError
+    from shapely.errors import GEOSException
     require(isinstance(collection,dict) and collection.get('type')=='FeatureCollection' and 'crs' not in collection,'Use RFC 7946 WGS84 FeatureCollection without legacy CRS.')
     raw=json.dumps(collection,allow_nan=False,sort_keys=True,separators=(',',':')).encode()
     require(len(raw)<=8_000_000,'Vector source exceeds 8 MB.')
     features=collection.get('features');require(isinstance(features,list) and 1<=len(features)<=10000,'Choose 1–10,000 features.')
-    crs=CRS.from_user_input(target);require(crs.is_projected or crs.is_geographic,'Display CRS must be geographic or projected.')
+    try:crs=CRS.from_user_input(target)
+    except CRSError as e:raise FigureInputError('Invalid display CRS.') from e
+    require(crs.is_projected or crs.is_geographic,'Display CRS must be geographic or projected.')
     projection=Transformer.from_crs('EPSG:4326',crs,always_xy=True)
     records=[];vertices=0
     for i,f in enumerate(features):
         require(isinstance(f,dict) and f.get('type')=='Feature' and isinstance(f.get('geometry'),dict),'Invalid feature geometry.')
-        geom=shape(f['geometry'])
+        try:geom=shape(f['geometry'])
+        except (GEOSException,ValueError,TypeError,KeyError,IndexError) as e:raise FigureInputError('Invalid feature geometry.') from e
         require(not geom.is_empty and geom.is_valid and geom.geom_type in ('Point','MultiPoint','LineString','MultiLineString','Polygon','MultiPolygon'),'Use valid nonempty point, line or polygon geometry.')
         coord=shapely.get_coordinates(geom);vertices+=len(coord)
         require(vertices<=250000 and np.isfinite(coord).all(),'Invalid coordinates or vertex budget exceeded.')
         require(np.all(abs(coord[:,0])<=180) and np.all(abs(coord[:,1])<=90),'GeoJSON coordinates must be longitude/latitude.')
         require(geom.bounds[2]-geom.bounds[0]<=180,'Split antimeridian-crossing geometries before drawing.')
-        g=transform(projection.transform,geom)
+        try:g=transform(projection.transform,geom)
+        except (GEOSException,ValueError,TypeError) as e:raise FigureInputError('Geometry projection failed.') from e
         require(g.is_valid and not g.is_empty and np.isfinite(shapely.get_coordinates(g)).all(),'Geometry invalid in chosen display CRS.')
         props=f.get('properties') or {};require(isinstance(props,dict),'Feature properties must be an object.')
         val=props.get(field) if field else None
