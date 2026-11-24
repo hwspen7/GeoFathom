@@ -5,6 +5,7 @@ import math
 import threading
 import numpy as np
 from .studio_catalog import BY_ID, NOTES, OPTIONS, MIN_RASTERS
+from .studio_domain_catalog import IDS as DOMAIN_IDS
 from .studio_data import (Table, read_grids, aligned_grids, normalized, pareto_mask, average_rank,
                           regular_series, rectangular_grid, linear_fit, sobol_indices, morris_effects,
                           FigureInputError)
@@ -40,7 +41,7 @@ def render(req, container=None, panel_label=''):
     table=Table(req.csv) if source=='table' else None
     grids=read_grids(req.rasters) if source=='raster' else []
     if grids:_require(len(grids)>=MIN_RASTERS.get(kind,1),'Select the required number of rasters.')
-    if grids and kind not in {'raster_matrix','raster_uncertainty','raster_exceedance','raster_difference','raster_significant_change','raster_profile'}:_require(len(grids)==1,'This recipe requires exactly one raster.')
+    if grids and kind not in DOMAIN_IDS and kind not in {'raster_matrix','raster_uncertainty','raster_exceedance','raster_difference','raster_significant_change','raster_profile'}:_require(len(grids)==1,'This recipe requires exactly one raster.')
     if source=='raster':_require(bool(grids),'Select GeoTIFF input.')
     count=len(table.rows) if table else int(np.isfinite(grids[0].values).sum())
     meta={'recipe':kind,'method_note':NOTES.get(kind,''),'input_count':count,'used_count':count,
@@ -73,7 +74,22 @@ def render(req, container=None, panel_label=''):
         is3d=(kind=='response_surface' and req.response_style=='surface') or kind in {'terrain_surface','terrain_wireframe','scatter_3d'}
         ax=fig.add_subplot(111,projection='3d' if is3d else 'polar' if kind=='radar' else None)
         xlabel=req.x or '';ylabel=req.y or ''
-        if kind in {'multi_line','grouped_bar','stacked_bar'}:
+        if kind in DOMAIN_IDS:
+            if source=='raster':
+                from .studio_domain_raster import render_raster_domain
+                if MIN_RASTERS.get(kind,1)==1:_require(len(grids)==1,'Select exactly one raster for this recipe.')
+                derived=render_raster_domain(kind,req,fig,ax,grids,parameter,meta,cmap)
+            else:
+                from .studio_domain_table import render_table_domain
+                derived=render_table_domain(kind,req,fig,ax,table,parameter,meta,palette,cmap,rows)
+            # Domain renderers specify labels for the computed quantities.
+            # Respect explicit overrides on the surviving primary axes.
+            if ax in fig.axes:
+                if req.x_label:ax.set_xlabel(req.x_label)
+                if req.y_label:ax.set_ylabel(req.y_label)
+                if source=='table' and ax.name!='polar':ax.grid(req.grid,alpha=.16)
+            ax=None
+        elif kind in {'multi_line','grouped_bar','stacked_bar'}:
             _require(2<=len(req.columns)<=12,'Choose two to twelve series.')
             if kind=='multi_line':
                 if req.profile_style=='series':

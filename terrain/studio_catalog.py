@@ -1,7 +1,6 @@
 """Scientific figure recipes and explicit input requirements.
 
-The legacy terrain gallery supplies 24 recipes; this catalog contains 51
-additional workflows. A recipe is never enabled without its required data.
+The native terrain gallery supplies 24 data-dependent quick recipes; this catalog adds 12 basic and 168 professional recipes. A recipe is never enabled without its required data.
 """
 # ID, display name, family, source type, required field bindings.
 RECIPES = (
@@ -58,6 +57,8 @@ RECIPES = (
     ('scatter_3d','Three-dimensional point scatter','3D','table','x y z'),
     ('raster_profile','Aligned raster transect profiles','Terrain','raster','x y'),
 )
+from .studio_domain_catalog import ALL as DOMAIN_RECIPES, BASIC_IDS, OPTIONS as DOMAIN_OPTIONS, MIN_RASTERS as DOMAIN_MIN_RASTERS, NOTES as DOMAIN_NOTES
+RECIPES = RECIPES + DOMAIN_RECIPES
 BY_ID = {item[0]:item for item in RECIPES}
 OPTIONS = {
     'rolling_mean': ('Window (samples)', 5, 2, 1000),
@@ -102,7 +103,11 @@ NOTES = {
     'terrain_wireframe':'Regular-grid visualization, decimated only for rendering.',
     'raster_profile':'Supply a path coordinate CSV in the exact projected raster CRS. Samples native pixels without interpolation; preserves NoData gaps.',
 }
+OPTIONS.update(DOMAIN_OPTIONS)
+MIN_RASTERS.update(DOMAIN_MIN_RASTERS)
+NOTES.update(DOMAIN_NOTES)
+
 def catalog():
     return [{'id':i,'title':t,'family':f,'source':s,'fields':r.split(),
              'note':NOTES.get(i,''),'option':OPTIONS.get(i),
-             'minimum_rasters':MIN_RASTERS.get(i,1)} for i,t,f,s,r in RECIPES]
+             'minimum_rasters':MIN_RASTERS.get(i,1),'tier':'basic' if i in BASIC_IDS else 'professional'} for i,t,f,s,r in RECIPES]

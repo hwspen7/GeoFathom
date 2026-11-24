@@ -75,7 +75,9 @@ class StudioInput(BaseModel):
 
 @router.get('/catalog')
 def studio_catalog():
-    return {'legacy_recipe_count':24,'additional_recipe_count':len(BY_ID),'recipes':catalog()}
+    entries=catalog()
+    basic=sum(r['tier']=='basic' for r in entries)
+    return {'legacy_recipe_count':24,'additional_recipe_count':len(entries),'basic_recipe_count':24+basic,'professional_recipe_count':len(entries)-basic,'recipes':entries}
 
 @router.post('/render')
 async def studio_render(body:StudioInput):

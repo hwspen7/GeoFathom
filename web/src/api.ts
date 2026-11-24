@@ -1215,13 +1215,13 @@ export async function exportFigurePDF(scene:unknown):Promise<Blob>{
  if(!response.ok)throw await responseError(response);return response.blob();
 }
 
-export interface StudioRecipe {id:string;title:string;family:string;source:'table'|'raster';fields:string[];note:string;option:[string,number,number,number]|null;minimum_rasters:number}
+export interface StudioRecipe {id:string;title:string;family:string;source:'table'|'raster';fields:string[];note:string;option:[string,number,number,number]|null;minimum_rasters:number;tier?:'basic'|'professional'}
 export interface StudioRaster {name:string;data:string;unit:string}
 export interface StudioInput {recipe:string;csv:string;rasters:StudioRaster[];x:string;y:string;z:string;group:string;low:string;high:string;columns:string[];
  title:string;x_label:string;y_label:string;parameter:number|null;maximize_x:boolean;maximize_y:boolean;palette:'mono'|'color'|'earth';font:'sans'|'serif';font_size:number;grid:boolean;width_mm:number;height_mm:number;dpi:120|300|600;format:'png'|'pdf'|'svg'|'tiff';
  response_style?:'heatmap'|'filled'|'contour'|'surface';contour_levels?:number;show_values?:boolean;show_points?:boolean;optimum?:'none'|'min'|'max';profile_style?:'series'|'overlay'|'delta'|'bands';map_style?:'continuous'|'diverging'|'categorical';map_columns?:number|null;map_common_mask?:boolean;map_min?:number|null;map_max?:number|null;class_breaks?:number[];line_width?:number;legend_position?:'best'|'upper left'|'upper right'|'lower left'|'lower right'|'center left'|'center right'}
 export interface StudioOutput {figure:string;media_type:string;metadata:Record<string,unknown>;table:Array<Array<string|number|null>>}
-export function getStudioCatalog(signal?:AbortSignal):Promise<{legacy_recipe_count:number;additional_recipe_count:number;recipes:StudioRecipe[]}>{return request('/terrain/studio/catalog',{signal});}
+export function getStudioCatalog(signal?:AbortSignal):Promise<{legacy_recipe_count:number;additional_recipe_count:number;basic_recipe_count?:number;professional_recipe_count?:number;recipes:StudioRecipe[]}>{return request('/terrain/studio/catalog',{signal});}
 export function renderStudio(body:StudioInput,signal?:AbortSignal):Promise<StudioOutput>{return request('/terrain/studio/render',{method:'POST',signal,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});}
 
 export function getStudioRasterTable(rasters:StudioRaster[],signal?:AbortSignal):Promise<{csv:string;metadata:Record<string,unknown>}>{return request('/terrain/studio/raster-table',{method:'POST',signal,headers:{'Content-Type':'application/json'},body:JSON.stringify({rasters})});}

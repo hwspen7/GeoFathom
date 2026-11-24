@@ -70,7 +70,10 @@ def table_input(recipe):
 
 @pytest.mark.parametrize('recipe',list(BY_ID))
 def test_every_recipe_renders_actual_data(recipe,raster_fixture):
-    if BY_ID[recipe][3]=='table':
+    from terrain.studio_domain_catalog import IDS
+    if recipe in IDS:
+        body=domain_input(recipe,raster_fixture)
+    elif BY_ID[recipe][3]=='table':
         body=table_input(recipe)
     else:
         rasters,classes=raster_fixture
@@ -112,8 +115,8 @@ def test_every_recipe_renders_actual_data(recipe,raster_fixture):
 
 
 def test_catalog_count_and_unique_recipes():
-    assert len(RECIPES)==len(BY_ID)==len(catalog())==52
-    assert len({r['title'] for r in catalog()})==52
+    assert len(RECIPES)==len(BY_ID)==len(catalog())==180
+    assert len({r['title'] for r in catalog()})==180
 
 
 @pytest.mark.parametrize('fmt,magic',[('svg',b'<?xml'),('pdf',b'%PDF'),('tiff',b'II*\x00')])
@@ -169,7 +172,8 @@ def test_api_catalog_render_metadata_and_validation():
     with TestClient(app) as client:
         response=client.get('/terrain/studio/catalog')
         assert response.status_code==200
-        assert response.json()['additional_recipe_count']+response.json()['legacy_recipe_count']==76
+        assert response.json()['additional_recipe_count']+response.json()['legacy_recipe_count']==204
+        assert response.json()['basic_recipe_count']==36 and response.json()['professional_recipe_count']==168
         response=client.post('/terrain/studio/render',json=table_input('pareto').model_dump())
         assert response.status_code==200,response.text
         result=response.json()
@@ -286,3 +290,82 @@ def test_missing_global_design_and_regular_series_rejected():
         render(StudioInput(recipe='sobol',csv='A,B,H\n1,2,3\n2,,4\n3,4,5',x='A',y='B',columns=['H']))
     with pytest.raises(FigureInputError,match='every observation'):
         render(StudioInput(recipe='rolling_mean',csv='x,y\n0,1\n1,\n2,3\n3,4',x='x',y='y',parameter=2))
+
+
+def domain_input(recipe,raster_fixture):
+    """Numerical inputs cover every new domain recipe without fabricated runtime data."""
+    from terrain.studio_domain_catalog import MIN_RASTERS
+    if BY_ID[recipe][3]=='raster':
+        rasters,classes=raster_fixture
+        yy,xx=np.indices((12,14))
+        if recipe.startswith('spectral_'):
+            bands=[grid('NIR',.42+.008*xx+.004*yy,unit='reflectance'),
+                   grid('Red',.16+.004*xx+.001*yy,unit='reflectance'),
+                   grid('Blue',.08+.001*xx+.003*yy,unit='reflectance')]
+            selected=bands[:MIN_RASTERS.get(recipe,2)]
+        elif recipe.startswith('land_'):
+            selected=[classes,grid('Later classes',(xx+yy+(xx>6))%4,unit='class')][:MIN_RASTERS.get(recipe,1)]
+        else:selected=rasters[:MIN_RASTERS.get(recipe,1)]
+        return StudioInput(recipe=recipe,rasters=selected,width_mm=115,height_mm=90)
+    values=[]
+    for i in range(24):
+        v=5+i*.2+math.sin(i*.8)
+        values.append([i+1,'Scenario '+str(i),['North','South'][i%2],v,2+i*.3+math.cos(i*.47),1+i%5,
+                       i%2,int(i%3==0),.15+.7*(i%2)+.03*math.sin(i),.2+.008*i,.3+.005*i+.015*math.sin(i)])
+    headers=['time','name','group','value','other','size','truth','predicted','probability','reflectance_a','reflectance_b']
+    args=dict(recipe=recipe,csv=csv_text(headers,values),x='time',y='value',z='other',group='group',
+              columns=['value','other'],width_mm=115,height_mm=90)
+    if recipe in {'basic_column','basic_waterfall','basic_paired_change','basic_pareto_frequency','basic_table_heatmap','opt_regret'}:args['x']='name'
+    if recipe.startswith('spectral_'):
+        args.update(y='reflectance_a',columns=['reflectance_a','reflectance_b'])
+    if recipe in {'model_roc','model_pr','model_threshold','model_gain','model_lift','model_calibration'}:args.update(x='truth',y='probability')
+    if recipe in {'model_confusion','model_class_metrics'}:args.update(x='truth',y='predicted')
+    if recipe=='opt_interaction':
+        args.update(csv=csv_text(['a','b','response'],[(i,j,i*i+j*i) for i in range(4) for j in range(3)]),x='a',y='b',z='response')
+    if recipe=='hydro_flashiness':
+        args.update(csv=csv_text(['time','discharge','period'],[(i,2+math.sin(i),j) for j in ['A','B'] for i in range(8)]),x='time',y='discharge',group='period')
+    return StudioInput(**args)
+
+
+def test_domain_numeric_oracles():
+    from terrain.studio_domain_model import binary_curve,pca,domination_counts
+    from terrain.studio_domain_raster import local_moments,patch_labels,safe_ratio
+    from terrain.studio_domain_table import ranks
+    y=np.array([0.,1.,0.,1.]);s=np.array([.1,.9,.2,.8])
+    _,tp,fp,p,n=binary_curve(y,s)
+    assert p==n==2 and tp.tolist()==[0,1,2,2,2] and fp.tolist()==[0,0,0,1,2]
+    assert ranks(np.array([2.,1.,2.])).tolist()==[2.5,1.,2.5]
+    m=np.array([[1.,2.],[2.,4.],[3.,6.]])
+    score,eig,load=pca(m)
+    assert eig[0]==pytest.approx(2.) and eig[1]==pytest.approx(0.,abs=1e-12)
+    assert domination_counts(np.array([[1.,2.,3.],[2.,3.,4.],[0.,4.,2.],[1.,2.,3.]])).tolist()==[0,2,0,0]
+    z=np.arange(9,dtype=float).reshape(3,3)
+    mean,sd,span,rms,count=local_moments(z)
+    assert mean[1,1]==4 and sd[1,1]==pytest.approx(np.sqrt(5))
+    assert span[1,1]==6 and count[1,1]==4 and rms[1,1]==pytest.approx(np.sqrt(5))
+    labels,sizes,codes=patch_labels(np.array([[1.,1.,2.],[2.,1.,2.],[2.,2.,np.nan]]))
+    assert sorted(sizes.tolist())==[2,3,3]
+    assert np.isnan(safe_ratio(np.array([1.]),np.array([0.]))[0])
+
+
+def test_domain_actual_values(raster_fixture):
+    ndvi=domain_input('spectral_ndvi',raster_fixture)
+    _,meta,_=render(ndvi)
+    yy,xx=np.indices((12,14))
+    nir=(.42+.008*xx+.004*yy).astype(np.float32).astype(float)
+    red=(.16+.004*xx+.001*yy).astype(np.float32).astype(float)
+    assert meta['mean']==pytest.approx(float(np.mean((nir-red)/(nir+red))))
+    _,meta,table=render(StudioInput(recipe='model_roc',csv='truth,score\n0,.1\n1,.8\n0,.2\n1,.9',x='truth',y='score'))
+    assert meta['auc']==pytest.approx(1)
+    _,_,table=render(StudioInput(recipe='hydro_mass',csv='seconds,flow\n0,2\n10,4\n20,4',x='seconds',y='flow'))
+    assert table[-1]==[20.,70.]
+    _,_,table=render(StudioInput(recipe='basic_waterfall',csv='step,value\nA,10\nB,-3\nC,1',x='step',y='value'))
+    assert [r[-1] for r in table[1:]]==[10.,7.,8.]
+
+
+def test_domain_recipe_counts_and_tiers():
+    from terrain.studio_domain_catalog import BASIC,PROFESSIONAL
+    assert len(BASIC)==12 and len(PROFESSIONAL)==116
+    entries=catalog()
+    assert sum(r['tier']=='professional' for r in entries)==168
+    assert sum(r['tier']=='basic' for r in entries)==12
