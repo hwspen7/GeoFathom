@@ -521,3 +521,21 @@ def test_basic_new_numeric_outputs():
     assert table[1:]==[[1,5.],[2,2.],[3,1.]]
     _,_,table=render(StudioInput(recipe='basic_group_summary',csv='g,v\na,1\na,3\nb,5',group='g',y='v'))
     assert table[1][2]==2 and table[1][3]==pytest.approx(np.sqrt(2)) and table[2][3] is None
+
+
+def test_kriging_predictions_preserve_observations_and_distance_limit():
+    from terrain.studio_geostatistics import predict_missing_grid
+    z=np.array([[1.,2.,3.,np.nan],[1.,np.nan,3.,np.nan],[1.,2.,3.,np.nan]])
+    fit={'model':'exponential','nugget':0.,'partial_sill':2.,'scale_m':2.}
+    out,sd,mask=predict_missing_grid(z,np.array([0.,1.,2.,10.]),np.arange(3.),fit,8,2)
+    assert mask.sum()==1 and np.isfinite(sd[1,1]) and np.isfinite(out[1,1])
+    assert np.array_equal(out[np.isfinite(z)],z[np.isfinite(z)]) and np.isnan(out[:,3]).all()
+
+
+def test_spatial_buffer_excludes_nearby_training_observations():
+    from terrain.studio_calibrated_models import block_regression
+    coords=np.array([(i*100,j*100) for i in range(8) for j in range(8)],float)
+    x=coords/100;y=3+x[:,0]*2-x[:,1]
+    pred,fold,report=block_regression(coords,x,y,200,3,0,101)
+    assert np.allclose(pred,y) and sum(f['buffer_excluded'] for f in report['folds'])>0
+    assert report['buffer_m']==101

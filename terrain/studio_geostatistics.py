@@ -97,3 +97,25 @@ def correlated_noise(rng,shape,dx,dy,length,sigma):
     transformed*=np.fft.rfft(kx,n=fx)[None,:]
     full=np.fft.irfft2(transformed,s=(fy,fx))
     return sigma*full[len(ky)-1:len(ky)-1+h,len(kx)-1:len(kx)-1+w].copy()
+
+
+def predict_missing_grid(grid,east,north,fit,neighbors,max_distance):
+    """Bounded ordinary kriging of explicitly requested NoData cells only.
+    Existing observations are never overwritten. No prediction is made outside
+    the maximum distance to the nearest observation.
+    """
+    z=np.asarray(grid,float);valid=np.isfinite(z);missing=~valid
+    require(valid.sum()>=3 and missing.any(),'Prediction requires observed cells and missing target cells.')
+    require(missing.sum()<=2000 and valid.sum()<=50000 and int(missing.sum())*int(valid.sum())<=20_000_000,
+            'Kriging prediction exceeds bounded target/source budget; select a smaller raster.')
+    yy,xx=np.nonzero(valid);points=np.column_stack((east[xx],north[yy]));values=z[valid]
+    result=z.copy();sd=np.full_like(z,np.nan);predicted=np.zeros(z.shape,bool)
+    for row,col in zip(*np.nonzero(missing)):
+        target=np.array([east[col],north[row]])
+        dist=np.linalg.norm(points-target,axis=1)
+        if dist.min()>max_distance:continue
+        nearest=np.argsort(dist,kind='stable')[:neighbors]
+        estimate,var=ordinary_kriging(points[nearest],values[nearest],target,fit,neighbors)
+        result[row,col]=estimate;sd[row,col]=np.sqrt(var);predicted[row,col]=True
+    require(predicted.any(),'No missing cells within the maximum prediction distance.')
+    return result,sd,predicted

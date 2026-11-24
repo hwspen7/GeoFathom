@@ -48,7 +48,8 @@ class StudioInput(BaseModel):
     dpi:Literal[120,300,600]=120
     format:Literal['png','pdf','svg','tiff']='png'
     variogram_model:Literal['none','exponential','gaussian','spherical']='none'
-    variogram_view:Literal['fit','kriging_validation']='fit'
+    variogram_view:Literal['fit','kriging_validation','kriging_prediction','kriging_sd']='fit'
+    kriging_max_distance_m:float=Field(default=500,gt=0,le=100000)
     kriging_neighbors:int=Field(default=24,ge=3,le=48)
     spectral_mode:Literal['angle','abundance','reconstruction_error']='angle'
     endmember_csv:str=Field(default='',max_length=20000)
@@ -57,6 +58,7 @@ class StudioInput(BaseModel):
     training_fraction:float=Field(default=.7,ge=.5,le=.85)
     model_validation:Literal['recorded','spatial_blocks']='recorded'
     block_size_m:float=Field(default=100,gt=0,le=1000000)
+    validation_buffer_m:float=Field(default=0,ge=0,le=1000000)
     validation_folds:int=Field(default=5,ge=3,le=10)
     ridge_penalty:float=Field(default=1,ge=0,le=1000000)
     point_mode:Literal['planar','voxel']='planar'

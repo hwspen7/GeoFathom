@@ -203,3 +203,5 @@ Research analysis includes a Global sensitivity page. Bounded Sobol and Morris d
 The studio also accepts individually selected bands from multi-band GeoTIFFs, applies recorded scale/offset before numerical analysis, records band indices with source hashes, and exposes a source inspection panel for CSV missingness, raster dimensions, CRS, valid pixels and exact alignment. Aligned raster-to-table conversion can now combine different physical quantities (for example elevation and slope) while arithmetic raster comparisons still require identical units. Strict JSON serialization is checked for every extended recipe in its actual render test.
 
 The catalog now contains 40 basic figures (24 native and 16 table figures) and 168 professional recipes. The new basic figures calculate rank-size, Lorenz share/Gini, baseline indices and group mean/sample SD from observations.
+
+Ordinary kriging has bounded explicit NoData prediction and conditional SD outputs; observed cells are preserved, and extrapolation is distance-limited. Spatial regression supports an exact metric buffer excluding nearby training observations from held-out folds.

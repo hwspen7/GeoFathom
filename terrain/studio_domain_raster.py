@@ -233,7 +233,7 @@ def render_raster_domain(kind,req,fig,ax,grids,parameter,meta,cmap,grid_sink=Non
                 if selected:ax.plot([r[1] for r in selected],[r[3] for r in selected],marker='o',label=direction)
             ax.legend(frameon=False);ax.set(xlabel='Lag (m)',ylabel={'spatial_variogram':'Semivariance','spatial_covariogram':'Covariance','spatial_correlogram':'Correlation'}[kind]);derived.extend([['direction','lag_m','pairs','statistic'],*map(list,rows)])
             if kind=='spatial_variogram' and req.variogram_model!='none':
-                from .studio_geostatistics import fit_variogram,semivariance,leave_one_out
+                from .studio_geostatistics import fit_variogram,semivariance,leave_one_out,predict_missing_grid
                 fit=fit_variogram([r[1] for r in rows],[r[3] for r in rows],[r[2] for r in rows],req.variogram_model)
                 meta['variogram_fit']=fit
                 meta['method_note']='Pooled isotropic covariance fit to cardinal directional empirical lags, weighted by pair counts. Assumes stationary residuals; inspect directional differences before inference.'
@@ -243,6 +243,12 @@ def render_raster_domain(kind,req,fig,ax,grids,parameter,meta,cmap,grid_sink=Non
                     ax.legend(frameon=False)
                     derived[0].append('fitted_semivariance')
                     for row in derived[1:]:row.append(float(semivariance(row[1],fit['model'],fit['nugget'],fit['partial_sill'],fit['scale_m'])))
+                elif req.variogram_view in {'kriging_prediction','kriging_sd'}:
+                    east,north=g.axes;prediction,sd,mask=predict_missing_grid(z,east,north,fit,req.kriging_neighbors,req.kriging_max_distance_m)
+                    ax.clear();out=prediction if req.variogram_view=='kriging_prediction' else sd
+                    show(out,'Observed + predicted ('+unit+')' if req.variogram_view=='kriging_prediction' else 'Conditional prediction SD ('+unit+')',output_unit=g.unit)
+                    meta.update(input_count=int(z.size),predicted_cells=int(mask.sum()),remaining_missing_cells=int((~np.isfinite(prediction)).sum()),max_prediction_distance_m=req.kriging_max_distance_m,method_note='Explicit NoData gap prediction, including exterior NoData if within maximum distance. Model-conditioned SD excludes covariance-fit uncertainty. Observed cells unchanged.')
+                    yy,xx=np.nonzero(mask);save(['easting','northing','prediction','conditional_sd'],east[xx],north[yy],prediction[mask],sd[mask])
                 else:
                     indices=np.flatnonzero(np.isfinite(z));stride=max(1,int(np.ceil(len(indices)/240)));indices=indices[::stride]
                     yy,xx=np.unravel_index(indices,z.shape);east,north=g.axes

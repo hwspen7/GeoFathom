@@ -133,13 +133,13 @@ def render_model(kind,req,fig,ax,table,parameter,meta,palette,cmap,rows):
             require(len(set([req.x,req.y,req.z,*req.columns]))==3+len(req.columns),'Coordinates, target and regression features must be distinct.')
             a,_=rows([req.x,req.y,req.z,*req.columns]);x,y,z,*features=a
             require(len(x)==len(table.rows),'Spatial regression requires complete observations.')
-            pred,fold,diagnostics=block_regression(np.column_stack((x,y)),np.column_stack(features),z,req.block_size_m,req.validation_folds,req.ridge_penalty)
+            pred,fold,diagnostics=block_regression(np.column_stack((x,y)),np.column_stack(features),z,req.block_size_m,req.validation_folds,req.ridge_penalty,req.validation_buffer_m)
             residual=pred-z
             im=ax.scatter(z,pred,c=fold,cmap='tab10',s=16,alpha=.75,vmin=.5,vmax=req.validation_folds+.5)
             fig.colorbar(im,ax=ax,label='Held-out fold',ticks=np.arange(1,req.validation_folds+1))
             lo=min(z.min(),pred.min());hi=max(z.max(),pred.max());ax.plot([lo,hi],[lo,hi],'--',color='#555555')
             setxy('Observed target','Out-of-fold prediction');meta['spatial_validation']=diagnostics
-            meta['method_note']='Ridge/OLS with fold-local feature scaling; whole spatial blocks held out. Coordinates must be projected metres. Adjacent blocks can remain dependent.'
+            meta['method_note']='Ridge/OLS with fold-local feature scaling; whole spatial blocks held out. Coordinates must be projected metres. Optional buffer excludes nearby training points; external-site validation is not implied.'
             save(['easting','northing','observed','prediction','residual','held_out_fold'],x,y,z,pred,residual,fold)
         else:
             x,y,z=xyz();order=np.argsort(x);x,y,z=x[order],y[order],z[order];require(np.all(np.diff(x)>0),'Training sizes must be unique.')

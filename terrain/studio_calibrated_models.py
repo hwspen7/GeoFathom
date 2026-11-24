@@ -83,7 +83,7 @@ def calibrate_reservoir(rain,flow,train_fraction):
                 'training':flow_metrics(flow[:n],q[:n]),'validation':flow_metrics(flow[n:],q[n:]),
                 'mass_balance_error':float(c*rain.sum()-q.sum()-s[-1])}
 
-def block_regression(coords,features,target,block_size,folds,alpha):
+def block_regression(coords,features,target,block_size,folds,alpha,buffer_m=0):
     """Spatially grouped held-out ridge regression; fold-local standardization."""
     coords,features,target=map(lambda v:np.asarray(v,float),(coords,features,target))
     n=len(target);require(12<=n<=20000 and features.ndim==2 and 1<=features.shape[1]<=12 and coords.shape==(n,2),
@@ -101,6 +101,14 @@ def block_regression(coords,features,target,block_size,folds,alpha):
     fold=assignment[ids];pred=np.full(n,np.nan);metrics=[]
     for k in range(folds):
         test=fold==k;train=~test
+        excluded=0
+        if buffer_m>0:
+            # Exact Euclidean separation, bounded blocks of pair distances.
+            train_ids=np.flatnonzero(train);test_coords=coords[test]
+            require(len(train_ids)*len(test_coords)<=40_000_000,'Buffered fold exceeds pair-distance budget.')
+            for start in range(0,len(train_ids),128):
+                ids_batch=train_ids[start:start+128];delta=coords[ids_batch,None,:]-test_coords[None,:,:]
+                near=np.any(np.sum(delta*delta,axis=2)<buffer_m**2,axis=1);train[ids_batch[near]]=False;excluded+=int(near.sum())
         require(int(train.sum())>features.shape[1]+1,'Insufficient training observations for selected features.')
         x=features[train];mean=x.mean(axis=0);std=x.std(axis=0);std[std==0]=1
         design=(x-mean)/std;y=target[train];center=y.mean()
@@ -108,9 +116,9 @@ def block_regression(coords,features,target,block_size,folds,alpha):
         else:coef=np.linalg.solve(design.T@design+alpha*np.eye(x.shape[1]),design.T@(y-center))
         pred[test]=center+(features[test]-mean)/std@coef
         metrics.append({'fold':k+1,'training_count':int(train.sum()),'validation_count':int(test.sum()),
-                        'validation_blocks':int((assignment==k).sum()),**flow_metrics(target[test],pred[test])})
+                        'validation_blocks':int((assignment==k).sum()),'buffer_excluded':excluded,**flow_metrics(target[test],pred[test])})
     return pred,fold+1,{'block_size_m':block_size,'blocks':len(unique),'folds':metrics,'overall':flow_metrics(target,pred),
-                        'ridge_penalty':alpha,'warning':'Entire spatial blocks are held out. Adjacent blocks may still be spatially correlated; no buffer or external-site validation is implied.'}
+                        'ridge_penalty':alpha,'buffer_m':buffer_m,'warning':'Entire spatial blocks are held out; training observations within the requested buffer are excluded. External-site validation is not implied.'}
 
 def voxel_counts(x,y,z,size):
     """Sparse occupied voxel counts with explicit origin and half-open bins."""
