@@ -61,3 +61,6 @@ Cloud/shadow candidates now also support projected single-height solar geometry,
 
 ## Analysis-ready STAC radiometry
 The separate STAC NDVI extraction path now applies per-band raster-extension v1/v2 scale and offset or explicitly nonidentity native GeoTIFF calibration. Conflicting metadata and Earth Search already-applied-offset flags are rejected rather than guessed. The STAC path shares the conservative SCL 4/5/6 clear mask. The regression verifies a nonzero offset changes the actual classified area. See https://github.com/Element84/earth-search/blob/main/docs/collections/sentinel-2-l2a.md and https://github.com/stac-extensions/raster .
+
+## Focused analysis-ready research extensions
+110 methods include covariance-aware two-sensor generalized least squares fusion, its standard uncertainty and standardized discrepancy; conditional Beer-Lambert gap-derived LAI and PAR absorption proxy; and reproducible K-means plus standardized residual distance. The canopy models require independent gap fraction, extinction and clumping inputs and are not stand-alone optical LAI/FPAR product retrieval. Fusion requires aligned unbiased measurements of the same quantity and consistent units. Clusters are not land-cover truth. Each method has a mandatory mathematical reference test.

@@ -10,6 +10,7 @@ from imagery.remote_catalog import BY_ID
 
 def expected_tests():
     groups={
+        'test_fusion_biophysical_reference':'fusion_gls fusion_gls_sd fusion_discrepancy canopy_lai canopy_fpar_proxy spectral_kmeans spectral_kmeans_distance',
         'test_cloud_shadow_reference':'cloud_shadow_candidates cloud_shadow_clear',
         'test_sar_complex_cloud_reference':'sar_calibrated_power insar_wrapped_phase insar_coherence cloud_candidates',
         'test_nested_spatial_reference':'spatial_nested_svm',

@@ -15,6 +15,7 @@ from analysis.science_raster import require
 from analysis.science_routes import raster_product,raster_preview,csv_output
 from analysis.science_figures import figure_sources,csv_text
 from .remote_catalog import BY_ID,catalog,SERIES_IDS,HYPER_IDS
+from .remote_fusion import fusion,canopy,unsupervised
 from .remote_sar_complex import complex_products,calibrated_power,cloud_candidates,cloud_shadow
 from .remote_temporal_models import seasonal_metrics,segmented_means
 from .remote_hyperspectral import continuum_features
@@ -176,6 +177,11 @@ def execute(body):
     elif kind=='calibrated_reflectance':out=v['band']
     elif kind=='ndvi_change':out=nd(v['nir_after'],v['red_after'])-nd(v['nir_before'],v['red_before'])
     elif kind=='dnbr':out=nd(v['nir_before'],v['swir_before'])-nd(v['nir_after'],v['swir_after'])
+    elif kind in {'fusion_gls','fusion_gls_sd','fusion_discrepancy'}:
+        require(all(np.all(z[np.isfinite(z)]>0) for z in (v['first_sd'],v['second_sd'])),'Fusion standard deviations must be positive.')
+        out,meta=fusion(v,params,kind)
+    elif kind in {'canopy_lai','canopy_fpar_proxy'}:out,meta=canopy(v,params,kind)
+    elif kind in {'spectral_kmeans','spectral_kmeans_distance'}:out,headers,rows,meta=unsupervised(v,params,kind)
     elif kind=='atmospheric_reflectance':out,meta=atmospheric_reflectance(v)
     elif kind=='robust_harmonization':out,meta=robust_harmonization(v,params)
     elif kind=='irmad':out,headers,rows,meta=irmad(v,params)
@@ -276,6 +282,9 @@ def execute(body):
     if kind=='spatial_nested_svm':
         add('Nested spatial outer-fold accuracy','basic_column',{'x':'fold','y':'accuracy'})
         add('Nested spatial selected C','basic_column',{'x':'fold','y':'selected_c'})
+    if kind in {'spectral_kmeans','spectral_kmeans_distance'}:
+        add('Spectral cluster population','basic_column',{'x':'cluster','y':'cells'})
+        for i,row in enumerate(rows):add('Cluster '+str(i+1)+' mean spectrum','basic_line',{'x':'band','y':'reflectance'},csv_text(['band','reflectance'],[[j+1,z] for j,z in enumerate(row[2:])]))
     if kind=='pca':add('PCA explained variance','basic_column',{'x':'component','y':'explained_fraction'})
     if kind=='transition_matrix':add('Transition area by class pair','basic_column',{'x':'transition','y':'area_m2'},csv_text(['transition','area_m2'],[[str(a)+' → '+str(b),area] for a,b,_,area,_ in rows]) ) if len(rows)<=50 else None
     if kind in SERIES_IDS and any(row[2] is not None for row in rows):add('Acquisition mean time series','basic_line',{'x':'time','y':'mean'})

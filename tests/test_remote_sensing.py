@@ -189,7 +189,7 @@ def test_remote_invalid_inputs_and_recovery():
         response=client.post('/analysis/remote-sensing/run',json=bad);assert response.status_code==422,response.text
     response=client.post('/analysis/remote-sensing/run',json=good);assert response.status_code==200,response.text
     np.testing.assert_allclose(grid(response.json()),.5)
-    assert client.get('/analysis/remote-sensing/catalog').json()['operation_count']==len(BY_ID)==103
+    assert client.get('/analysis/remote-sensing/catalog').json()['operation_count']==len(BY_ID)==110
 
 def test_temporal_independent_quality_masks():
     # Cloud at one date does not erase the other valid acquisitions.
@@ -709,3 +709,25 @@ def test_cloud_shadow_reference(kind):
         assert out[3,3]==1 and out[3,5]==0 and np.nansum(out)==1
     else:
         assert out[3,3]==0 and out[3,5]==0 and out[3,2]==1 and np.count_nonzero(out==0)==2
+
+
+@pytest.mark.parametrize('kind',['fusion_gls','fusion_gls_sd','fusion_discrepancy','canopy_lai','canopy_fpar_proxy','spectral_kmeans','spectral_kmeans_distance'])
+def test_fusion_biophysical_reference(kind):
+    if kind.startswith('fusion_'):
+        a={r:constant(v) for r,v in [('first',10),('second',14),('first_sd',2),('second_sd',3)]}
+        rho=.4;cov=np.array([[4,6*rho],[6*rho,9]]);inverse=np.linalg.inv(cov);ones=np.ones(2)
+        expected={'fusion_gls':(ones@inverse@np.array([10,14]))/(ones@inverse@ones),'fusion_gls_sd':np.sqrt(1/(ones@inverse@ones)),
+                  'fusion_discrepancy':4/np.sqrt(13-12*rho)}[kind]
+        np.testing.assert_allclose(grid(run(kind,a,{'correlation':rho})),expected,atol=1e-12)
+        a['first_sd'][0,0]=0
+        with pytest.raises(FigureInputError,match='positive'):run(kind,a)
+    elif kind.startswith('canopy_'):
+        lai=np.linspace(0,5,12).reshape(3,4);gap=np.exp(-.6*.8*lai)
+        params={'extinction':.6,'clumping':.8,'par_extinction':.7}
+        np.testing.assert_allclose(grid(run(kind,{'gap':gap},params)),lai if kind=='canopy_lai' else 1-np.exp(-.7*.8*lai),atol=1e-12)
+    else:
+        labels=np.repeat([1,2,3],16).reshape(6,8);x=labels*.2
+        a={r:x.copy() for r in ('blue','green','red','nir')}
+        r=run(kind,a,{'clusters':3,'seed':12})
+        np.testing.assert_allclose(grid(r),labels if kind=='spectral_kmeans' else 0,atol=1e-12)
+        assert [row[1] for row in r['rows']]==[16,16,16]

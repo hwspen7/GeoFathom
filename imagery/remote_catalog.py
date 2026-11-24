@@ -35,7 +35,18 @@ SEASON=(p('period','Season period (time units)',365,.0001,1e6),p('season_fractio
 SEGMENT=(p('min_segment','Minimum observations per segment',3,2,16,True),p('penalty','SSE penalty per breakpoint',.05,1e-12,1e100))
 COMPLEX=(('master_real','numeric'),('master_imag','numeric'),('slave_real','numeric'),('slave_imag','numeric'))
 SHADOW=(p('solar_zenith','Solar zenith (degrees)',30,0,85),p('solar_azimuth','Solar azimuth (grid degrees)',135,0,360),p('cloud_height_m','Cloud height above ground (m)',1000,0,20000),p('dark_nir','Maximum dark-land NIR',.15,0,1))
+FUSION=numeric('first','second','first_sd','second_sd')
+FUSION_P=(p('correlation','Error correlation',0,-.999,.999),)
+CANOPY=(p('extinction','Directional extinction coefficient',.5,.001,10),p('clumping','Clumping factor',1,.001,1),p('par_extinction','PAR extinction coefficient',.5,.001,10))
+CLUSTER=(p('clusters','Number of clusters',4,2,16,True),p('iterations','Maximum iterations',100,10,300,True),p('seed','Random seed',42,0,2147483647,True))
 METHODS=(
+m('fusion_gls','Fusion','Covariance-aware multi-sensor fusion',FUSION,'source','Two aligned observations of same quantity and supplied standard deviations; correlated GLS.',FUSION_P),
+m('fusion_gls_sd','Fusion','Fused estimate standard uncertainty',FUSION,'source','Conditional GLS uncertainty; supplied errors and correlation.',FUSION_P),
+m('fusion_discrepancy','Fusion','Standardized inter-sensor discrepancy',FUSION,'index','Signed difference normalized by propagated difference uncertainty; not a calibrated p-value.',FUSION_P),
+m('canopy_lai','Biophysical','Effective canopy LAI from gap fraction',(('gap','fraction'),),'m2/m2','Beer-Lambert directional gap inversion with externally supplied extinction and clumping; no automatic optical LAI retrieval.',CANOPY),
+m('canopy_fpar_proxy','Biophysical','Conditional canopy PAR absorption proxy',(('gap','fraction'),),'fraction','Gap-derived LAI and supplied PAR extinction, ignores scattering and background absorption.',CANOPY),
+m('spectral_kmeans','Classification','Unsupervised standardized spectral K-means',SPECTRUM,'class','Deterministic seeded cluster fitting on complete spectra; cluster IDs are not semantic classes.',CLUSTER),
+m('spectral_kmeans_distance','Classification','Spectral cluster residual distance',SPECTRUM,'index','Standardized distance to nearest fitted cluster center; not calibrated anomaly probability.',CLUSTER),
 m('cloud_shadow_candidates','Quality','Geometric dark-land cloud-shadow candidates',(('cloud','class'),('nir','reflectance'),('land','class')),'class','Cloud mask 1=candidate, land mask 1=land; supplied cloud height and solar geometry, 1=shadow candidate.',SHADOW),
 m('cloud_shadow_clear','Quality','Candidate cloud/shadow clear mask',(('cloud','class'),('nir','reflectance'),('land','class')),'class','Cloud mask 1=candidate, land mask 1=land; output 1=retain, 0=cloud or projected dark-land shadow candidate.',SHADOW),
 m('sar_calibrated_power','Radar','LUT-based SAR amplitude power calibration',(('amplitude','numeric'),('gain','positive_gain'),('noise','power')),'linear_power','Supplied interpolated amplitude gain and calibrated noise power; explicit convention, not mission metadata parsing.'),
