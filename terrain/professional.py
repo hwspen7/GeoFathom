@@ -494,7 +494,7 @@ def surface(z,valid,affine,crs,operation,reference,point,end_point,max_slope,
         elif operation=="flow_accumulation":values=accum
         elif operation=="stream_order":
             from .multiflow import strahler_orders,shreve_magnitudes
-            if not 1<=stream_cells<=current_limits().global_cells:
+            if not 1<=stream_cells<=max(1_000_000,current_limits().global_cells):
                 raise RasterError("Invalid stream accumulation threshold.")
             values=(strahler_orders if stream_order_scheme=="strahler" else shreve_magnitudes)(
                 dst,valid&(accum>=stream_cells),cancel)

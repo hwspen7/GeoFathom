@@ -593,7 +593,7 @@ export type TerrainComputePolicy = {
 export type TerrainComputeLimits = Omit<TerrainComputePolicy,'mode'|'memory_percent'> & {memory_bytes:number;native_slope_cells:number};
 export interface TerrainComputeStatus {
   policy:TerrainComputePolicy;hardware:{total_bytes:number;available_bytes:number;logical_cpus:number;scratch_free_bytes:number};
-  effective:TerrainComputeLimits;active_tasks:number;queued_tasks:number;scope:string;terrain_gpu:string;memory_protection:string;
+  effective:TerrainComputeLimits;active_tasks:number;queued_tasks:number;reserved_bytes?:number;scope:string;terrain_gpu:string;memory_protection:string;
 }
 export function getTerrainComputeResources(signal?:AbortSignal):Promise<TerrainComputeStatus>{
   return request('/terrain/resources',{signal});

@@ -128,7 +128,7 @@ class AdvancedTerrainInput(BaseModel):
     min_elevation:float=Field(default=-12000,ge=-12000,le=12000)
     max_elevation:float=Field(default=12000,ge=-12000,le=12000)
     max_tri:float=Field(default=100,ge=0,le=100000)
-    stream_cells:int=Field(default=100,ge=1,le=1000000)
+    stream_cells:int=Field(default=100,ge=1,le=8000000)
     azimuth:float=Field(default=315,ge=0,le=360)
     altitude:float=Field(default=45,ge=0,le=90)
     section_spacing:float=Field(default=50,ge=1,le=10000)

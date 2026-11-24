@@ -41,6 +41,7 @@ export default function ComputingResources(){
    <small>Backend CPU: {status.hardware.logical_cpus} logical cores · RAM: {gb(status.hardware.total_bytes)}</small>
    <small>Available: {gb(status.hardware.available_bytes)} · Disk: {gb(status.hardware.scratch_free_bytes)}</small>
    <small>Active tasks: {status.active_tasks} · Queued: {status.queued_tasks}</small>
+   {status.reserved_bytes!==undefined&&<small>Reserved: {gb(status.reserved_bytes)}</small>}
    <label>Mode <select aria-label="Compute resource mode" value={draft.mode} onChange={event=>setDraft({...draft,mode:event.target.value as TerrainComputePolicy['mode']})}>
     <option value="automatic">Automatic</option><option value="manual">Manual</option>
    </select></label>
@@ -56,7 +57,7 @@ export default function ComputingResources(){
    <small>Per task: {gb(e.memory_bytes)} · {e.concurrent_tasks} concurrent · {e.tile_size} px tile</small>
    <table aria-label="Effective terrain cell limits"><tbody>{groups.map(([key,label])=><tr key={key}><th scope="row">{label}</th><td>{n(e[key])}</td></tr>)}
     <tr><th scope="row">Viewshed extent</th><td>{n(e.viewshed_distance_m)} m</td></tr><tr><th scope="row">Ray samples</th><td>{n(e.ray_samples)}</td></tr></tbody></table>
-   <small>CPU terrain engine · memory admission estimate · full-grid ceilings remain.</small>
+   <small>CPU terrain engine · cooperative memory protection · full-grid ceilings remain.</small>
    <button type="submit" disabled={busy}>Apply resources</button><button type="button" disabled={busy} onClick={()=>void refresh()}>Refresh hardware</button>
    {saved&&<small role="status">Resource settings saved.</small>}
   </form>}

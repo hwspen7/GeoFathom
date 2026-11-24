@@ -8,13 +8,13 @@ out-of-core implementations exist.
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import asdict, dataclass
-import json
 import math
 import os
 from pathlib import Path
 import shutil
+import time
 from threading import RLock, Condition
-from .cancellation import checkpoint
+from .cancellation import checkpoint, runtime_guard
 from uuid import uuid4
 
 import psutil
@@ -88,6 +88,7 @@ _active: ContextVar[Limits | None] = ContextVar("terrain_compute_limits", defaul
 _lock = RLock()
 _running = 0
 _waiting = 0
+_reserved = 0
 _condition = Condition(_lock)
 
 
@@ -183,7 +184,7 @@ def detect_host():
     return Host(total, available, max(1, _cgroup_cpus(cpus)), int(shutil.disk_usage(path).free))
 
 
-def resolve_limits(policy, host):
+def resolve_limits(policy, host, reserved=0):
     manual = policy.mode == "manual"
     concurrency = min(host.logical_cpus, policy.concurrent_tasks if manual else 2)
     concurrency = max(1, concurrency)
@@ -191,7 +192,7 @@ def resolve_limits(policy, host):
     # Reserve host headroom and divide the aggregate budget among admitted tasks.
     aggregate = min(host.total_bytes*percent//100, host.available_bytes*3//4,
                     64*GiB)
-    budget = max(0, aggregate//concurrency)
+    budget = max(0, min(aggregate//concurrency, aggregate-reserved))
     # At least 128 MiB is required for the API, GDAL and minimum tile working set.
     usable = max(0, budget-128*MiB)
     tile_ceiling = math.isqrt(usable//256) - 2
@@ -223,7 +224,7 @@ def active_limits():
 
 @contextmanager
 def task_resources(cancel=None):
-    global _running, _waiting
+    global _running, _waiting, _reserved
     with _condition:
         if _waiting >= 16:
             raise ResourceBusy("Terrain task queue is full.")
@@ -231,22 +232,36 @@ def task_resources(cancel=None):
         try:
             while True:
                 checkpoint(cancel)
-                limits = resolve_limits(load_policy(), detect_host())
-                if not limits.tile_size:
+                limits = resolve_limits(load_policy(), detect_host(), _reserved)
+                if not limits.tile_size and not _running:
                     raise ResourceBusy("Insufficient available terrain memory. Free memory or reduce concurrent tasks.")
-                if _running < limits.concurrent_tasks:
+                if limits.tile_size and _running < limits.concurrent_tasks:
                     _running += 1
+                    _reserved += limits.memory_bytes
                     break
                 _condition.wait(timeout=.1)
         finally:
             _waiting -= 1
     token = _active.set(limits)
+    last_check = 0.
+    def guard():
+        nonlocal last_check
+        now=time.monotonic()
+        if now-last_check<.5:return
+        last_check=now
+        host=detect_host()
+        if host.available_bytes<128*MiB:
+            raise ResourceBusy("Terrain calculation stopped at a safe checkpoint because host memory is critically low.")
+    guard_token=runtime_guard.set(guard)
     try:
+        checkpoint(cancel)
         yield limits
     finally:
+        runtime_guard.reset(guard_token)
         _active.reset(token)
         with _condition:
             _running -= 1
+            _reserved -= limits.memory_bytes
             _condition.notify_all()
 
 
@@ -254,9 +269,9 @@ def resource_status():
     with _lock:
         policy = load_policy()
         host = detect_host()
-        limits = resolve_limits(policy, host)
+        limits = resolve_limits(policy, host, _reserved)
         return {"policy": policy.model_dump(), "hardware": asdict(host),
-                "effective": asdict(limits), "active_tasks": _running, "queued_tasks": _waiting,
+                "effective": asdict(limits), "active_tasks": _running, "queued_tasks": _waiting, "reserved_bytes": _reserved,
                 "scope": "local_backend_process",
                 "terrain_gpu": "not_available",
-                "memory_protection": "estimated_admission_not_os_enforcement"}
+                "memory_protection": "admission_and_cooperative_pressure_guard"}

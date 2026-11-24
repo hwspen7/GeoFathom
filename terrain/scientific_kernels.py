@@ -260,7 +260,7 @@ def mesh_lod_tiles(z,valid,dx,dy,tile_cells=32,levels=(1,2,4,8),cancel=None):
     This supplies a mesh pyramid, not a claim of browser GPU streaming.
     Every coarse tile uses the same grid origin and preserves boundary nodes.
     """
-    z,valid=_validated(z,valid,dx,dy,active_limits().surface_cells if active_limits() else 8_000_000)
+    z,valid=_validated(z,valid,dx,dy,8_000_000)
     if tile_cells not in (16,32,64) or not levels or tuple(levels)!=tuple(sorted(set(levels))) or any(
         not isinstance(step,int) or step<1 or step&(step-1) for step in levels):
         raise RasterError("LOD tile steps must be sorted powers of two.")
