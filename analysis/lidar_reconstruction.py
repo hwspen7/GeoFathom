@@ -2,7 +2,7 @@
 import numpy as np
 from scipy.ndimage import gaussian_filter, map_coordinates
 
-def poisson_grid(points,k,spacing):
+def poisson_grid(points,k,spacing,*,screen_weight=0.,iterations=100,tolerance=1e-5):
     """Padded uniform-grid Poisson approximation for closed star-shaped samples."""
     try:
         from skimage.measure import marching_cubes
@@ -43,6 +43,42 @@ def poisson_grid(points,k,spacing):
     rhs=np.fft.fftn(div);lap[0,0,0]=1;rhs[0,0,0]=0
     indicator=np.fft.ifftn(rhs/lap).real
     level=float(np.median(map_coordinates(indicator,pos.T,order=1,mode="nearest")))
+    screen_info={}
+    if screen_weight>0:
+        from scipy.sparse import coo_matrix
+        from scipy.sparse.linalg import LinearOperator,cg
+        if not .001<=screen_weight<=100 or np.prod(shape)>300000:
+            raise ValueError("Screened Poisson requires weight 0.001–100 and at most 300,000 cells.")
+        # S contains the actual trilinear point evaluation operator. Minimize
+        # gradient energy plus lambda * ||S u - level||^2, in grid units.
+        rows=[];cols=[];values=[]
+        for a in (0,1):
+            for b in (0,1):
+                for c in (0,1):
+                    bit=np.array([a,b,c]);idx=base+bit
+                    rows.append(np.arange(len(p)));cols.append(np.ravel_multi_index(idx.T,shape))
+                    values.append(np.prod(np.where(bit,fraction,1-fraction),axis=1))
+        S=coo_matrix((np.concatenate(values),(np.concatenate(rows),np.concatenate(cols))),shape=(len(p),int(np.prod(shape)))).tocsr()
+        ST=S.T.tocsr();w=screen_weight/spacing**2
+        target=np.full(len(p),level)
+        initial=indicator.ravel()
+        before=float(np.sqrt(np.mean((S@initial-target)**2)))
+        def apply(u):
+            g=u.reshape(shape)
+            laplace=sum((2*g-np.roll(g,1,axis=i)-np.roll(g,-1,axis=i))/spacing**2 for i in range(3))
+            return laplace.ravel()+w*(ST@(S@u))
+        op=LinearOperator((len(initial),len(initial)),matvec=apply,dtype=float)
+        diagonal=6/spacing**2+w*np.asarray(S.power(2).sum(axis=0)).ravel()
+        pre=LinearOperator(op.shape,matvec=lambda x:x/diagonal,dtype=float)
+        rhs=-div.ravel()+w*(ST@target)
+        residual=[]
+        solution,info=cg(op,rhs,x0=initial,M=pre,rtol=tolerance,atol=0,maxiter=iterations,
+                         callback=lambda x:residual.append(float(np.linalg.norm(apply(x)-rhs))))
+        if info<0 or not np.isfinite(solution).all():raise ValueError("Screened Poisson solve failed.")
+        indicator=solution.reshape(shape)
+        screen_info={"screen_weight":screen_weight,"screen_converged":info==0,"screen_iterations":len(residual),
+            "relative_residual":float(np.linalg.norm(apply(solution)-rhs)/max(np.linalg.norm(rhs),1e-30)),
+            "unscreened_sample_rmse":before,"screened_sample_rmse":float(np.sqrt(np.mean((S@solution-target)**2)))}
     if not indicator.min()<level<indicator.max():
         raise ValueError("No supported Poisson isosurface.")
     vertices,faces,_,_=marching_cubes(indicator.astype(np.float32),level=level,spacing=(spacing,)*3,allow_degenerate=False)
@@ -60,7 +96,7 @@ def poisson_grid(points,k,spacing):
         "vertices":len(vertices),"triangles":len(faces),"surface_area_m2":float(area.sum()),
         "boundary_edges":int((count==1).sum()),"nonmanifold_edges":int((count>2).sum()),
         "normal_support":int(good.sum()),"grid_shape":shape.tolist(),"grid_spacing_m":spacing,
-        "iso_level":level,"assumption":"closed approximately star-shaped surface; centroid-oriented normals"}
+        "iso_level":level,**screen_info,"assumption":"closed approximately star-shaped surface; centroid-oriented normals"}
 
 def progressive_tin(p,size,radius,threshold):
     """Coarse-to-fine lower-envelope TIN densification; no extrapolation."""

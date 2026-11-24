@@ -22,6 +22,7 @@ def run(operation: str, epsg: int, vertical_datum: str = Query(min_length=1,max_
         trim_fraction: float = Query(.8,ge=.5,le=1), max_iterations: int = Query(60,ge=1,le=100),
         tolerance: float = Query(1e-5,ge=1e-9,le=1), registration_sigma: float = Query(.05,ge=0,le=1e6),
         min_neighbors: int = Query(5,ge=3,le=1000), threshold: float = Query(3.5,ge=0,le=1e6),
+        horizontal_sigma: float = Query(.03,ge=0,le=1e6), vertical_sigma: float = Query(.05,ge=0,le=1e6),
         cloud: UploadFile = File(...), reference: UploadFile | None = File(None)):
     try:
         crs = metric_crs(epsg)
@@ -48,10 +49,10 @@ def run(operation: str, epsg: int, vertical_datum: str = Query(min_length=1,max_
             p,source=load(cloud)
             q,ref=load(reference) if reference else (None,None)
             result=analyze(operation,p,q,k=k,size=size,radius=radius,max_edge=max_edge,trim_fraction=trim_fraction,max_iterations=max_iterations,
-                tolerance=tolerance,registration_sigma=registration_sigma,min_neighbors=min_neighbors,threshold=threshold)
+                tolerance=tolerance,registration_sigma=registration_sigma,min_neighbors=min_neighbors,threshold=threshold,horizontal_sigma=horizontal_sigma,vertical_sigma=vertical_sigma)
         result["receipt"] = {"schema":"geofathom-lidar-1","horizontal_crs":crs,
             "vertical_datum":vertical_datum.strip(),"vertical_unit":"m","crs_assignment":"operator supplied; no reprojection or datum transformation",
-            "source":source,"reference":ref,"parameters":{"k":k,"size_m":size,"radius_m":radius,"max_edge_m":max_edge,"trim_fraction":trim_fraction,"max_iterations":max_iterations,"tolerance_m":tolerance,"registration_sigma_m":registration_sigma,"min_neighbors":min_neighbors,"threshold":threshold},
+            "source":source,"reference":ref,"parameters":{"k":k,"size_m":size,"radius_m":radius,"max_edge_m":max_edge,"trim_fraction":trim_fraction,"max_iterations":max_iterations,"tolerance_m":tolerance,"registration_sigma_m":registration_sigma,"min_neighbors":min_neighbors,"threshold":threshold,"horizontal_sigma_m":horizontal_sigma,"vertical_sigma_m":vertical_sigma},
             "result_sha256":hashlib.sha256(result["csv"].encode()).hexdigest(),
             "figure_sampling":"evenly spaced result rows, maximum 10000"}
         raster_fields={"surface_change":"delta_z_m","correlated_change":"delta_z_m","canopy_structure":"p95_m","canopy_watershed":"canopy_height_m","canopy_complexity":"height_entropy","building_candidates":"height_m"}

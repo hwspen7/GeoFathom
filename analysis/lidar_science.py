@@ -22,9 +22,13 @@ from .lidar_inference import feature_registration, clustered_normal_change, cano
 
 from .lidar_structures import cloth_filter, canopy_complexity, building_candidates
 
+from .lidar_covariance import covariance_change
+
 MAX_POINTS = 100_000
 MAX_BYTES = 16 * 1024 * 1024
 METHODS = {
+    "screened_poisson": ("Screened uniform-grid Poisson", "Trilinear point constraints and preconditioned conjugate gradient; closed star-shaped input."),
+    "covariance_change": ("Anisotropic covariance change", "Instrument covariance floor, PCA normal uncertainty propagation and conditional BY correction."),
     "cloth_filter": ("Cloth membrane ground filtering", "CSF-inspired inverted obstacle and damped membrane relaxation; not canonical CSF."),
     "canopy_complexity": ("Canopy vertical complexity", "Ground-normalized return entropy, effective layers and occupied voxel volume; not LAD."),
     "building_candidates": ("Planar roof footprint metrics", "Ground-normalized planar candidates, observed area, perimeter and height-volume proxy."),
@@ -197,7 +201,7 @@ def _serialize(columns, table):
     return out.getvalue(), figure.getvalue(), [row(r) for r in table[:100]]
 
 def analyze(operation, p, reference=None, *, k=16, size=1., radius=2., max_edge=10., trim_fraction=.8, max_iterations=60, tolerance=1e-5,
-            registration_sigma=.05, min_neighbors=5, threshold=3.5):
+            registration_sigma=.05, min_neighbors=5, threshold=3.5, horizontal_sigma=.03, vertical_sigma=.05):
     if operation not in METHODS:
         raise ValueError("Unknown point-cloud operation.")
     if not 3 <= k <= 64 or not all(np.isfinite(v) and .001 <= v <= 1e6 for v in (size,radius,max_edge)):
@@ -211,10 +215,18 @@ def analyze(operation, p, reference=None, *, k=16, size=1., radius=2., max_edge=
     metrics = {"input_points":len(p)}
     if not (np.isfinite(threshold) and 0 <= threshold <= 1e6 and np.isfinite(registration_sigma) and 0 <= registration_sigma <= 1e6 and 3 <= min_neighbors <= 1000):
         raise ValueError("Invalid diagnostic or uncertainty parameters.")
-    if operation in ("cloud_distance","surface_change","ground_height","rigid_registration","normal_change","canopy_structure","point_plane_icp","crown_candidates","correlated_change","coarse_pca","generalized_icp","feature_registration","clustered_normal_change","canopy_watershed","canopy_complexity","building_candidates") and reference is None:
+    if operation in ("cloud_distance","surface_change","ground_height","rigid_registration","normal_change","canopy_structure","point_plane_icp","crown_candidates","correlated_change","coarse_pca","generalized_icp","feature_registration","clustered_normal_change","canopy_watershed","canopy_complexity","building_candidates","covariance_change") and reference is None:
         raise ValueError("This method needs a reference cloud in the same CRS and vertical datum.")
     if operation == "stream_voxels":
         raise ValueError("Streaming operation requires the file-backed endpoint.")
+    elif operation == "covariance_change":
+        if not all(np.isfinite(x) and 0<=x<=1e6 for x in (horizontal_sigma,vertical_sigma)):
+            raise ValueError("Invalid instrumental uncertainty.")
+        _,inverse,counts=_groups(reference,size,3)
+        cores=np.column_stack([np.bincount(inverse,weights=reference[:,i])/counts for i in range(3)])
+        table,info=covariance_change(p,reference,cores,k,radius,max_edge,horizontal_sigma,vertical_sigma,registration_sigma,min_neighbors)
+        columns += ["normal_x","normal_y","normal_z","current_count","reference_count","signed_change_m","mean_variance_m2","normal_variance_m2","standard_error_m","lod95_m","p_value","normal_angular_sd_rad","q_by"]
+        metrics.update(info)
     elif operation == "cloth_filter":
         table,info=cloth_filter(p,size,radius,threshold,max_iterations,tolerance)
         columns += ["ground_z_m","height_m","ground_flag"]
@@ -262,10 +274,10 @@ def analyze(operation, p, reference=None, *, k=16, size=1., radius=2., max_edge=
         table,info=method(p,size,radius,threshold)
         columns += ["ground_z_m","height_m","ground_flag"]
         metrics.update(info)
-    elif operation in ("tin_mesh","alpha_boundary","poisson_grid"):
+    elif operation in ("tin_mesh","alpha_boundary","poisson_grid","screened_poisson"):
         if operation=="tin_mesh":table,info=tin_mesh(p,max_edge)
         elif operation=="alpha_boundary":table,info=alpha_boundary(p,radius)
-        else:table,info=poisson_grid(p,k,size)
+        else:table,info=poisson_grid(p,k,size,screen_weight=threshold if operation=='screened_poisson' else 0.,iterations=max_iterations,tolerance=tolerance)
         columns=[f"{axis}{i}_m" for i in (1,2,3) for axis in ("x","y","z")]+["surface_area_m2"]
         if operation=="tin_mesh":columns+=["projected_area_m2"]
         metrics.update(info)
@@ -354,7 +366,7 @@ def analyze(operation, p, reference=None, *, k=16, size=1., radius=2., max_edge=
     data, figure, rows = _serialize(columns,table)
     result = {"operation":operation,"columns":columns,"rows":rows,"row_count":len(table),"csv":data,"figure_csv":figure,
             "metrics":metrics,"assumption":METHODS[operation][1]}
-    if operation in ("tin_mesh","alpha_boundary","poisson_grid"):
+    if operation in ("tin_mesh","alpha_boundary","poisson_grid","screened_poisson"):
         from .lidar_exports import mesh_obj
         result["mesh_obj"]=mesh_obj(table)
     return result
