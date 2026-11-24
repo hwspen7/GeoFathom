@@ -1227,7 +1227,8 @@ export function renderStudio(body:StudioInput,signal?:AbortSignal):Promise<Studi
 export function getStudioRasterTable(rasters:StudioRaster[],signal?:AbortSignal):Promise<{csv:string;metadata:Record<string,unknown>}>{return request('/terrain/studio/raster-table',{method:'POST',signal,headers:{'Content-Type':'application/json'},body:JSON.stringify({rasters})});}
 
 export interface StudioLegacyPanel {scene:Omit<import('./figureLibrary').FigureScene,'note'|'error'>;table:Array<Array<string|number|null>>;provenance:Record<string,unknown>}
-export interface StudioComposition {panels:Array<StudioInput|StudioLegacyPanel>;title:string;caption:string;columns:number;width_mm:number;height_mm:number;dpi:120|300|600;format:StudioInput['format'];spacing:number}
+export interface StudioPanelSlot {row:number;column:number;row_span:number;column_span:number}
+export interface StudioComposition {slots?:StudioPanelSlot[];row_weights?:number[];column_weights?:number[];panels:Array<StudioInput|StudioLegacyPanel>;title:string;caption:string;columns:number;width_mm:number;height_mm:number;dpi:120|300|600;format:StudioInput['format'];spacing:number}
 export function composeStudio(body:StudioComposition,signal?:AbortSignal):Promise<StudioOutput>{return request('/terrain/studio/compose',{method:'POST',signal,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});}
 
 export interface GlobalSensitivityInput {base:ResearchExperiment['base'];method:'sobol'|'morris'|'pareto';factors:Array<{name:string;minimum:number;maximum:number}>;metric:string;second_metric?:string;samples:number;seed:number;expected_source_sha256?:string}

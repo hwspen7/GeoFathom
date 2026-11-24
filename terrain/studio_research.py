@@ -133,7 +133,7 @@ def render_raster(kind,req,fig,ax,grids,meta):
         meta.update(valid_cells=int(len(v)),nodata_cells=int(z.size-len(v)),median=float(np.median(v)))
         return numeric_rows(['lower_edge','upper_edge','cells'],edges[:-1],edges[1:],counts)
     require(len(grids)==2,'Select exactly two rasters.')
-    stack,common=aligned_grids(grids, same_unit=kind!='research_map_bivariate')
+    stack,common=aligned_grids(grids, require_same_unit=kind!='research_map_bivariate')
     x,y=stack[:,common];meta.update(used_count=int(common.sum()),common_valid_cells=int(common.sum()))
     if kind=='research_map_bivariate':
         cuts=[np.quantile(v,[1/3,2/3]) for v in (x,y)];require(all(v[0]<v[1] for v in cuts),'Distinct tertile breaks required.')

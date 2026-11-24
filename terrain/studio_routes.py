@@ -143,9 +143,16 @@ class LegacyPanel(BaseModel):
     table:list[list[str|float|None]]=Field(default_factory=list,max_length=20001)
     provenance:dict=Field(default_factory=dict)
 
+class PanelSlot(BaseModel):
+    model_config=ConfigDict(extra='forbid')
+    row:int=Field(ge=0,le=5)
+    column:int=Field(ge=0,le=5)
+    row_span:int=Field(default=1,ge=1,le=6)
+    column_span:int=Field(default=1,ge=1,le=6)
+
 class CompositionInput(BaseModel):
     model_config=ConfigDict(extra='forbid',allow_inf_nan=False)
-    panels:list[StudioInput|LegacyPanel]=Field(min_length=2,max_length=6)
+    panels:list[StudioInput|LegacyPanel]=Field(min_length=2,max_length=12)
     title:str=Field(default='',max_length=200)
     caption:str=Field(default='',max_length=600)
     columns:int=Field(default=2,ge=1,le=3)
@@ -154,6 +161,9 @@ class CompositionInput(BaseModel):
     dpi:Literal[120,300,600]=120
     format:Literal['png','pdf','svg','tiff']='png'
     spacing:float=Field(default=.06,ge=.02,le=.2)
+    slots:list[PanelSlot]=Field(default_factory=list,max_length=12)
+    row_weights:list[float]=Field(default_factory=list,max_length=6)
+    column_weights:list[float]=Field(default_factory=list,max_length=6)
 
     @model_validator(mode='after')
     def budget(self):
@@ -161,10 +171,27 @@ class CompositionInput(BaseModel):
             raise ValueError('Composition data exceeds payload limit.')
         if self.width_mm*self.height_mm*(self.dpi/25.4)**2>45_000_000:
             raise ValueError('Composition exceeds 45 megapixels.')
-        if self.columns>len(self.panels):raise ValueError('Column count exceeds panel count.')
-        if self.width_mm/self.columns<65 or self.height_mm/math.ceil(len(self.panels)/self.columns)<45:
-            raise ValueError('Panels are too small; increase figure dimensions or change layout.')
+        slots=self.layout_slots()
+        nr=max(s.row+s.row_span for s in slots);nc=max(s.column+s.column_span for s in slots)
+        if nr>6 or nc>6:raise ValueError('Layout extends beyond six rows or columns.')
+        if len(slots)!=len(self.panels):raise ValueError('Provide one layout slot per panel.')
+        seen=set()
+        for s in slots:
+            cells={(r,c) for r in range(s.row,s.row+s.row_span) for c in range(s.column,s.column+s.column_span)}
+            if seen&cells:raise ValueError('Panel slots overlap.')
+            seen|=cells
+        rw=self.row_weights or [1.]*nr;cw=self.column_weights or [1.]*nc
+        if len(rw)!=nr or len(cw)!=nc or any(not math.isfinite(v) or not .2<=v<=5 for v in rw+cw):raise ValueError('Supply positive bounded weights for each layout row and column.')
+        available_height=self.height_mm*(.81 if self.caption else 1)
+        for s in slots:
+            if self.width_mm*sum(cw[s.column:s.column+s.column_span])/sum(cw)<55 or available_height*sum(rw[s.row:s.row+s.row_span])/sum(rw)<40:
+                raise ValueError('Panels are too small; increase dimensions, merge cells or adjust weights.')
         return self
+
+    def layout_slots(self):
+        if self.slots:return self.slots
+        if self.columns>len(self.panels):raise ValueError('Column count exceeds panel count.')
+        return [PanelSlot(row=i//self.columns,column=i%self.columns) for i in range(len(self.panels))]
 
 def render_composition(body):
     import io
@@ -177,7 +204,7 @@ def render_composition(body):
     with LOCK,rc_context({'pdf.fonttype':42,'svg.fonttype':'none','font.family':'sans-serif','font.size':9}):
         fig=Figure(figsize=(body.width_mm/25.4,body.height_mm/25.4),layout='constrained',facecolor='white')
         FigureCanvasAgg(fig)
-        nrows=math.ceil(len(body.panels)/body.columns)
+        slots=body.layout_slots();nrows=max(s.row+s.row_span for s in slots);ncols=max(s.column+s.column_span for s in slots)
         # Subfigures share the parent canvas: plots, ticks and text remain vectors.
         # Reserve a real caption row rather than drawing across the data panels.
         if body.caption:
@@ -185,14 +212,15 @@ def render_composition(body):
             top=fig.add_subfigure(gs[0]);bottom=fig.add_subplot(gs[1]);bottom.axis('off')
             bottom.text(.01,.92,textwrap.fill(body.caption,width=max(36,int(body.width_mm/1.4))),ha='left',va='top',transform=bottom.transAxes,fontsize=8)
         else:top=fig
-        containers=top.subfigures(nrows,body.columns,squeeze=False,wspace=body.spacing,hspace=body.spacing)
+        gs=top.add_gridspec(nrows,ncols,height_ratios=body.row_weights or None,width_ratios=body.column_weights or None,wspace=body.spacing,hspace=body.spacing)
+        containers=[top.add_subfigure(gs[s.row:s.row+s.row_span,s.column:s.column+s.column_span]) for s in slots]
         receipts=[]
         for i,panel in enumerate(body.panels):
             if isinstance(panel,LegacyPanel):
-                draw_legacy_panel(containers.flat[i],panel.scene,f'({chr(97+i)})')
+                draw_legacy_panel(containers[i],panel.scene,f'({chr(97+i)})')
                 meta={'recipe':'native_vector_figure','title':panel.scene.title,'provenance':panel.provenance};table=panel.table
             else:
-                _,meta,table=render(panel,container=containers.flat[i],panel_label=f'({chr(97+i)}) ')
+                _,meta,table=render(panel,container=containers[i],panel_label=f'({chr(97+i)}) ')
                 meta['csv_sha256']=hashlib.sha256(panel.csv.encode()).hexdigest() if panel.csv else None
             receipts.append({'label':chr(97+i),'metadata':meta,'table':table})
         if body.title:fig.suptitle(publication_title(body.title,body.width_mm,12),fontsize=12,fontweight='medium')
@@ -201,7 +229,7 @@ def render_composition(body):
         if body.format=='tiff':fig.savefig(buf,format='tiff',dpi=body.dpi,pil_kwargs={'compression':'tiff_lzw'})
         else:fig.savefig(buf,format=body.format,dpi=body.dpi)
         fig.clear()
-        return buf.getvalue(),{'schema':'geofathom-composition-1','layout':layout,'panel_count':len(receipts),'panels':receipts}
+        return buf.getvalue(),{'schema':'geofathom-composition-1','layout':layout,'panel_count':len(receipts),'slots':[s.model_dump() for s in slots],'row_weights':body.row_weights,'column_weights':body.column_weights,'panels':receipts}
 
 @router.post('/compose')
 async def studio_compose(body:CompositionInput):
