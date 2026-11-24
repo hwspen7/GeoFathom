@@ -59,7 +59,8 @@ RECIPES = (
 )
 from .studio_domain_catalog import ALL as DOMAIN_RECIPES, BASIC_IDS, OPTIONS as DOMAIN_OPTIONS, MIN_RASTERS as DOMAIN_MIN_RASTERS, NOTES as DOMAIN_NOTES
 from .studio_research import RECIPES as RESEARCH_RECIPES, MIN_RASTERS as RESEARCH_MIN, NOTES as RESEARCH_NOTES
-RECIPES = RECIPES + DOMAIN_RECIPES + RESEARCH_RECIPES
+from .studio_vector import RECIPES as VECTOR_RECIPES, MIN_RASTERS as VECTOR_MIN, NOTES as VECTOR_NOTES
+RECIPES = RECIPES + DOMAIN_RECIPES + RESEARCH_RECIPES + VECTOR_RECIPES
 BY_ID = {item[0]:item for item in RECIPES}
 OPTIONS = {
     'rolling_mean': ('Window (samples)', 5, 2, 1000),
@@ -109,6 +110,8 @@ MIN_RASTERS.update(DOMAIN_MIN_RASTERS)
 NOTES.update(DOMAIN_NOTES)
 NOTES.update(RESEARCH_NOTES)
 MIN_RASTERS.update(RESEARCH_MIN)
+MIN_RASTERS.update(VECTOR_MIN)
+NOTES.update(VECTOR_NOTES)
 
 def catalog():
     return [{'id':i,'title':t,'family':f,'source':s,'fields':r.split(),

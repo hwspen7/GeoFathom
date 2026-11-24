@@ -87,5 +87,5 @@ export default function NetworkSciencePanel({active,connected,resultsTarget,proj
  <table><tbody>{Object.entries(result.receipt.metrics).map(([k,v])=><tr key={k}><th>{k.replaceAll('_',' ')}</th><td>{typeof v==='number'?v.toPrecision(7):JSON.stringify(v)}</td></tr>)}</tbody></table>
  <div className="spatial-table"><table><thead><tr>{result.columns.map(c=><th key={c}>{c}</th>)}</tr></thead><tbody>{result.rows.slice(0,200).map((r,i)=><tr key={i}>{r.map((v,j)=><td key={j}>{v===null?'Unreachable / NoData':typeof v==='number'?v.toPrecision(7):v}</td>)}</tr>)}</tbody></table><small>{Math.min(result.rows.length,200)} / {result.rows.length} rows</small></div></>:<p>Choose a network and run an analysis.</p>}</div>
  </div></div></div>,document.body)}
- {studio&&result&&<ScientificFigureStudio initialTier="all" source={{name:figure?.title??result.operation,csv:figure?.csv??result.csv,provenance:result.receipt,initialRecipe:figure?.recipe,initialBindings:figure?.bindings}} onClose={()=>setStudio(false)}/>}</>;
+ {studio&&result&&<ScientificFigureStudio initialTier="all" source={{name:figure?.title??result.operation,csv:figure?.csv??result.csv,vectors:result.features,provenance:result.receipt,initialRecipe:figure?.recipe,initialBindings:figure?.bindings}} onClose={()=>setStudio(false)}/>}</>;
 }

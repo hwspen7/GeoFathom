@@ -24,6 +24,9 @@ class RasterInput(BaseModel):
 class StudioInput(BaseModel):
     model_config=ConfigDict(extra='forbid',allow_inf_nan=False)
     recipe:str=Field(max_length=80)
+    vector_geojson:dict|None=None
+    vector_attribute:str=Field(default='',max_length=120)
+    vector_epsg:int=Field(default=4326,ge=1,le=999999)
     csv:str=Field(default='',max_length=5_000_000)
     rasters:list[RasterInput]=Field(default_factory=list,max_length=8)
     x:str=Field(default='',max_length=120)
@@ -97,6 +100,8 @@ class StudioInput(BaseModel):
         if sum(len(r.data) for r in self.rasters)>48_000_000:raise ValueError('Combined raster payload exceeds limit.')
         if self.width_mm*self.height_mm*(self.dpi/25.4)**2>20_000_000:raise ValueError('Image exceeds 20 megapixels; reduce dimensions or DPI.')
         if any(not c or len(c)>120 for c in self.columns):raise ValueError('Invalid series column.')
+        if self.vector_geojson is not None and len(json.dumps(self.vector_geojson,allow_nan=False).encode())>8_000_000:raise ValueError('Vector source exceeds 8 MB.')
+        if BY_ID[self.recipe][3]=='vector' and self.vector_geojson is None:raise ValueError('Supply GeoJSON vector features.')
         if BY_ID[self.recipe][3]=='table' and not self.csv.strip():raise ValueError('Supply a CSV table.')
         return self
 
@@ -170,7 +175,7 @@ class CompositionInput(BaseModel):
 
     @model_validator(mode='after')
     def budget(self):
-        if sum(len(p.csv)+sum(len(r.data) for r in p.rasters) if isinstance(p,StudioInput) else len(p.model_dump_json()) for p in self.panels)>64_000_000:
+        if sum(len(p.csv)+sum(len(r.data) for r in p.rasters)+len(json.dumps(p.vector_geojson)) if isinstance(p,StudioInput) else len(p.model_dump_json()) for p in self.panels)>64_000_000:
             raise ValueError('Composition data exceeds payload limit.')
         if self.width_mm*self.height_mm*(self.dpi/25.4)**2>45_000_000:
             raise ValueError('Composition exceeds 45 megapixels.')

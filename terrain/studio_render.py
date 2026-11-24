@@ -7,6 +7,7 @@ import numpy as np
 from .studio_catalog import BY_ID, NOTES, OPTIONS, MIN_RASTERS
 from .studio_domain_catalog import IDS as DOMAIN_IDS
 from .studio_research import IDS as RESEARCH_IDS
+from .studio_vector import IDS as VECTOR_IDS
 from .studio_data import (Table, read_grids, aligned_grids, normalized, pareto_mask, average_rank,
                           regular_series, rectangular_grid, linear_fit, sobol_indices, morris_effects,
                           FigureInputError)
@@ -40,11 +41,11 @@ def render(req, container=None, panel_label='', grid_sink=None):
         _require(bool(getattr(req,name)),'Select required field: '+name)
     _require(len(set(req.columns))==len(req.columns),'Select distinct columns.')
     table=Table(req.csv) if source=='table' else None
-    grids=read_grids(req.rasters) if source=='raster' else []
+    grids=read_grids(req.rasters) if source in ('raster','vector') and req.rasters else []
     if grids:_require(len(grids)>=MIN_RASTERS.get(kind,1),'Select the required number of rasters.')
-    if grids and kind not in DOMAIN_IDS and kind not in RESEARCH_IDS and kind not in {'raster_matrix','raster_uncertainty','raster_exceedance','raster_difference','raster_significant_change','raster_profile'}:_require(len(grids)==1,'This recipe requires exactly one raster.')
+    if grids and kind not in DOMAIN_IDS and kind not in RESEARCH_IDS and kind not in VECTOR_IDS and kind not in {'raster_matrix','raster_uncertainty','raster_exceedance','raster_difference','raster_significant_change','raster_profile'}:_require(len(grids)==1,'This recipe requires exactly one raster.')
     if source=='raster':_require(bool(grids),'Select GeoTIFF input.')
-    count=len(table.rows) if table else int(np.isfinite(grids[0].values).sum())
+    count=len(table.rows) if table else len(req.vector_geojson.get('features',[])) if source=='vector' else int(np.isfinite(grids[0].values).sum())
     meta={'recipe':kind,'method_note':NOTES.get(kind,''),'input_count':count,'used_count':count,
           'raster_sources':[{'name':g.name,'sha256':g.sha256,'crs':str(g.crs),'unit':g.unit,'shape':list(g.values.shape),'band':g.band,'band_count':g.band_count,'scale':g.scale,'offset':g.offset} for g in grids]}
     derived=[]
@@ -78,7 +79,10 @@ def render(req, container=None, panel_label='', grid_sink=None):
         is3d=(kind=='response_surface' and req.response_style=='surface') or kind in {'terrain_surface','terrain_wireframe','scatter_3d'}
         ax=fig.add_subplot(111,projection='3d' if is3d else 'polar' if kind=='radar' else None)
         xlabel=req.x or '';ylabel=req.y or ''
-        if kind in RESEARCH_IDS:
+        if kind in VECTOR_IDS:
+            from .studio_vector import render_vector
+            derived=render_vector(kind,req,fig,ax,grids,meta);ax=None
+        elif kind in RESEARCH_IDS:
             from .studio_research import render_table,render_raster
             derived=render_table(kind,req,fig,ax,table,meta,palette,rows) if source=='table' else render_raster(kind,req,fig,ax,grids,meta)
             ax=None
