@@ -24,7 +24,19 @@ TIME=(p('time1','First acquisition time',0,-1e6,1e6),p('time2','Second acquisiti
 TIMES=numeric('date1','date2','date3','date4')
 CLASSES=(('before','class'),('after','class'))
 SPECTRUM=refl('blue','green','red','nir')
+SERIES_IDS={'series_median','series_count','series_slope','series_amplitude','series_harmonic_rmse'}
 METHODS=(
+m('surface_temperature_rte','Thermal','Atmosphere-corrected single-channel LST',(('radiance','radiance'),('emissivity','emissivity'),('transmittance','transmittance'),('upwelling','radiance'),('downwelling','radiance')),'K','External band-specific atmospheric radiance and transmittance required.',(p('k1','K1 radiance constant',774.8853,.000001,1e7),p('k2','K2 temperature constant',1321.0789,.000001,1e7))),
+m('topographic_c','Preprocessing','Terrain illumination C correction',(('reflectance','reflectance'),('slope','slope'),('aspect','aspect'),('calibration','class')),'reflectance','Calibration mask=1 in homogeneous cover; grid-referenced solar geometry; shaded cells excluded.',(p('solar_zenith','Solar zenith (degrees)',30,0,85),p('solar_azimuth','Solar azimuth (grid degrees)',135,0,360),p('min_cosine','Minimum illumination cosine',.1,.01,1))),
+m('ndvi_uncertainty','Optical','NDVI propagated standard uncertainty',refl('nir','red')+(('nir_sd','nonnegative'),('red_sd','nonnegative')),'index','First-order delta method; supplied reflectance SDs and same-cell correlation.',(p('correlation','NIR/red error correlation',0,-1,1),p('min_sum','Minimum absolute band sum',.01,1e-8,1))),
+m('change_vector','Change','Multiband change vector magnitude',refl('red_before','nir_before','swir_before','red_after','nir_after','swir_after'),'reflectance','Euclidean length of paired spectral change vector.'),
+m('change_mahalanobis','Change','Stable-reference covariance change distance',refl('red_before','nir_before','swir_before','red_after','nir_after','swir_after')+(('calibration','class'),),'index','Stable calibration mask=1, covariance shrinkage; descriptive multivariate distance.'),
+m('spatial_lda','Classification','Regularized LDA with spatial holdout',SPECTRUM+(('training','class'),),'class','Equal-prior shared covariance classifier; disjoint spatial blocks and optional training buffer.',(p('block_m','Block width (m)',100,1,100000),p('folds','Spatial fold count',5,3,10,True),p('heldout_fold','Held-out fold',0,0,9,True),p('buffer_blocks','Training exclusion buffer (blocks)',0,0,1,True),p('shrinkage','Covariance shrinkage',.1,.001,1))),
+m('series_median','Time Series','Multi-acquisition median composite',numeric('date1','date2','date3','date4','date5','date6'),'source','6–64 aligned acquisitions; at least two valid observations.'),
+m('series_count','Time Series','Multi-acquisition observation count',numeric('date1','date2','date3','date4','date5','date6'),'count','6–64 aligned acquisitions; count of quality-screened observations.'),
+m('series_slope','Time Series','Multi-acquisition linear trend',numeric('date1','date2','date3','date4','date5','date6'),'source/time','6–64 aligned acquisitions with actual times and per-pixel missingness.'),
+m('series_amplitude','Time Series','Seasonal harmonic amplitude',numeric('date1','date2','date3','date4','date5','date6'),'source','Linear trend plus first harmonic, fixed period; at least six valid observations.',(p('period','Seasonal period (time units)',365,.0001,1e6),)),
+m('series_harmonic_rmse','Time Series','Seasonal model residual RMSE',numeric('date1','date2','date3','date4','date5','date6'),'source','In-sample seasonal model residual; not forecast validation.',(p('period','Seasonal period (time units)',365,.0001,1e6),)),
 m('true_color','Spectral','True-color reflectance composite',refl('red','green','blue'),'reflectance','Calibrated [0,1] reflectance RGB channels; common validity mask, no display stretch.'),
 m('false_color','Spectral','False-color NIR / red / green composite',refl('nir','red','green'),'reflectance','Calibrated [0,1] reflectance channels assigned to RGB in NIR/red/green order; no display stretch.'),
 m('calibrated_reflectance','Preprocessing','Calibrated reflectance export',refl('band'),'reflectance','Explicit source scale and offset; no atmospheric correction.'),
@@ -87,4 +99,4 @@ assert len(BY_ID)==len(METHODS)
 def catalog():
     return [{'id':x.id,'group':x.group,'title':x.title,'roles':[{'id':r,'quantity':q} for r,q in x.roles],
              'parameters':[dict(zip(('name','label','default','minimum','maximum','integer'),v)) for v in x.parameters],
-             'unit':x.unit,'assumption':x.assumption} for x in METHODS]
+             'unit':x.unit,'assumption':x.assumption,'variable_series':x.id in SERIES_IDS} for x in METHODS]

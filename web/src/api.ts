@@ -1255,7 +1255,7 @@ export type RemoteQualityScheme='binary'|'sentinel_clear'|'landsat_clear'|'lands
 export interface RemoteSource {name:string;data:string}
 export interface RemoteBinding {source:number;band:number;encoding:RemoteEncoding;scale:number;offset:number;unit:string}
 export interface RemoteQuality {source:number;band:number;scheme:RemoteQualityScheme;roles:string[]}
-export interface RemoteMethod {id:string;group:string;title:string;roles:Array<{id:string;quantity:string}>;parameters:SpatialScienceMethod['parameters'];unit:string;assumption:string}
-export interface RemoteInput {operation:string;sources:RemoteSource[];bindings:Record<string,RemoteBinding>;quality:RemoteQuality[];parameters:Record<string,number>}
+export interface RemoteMethod {id:string;group:string;title:string;roles:Array<{id:string;quantity:string}>;parameters:SpatialScienceMethod['parameters'];unit:string;assumption:string;variable_series?:boolean}
+export interface RemoteInput {operation:string;sources:RemoteSource[];bindings:Record<string,RemoteBinding>;quality:RemoteQuality[];parameters:Record<string,number>;times?:number[]}
 export function getRemoteCatalog(signal?:AbortSignal):Promise<{operations:RemoteMethod[];operation_count:number}>{return request('/analysis/remote-sensing/catalog',{signal});}
 export function runRemoteScience(body:RemoteInput,signal?:AbortSignal):Promise<SpatialScienceResult>{return request('/analysis/remote-sensing/run',{method:'POST',signal,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});}

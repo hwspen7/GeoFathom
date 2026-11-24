@@ -189,7 +189,7 @@ def test_remote_invalid_inputs_and_recovery():
         response=client.post('/analysis/remote-sensing/run',json=bad);assert response.status_code==422,response.text
     response=client.post('/analysis/remote-sensing/run',json=good);assert response.status_code==200,response.text
     np.testing.assert_allclose(grid(response.json()),.5)
-    assert client.get('/analysis/remote-sensing/catalog').json()['operation_count']==len(BY_ID)==55
+    assert client.get('/analysis/remote-sensing/catalog').json()['operation_count']==len(BY_ID)==66
 
 def test_temporal_independent_quality_masks():
     # Cloud at one date does not erase the other valid acquisitions.
@@ -329,3 +329,59 @@ def test_remote_gdal_reference(tmp_path):
         expected[0,0]=np.nan
         result=execute(RemoteInput(operation=kind,sources=[source(target),s],bindings={'target':{'source':0},'source':{'source':1,'unit':'m' if mode=='bilinear' else ''}}))
         np.testing.assert_allclose(grid(result),expected,equal_nan=True,atol=1e-10)
+
+
+@pytest.mark.parametrize('kind',['surface_temperature_rte','topographic_c','ndvi_uncertainty','change_vector','change_mahalanobis','spatial_lda','series_median','series_count','series_slope','series_amplitude','series_harmonic_rmse'])
+def test_research_depth_reference(kind):
+    if kind=='surface_temperature_rte':
+        t=310.;k1=774.8853;k2=1321.0789;e=.95;tau=.8;up=1.2;down=2.
+        l=tau*(e*k1/np.expm1(k2/t)+(1-e)*down)+up
+        a={r:constant(x) for r,x in [('radiance',l),('emissivity',e),('transmittance',tau),('upwelling',up),('downwelling',down)]}
+        np.testing.assert_allclose(grid(run(kind,a)),t,atol=1e-10)
+    elif kind=='topographic_c':
+        s=np.arange(12,dtype=float).reshape(3,4)*3;aspect=constant(135.)
+        cos=np.cos(np.deg2rad(s-30));r=.4*cos+.1
+        result=run(kind,{'reflectance':r,'slope':s,'aspect':aspect,'calibration':constant(1)})
+        np.testing.assert_allclose(grid(result),.4*np.cos(np.deg2rad(30))+.1,atol=1e-12)
+        assert result['receipt']['metrics']['c']==pytest.approx(.25)
+    elif kind=='ndvi_uncertainty':
+        a={'nir':constant(.6),'red':constant(.2),'nir_sd':constant(.01),'red_sd':constant(.02)}
+        for rho in (-1,0,1):
+            expected=np.sqrt((.4/.64*.01)**2+(1.2/.64*.02)**2-2*rho*(.4/.64*.01)*(1.2/.64*.02))
+            np.testing.assert_allclose(grid(run(kind,a,{'correlation':rho})),expected,atol=1e-12)
+    elif kind in {'change_vector','change_mahalanobis'}:
+        rng=np.random.default_rng(17);d=rng.normal(0,.02,(3,3,4));a={}
+        for i,r in enumerate(('red','nir','swir')):
+            a[r+'_before']=constant(.3);a[r+'_after']=constant(.3)+d[i]
+        if kind=='change_vector':
+            np.testing.assert_allclose(grid(run(kind,a)),np.linalg.norm(d,axis=0),atol=1e-12)
+        else:
+            a['calibration']=constant(1);a['calibration'][0,0]=0
+            ref=d.reshape(3,-1).T[1:];cov=np.cov(ref,rowvar=False);cov=.98*cov+.02*np.trace(cov)/3*np.eye(3)
+            delta=d.reshape(3,-1).T-ref.mean(axis=0)
+            expected=np.sqrt(np.einsum('ij,jk,ik->i',delta,np.linalg.inv(cov),delta)).reshape(3,4)
+            np.testing.assert_allclose(grid(run(kind,a)),expected,atol=1e-10)
+    elif kind=='spatial_lda':
+        rng=np.random.default_rng(27);row,col=np.indices((24,24));labels=1+(row%2)
+        a={r:np.where(labels==1,.2,.8)+rng.normal(0,.01,labels.shape) for r in ('blue','green','red','nir')};a['training']=labels
+        result=run(kind,a,{'block_m':40,'folds':5,'heldout_fold':0})
+        np.testing.assert_array_equal(grid(result),labels)
+        m=result['receipt']['metrics'];hold=((col//4+2*(row//4))%5)==0
+        assert m['heldout_cells']==int(hold.sum()) and m['training_cells']==int((~hold).sum())
+        assert m['overall_accuracy']==1
+        # Changed held-out labels must not change the trained map.
+        a['training']=np.where(hold,3-labels,labels)
+        other=run(kind,a,{'block_m':40,'folds':5,'heldout_fold':0})
+        np.testing.assert_array_equal(grid(other),labels);assert other['receipt']['metrics']['overall_accuracy']==0
+    else:
+        t=np.arange(12,dtype=float);y=3+2*t
+        if kind in {'series_amplitude','series_harmonic_rmse'}:y=y+4*np.cos(2*np.pi*t/6)+3*np.sin(2*np.pi*t/6)
+        arrays=np.array([constant(v) for v in y]);arrays[2,0,0]=np.nan
+        s=source(arrays);bindings={f'date{i+1}':{'source':0,'band':i+1,'unit':'index'} for i in range(len(t))}
+        result=checked(execute(RemoteInput(operation=kind,sources=[s],bindings=bindings,times=t.tolist(),parameters={'period':6} if kind in {'series_amplitude','series_harmonic_rmse'} else {})))
+        z=grid(result)
+        if kind=='series_count':assert z[0,0]==11 and z[1,1]==12
+        elif kind=='series_median':assert z[0,0]==np.median(np.delete(y,2)) and z[1,1]==np.median(y)
+        else:np.testing.assert_allclose(z,{'series_slope':2,'series_amplitude':5,'series_harmonic_rmse':0}[kind],atol=1e-10)
+        assert result['receipt']['metrics']['acquisitions']==12
+        assert len(result['rows'])==12

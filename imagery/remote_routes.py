@@ -14,7 +14,8 @@ from terrain.studio_data import Grid,FigureInputError
 from analysis.science_raster import require
 from analysis.science_routes import raster_product,raster_preview,csv_output
 from analysis.science_figures import figure_sources,csv_text
-from .remote_catalog import BY_ID,catalog
+from .remote_catalog import BY_ID,catalog,SERIES_IDS
+from .remote_research import surface_temperature,c_correction,ndvi_uncertainty,change_vectors,spatial_classifier,long_series
 from .remote_products import rgb_product
 from .remote_kernels import ratio,nd,optical,quality_mask,transition,agreement,temporal,pca,classify,sen_slope,temporal_slope_se,lee_filter,unmix,stratified_accuracy
 
@@ -27,7 +28,7 @@ class Source(BaseModel):
 
 class Binding(BaseModel):
     model_config=ConfigDict(extra='forbid',allow_inf_nan=False)
-    source:int=Field(ge=0,le=11)
+    source:int=Field(ge=0,le=63)
     band:int=Field(default=1,ge=1,le=1024)
     encoding:Literal['metadata','raw','landsat_sr','landsat_st','custom']='metadata'
     scale:float=Field(default=1,gt=0,le=1e12)
@@ -36,18 +37,19 @@ class Binding(BaseModel):
 
 class Quality(BaseModel):
     model_config=ConfigDict(extra='forbid')
-    source:int=Field(ge=0,le=11)
+    source:int=Field(ge=0,le=63)
     band:int=Field(default=1,ge=1,le=1024)
     scheme:Literal['binary','sentinel_clear','landsat_clear','landsat_unsaturated']='binary'
-    roles:list[str]=Field(default_factory=list,max_length=8)
+    roles:list[str]=Field(default_factory=list,max_length=64)
 
 class RemoteInput(BaseModel):
     model_config=ConfigDict(extra='forbid',allow_inf_nan=False)
     operation:str=Field(max_length=80)
-    sources:list[Source]=Field(min_length=1,max_length=12)
-    bindings:dict[str,Binding]=Field(min_length=1,max_length=8)
-    quality:list[Quality]=Field(default_factory=list,max_length=8)
+    sources:list[Source]=Field(min_length=1,max_length=64)
+    bindings:dict[str,Binding]=Field(min_length=1,max_length=64)
+    quality:list[Quality]=Field(default_factory=list,max_length=64)
     parameters:dict[str,float]=Field(default_factory=dict,max_length=12)
+    times:list[float]=Field(default_factory=list,max_length=64)
 
 def read_band(source,binding,quantity,raw,sha):
     with MemoryFile(raw) as mem,mem.open() as ds:
@@ -79,22 +81,32 @@ def read_band(source,binding,quantity,raw,sha):
         if quantity in {'power','radiance'}:require(np.all(v>=0),'Linear power and radiance cannot be negative.')
         if quantity=='kelvin':require(np.all(v>0),'Kelvin temperature must be positive.')
         if quantity=='emissivity':require(np.all((v>0)&(v<=1)),'Emissivity must be in (0,1].')
+        if quantity=='transmittance':require(np.all((v>0)&(v<=1)),'Transmittance must be in (0,1].')
+        if quantity=='nonnegative':require(np.all(v>=0),'Standard uncertainty must be nonnegative.')
+        if quantity=='slope':require(np.all((v>=0)&(v<=90)),'Slope must be in [0,90] degrees.')
+        if quantity=='aspect':require(np.all((v>=0)&(v<=360)),'Aspect must be in [0,360] degrees.')
         if quantity=='db':require(np.all((v>=-1000)&(v<=1000)),'Radar dB outside supported numeric range.')
-        expected={'reflectance':'reflectance','class':'class','power':'linear_power','db':'dB','radiance':'radiance','kelvin':'K','emissivity':'unitless'}.get(quantity)
+        expected={'reflectance':'reflectance','class':'class','power':'linear_power','db':'dB','radiance':'radiance','kelvin':'K','emissivity':'unitless','transmittance':'unitless','nonnegative':'reflectance','slope':'degree','aspect':'degree'}.get(quantity)
         unit=expected or binding.unit or tag
         if quantity=='numeric':require(bool(unit),'Declare the physical unit of each numeric band.')
         if binding.unit and expected:require(binding.unit==expected,'Declared unit conflicts with required physical quantity.')
         # Explicit role binding asserts semantics; known incompatible tagged units cannot be overridden.
         if tag and quantity!='class':
             allowed={unit}
-            if quantity in {'reflectance','emissivity','power'}:allowed|={'unitless','1','dimensionless'}
+            if quantity in {'reflectance','emissivity','power','transmittance','nonnegative'}:allowed|={'unitless','1','dimensionless'}
+            if quantity in {'slope','aspect'}:allowed|={'degrees','deg'}
             require(tag in allowed or encoding in {'landsat_sr','landsat_st','custom'},'GeoTIFF unit conflicts with selected band quantity.')
         g=Grid(source.name,z,a,ds.crs,unit,sha,b,ds.count,scale,offset)
         return g
 
 def execute(body):
     method=BY_ID.get(body.operation);require(method is not None,'Unknown remote sensing operation.')
-    roles=dict(method.roles);require(set(body.bindings)==set(roles),'Bind every required spectral role exactly once.')
+    roles=dict(method.roles)
+    if method.id in SERIES_IDS:
+        require(6<=len(body.times)<=64,'Supply 6–64 acquisition times.')
+        roles={f'date{i+1}':'numeric' for i in range(len(body.times))}
+    else:require(not body.times,'Acquisition times are only accepted by variable series methods.')
+    require(set(body.bindings)==set(roles),'Bind every required spectral role exactly once.')
     require(set(body.parameters)<=set(p[0] for p in method.parameters),'Unknown remote sensing parameter.')
     params={}
     for name,_,default,lo,hi,integer in method.parameters:
@@ -117,7 +129,7 @@ def execute(body):
         if first is None:first=g
         elif not allow_mismatch:require(g.crs==first.crs and g.transform==first.transform and g.values.shape==first.values.shape,'All bands and QA rasters must be explicitly aligned to the same grid.')
         return g
-    for name,quantity in method.roles:
+    for name,quantity in roles.items():
         b=body.bindings[name];g=load(b,quantity,aligning and name=='source');grids[name]=g
         provenance[name]={'source':g.name,'sha256':g.sha256,'band':g.band,'quantity':quantity,'unit':g.unit,'scale':g.scale,'offset':g.offset,'encoding':b.encoding,'crs':str(g.crs),'shape':list(g.values.shape),'transform':list(g.transform)[:6]}
     quality=[]
@@ -151,6 +163,14 @@ def execute(body):
     elif kind=='calibrated_reflectance':out=v['band']
     elif kind=='ndvi_change':out=nd(v['nir_after'],v['red_after'])-nd(v['nir_before'],v['red_before'])
     elif kind=='dnbr':out=nd(v['nir_before'],v['swir_before'])-nd(v['nir_after'],v['swir_after'])
+    elif kind=='surface_temperature_rte':out,meta=surface_temperature(v,params)
+    elif kind=='topographic_c':out,meta=c_correction(v,params)
+    elif kind=='ndvi_uncertainty':out,meta=ndvi_uncertainty(v,params)
+    elif kind in {'change_vector','change_mahalanobis'}:out,meta=change_vectors(v,kind=='change_mahalanobis')
+    elif kind=='spatial_lda':out,headers,rows,meta=spatial_classifier(v,first,params)
+    elif kind in SERIES_IDS:
+        out,meta=long_series(kind,np.stack(list(v.values())),body.times,params.get('period',365))
+        headers=['time','valid_cells','mean'];rows=[[t,int(np.isfinite(z).sum()),float(np.nanmean(z)) if np.isfinite(z).any() else None] for t,z in zip(body.times,v.values())]
     elif method.group=='Optical':
         out=optical(kind,v,params);out[~common]=np.nan
         meta['reflectance_outside_0_1']={r:int(np.count_nonzero(np.isfinite(z)&((z<0)|(z>1)))) for r,z in v.items()}
@@ -208,7 +228,8 @@ def execute(body):
         plots.append({'title':title,'recipe':recipe,'bindings':bindings,'csv':csv if table is None else table,'raster':False})
     if kind=='pca':add('PCA explained variance','basic_column',{'x':'component','y':'explained_fraction'})
     if kind=='transition_matrix':add('Transition area by class pair','basic_column',{'x':'transition','y':'area_m2'},csv_text(['transition','area_m2'],[[str(a)+' → '+str(b),area] for a,b,_,area,_ in rows]) ) if len(rows)<=50 else None
-    if kind=='classification_accuracy':
+    if kind in SERIES_IDS and any(row[2] is not None for row in rows):add('Acquisition mean time series','basic_line',{'x':'time','y':'mean'})
+    if kind in {'classification_accuracy','spatial_lda'}:
         for key in ('precision','recall'):
             if any(r[headers.index(key)] is not None for r in rows):add('Class '+key,'basic_column',{'x':'class','y':key})
     if kind in {'minimum_distance','spectral_unmix','spectral_unmix_rmse'}:
