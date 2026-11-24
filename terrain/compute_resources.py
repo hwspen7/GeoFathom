@@ -37,6 +37,7 @@ class ComputePolicy(BaseModel):
     mode: Literal["automatic", "manual"] = "automatic"
     backend: Literal["auto", "cpu"] = "auto"
     gpu_memory_percent: int = Field(default=60, ge=10, le=80)
+    hard_memory: bool = False
     memory_percent: int = Field(default=65, ge=10, le=85)
     concurrent_tasks: int = Field(default=1, ge=1, le=4)
     tile_size: Literal[128, 256, 512, 1024] = 512
@@ -73,6 +74,7 @@ class Limits:
     ray_samples: int
     native_slope_cells: int
     gpu_memory_bytes: int = 0
+    hard_memory: bool = False
 
     def grid(self, operation):
         group = ("surface" if operation in LOCAL_OPERATIONS else
@@ -116,6 +118,10 @@ def load_policy():
 
 
 def save_policy(policy):
+    if policy.hard_memory:
+        from .isolated_worker import hard_memory_available
+        if not hard_memory_available():
+            raise ResourceBusy("Hard memory mode requires a Windows Job Object or a delegated Linux cgroup v2.")
     with _lock:
         if _running or _waiting:
             raise ResourceBusy("Finish or cancel active terrain tasks before changing resource settings.")
@@ -219,7 +225,7 @@ def resolve_limits(policy, host, reserved=0):
     rays = policy.ray_samples if manual else min(500_000_000, max(100_000_000, 25_000_000*host.logical_cpus))
     return Limits(budget, concurrency, tile, **caps, viewshed_distance_m=distance,
                   ray_samples=rays, native_slope_cells=min(8_000_000, usable//128),
-                  gpu_memory_bytes=0 if policy.backend=='cpu' else min(host.gpu_free_bytes//2,host.gpu_total_bytes*policy.gpu_memory_percent//100,512*MiB))
+                  gpu_memory_bytes=0 if policy.backend=='cpu' else min(host.gpu_free_bytes//2,host.gpu_total_bytes*policy.gpu_memory_percent//100,512*MiB), hard_memory=policy.hard_memory)
 
 
 def current_limits():
@@ -274,6 +280,7 @@ def task_resources(cancel=None):
 
 
 def resource_status():
+    from .isolated_worker import hard_memory_available
     with _lock:
         policy = load_policy()
         host = detect_host()
@@ -282,4 +289,5 @@ def resource_status():
                 "effective": asdict(limits), "active_tasks": _running, "queued_tasks": _waiting, "reserved_bytes": _reserved,
                 "scope": "local_backend_process",
                 "terrain_gpu": "available" if host.gpu_total_bytes else "not_available",
-                "memory_protection": "admission_and_cooperative_pressure_guard"}
+                "hard_memory_available": hard_memory_available(),
+                "memory_protection": "isolated_os_boundary" if policy.hard_memory else "admission_and_cooperative_pressure_guard"}

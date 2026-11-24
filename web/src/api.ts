@@ -586,14 +586,14 @@ export function traceExisting(start:[number,number],end:[number,number],paths:[n
   });
 }
 export type TerrainComputePolicy = {
-  mode:'automatic'|'manual';backend?:'auto'|'cpu';gpu_memory_percent?:number;memory_percent:number;concurrent_tasks:number;tile_size:128|256|512|1024;
+  mode:'automatic'|'manual';backend?:'auto'|'cpu';gpu_memory_percent?:number;hard_memory?:boolean;memory_percent:number;concurrent_tasks:number;tile_size:128|256|512|1024;
   slope_cells:number;surface_cells:number;global_cells:number;visibility_cells:number;least_cost_cells:number;
   viewshed_distance_m:number;ray_samples:number;
 };
 export type TerrainComputeLimits = Omit<TerrainComputePolicy,'mode'|'memory_percent'|'backend'|'gpu_memory_percent'> & {memory_bytes:number;native_slope_cells:number;gpu_memory_bytes?:number};
 export interface TerrainComputeStatus {
   policy:TerrainComputePolicy;hardware:{total_bytes:number;available_bytes:number;logical_cpus:number;scratch_free_bytes:number;gpu_free_bytes?:number;gpu_total_bytes?:number};
-  effective:TerrainComputeLimits;active_tasks:number;queued_tasks:number;reserved_bytes?:number;scope:string;terrain_gpu:string;memory_protection:string;
+  effective:TerrainComputeLimits;active_tasks:number;queued_tasks:number;reserved_bytes?:number;scope:string;hard_memory_available?:boolean;terrain_gpu:string;memory_protection:string;
 }
 export function getTerrainComputeResources(signal?:AbortSignal):Promise<TerrainComputeStatus>{
   return request('/terrain/resources',{signal});

@@ -25,7 +25,11 @@ async def run_cancelable(request, fn, *args, budgeted=False):
         if not budgeted:
             return fn(*args,cancel=cancel)
         with task_resources(cancel) as limits:
-            result=fn(*args,cancel=cancel)
+            if limits.hard_memory:
+                from .isolated_worker import isolated_call
+                result=isolated_call(fn,args,limits,cancel)
+            else:
+                result=fn(*args,cancel=cancel)
             if isinstance(result,dict):
                 result["compute_resources"]=asdict(limits)
             return result

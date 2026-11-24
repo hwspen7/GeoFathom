@@ -42,6 +42,8 @@ export default function ComputingResources(){
    <small>Available: {gb(status.hardware.available_bytes)} · Disk: {gb(status.hardware.scratch_free_bytes)}</small>
    <small>GPU: {status.terrain_gpu==="available"?gb(status.hardware.gpu_total_bytes??0)+" VRAM":"CPU fallback"} · GPU budget: {gb(e.gpu_memory_bytes??0)}</small>
    <label>Compute backend <select aria-label="Compute backend" value={draft.backend??"auto"} onChange={event=>setDraft({...draft,backend:event.target.value as "auto"|"cpu"})}><option value="auto">Automatic CPU / CUDA</option><option value="cpu">CPU only</option></select></label>
+   <label>OS-enforced memory <input aria-label="Hard memory isolation" type="checkbox" checked={draft.hard_memory??false} disabled={!status.hard_memory_available&&!draft.hard_memory} onChange={event=>setDraft({...draft,hard_memory:event.target.checked})}/></label>
+   <small>{status.hard_memory_available?'Isolated worker available':'Hard memory isolation unavailable on this host'}</small>
    <small>Active tasks: {status.active_tasks} · Queued: {status.queued_tasks}</small>
    {status.reserved_bytes!==undefined&&<small>Reserved: {gb(status.reserved_bytes)}</small>}
    <label>Mode <select aria-label="Compute resource mode" value={draft.mode} onChange={event=>setDraft({...draft,mode:event.target.value as TerrainComputePolicy['mode']})}>
@@ -60,7 +62,7 @@ export default function ComputingResources(){
    <small>Per task: {gb(e.memory_bytes)} · {e.concurrent_tasks} concurrent · {e.tile_size} px tile</small>
    <table aria-label="Effective terrain cell limits"><tbody>{groups.map(([key,label])=><tr key={key}><th scope="row">{label}</th><td>{n(e[key])}</td></tr>)}
     <tr><th scope="row">Viewshed extent</th><td>{n(e.viewshed_distance_m)} m</td></tr><tr><th scope="row">Ray samples</th><td>{n(e.ray_samples)}</td></tr></tbody></table>
-   <small>CUDA slope kernels where available · CPU fallback · cooperative memory protection.</small>
+   <small>CUDA slope kernels where available · CPU fallback.</small>
    <button type="submit" disabled={busy}>Apply resources</button><button type="button" disabled={busy} onClick={()=>void refresh()}>Refresh hardware</button>
    {saved&&<small role="status">Resource settings saved.</small>}
   </form>}

@@ -63,7 +63,7 @@ export function meshOBJ(mesh:TerrainMesh){
  return rows.join('\n')+'\n';
 }
 type Camera={angle:number;tilt:number;exaggeration:number;zoom:number;clip:number;wire:boolean;drape:boolean;panX:number;panY:number};
-function renderer(gl:WebGL2RenderingContext,mesh:TerrainMesh,redraw:()=>void){
+function renderer(gl:WebGL2RenderingContext,mesh:TerrainMesh,redraw:()=>void,cacheBudget:number){
  const data=meshData(mesh);
  function shader(type:number,source:string){
    const s=gl.createShader(type);if(!s)throw Error('Shader allocation failed');
@@ -122,7 +122,7 @@ function renderer(gl:WebGL2RenderingContext,mesh:TerrainMesh,redraw:()=>void){
   low=Math.min(low,h);high=Math.max(high,h);
  }
  if(!Number.isFinite(low)){low=0;high=0;}
- type StreamBuffers={vertex:WebGLBuffer;surface:WebGLBuffer;wire:WebGLBuffer;faces:number;edges:number;level:number};
+ type StreamBuffers={vertex:WebGLBuffer;surface:WebGLBuffer;wire:WebGLBuffer;faces:number;edges:number;level:number;bytes:number};
  const streamingTiles=new Map<string,StreamBuffers>();
  const streamKey=(level:number,row:number,col:number)=>level+':'+row+':'+col;
  function bindVertices(buffer:WebGLBuffer|null){
@@ -152,9 +152,10 @@ function renderer(gl:WebGL2RenderingContext,mesh:TerrainMesh,redraw:()=>void){
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,surface);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,geometry.triangles,gl.STATIC_DRAW);
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,wire);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,geometry.edges,gl.STATIC_DRAW);
   streamingTiles.set(key,{vertex:vb,surface,wire,faces:geometry.triangles.length,
-                          edges:geometry.edges.length,level:tile.level});
+                          edges:geometry.edges.length,level:tile.level,bytes:geometry.vertices.byteLength+geometry.triangles.byteLength+geometry.edges.byteLength});
   // A hard GPU cache limit prevents unbounded buffers after extensive panning.
-  if(streamingTiles.size>96){
+  const totalBytes=()=>Array.from(streamingTiles.values()).reduce((total,item)=>total+item.bytes,0);
+  while(streamingTiles.size>1&&(streamingTiles.size>96||totalBytes()>cacheBudget)){
    const oldest=streamingTiles.keys().next().value;
    if(oldest!==undefined){
     const entry=streamingTiles.get(oldest);
@@ -201,7 +202,7 @@ function renderer(gl:WebGL2RenderingContext,mesh:TerrainMesh,redraw:()=>void){
   gl.deleteTexture(texture);gl.deleteProgram(program);}};
 }
 const initial:Camera={angle:-.6,tilt:.7,exaggeration:1,zoom:1.6,clip:1,wire:false,drape:true,panX:0,panY:0};
-export function GPUView({mesh,fallback,tileSource}:{mesh:TerrainMesh;fallback:ReactNode;
+export function GPUView({mesh,fallback,tileSource,cacheBudget=16*1024**2}:{mesh:TerrainMesh;fallback:ReactNode;cacheBudget?:number;
  tileSource?:{image_id:string;geometry:GeoJSON.Geometry}}){
  const canvas=useRef<HTMLCanvasElement>(null),render=useRef<ReturnType<typeof renderer>|null>(null),drag=useRef<{x:number;y:number;pan:boolean}|null>(null);
  const [camera,setCamera]=useState(initial),[available,setAvailable]=useState(true);
@@ -211,12 +212,12 @@ export function GPUView({mesh,fallback,tileSource}:{mesh:TerrainMesh;fallback:Re
    const node=canvas.current;if(!node)return;
    try{
      const gl=node.getContext('webgl2',{antialias:true,preserveDrawingBuffer:true});if(!gl)throw Error('WebGL2 unavailable');
-     const engine=renderer(gl,mesh,()=>render.current?.draw(latest.current));render.current=engine;engine.draw(latest.current);
+     const engine=renderer(gl,mesh,()=>render.current?.draw(latest.current),cacheBudget);render.current=engine;engine.draw(latest.current);
      const lost=(e:Event)=>{e.preventDefault();setAvailable(false);};
      node.addEventListener('webglcontextlost',lost);
      return()=>{node.removeEventListener('webglcontextlost',lost);engine.dispose();render.current=null;};
    }catch{setAvailable(false);}
- },[mesh]);
+ },[mesh,cacheBudget]);
  useEffect(()=>{render.current?.draw(camera);},[camera]);
  useEffect(()=>{
   const source=tileSource;
