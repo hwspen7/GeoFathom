@@ -13,19 +13,29 @@ from geometry.measure import GeometryError
 from .engine import analyze_area,elevation_profile
 from .cancellation import TerrainCancelled
 from .catalog import terrain_catalog
+from .compute_resources import task_resources, ResourceBusy
+from dataclasses import asdict
 
 
 async def run_cancelable(request, fn, *args):
     # Do not abandon a worker on browser disconnect: request cancellation
     # is observed at the algorithm checkpoints, and the worker is drained.
     cancel=Event()
-    task=asyncio.create_task(run_in_threadpool(fn,*args,cancel=cancel))
+    def execute():
+        with task_resources() as limits:
+            result=fn(*args,cancel=cancel)
+            if isinstance(result,dict):
+                result["compute_resources"]=asdict(limits)
+            return result
+    task=asyncio.create_task(run_in_threadpool(execute))
     try:
         while not task.done():
             await asyncio.wait({task},timeout=.1)
             if not task.done() and await request.is_disconnected():
                 cancel.set()
         return await task
+    except ResourceBusy as error:
+        raise HTTPException(status_code=409,detail=str(error)) from error
     except TerrainCancelled as error:
         raise HTTPException(status_code=499,detail=str(error)) from error
     finally:
@@ -131,7 +141,7 @@ class AdvancedTerrainInput(BaseModel):
     slope_classes:Literal['standard','detailed','broad']='standard'
     mfd_exponent:float=Field(default=1.1,ge=0.5,le=8.0)
     neighborhood_radius:int=Field(default=1,ge=1,le=4)
-    max_distance_m:float=Field(default=0,ge=0,le=10000)
+    max_distance_m:float=Field(default=0,ge=0,le=100000)
     view_azimuth:float=Field(default=0,ge=0,le=360)
     view_width:float=Field(default=360,gt=0,le=360)
     route_model:Literal['surface','distance','gentle']='surface'

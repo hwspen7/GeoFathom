@@ -13,6 +13,7 @@ from rasterio.transform import array_bounds
 from shapely.geometry import LineString, MultiLineString
 from imagery.raster import RasterError
 from .cancellation import checkpoint
+from .compute_resources import current_limits
 
 SURFACES = {"elevation", "slope_map", "aspect_map", "hillshade", "tri", "tpi",
             "curvature", "plan_curvature", "profile_curvature", "flow_direction", "flow_accumulation", "flow_accumulation_mfd", "streams", "stream_order",
@@ -129,7 +130,8 @@ def least_cost(z,valid,start,end,dx,dy,max_grade,cancel=None,route_model="surfac
     if route_model not in {"surface","distance","gentle"}:
         raise RasterError("Unsupported route cost model.")
     """Dijkstra on raster cell centres; no diagonal corner cutting through nodata."""
-    if valid.size>262144:raise RasterError("Route grid exceeds 262,144 cells.")
+    limit=current_limits().least_cost_cells
+    if valid.size>limit:raise RasterError(f"Route grid exceeds {limit:,} cells under the effective compute budget.")
     if not math.isfinite(max_grade) or not 0<max_grade<=90:
         raise RasterError("Route slope limit must be in (0, 90] degrees.")
     h,w=z.shape

@@ -12,6 +12,7 @@ from rasterio.windows import Window
 
 from imagery.raster import RasterError
 from .cancellation import checkpoint
+from .compute_resources import active_limits
 
 _BLOCK=512
 
@@ -20,6 +21,8 @@ def analyze_area_tiled(source, polygon, window, cancel=None,gradient_method="hor
     if gradient_method not in {"horn","zevenbergen_thorne"}:
         raise RasterError("Unsupported terrain gradient method.")
     """Compute complete-window terrain statistics with at most 514x514 pixels."""
+    limits=active_limits()
+    block=limits.tile_size if limits is not None else _BLOCK
     height,width=int(window.height),int(window.width)
     if height<3 or width<3:
         raise RasterError("Slope analysis requires at least a 3 x 3 study area.")
@@ -33,11 +36,11 @@ def analyze_area_tiled(source, polygon, window, cancel=None,gradient_method="hor
     downslope_sine=0.
     downslope_cosine=0.
     dx,dy=abs(source.transform.a),abs(source.transform.e)
-    for row in range(0,height,_BLOCK):
-        for col in range(0,width,_BLOCK):
+    for row in range(0,height,block):
+        for col in range(0,width,block):
             checkpoint(cancel)
-            h=min(_BLOCK,height-row)
-            w=min(_BLOCK,width-col)
+            h=min(block,height-row)
+            w=min(block,width-col)
             # Read one extra pixel around the core. This avoids seams while
             # preserving all source-window and study-polygon boundaries.
             hr0=max(0,row-1)
