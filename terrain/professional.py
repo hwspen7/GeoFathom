@@ -502,7 +502,7 @@ def surface(z,valid,affine,crs,operation,reference,point,end_point,max_slope,
                      "channel_cells":int(np.isfinite(values).sum()),
                      ("max_stream_order" if stream_order_scheme=="strahler" else "max_stream_magnitude"):int(np.nanmax(values))}
         else:
-            if not 1<=stream_cells<=1_000_000:raise RasterError("Invalid stream accumulation threshold.")
+            if not 1<=stream_cells<=max(1_000_000,current_limits().global_cells):raise RasterError("Invalid stream accumulation threshold.")
             values=np.where(valid,(accum>=stream_cells).astype(float),np.nan)
             stream=(values==1).ravel()
             # Trace each edge once; cap the vector output while preserving the full raster.

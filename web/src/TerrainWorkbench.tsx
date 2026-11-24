@@ -311,7 +311,7 @@ export default function TerrainWorkbench(p:Props){
    (operation!=='suitability'||validNumber(maxSlope,0,90)&&validNumber(minElevation,-12000,12000)&&validNumber(maxElevation,-12000,12000)&&Number(minElevation)<=Number(maxElevation)&&validNumber(maxTri,0,100000)&&
       (suitabilityModel==='binary'||[suitabilitySlopeWeight,suitabilityTriWeight,suitabilityElevationWeight].every(n=>validNumber(n,0,100))&&
         [suitabilitySlopeWeight,suitabilityTriWeight,suitabilityElevationWeight].reduce((sum,w)=>sum+Number(w),0)>0))&&
-   (!['streams','stream_order'].includes(operation??'')||validNumber(streamCells,1,1000000)&&Number.isInteger(Number(streamCells)))&&
+   (!['streams','stream_order'].includes(operation??'')||validNumber(streamCells,1,8000000)&&Number.isInteger(Number(streamCells)))&&
    (operation!=='hillshade'||validNumber(azimuth,0,360)&&validNumber(altitude,0,90))&&
    (!needsPoint||validNumber(lon,-180,180)&&validNumber(lat,-90,90))&&
    (operation!=='flow_accumulation_mfd'||validNumber(mfdExponent,.5,8))&&
@@ -1132,7 +1132,7 @@ export default function TerrainWorkbench(p:Props){
           <option value="shreve">Shreve · additive magnitude</option>
         </select>
       </label>}
-      {(operation==='streams'||operation==='stream_order')&&<label>Minimum upstream cells<input type="number" min="1" step="1" value={streamCells} onChange={e=>setStreamCells(e.target.value)}/></label>}
+      {(operation==='streams'||operation==='stream_order')&&<label>Minimum upstream cells<input type="number" min="1" max="8000000" step="1" value={streamCells} onChange={e=>setStreamCells(e.target.value)}/></label>}
      {['flow_direction','flow_accumulation','flow_accumulation_mfd','streams','stream_order','watershed'].includes(operation)&&<label className="gis-check"><input aria-label="Condition drainage DEM" type="checkbox" checked={fillSinks} onChange={e=>setFillSinks(e.target.checked)}/> Fill depressions and route flat cells</label>}
      {['flow_direction','flow_accumulation','flow_accumulation_mfd','streams','stream_order','watershed'].includes(operation)&&fillSinks&&<label>Depression conditioning
        <select aria-label="Depression conditioning method" value={depressionMethod} onChange={e=>setDepressionMethod(e.target.value as 'fill'|'breach')}>

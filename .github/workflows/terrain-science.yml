@@ -41,6 +41,9 @@ jobs:
       - name: Run advanced scientific analytic and GeoTIFF integration checks
         run: |
           python -m pytest -q --junitxml=build/terrain-methods-tests.xml tests/test_terrain_scientific_methods.py tests/test_terrain_exact_coverage.py tests/test_terrain_uncertainty.py tests/test_terrain_mesh_streaming.py tests/test_terrain_independent_references.py tests/test_terrain_compiled_kernels.py
+      - name: Verify adaptive graph and resumable terrain scaling
+        run: |
+          python -m pytest -q --junitxml=build/terrain-scaling-tests.xml tests/test_terrain_compute_resources.py tests/test_terrain_scaling.py
       - name: Enforce >=95 foundational synthetic numerical score for every Terrain operation
         run: |
           python scripts/terrain_numerical_gate.py --junit build/terrain-foundation-tests.xml --reference build/terrain-reference.json --output build/terrain-foundation-matrix.json
@@ -60,5 +63,6 @@ jobs:
             build/terrain-foundation-tests.xml
             build/terrain-foundation-matrix.json
             build/terrain-methods-tests.xml
+            build/terrain-scaling-tests.xml
           if-no-files-found: warn
           retention-days: 30
