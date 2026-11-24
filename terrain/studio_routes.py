@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from starlette.concurrency import run_in_threadpool
 from .figure_routes import FigureValidationRoute, FigurePDFInput
 from .studio_catalog import catalog, BY_ID
-from .studio_data import FigureInputError, raster_table
+from .studio_data import FigureInputError, raster_table, inspect_sources
 from .studio_render import render
 from typing import Literal
 
@@ -19,6 +19,7 @@ class RasterInput(BaseModel):
     name:str=Field(min_length=1,max_length=160)
     data:str=Field(min_length=1,max_length=32_000_000)
     unit:str=Field(default='',max_length=80)
+    band:int=Field(default=1,ge=1,le=1024)
 
 class StudioInput(BaseModel):
     model_config=ConfigDict(extra='forbid',allow_inf_nan=False)
@@ -191,5 +192,25 @@ async def studio_compose(body:CompositionInput):
         return {'figure':base64.b64encode(payload).decode('ascii'),
                 'media_type':{'png':'image/png','pdf':'application/pdf','svg':'image/svg+xml','tiff':'image/tiff'}[body.format],
                 'metadata':metadata,'table':[]}
+    except (FigureInputError,ValueError,OverflowError,RuntimeError,OSError) as error:
+        raise HTTPException(status_code=422,detail=str(error)) from error
+
+
+class SourceInspectionInput(BaseModel):
+    model_config=ConfigDict(extra='forbid')
+    csv:str=Field(default='',max_length=5_000_000)
+    rasters:list[RasterInput]=Field(default_factory=list,max_length=8)
+
+    @model_validator(mode='after')
+    def budget(self):
+        if sum(len(r.data) for r in self.rasters)>48_000_000:raise ValueError('Combined raster payload exceeds limit.')
+        return self
+
+@router.post('/inspect')
+async def inspect_studio_sources(body:SourceInspectionInput):
+    try:
+        result=await run_in_threadpool(inspect_sources,body.csv,body.rasters)
+        json.dumps(result,allow_nan=False)
+        return result
     except (FigureInputError,ValueError,OverflowError,RuntimeError,OSError) as error:
         raise HTTPException(status_code=422,detail=str(error)) from error

@@ -55,7 +55,7 @@ def geotiff_product(grid,values,unit,recipe,sources):
     """Preserve native grid, NoData and full numerical precision for reuse."""
     import base64,hashlib,json
     from rasterio.io import MemoryFile
-    values=np.ma.asarray(values,dtype=np.float64).filled(np.nan)
+    values=np.ma.asarray(values,dtype=np.float64).filled(np.nan).copy()
     values[~np.isfinite(values)]=np.nan
     if values.shape!=grid.values.shape:raise FigureInputError('Derived product has mismatched dimensions.')
     with MemoryFile() as memory:

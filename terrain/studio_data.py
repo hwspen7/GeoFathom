@@ -62,6 +62,10 @@ class Grid:
     crs:object
     unit:str
     sha256:str
+    band:int=1
+    band_count:int=1
+    scale:float=1.0
+    offset:float=0.0
     @property
     def extent(self):
         a=self.transform;h,w=self.values.shape
@@ -81,29 +85,33 @@ def read_grids(items):
             raw=base64.b64decode(item.data,validate=True)
             if len(raw)>24_000_000: raise FigureInputError('Encoded raster exceeds size limit.')
             with MemoryFile(raw) as mem,mem.open() as ds:
-                if ds.driver!='GTiff' or ds.count!=1 or not ds.crs: raise FigureInputError('Use single-band georeferenced GeoTIFFs.')
+                if ds.driver!='GTiff' or not ds.crs: raise FigureInputError('Use georeferenced GeoTIFFs.')
+                band=getattr(item,'band',1)
+                if not 1<=band<=ds.count:raise FigureInputError('Selected band is outside the GeoTIFF band count.')
                 total+=ds.width*ds.height
                 if ds.width*ds.height>MAX_RASTER_CELLS or total>MAX_TOTAL_CELLS: raise FigureInputError('Raster rendering exceeds cell budget.')
                 a=ds.transform
                 if a.b!=0 or a.d!=0 or a.a<=0 or a.e>=0: raise FigureInputError('North-up rasters are required; explicitly reproject rotated grids first.')
-                values=ds.read(1,masked=True).astype(np.float64).filled(np.nan)
-                values=values*ds.scales[0]+ds.offsets[0]
+                scale=float(ds.scales[band-1]);offset=float(ds.offsets[band-1])
+                if not math.isfinite(scale) or not math.isfinite(offset):raise FigureInputError('Band scale and offset must be finite.')
+                values=ds.read(band,masked=True).astype(np.float64).filled(np.nan)
+                values=values*scale+offset
                 values[~np.isfinite(values)]=np.nan
                 if not np.isfinite(values).any(): raise FigureInputError('No finite raster cells.')
                 if np.nanmax(np.abs(values))>1e100: raise FigureInputError('Raster values exceed numerical range.')
-                unit=ds.tags().get('TERRAIN_UNIT') or ds.units[0] or item.unit or ''
+                unit=ds.tags(band).get('TERRAIN_UNIT') or ds.units[band-1] or ds.tags().get('TERRAIN_UNIT') or item.unit or ''
                 if item.unit and unit and item.unit!=unit: raise FigureInputError('Supplied raster unit conflicts with GeoTIFF metadata.')
-                grids.append(Grid(item.name,values,a,ds.crs,unit,hashlib.sha256(raw).hexdigest()))
+                grids.append(Grid(item.name,values,a,ds.crs,unit,hashlib.sha256(raw).hexdigest(),band,ds.count,scale,offset))
         except FigureInputError: raise
         except (ValueError,RuntimeError,OSError) as error: raise FigureInputError('Invalid GeoTIFF: '+str(error)) from error
     return grids
 
-def aligned_grids(grids):
+def aligned_grids(grids,require_same_unit=True):
     first=grids[0]
     for g in grids[1:]:
         if g.values.shape!=first.values.shape or g.crs!=first.crs or g.transform!=first.transform:
             raise FigureInputError('Raster grids, transforms and CRS must match exactly.')
-        if g.unit!=first.unit: raise FigureInputError('Raster physical units must match.')
+        if require_same_unit and g.unit!=first.unit: raise FigureInputError('Raster physical units must match.')
     stack=np.stack([g.values for g in grids])
     common=np.isfinite(stack).all(axis=0)
     if not common.any(): raise FigureInputError('No common valid raster cells.')
@@ -187,7 +195,8 @@ def raster_table(items, limit=MAX_TABLE_ROWS):
     grids=read_grids(items)
     if not grids:raise FigureInputError('Select raster inputs.')
     if not 1<=limit<=MAX_TABLE_ROWS:raise FigureInputError('Invalid cell sample limit.')
-    stack,common=aligned_grids(grids)
+    # A multivariate table can contain different physical quantities; only its geometry must align.
+    stack,common=aligned_grids(grids,require_same_unit=False)
     indexes=np.flatnonzero(common.ravel());n=int(indexes.size)
     stride=max(1,math.ceil(n/limit));chosen=indexes[::stride]
     row,col=np.unravel_index(chosen,common.shape)
@@ -199,4 +208,41 @@ def raster_table(items, limit=MAX_TABLE_ROWS):
     for r in zip(east,north,*values):writer.writerow(r)
     return {'csv':f.getvalue(),'metadata':{'population':'common finite raster cells',
         'population_cells':n,'sample_cells':int(chosen.size),'sampling':'all_cells' if stride==1 else 'every_kth_common_cell_in_row_major_order',
-        'stride':stride,'coordinate_crs':str(g.crs),'columns':[{'column':name,'name':v.name,'sha256':v.sha256,'unit':v.unit} for name,v in zip(names[2:],grids)]}}
+        'stride':stride,'coordinate_crs':str(g.crs),'columns':[{'column':name,'name':v.name,'sha256':v.sha256,'unit':v.unit,'band':v.band} for name,v in zip(names[2:],grids)]}}
+
+
+def raster_receipt(g):
+    finite=g.values[np.isfinite(g.values)]
+    return {'name':g.name,'sha256':g.sha256,'band':g.band,'band_count':g.band_count,'unit':g.unit,
+            'crs':str(g.crs),'shape':list(g.values.shape),'extent':list(g.extent),
+            'pixel_size':[g.transform.a,-g.transform.e],'scale':g.scale,'offset':g.offset,
+            'valid_cells':int(len(finite)),'missing_cells':int(g.values.size-len(finite)),
+            'minimum':float(finite.min()),'maximum':float(finite.max()),
+            'mean':float(finite.mean()),'population_sd':float(finite.std())}
+
+def inspect_sources(csv_text,items):
+    report={'table':None,'rasters':[],'aligned':None}
+    if csv_text.strip():
+        table=Table(csv_text);columns=[]
+        for name in table.names:
+            labels=table.labels(name);missing=int((labels=='').sum())
+            column={'name':name,'missing':missing,'nonmissing':len(labels)-missing}
+            try:
+                values=table.numeric(name);v=values[np.isfinite(values)]
+                column['kind']='numeric' if len(v) else 'empty'
+                if len(v):column.update(minimum=float(v.min()),maximum=float(v.max()),mean=float(v.mean()),distinct=int(len(np.unique(v))))
+            except FigureInputError:
+                column['kind']='text_or_invalid_numeric';column['distinct']=int(len(np.unique(labels[labels!=''])))
+            columns.append(column)
+        report['table']={'rows':len(table.rows),'columns':columns}
+    if items:
+        grids=read_grids(items);report['rasters']=[raster_receipt(g) for g in grids]
+        first=grids[0]
+        aligned=all(g.crs==first.crs and g.transform==first.transform and g.values.shape==first.values.shape for g in grids)
+        report['aligned']=aligned
+        if aligned:
+            common=np.logical_and.reduce([np.isfinite(g.values) for g in grids])
+            report['common_valid_cells']=int(common.sum())
+        report['same_unit']=all(g.unit==first.unit for g in grids)
+    if not csv_text.strip() and not items:raise FigureInputError('Supply a table or raster to inspect.')
+    return report

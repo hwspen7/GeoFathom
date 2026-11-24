@@ -87,6 +87,8 @@ def test_every_recipe_renders_actual_data(recipe,raster_fixture):
     assert metadata['family']==BY_ID[recipe][2]
     assert metadata['layout']['canvas_pixels'][0]>0
     assert metadata['plot_table_rows']==max(0,len(table)-1)
+    import json
+    json.dumps({'metadata':metadata,'table':table},allow_nan=False)
     import os,json
     from pathlib import Path
     target=os.environ.get('GEOFATHOM_FIGURE_REVIEW_DIR')
@@ -398,3 +400,27 @@ def test_computed_raster_roundtrip(raster_fixture):
     assert np.allclose(grid_out.values,expected,equal_nan=True)
     assert grid_out.transform==grids[0].transform and grid_out.crs==grids[0].crs
     assert grid_out.sha256==product['sha256']
+
+
+def test_multiband_physical_values_and_mixed_units_table():
+    from terrain.studio_routes import RasterInput
+    from terrain.studio_data import read_grids,raster_table,inspect_sources,aligned_grids
+    with MemoryFile() as mem:
+        with mem.open(driver='GTiff',height=3,width=3,count=2,dtype='uint16',
+                      transform=from_origin(500000,4500000,10,10),crs='EPSG:32617',nodata=65535) as ds:
+            ds.write(np.arange(9,dtype=np.uint16).reshape(3,3)+10,1)
+            ds.write(np.arange(9,dtype=np.uint16).reshape(3,3)+100,2)
+            ds.scales=(.01,.1);ds.offsets=(0.,1.)
+            ds.update_tags(1,TERRAIN_UNIT='reflectance');ds.update_tags(2,TERRAIN_UNIT='m')
+        raw=base64.b64encode(mem.read()).decode()
+    inputs=[RasterInput(name='Band A',data=raw,band=1),RasterInput(name='Band B',data=raw,band=2)]
+    grids=read_grids(inputs)
+    assert grids[0].values[0,0]==pytest.approx(.1) and grids[1].values[0,0]==pytest.approx(11)
+    with pytest.raises(FigureInputError,match='units'):aligned_grids(grids)
+    out=raster_table(inputs)
+    assert out['metadata']['sample_cells']==9 and out['metadata']['columns'][1]['band']==2
+    report=inspect_sources('a,b\n1,X\n,2',inputs)
+    assert report['aligned'] and not report['same_unit'] and report['common_valid_cells']==9
+    assert report['table']['columns'][0]['missing']==1
+    assert report['rasters'][1]['band_count']==2
+    with pytest.raises(FigureInputError,match='band'):read_grids([RasterInput(name='Bad',data=raw,band=3)])

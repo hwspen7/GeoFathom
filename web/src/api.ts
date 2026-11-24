@@ -1216,7 +1216,7 @@ export async function exportFigurePDF(scene:unknown):Promise<Blob>{
 }
 
 export interface StudioRecipe {id:string;title:string;family:string;source:'table'|'raster';fields:string[];note:string;option:[string,number,number,number]|null;minimum_rasters:number;tier?:'basic'|'professional'}
-export interface StudioRaster {name:string;data:string;unit:string}
+export interface StudioRaster {name:string;data:string;unit:string;band?:number}
 export interface StudioInput {recipe:string;csv:string;rasters:StudioRaster[];x:string;y:string;z:string;group:string;low:string;high:string;columns:string[];
  title:string;x_label:string;y_label:string;parameter:number|null;maximize_x:boolean;maximize_y:boolean;palette:'mono'|'color'|'earth';font:'sans'|'serif';font_size:number;grid:boolean;width_mm:number;height_mm:number;dpi:120|300|600;format:'png'|'pdf'|'svg'|'tiff';
  export_grid?:boolean;spatial_inference?:'statistic'|'p'|'q'|'cluster';permutations?:number;random_seed?:number;alpha?:number;response_style?:'heatmap'|'filled'|'contour'|'surface';contour_levels?:number;show_values?:boolean;show_points?:boolean;optimum?:'none'|'min'|'max';profile_style?:'series'|'overlay'|'delta'|'bands';map_style?:'continuous'|'diverging'|'categorical';map_columns?:number|null;map_common_mask?:boolean;map_min?:number|null;map_max?:number|null;class_breaks?:number[];line_width?:number;legend_position?:'best'|'upper left'|'upper right'|'lower left'|'lower right'|'center left'|'center right'}
@@ -1233,3 +1233,6 @@ export function composeStudio(body:StudioComposition,signal?:AbortSignal):Promis
 export interface GlobalSensitivityInput {base:ResearchExperiment['base'];method:'sobol'|'morris';factors:Array<{name:string;minimum:number;maximum:number}>;metric:string;samples:number;seed:number;expected_source_sha256?:string}
 export interface GlobalSensitivityOutput {method:'sobol'|'morris';metric:string;evaluations:number;indices:Array<{factor:string;[key:string]:string|number|null}>;plot_csv:string;design_csv:string;bindings:{x:string;y:string;columns:string[]};method_note:string;manifest:Record<string,unknown>}
 export function analyzeGlobalSensitivity(body:GlobalSensitivityInput,signal?:AbortSignal):Promise<GlobalSensitivityOutput>{return request('/terrain/research/global-sensitivity',{method:'POST',signal,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});}
+
+export interface StudioSourceInspection {table:null|{rows:number;columns:Array<{name:string;kind:string;missing:number;nonmissing:number;distinct?:number;minimum?:number;maximum?:number;mean?:number}>};rasters:Array<{name:string;band:number;band_count:number;unit:string;crs:string;shape:number[];valid_cells:number;missing_cells:number;minimum:number;maximum:number;scale:number;offset:number;sha256:string}>;aligned:boolean|null;same_unit?:boolean;common_valid_cells?:number}
+export function inspectStudioSources(csv:string,rasters:StudioRaster[],signal?:AbortSignal):Promise<StudioSourceInspection>{return request('/terrain/studio/inspect',{method:'POST',signal,headers:{'Content-Type':'application/json'},body:JSON.stringify({csv,rasters})});}

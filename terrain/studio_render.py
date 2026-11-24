@@ -45,7 +45,7 @@ def render(req, container=None, panel_label='', grid_sink=None):
     if source=='raster':_require(bool(grids),'Select GeoTIFF input.')
     count=len(table.rows) if table else int(np.isfinite(grids[0].values).sum())
     meta={'recipe':kind,'method_note':NOTES.get(kind,''),'input_count':count,'used_count':count,
-          'raster_sources':[{'name':g.name,'sha256':g.sha256,'crs':str(g.crs),'unit':g.unit,'shape':list(g.values.shape)} for g in grids]}
+          'raster_sources':[{'name':g.name,'sha256':g.sha256,'crs':str(g.crs),'unit':g.unit,'shape':list(g.values.shape),'band':g.band,'band_count':g.band_count,'scale':g.scale,'offset':g.offset} for g in grids]}
     derived=[]
     def rows(names,labels=()):
         nonlocal count
@@ -368,7 +368,7 @@ def render(req, container=None, panel_label='', grid_sink=None):
                 if grid_sink is not None:
                     from .studio_inference import geotiff_product
                     units={'raster_slope':'degree','raster_hillshade':'unitless','raster_exceedance':'unitless'}
-                    grid_sink.append(geotiff_product(grid,values,units.get(kind,grid.unit),kind,[v.sha256 for v in grids]))
+                    grid_sink.append(geotiff_product(grid,values,units.get(kind,grid.unit),kind,[{'sha256':v.sha256,'band':v.band} for v in grids]))
                 im=a.imshow(values,extent=grid.extent,origin='upper',interpolation='nearest',cmap=cm,vmin=vmin,vmax=vmax);map_axes(a,grid)
                 if label:fig.colorbar(im,ax=a,label=label,shrink=.85)
                 return im

@@ -1,6 +1,6 @@
 import {useEffect,useMemo,useRef,useState} from 'react';
 import {createPortal} from 'react-dom';
-import {getStudioCatalog,getStudioRasterTable,renderStudio,composeStudio,type StudioComposition,type StudioLegacyPanel,type StudioInput,type StudioOutput,type StudioRaster,type StudioRecipe} from './api';
+import {getStudioCatalog,getStudioRasterTable,renderStudio,inspectStudioSources,type StudioSourceInspection,composeStudio,type StudioComposition,type StudioLegacyPanel,type StudioInput,type StudioOutput,type StudioRaster,type StudioRecipe} from './api';
 import {saveFigureBlob} from './figureExport';
 import {tableCSV} from './figureLibrary';
 
@@ -33,6 +33,7 @@ export default function ScientificFigureStudio({source,onClose,initialTier='prof
  const [tier,setTier]=useState<'all'|'basic'|'professional'>(initialTier);
  const [settings,setSettings]=useState<StudioInput>(()=>({...empty,csv:source.csv??'',title:'',...source.initialBindings}));
  const [rasters,setRasters]=useState<StudioRaster[]>(()=>source.rasters??[]),[selected,setSelected]=useState<number[]>(()=>source.rasters?.length?[0]:[]);
+ const [inspection,setInspection]=useState<StudioSourceInspection|null>(null);
  const [output,setOutput]=useState<StudioOutput|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState(''),[dpi,setDpi]=useState<300|600>(300);
  const [completed,setCompleted]=useState<StudioInput|null>(null),[fileName,setFileName]=useState(source.csv?'Current result data table':'No CSV selected');
  const [tableSource,setTableSource]=useState('current'),[tableProvenance,setTableProvenance]=useState<unknown>(source.provenance);
@@ -50,7 +51,7 @@ export default function ScientificFigureStudio({source,onClose,initialTier='prof
  },[]);
  function change<K extends keyof StudioInput>(k:K,v:StudioInput[K]){setSettings(s=>({...s,[k]:v}));setOutput(null);setCompleted(null);setError('');}
  function selectRecipe(r:StudioRecipe){setSettings(s=>({...s,recipe:r.id,parameter:r.option?.[1]??null,title:'',x_label:'',y_label:''}));setOutput(null);setCompleted(null);setError('');}
- function invalidate(){setOutput(null);setCompleted(null);}
+ function invalidate(){setOutput(null);setCompleted(null);setInspection(null);}
  function invalidateComposition(){setCombined(null);setCombinedInput(null);}
  function addPanel(){if(!completed||!active||panels.length>=6)return;setPanels(old=>[...old,{input:structuredClone(completed),name:completed.title||active.title,provenance:completed.csv?tableProvenance:source.provenance}]);invalidateComposition();}
  function movePanel(i:number,delta:number){setPanels(old=>{const a=[...old],j=i+delta;if(j>=0&&j<a.length)[a[i],a[j]]=[a[j],a[i]];return a;});invalidateComposition();}
@@ -69,6 +70,7 @@ export default function ScientificFigureStudio({source,onClose,initialTier='prof
  const tierRecipes=recipes.filter(r=>tier==='all'||(r.tier??'professional')===tier);
  const families=['All',...new Set(tierRecipes.map(r=>r.family))];
  const visible=tierRecipes.filter(r=>(family==='All'||r.family===family)&&(!search||(r.title+' '+r.family+' '+r.id).toLowerCase().includes(search.toLowerCase())));
+ async function inspect(){if(busy)return;const ac=new AbortController();controller.current=ac;setBusy(true);setError('');setInspection(null);try{const out=await inspectStudioSources(active?.source==='table'?settings.csv:'',active?.source==='raster'?chosen:[],ac.signal);if(!ac.signal.aborted)setInspection(out);}catch(e){if(!ac.signal.aborted)setError((e as Error).message);}finally{if(controller.current===ac){controller.current=null;setBusy(false);}}}
  async function render(format:StudioInput['format']='png',preview=true){
   if(!active||!canRender||busy)return;const ac=new AbortController();controller.current=ac;setBusy(true);setError('');
   const input=studioRequest(settings,active,chosen,format,preview?120:dpi);
@@ -100,7 +102,7 @@ export default function ScientificFigureStudio({source,onClose,initialTier='prof
       <label>Import GeoTIFF<input type="file" multiple accept=".tif,.tiff" aria-label="Import figure GeoTIFF" onChange={e=>void rasterFiles(e.target.files)}/></label>
       <small>Select in input order; maps preserve the original grid.</small>
       {rasters.map((r,i)=><div className="studio-raster" key={i}><label><input type="checkbox" checked={selected.includes(i)} disabled={!selected.includes(i)&&selected.length>=8} onChange={e=>{setSelected(s=>e.target.checked?[...s,i]:s.filter(n=>n!==i));invalidate();}}/>{selected.includes(i)?String(selected.indexOf(i)+1)+'. ':''}{r.name}</label>
-       <label>Unit<input aria-label={'Raster unit '+(i+1)} value={r.unit} placeholder="e.g. m" onChange={e=>{setRasters(old=>old.map((item,j)=>j===i?{...item,unit:e.target.value}:item));invalidate();}}/></label></div>)}
+       <label>Band number<input aria-label={'Raster band '+(i+1)} type="number" min="1" max="1024" value={r.band??1} onChange={e=>{setRasters(old=>old.map((item,j)=>j===i?{...item,band:Number(e.target.value)}:item));invalidate();}}/></label><button type="button" disabled={rasters.length>=64} onClick={()=>{setRasters(old=>[...old,{...r,name:r.name+' · additional band',band:(r.band??1)+1}]);invalidate();}}>Add another band</button><label>Unit<input aria-label={'Raster unit '+(i+1)} value={r.unit} placeholder="e.g. m" onChange={e=>{setRasters(old=>old.map((item,j)=>j===i?{...item,unit:e.target.value}:item));invalidate();}}/></label></div>)}
       {chosen.length<active.minimum_rasters&&<small>Requires at least {active.minimum_rasters} raster inputs.</small>}
       <button type="button" disabled={!chosen.length} onClick={()=>void rasterCells()}>Use actual raster cells as table</button>
       {active.id==='raster_profile'&&<><small>Supply ordered path coordinates in the selected raster's projected metre CRS. Sampling occurs at the supplied points.</small><label>Path CSV<input type="file" accept=".csv,text/csv" onChange={e=>void csvFile(e.target.files?.[0])}/></label><label>Path coordinates<textarea aria-label="Path coordinates CSV" rows={4} value={settings.csv} onChange={e=>change('csv',e.target.value)}/></label>{(['x','y'] as const).map(k=><label key={k}>{k==='x'?'Easting column':'Northing column'}<select aria-label={'Figure field '+k} value={settings[k]} onChange={e=>change(k,e.target.value)}><option value="">Select column</option>{headers.map(h=><option key={h}>{h}</option>)}</select></label>)}</>}
@@ -124,12 +126,13 @@ export default function ScientificFigureStudio({source,onClose,initialTier='prof
   </aside>
   <section className="studio-preview" aria-label="Studio figure preview">
    {error&&<p role="alert" className="discovery-error">{error}</p>}{busy&&<p role="status">Rendering the selected data…</p>}
+   {inspection&&<details open><summary>Data quality inspection</summary>{inspection.table&&<><p>{inspection.table.rows} table rows</p><table><thead><tr><th>Column</th><th>Type</th><th>Missing</th><th>Min</th><th>Max</th></tr></thead><tbody>{inspection.table.columns.map(c=><tr key={c.name}><td>{c.name}</td><td>{c.kind}</td><td>{c.missing}</td><td>{c.minimum??'—'}</td><td>{c.maximum??'—'}</td></tr>)}</tbody></table></>}{inspection.rasters.map((g,i)=><p key={i}>{g.name} · band {g.band}/{g.band_count} · {g.crs} · {g.shape.join(' × ')} · {g.unit||'unit unspecified'} · {g.valid_cells} valid / {g.missing_cells} missing · scale {g.scale} + offset {g.offset}</p>)}{inspection.aligned!==null&&<p>Grid alignment: {inspection.aligned?'Exact':'Different — align before comparison'} · common valid cells: {inspection.common_valid_cells??'not comparable'} · units: {inspection.same_unit?'same':'different'}</p>}</details>}
    {output?<><img alt={active?.title+' preview'} src={'data:'+output.media_type+';base64,'+output.figure}/><div className="studio-receipt"><strong>Numerical population</strong><p>{String(output.metadata.used_count)} used / {String(output.metadata.input_count)} input observations or cells</p>{Boolean(output.metadata.method_note)&&<small>{String(output.metadata.method_note)}</small>}</div>
     {!!output.table.length&&<details><summary>Computed plot data ({output.table.length-1} rows)</summary><table><thead><tr>{output.table[0].map((v,i)=><th key={i}>{v}</th>)}</tr></thead><tbody>{output.table.slice(1,11).map((row,i)=><tr key={i}>{row.map((v,j)=><td key={j}>{v??'Missing'}</td>)}</tr>)}</tbody></table></details>}
    </>:<div className="studio-empty">Select a recipe, bind the required data and render a scientific figure.</div>}
   </section>
  </div>
- <footer><button type="button" disabled={!canRender||busy} onClick={()=>void render()}>Render figure</button>{busy&&<button type="button" onClick={cancel}>Cancel render</button>}<label>Export resolution<select aria-label="Studio export DPI" value={dpi} onChange={e=>setDpi(Number(e.target.value) as 300|600)}><option value={300}>300 DPI</option><option value={600}>600 DPI</option></select></label>
+ <footer><button type="button" disabled={busy||(active?.source==='table'?!settings.csv:!chosen.length)} onClick={()=>void inspect()}>Inspect data</button><button type="button" disabled={!canRender||busy} onClick={()=>void render()}>Render figure</button>{busy&&<button type="button" onClick={cancel}>Cancel render</button>}<label>Export resolution<select aria-label="Studio export DPI" value={dpi} onChange={e=>setDpi(Number(e.target.value) as 300|600)}><option value={300}>300 DPI</option><option value={600}>600 DPI</option></select></label>
   {(['png','svg','pdf','tiff'] as const).map(format=><button type="button" key={format} disabled={!output||busy} onClick={()=>void render(format,false)}>{format.toUpperCase()}</button>)}
   <button type="button" disabled={!output||!completed||busy||panels.length>=6} onClick={addPanel}>Add to composition ({panels.length}/6)</button>
   {output?.derived_rasters?.map((v,i)=><span key={i}><button type="button" disabled={busy} onClick={()=>downloadEncoded(v.data,'image/tiff',v.name+'.tif')}>Numerical GeoTIFF</button> <button type="button" disabled={busy||rasters.length>=64} onClick={()=>{setRasters(old=>[...old,{name:v.name,data:v.data,unit:v.unit}]);setSelected([rasters.length]);invalidate();}}>Use computed raster</button></span>)}

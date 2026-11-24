@@ -72,7 +72,7 @@ def render_raster_domain(kind,req,fig,ax,grids,parameter,meta,cmap,grid_sink=Non
         v=out[valid];meta.update(used_count=int(v.size),minimum=float(v.min()),maximum=float(v.max()),mean=float(v.mean()),output_unit=label)
         if grid_sink is not None:
             from .studio_inference import geotiff_product
-            grid_sink.append(geotiff_product(g,out,output_unit if output_unit is not None else label,kind,[item.sha256 for item in grids]))
+            grid_sink.append(geotiff_product(g,out,output_unit if output_unit is not None else label,kind,[{'sha256':item.sha256,'band':item.band} for item in grids]))
         save(['valid_cells','minimum','maximum','mean'],[len(v)],[v.min()],[v.max()],[v.mean()])
     def geo_axes():
         ax.set_aspect('equal');ax.set_xlabel('Easting' if g.crs.is_projected else 'Longitude');ax.set_ylabel('Northing' if g.crs.is_projected else 'Latitude')
