@@ -586,13 +586,13 @@ export function traceExisting(start:[number,number],end:[number,number],paths:[n
   });
 }
 export type TerrainComputePolicy = {
-  mode:'automatic'|'manual';memory_percent:number;concurrent_tasks:number;tile_size:128|256|512|1024;
+  mode:'automatic'|'manual';backend?:'auto'|'cpu';gpu_memory_percent?:number;memory_percent:number;concurrent_tasks:number;tile_size:128|256|512|1024;
   slope_cells:number;surface_cells:number;global_cells:number;visibility_cells:number;least_cost_cells:number;
   viewshed_distance_m:number;ray_samples:number;
 };
-export type TerrainComputeLimits = Omit<TerrainComputePolicy,'mode'|'memory_percent'> & {memory_bytes:number;native_slope_cells:number};
+export type TerrainComputeLimits = Omit<TerrainComputePolicy,'mode'|'memory_percent'|'backend'|'gpu_memory_percent'> & {memory_bytes:number;native_slope_cells:number;gpu_memory_bytes?:number};
 export interface TerrainComputeStatus {
-  policy:TerrainComputePolicy;hardware:{total_bytes:number;available_bytes:number;logical_cpus:number;scratch_free_bytes:number};
+  policy:TerrainComputePolicy;hardware:{total_bytes:number;available_bytes:number;logical_cpus:number;scratch_free_bytes:number;gpu_free_bytes?:number;gpu_total_bytes?:number};
   effective:TerrainComputeLimits;active_tasks:number;queued_tasks:number;reserved_bytes?:number;scope:string;terrain_gpu:string;memory_protection:string;
 }
 export function getTerrainComputeResources(signal?:AbortSignal):Promise<TerrainComputeStatus>{
@@ -995,7 +995,7 @@ export async function downloadGISJob(projectId:string,id:string):Promise<void>{
 
 
 export type TerrainOperation='dem_difference'|'contours'|'volume'|'visibility'|'viewshed_multi'|'watershed'|'mesh'|'distribution'|'elevation'|'slope_map'|'aspect_map'|'hillshade'|'tri'|'tpi'|'curvature'|'plan_curvature'|'profile_curvature'|'flow_direction'|'flow_accumulation'|'flow_accumulation_mfd'|'streams'|'stream_order'|'suitability'|'cutfill_map'|'least_cost'|'cross_sections';
-export interface TerrainRaster {png:string;geotiff:string;corners:[[number,number],[number,number],[number,number],[number,number]];legend:{label:string;color:string;cells:number}[];width:number;height:number;valid_cells:number;unit?:string}
+export interface TerrainRaster {png:string;geotiff:string;product_id?:string;corners:[[number,number],[number,number],[number,number],[number,number]];legend:{label:string;color:string;cells:number}[];width:number;height:number;valid_cells:number;unit?:string}
 export interface TerrainRasterLayer {id:string;title:string;raster:TerrainRaster;opacity:number;resampling:'nearest'|'linear'}
 export interface TerrainDistributionBin {lower_m:number;upper_m:number;cells:number;area_m2:number;cumulative_pct:number}
 export interface TerrainLOD {tile_cells:number;levels:number[];transport:string;tiles:Array<{lod_step:number;row_start:number;col_start:number;rows:number;cols:number;bounds_cell:number[];row_indices:number[];col_indices:number[];heights:Array<number|null>}>}
@@ -1175,4 +1175,20 @@ export function downloadProjectPackage(project:string,rasters:Array<{id:string;k
 export function restoreProjectPackage(project:string,file:File,token:string,signal?:AbortSignal):Promise<{created:number;layers:number;rasters:Array<{asset:RasterAsset;kind:'image'|'dem'}>}>{
  const body=new FormData();body.append('file',file);
  return request(exchangePath(project)+'/package/import',{method:'POST',body,signal,headers:{'X-GeoFathom-Local-Import':'1','X-GeoFathom-Admin-Token':token}});
+}
+
+/** Authenticated binary transfer without embedding large rasters in JSON. */
+export async function downloadTerrainRaster(raster:TerrainRaster,filename:string):Promise<void>{
+ let blob:Blob;
+ if(raster.product_id){
+  const response=await rawRequest('/terrain/products/'+encodeURIComponent(raster.product_id));
+  if(!response.ok)throw await responseError(response);
+  blob=await response.blob();
+ }else{
+  const data=Uint8Array.from(atob(raster.geotiff),c=>c.charCodeAt(0));
+  blob=new Blob([data],{type:'image/tiff'});
+ }
+ const url=URL.createObjectURL(blob);
+ const link=document.createElement('a');link.href=url;link.download=filename;link.click();
+ setTimeout(()=>URL.revokeObjectURL(url),1000);
 }

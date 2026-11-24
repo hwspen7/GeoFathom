@@ -300,24 +300,44 @@ def raster_product(values,operation,affine,crs,cancel=None,
     legend=[{"label":label,"color":color,"cells":int((classes==i).sum())}
             for i,(label,color) in enumerate(zip(labels,colors))]
     height,width=values.shape
-    with MemoryFile() as memory:
-        with memory.open(driver="GTiff",height=height,width=width,count=1,dtype="float32",
+    def write(dst):
+        from rasterio.windows import Window
+        for top in range(0,height,512):
+            checkpoint(cancel)
+            for left in range(0,width,512):
+                h,w=min(512,height-top),min(512,width-left)
+                dst.write(values[top:top+h,left:left+w].astype(np.float32),1,window=Window(left,top,w,h))
+        # Labels are declared provenance, not an assertion of survey
+        # control or absolute vertical accuracy.
+        datum_tags={
+            "TERRAIN_SOURCE_VERTICAL_DATUM":source_datum or "not_declared",
+        }
+        if operation=="dem_difference":
+            datum_tags["TERRAIN_REFERENCE_VERTICAL_DATUM"]=(
+                reference_datum or "not_declared")
+        dst.update_tags(TERRAIN_OPERATION=operation,
+                        TERRAIN_UNIT=("score_0_to_1" if operation=="suitability" and suitability_model=="weighted" else "Shreve_magnitude" if operation=="stream_order" and stream_order_scheme=="shreve" else RASTER_UNITS[operation]),
+                        TERRAIN_NODATA_POLICY="NaN",
+                        TERRAIN_GRID_BASIS="projected_cell_centers",
+                        **datum_tags)
+
+    product_id=None
+    # Keep the established small-product API; large products never enter
+    # the JSON response as base64. Persist the full exact source grid.
+    if active_limits() is not None and values.size>1_000_000:
+        from .products import temporary_product,publish
+        with temporary_product(values.size) as path:
+            with rasterio.open(path,"w",driver="GTiff",height=height,width=width,count=1,dtype="float32",
+                 crs=crs,transform=affine,nodata=float("nan"),compress="deflate",tiled=True,blockxsize=256,blockysize=256) as dst:
+                write(dst)
+            product_id=publish(path,cancel)
+        tif=""
+    else:
+        with MemoryFile() as memory:
+            with memory.open(driver="GTiff",height=height,width=width,count=1,dtype="float32",
                          crs=crs,transform=affine,nodata=float("nan"),compress="deflate") as dst:
-            dst.write(values.astype(np.float32),1)
-            # Labels are declared provenance, not an assertion of survey
-            # control or absolute vertical accuracy.
-            datum_tags={
-                "TERRAIN_SOURCE_VERTICAL_DATUM":source_datum or "not_declared",
-            }
-            if operation=="dem_difference":
-                datum_tags["TERRAIN_REFERENCE_VERTICAL_DATUM"]=(
-                    reference_datum or "not_declared")
-            dst.update_tags(TERRAIN_OPERATION=operation,
-                            TERRAIN_UNIT=("score_0_to_1" if operation=="suitability" and suitability_model=="weighted" else "Shreve_magnitude" if operation=="stream_order" and stream_order_scheme=="shreve" else RASTER_UNITS[operation]),
-                            TERRAIN_NODATA_POLICY="NaN",
-                            TERRAIN_GRID_BASIS="projected_cell_centers",
-                            **datum_tags)
-        tif=base64.b64encode(memory.read()).decode("ascii")
+                write(dst)
+            tif=base64.b64encode(memory.read()).decode("ascii")
     bounds=array_bounds(height,width,affine)
     target,tw,th=calculate_default_transform(crs,"EPSG:3857",width,height,*bounds)
     factor=max(tw,th)/512
@@ -342,7 +362,7 @@ def raster_product(values,operation,affine,crs,cancel=None,
     xs,ys=transform("EPSG:3857","EPSG:4326",[west,east,east,west],[north,north,south,south])
     checkpoint(cancel)
     return {"png":"data:image/png;base64,"+base64.b64encode(sink.getvalue()).decode("ascii"),
-            "geotiff":tif,"corners":[[x,y] for x,y in zip(xs,ys)],"legend":legend,
+            "geotiff":tif,**({"product_id":product_id} if product_id else {}),"corners":[[x,y] for x,y in zip(xs,ys)],"legend":legend,
             "width":width,"height":height,"valid_cells":int(finite.sum()),
             "unit":("score_0_to_1" if operation=="suitability" and suitability_model=="weighted" else "Shreve_magnitude" if operation=="stream_order" and stream_order_scheme=="shreve" else RASTER_UNITS[operation])}
 

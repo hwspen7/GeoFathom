@@ -1,3 +1,4 @@
+import {downloadTerrainRaster} from './api';
 import {useEffect,useMemo,useRef,useState,type ChangeEvent} from 'react';
 import {createPortal} from 'react-dom';
 import {Mountain} from 'lucide-react';
@@ -884,7 +885,7 @@ export default function TerrainWorkbench(p:Props){
            · Declared vertical datum: {selected?.source.vertical_datum??'Unknown'}</small>
        </details>}
        {resultTab==='details'&&<div className="terrain-output-downloads">
-         {result.raster&&<button onClick={()=>{const a=document.createElement('a');const data=Uint8Array.from(atob(result.raster!.geotiff),c=>c.charCodeAt(0));const url=URL.createObjectURL(new Blob([data],{type:'image/tiff'}));a.href=url;a.download=result.operation+'.tif';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}}>GeoTIFF</button>}
+         {result.raster&&<button onClick={()=>void downloadTerrainRaster(result.raster!,result.operation+'.tif').catch(e=>setError(e instanceof Error?e.message:String(e)))}>GeoTIFF</button>}
          {result.raster&&<button aria-label="Export terrain class CSV" onClick={()=>{
            const csv=terrainClassesCsv(result.raster!.legend,result.cell_area_m2);
            const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));

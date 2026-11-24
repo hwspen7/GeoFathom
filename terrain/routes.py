@@ -219,3 +219,21 @@ async def advanced(request:Request,body:AdvancedTerrainInput):
             body.design_curvature_east,body.design_curvature_cross,body.design_curvature_north,budgeted=True)
     except (GeometryError,RasterError,ValueError,OverflowError) as error:
         raise HTTPException(status_code=422,detail=str(error)) from error
+
+@router.get("/products/{identifier}")
+def download_product(identifier: str):
+    from fastapi.responses import FileResponse
+    from .products import product_path
+    try:
+        return FileResponse(product_path(identifier),media_type="image/tiff",filename="terrain-"+identifier[:12]+".tif")
+    except RasterError as error:raise HTTPException(422,detail=str(error)) from error
+    except FileNotFoundError as error:raise HTTPException(404,detail=str(error)) from error
+
+
+@router.delete("/products/{identifier}")
+def delete_product(identifier: str):
+    from .products import remove
+    try:remove(identifier)
+    except RasterError as error:raise HTTPException(422,detail=str(error)) from error
+    except FileNotFoundError as error:raise HTTPException(404,detail=str(error)) from error
+    return {"deleted":True}
