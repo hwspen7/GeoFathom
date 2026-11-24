@@ -13,6 +13,8 @@ from pyproj import Geod, Transformer
 
 GEOD=Geod(ellps="WGS84")
 METHODS={
+ "directed_min_cut":("Directed arc connectivity and minimum cut","Exact unit-capacity directed max-flow/min-cut certificate; opposing arcs are distinct."),
+ "access_equity":("Demand-weighted accessibility equity","Nearest-facility utility, isolation and demand-weighted Gini; not capacity allocation."),
  "topology":("Network structure","Topology and weak components; explicit endpoints, no automatic crossing intersection."),
  "shortest_path":("Least-cost path","Directed Dijkstra with positive additive costs; parallel edges retained."),
  "od_matrix":("Origin–destination costs","Directed origin–destination cost matrix; unreachable pairs are null."),
@@ -227,7 +229,23 @@ def execute(body):
         if columns:bindings["columns"]=columns
         figures.append({"title":title,"recipe":recipe,"bindings":bindings,"csv":csv_data,"raster":False})
     def budget(count):require(count*(n+arcs)<=10_000_000,"Network search work budget exceeded.")
-    if kind in ("raster_impedance","raster_least_cost","pareto_path"):
+    if kind=="directed_min_cut":
+        from .network_equity import directed_cut
+        require(len(origins)==len(destinations)==1,"Choose exactly one origin and destination.")
+        cut,metrics=directed_cut(a,origins[0],destinations[0])
+        cols=["source","target","edge_id","capacity"]
+        by_id={e.id:e for e in g.edges}
+        for u,v,eid in cut:
+            e=by_id[eid];rows.append([u,v,eid,1])
+            features.append(edge_feature(e,e.coords if u==e.source else e.coords[::-1],cut_capacity=1,color="#b94f46"))
+    elif kind=="access_equity":
+        from .network_equity import access_equity
+        require(origins and destinations,"Choose origins and facilities.");budget(len(origins))
+        rows,metrics,curve=access_equity(a,origins,destinations,body.demand,body.threshold)
+        cols=["origin","facility","cost","demand","accessibility"]
+        features=[node_feature(g,s,facility=t,cost=c,demand=w,accessibility=z) for s,t,c,w,z in rows]
+        if metrics["access_gini"] is not None:plot("Demand-weighted access Lorenz curve","basic_line","cumulative_demand","cumulative_access",values=(["cumulative_demand","cumulative_access"],curve))
+    elif kind in ("raster_impedance","raster_least_cost","pareto_path"):
         from .network_advanced import pareto_routes,raster_costs
         by_id={e.id:e for e in g.edges}
         if kind=="pareto_path":
@@ -447,7 +465,7 @@ def execute(body):
             cols=["origin","accessibility"];rows=[[s,score[s]] for s in origins];features=[node_feature(g,s,accessibility=score[s]) for s in origins]
             plot("Origin accessibility","basic_column","origin","accessibility")
     # Display styling is separate from raw values and never changes numerical products.
-    field={'harmonic_centrality':'score','betweenness':'score','gravity_access':'accessibility','two_step_fca':'accessibility','enhanced_two_step_fca':'accessibility','capacitated_allocation':'served_fraction','edge_criticality':'lost_fraction','hazard_exposure':'mean','raster_impedance':'multiplier','raster_least_cost':'multiplier'}.get(kind)
+    field={'access_equity':'accessibility','harmonic_centrality':'score','betweenness':'score','gravity_access':'accessibility','two_step_fca':'accessibility','enhanced_two_step_fca':'accessibility','capacitated_allocation':'served_fraction','edge_criticality':'lost_fraction','hazard_exposure':'mean','raster_impedance':'multiplier','raster_least_cost':'multiplier'}.get(kind)
     if field:
         values=[f['properties'][field] for f in features if f['properties'].get(field) is not None]
         if values:

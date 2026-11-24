@@ -24,7 +24,7 @@ def run(kind,network=NETWORK,**kw):
 def metrics(r):return r['receipt']['metrics']
 
 def test_catalog_and_topology():
-    r=run('topology');assert len(METHODS)==22
+    r=run('topology');assert len(METHODS)==24
     assert r['receipt']['nodes']==6 and r['receipt']['directed_arcs']==6
     assert metrics(r)['weak_components']==2
     assert {row[0]:row[3] for row in r['rows']}=={'A':2,'B':1,'C':0,'D':1,'E':1,'F':1}
@@ -229,3 +229,21 @@ def test_advanced_network_result_figures_and_lineage():
             req=StudioInput(recipe=figure['recipe'],csv=figure['csv'],**figure['bindings'])
             png,_,_=render(req);assert png.startswith(b'\x89PNG')
             svg,_,_=render(req.model_copy(update={'format':'svg'}));assert svg.startswith(b'<?xml')
+
+
+def test_directed_min_cut_parallel_and_unreachable():
+    r=run('directed_min_cut',origins=['A'],destinations=['C'])
+    assert metrics(r)['directed_arc_connectivity']==2
+    assert len(r['rows'])==2
+    assert metrics(run('directed_min_cut',origins=['C'],destinations=['A']))['directed_arc_connectivity']==0
+    n=collection(edge('a','A','B',1),edge('b','A','B',2))
+    assert metrics(run('directed_min_cut',n,origins=['A'],destinations=['B']))['directed_arc_connectivity']==2
+
+def test_access_equity_preserves_unreachable_demand():
+    r=run('access_equity',origins=['A','E'],destinations=['B'],demand={'A':1,'E':3},threshold=2)
+    assert r['rows']==[['A','B',2.,1.,.5],['E',None,None,3.,0.]]
+    assert metrics(r)['demand_weighted_access']==pytest.approx(.125)
+    assert metrics(r)['unreachable_demand_fraction']==pytest.approx(.75)
+    assert metrics(r)['access_gini']==pytest.approx(.75)
+    r=run('access_equity',origins=['E'],destinations=['B'],demand={'E':1})
+    assert metrics(r)['access_gini'] is None
