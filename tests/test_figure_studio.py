@@ -446,3 +446,45 @@ def test_variogram_fit_and_conditional_kriging_views(raster_fixture):
     assert meta['variogram_fit']['partial_sill']>=0 and table[0][-1]=='fitted_semivariance'
     _,meta,table=render(body.model_copy(update={'variogram_model':'exponential','variogram_view':'kriging_validation','kriging_neighbors':8}))
     assert meta['validation_count']==168 and meta['rmse']>=0 and len(table)==169
+
+
+def test_calibrated_domain_models_independent_oracles():
+    from terrain.studio_calibrated_models import spectral_unmix,linear_reservoir,calibrate_reservoir,block_regression,voxel_counts
+    signatures=np.array([[.1,.7,.3],[.6,.2,.4],[.2,.3,.8]])
+    truth=np.array([[.2,.3,.5],[1.,0.,0.],[0.,.5,.5]])
+    fractions,error,receipt=spectral_unmix(truth@signatures,signatures)
+    assert np.allclose(fractions,truth,atol=2e-5)
+    assert np.allclose(fractions.sum(axis=1),1) and np.max(error)<1e-5
+    rain=np.random.default_rng(8).uniform(0,20,100)
+    flow,storage=linear_reservoir(rain,.72,.65)
+    assert np.sum(flow)+storage[-1]==pytest.approx(.65*np.sum(rain))
+    fit,s,diagnostics=calibrate_reservoir(rain,flow,.7)
+    assert diagnostics['validation']['rmse']<.01
+    assert diagnostics['recession']==pytest.approx(.72,abs=.001)
+    changed=flow.copy();changed[70:]+=50
+    fit2,_,receipt2=calibrate_reservoir(rain,changed,.7)
+    assert np.array_equal(fit,fit2) and receipt2['validation']['rmse']>40
+    coords=np.array([(i*100,j*100) for i in range(6) for j in range(6)],float)
+    features=np.column_stack((coords[:,0]/100,coords[:,1]/100))
+    y=3+features[:,0]*2-features[:,1]
+    pred,fold,receipt=block_regression(coords,features,y,150,4,0)
+    assert np.allclose(pred,y) and len(np.unique(fold))==4
+    for cell in np.unique(np.floor(coords/150),axis=0):
+        assert len(np.unique(fold[np.all(np.floor(coords/150)==cell,axis=1)]))==1
+    centers,counts,origin=voxel_counts([0,.2,1.1],[0,.2,0],[0,.2,0],1)
+    assert counts.tolist()==[2,1] and np.allclose(centers,[[.5,.5,.5],[1.5,.5,.5]])
+
+
+def test_domain_advanced_figures_actual_rendering():
+    from terrain.studio_routes import StudioInput
+    from terrain.studio_render import render
+    from terrain.studio_calibrated_models import linear_reservoir
+    rain=np.random.default_rng(8).uniform(0,20,40);q,_=linear_reservoir(rain,.7,.6)
+    csv='time,flow,rain\n'+'\n'.join(f'{i},{a},{b}' for i,(a,b) in enumerate(zip(q,rain)))
+    _,meta,table=render(StudioInput(recipe='hydro_runoff',csv=csv,x='time',y='flow',z='rain',hydrology_mode='calibrated_reservoir'))
+    assert meta['calibration']['validation']['rmse']<.02 and len(table)==41
+    csv='east,north,target,a,b\n'+'\n'.join(f'{i*100},{j*100},{3+2*i-j},{i},{j}' for i in range(6) for j in range(6))
+    _,meta,table=render(StudioInput(recipe='model_learning',csv=csv,x='east',y='north',z='target',columns=['a','b'],model_validation='spatial_blocks',block_size_m=150,validation_folds=4,ridge_penalty=0))
+    assert meta['spatial_validation']['overall']['rmse']<1e-10 and len(table)==37
+    _,meta,table=render(StudioInput(recipe='point_density',csv='x,y,z\n0,0,0\n.2,.2,.2\n1.1,0,0',x='x',y='y',z='z',point_mode='voxel',voxel_size=1))
+    assert meta['occupied_voxels']==2 and sum(row[3] for row in table[1:])==3

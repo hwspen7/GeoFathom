@@ -115,7 +115,18 @@ def render_table_domain(kind,req,fig,ax,table,parameter,meta,palette,cmap,rows):
         elif kind in {'hydro_runoff','hydro_flashiness'}:
             if kind=='hydro_runoff':
                 a,_=rows([req.x,req.y,req.z]);x,y,z=a;complete();order=np.argsort(x);x,y,z=[v[order] for v in a];require(np.all(np.diff(x)>0) and np.all(y>=0) and np.all(z>=0),'Time must be unique; rainfall and discharge nonnegative.')
-                ax.plot(x,y,label=req.y);right=ax.twinx();right.bar(x,z,width=np.min(np.diff(x))*.65,color=palette[1],alpha=.45);right.invert_yaxis();right.set_ylabel(req.z);setxy(req.x,req.y);save([req.x,req.y,req.z],x,y,z)
+                ax.plot(x,y,label='Observed flow' if req.hydrology_mode=='calibrated_reservoir' else req.y)
+                right=ax.twinx();right.bar(x,z,width=np.min(np.diff(x))*.65,color=palette[1],alpha=.26);right.invert_yaxis();right.set_ylabel(req.z);setxy(req.x,req.y)
+                if req.hydrology_mode=='calibrated_reservoir':
+                    from .studio_calibrated_models import calibrate_reservoir
+                    require(len(x)>=20 and np.allclose(np.diff(x),np.diff(x)[0],rtol=1e-7,atol=1e-10),'Reservoir calibration requires regularly spaced observations.')
+                    q,s,diagnostics=calibrate_reservoir(z,y,req.training_fraction)
+                    n=diagnostics['training_count'];ax.plot(x,q,color=palette[2],label='Simulated flow')
+                    ax.axvline(x[n],linestyle='--',color='#555555',label='Validation begins')
+                    ax.legend(frameon=False);meta['calibration']=diagnostics
+                    meta['method_note']='Conservative single-reservoir rainfall-runoff model; observed runoff and rainfall must both be depth per time step in identical units. Chronological holdout; initial storage zero.'
+                    save([req.x,'observed_depth','rainfall_depth','simulated_depth','storage_depth','period'],x,y,z,q,s,np.where(np.arange(len(x))<n,'training','validation'))
+                else:save([req.x,req.y,req.z],x,y,z)
             else:
                 a,c=rows([req.x,req.y],[req.group]);complete();x,y=a;groups=c[0];require(np.all(y>=0),'Discharge cannot be negative.')
                 names=[];values=[]

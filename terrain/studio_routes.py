@@ -50,6 +50,17 @@ class StudioInput(BaseModel):
     variogram_model:Literal['none','exponential','gaussian','spherical']='none'
     variogram_view:Literal['fit','kriging_validation']='fit'
     kriging_neighbors:int=Field(default=24,ge=3,le=48)
+    spectral_mode:Literal['angle','abundance','reconstruction_error']='angle'
+    endmember_csv:str=Field(default='',max_length=20000)
+    endmember_index:int=Field(default=1,ge=1,le=8)
+    hydrology_mode:Literal['observed','calibrated_reservoir']='observed'
+    training_fraction:float=Field(default=.7,ge=.5,le=.85)
+    model_validation:Literal['recorded','spatial_blocks']='recorded'
+    block_size_m:float=Field(default=100,gt=0,le=1000000)
+    validation_folds:int=Field(default=5,ge=3,le=10)
+    ridge_penalty:float=Field(default=1,ge=0,le=1000000)
+    point_mode:Literal['planar','voxel']='planar'
+    voxel_size:float=Field(default=10,gt=0,le=1000000)
     export_grid:bool=False
     spatial_inference:Literal['statistic','p','q','cluster']='statistic'
     permutations:int=Field(default=199,ge=99,le=9999)
@@ -73,6 +84,9 @@ class StudioInput(BaseModel):
     @model_validator(mode='after')
     def validate_budget(self):
         if self.recipe not in BY_ID:raise ValueError('Unknown figure recipe.')
+        if self.recipe=='spectral_angle' and self.spectral_mode!='angle' and not self.endmember_csv.strip():raise ValueError('Supply calibrated endmember spectra.')
+        if self.recipe=='model_learning' and self.model_validation=='spatial_blocks' and not self.columns:raise ValueError('Select regression feature columns.')
+        if self.recipe=='point_density' and self.point_mode=='voxel' and not self.z:raise ValueError('Select the vertical coordinate column.')
         if self.class_breaks and (len(self.class_breaks)<2 or any(a>=b for a,b in zip(self.class_breaks,self.class_breaks[1:]))):raise ValueError('Class breaks must be strictly increasing.')
         if (self.map_min is None)!=(self.map_max is None) or (self.map_min is not None and self.map_min>=self.map_max):raise ValueError('Fixed display range requires increasing minimum and maximum.')
         if self.recipe=='raster_profile' and not self.csv.strip():raise ValueError('Supply path coordinates.')

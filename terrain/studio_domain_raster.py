@@ -102,6 +102,24 @@ def render_raster_domain(kind,req,fig,ax,grids,parameter,meta,cmap,grid_sink=Non
                 meta['loadings']=vec[:,0].tolist()
             meta['used_count']=int(mask.sum())
         else:
+            if kind=='spectral_angle' and req.spectral_mode!='angle':
+                from .studio_data import Table
+                from .studio_calibrated_models import spectral_unmix
+                signatures=Table(req.endmember_csv)
+                require(len(signatures.names)==n+1,'Endmember CSV requires a name column followed by one reflectance column per selected band, in raster order.')
+                labels=np.asarray(signatures.columns[signatures.names[0]],dtype=str)
+                require(len(set(labels))==len(labels) and all(str(v).strip() for v in labels),'Endmember labels must be unique and nonempty.')
+                em=np.column_stack([signatures.numeric(k) for k in signatures.names[1:]])
+                require(1<=req.endmember_index<=len(em),'Selected endmember does not exist.')
+                fractions,rmse,diagnostics=spectral_unmix(a.T,em)
+                meta.update(unmixing=diagnostics,endmembers=labels.tolist(),endmember_spectra=em.tolist(),mean_abundances=fractions.mean(axis=0).tolist(),
+                    reconstruction_rmse=float(np.sqrt(np.mean(rmse**2))),method_note='Fully constrained linear spectral mixture; supplied endmembers, nonnegative fractions summing to one. Reconstruction error is not independent classification accuracy.')
+                out=np.full(z.shape,np.nan)
+                if req.spectral_mode=='abundance':
+                    j=req.endmember_index-1;out[mask]=fractions[:,j];show(out,'Abundance: '+str(labels[j]),vmin=0,vmax=1,output_unit='fraction')
+                else:
+                    out[mask]=rmse;show(out,'Reflectance reconstruction RMSE',vmin=0,output_unit='reflectance')
+                return derived
             if kind=='spectral_angle':
                 ref=a.mean(axis=1);cos=safe_ratio(ref@a,np.linalg.norm(ref)*np.linalg.norm(a,axis=0));v=np.degrees(np.arccos(np.clip(cos,-1,1)))
             elif kind=='spectral_ratio':v=safe_ratio(a[0],a[1])

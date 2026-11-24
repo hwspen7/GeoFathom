@@ -128,8 +128,22 @@ def render_model(kind,req,fig,ax,table,parameter,meta,palette,cmap,rows):
     elif kind=='model_shap_dependence':
         x,y,z=xyz();im=ax.scatter(x,y,c=z,cmap=cmap,s=14);fig.colorbar(im,ax=ax,label=req.z);ax.axhline(0,color='gray');setxy(req.x,'Supplied SHAP contribution');save([req.x,req.y,req.z],x,y,z)
     elif kind=='model_learning':
-        x,y,z=xyz();order=np.argsort(x);x,y,z=x[order],y[order],z[order];require(np.all(np.diff(x)>0),'Training sizes must be unique.')
-        ax.plot(x,y,label='Training');ax.plot(x,z,label='Validation');ax.legend(frameon=False);setxy(req.x,'Recorded score');save([req.x,req.y,req.z],x,y,z)
+        if req.model_validation=='spatial_blocks':
+            from .studio_calibrated_models import block_regression
+            require(len(set([req.x,req.y,req.z,*req.columns]))==3+len(req.columns),'Coordinates, target and regression features must be distinct.')
+            a,_=rows([req.x,req.y,req.z,*req.columns]);x,y,z,*features=a
+            require(len(x)==len(table.rows),'Spatial regression requires complete observations.')
+            pred,fold,diagnostics=block_regression(np.column_stack((x,y)),np.column_stack(features),z,req.block_size_m,req.validation_folds,req.ridge_penalty)
+            residual=pred-z
+            im=ax.scatter(z,pred,c=fold,cmap='tab10',s=16,alpha=.75,vmin=.5,vmax=req.validation_folds+.5)
+            fig.colorbar(im,ax=ax,label='Held-out fold',ticks=np.arange(1,req.validation_folds+1))
+            lo=min(z.min(),pred.min());hi=max(z.max(),pred.max());ax.plot([lo,hi],[lo,hi],'--',color='#555555')
+            setxy('Observed target','Out-of-fold prediction');meta['spatial_validation']=diagnostics
+            meta['method_note']='Ridge/OLS with fold-local feature scaling; whole spatial blocks held out. Coordinates must be projected metres. Adjacent blocks can remain dependent.'
+            save(['easting','northing','observed','prediction','residual','held_out_fold'],x,y,z,pred,residual,fold)
+        else:
+            x,y,z=xyz();order=np.argsort(x);x,y,z=x[order],y[order],z[order];require(np.all(np.diff(x)>0),'Training sizes must be unique.')
+            ax.plot(x,y,label='Training');ax.plot(x,z,label='Validation');ax.legend(frameon=False);setxy(req.x,'Recorded score');save([req.x,req.y,req.z],x,y,z)
     elif kind.startswith('multi_'):
         m=table_matrix(table,req,rows);names=req.columns
         if kind in {'multi_covariance','multi_spearman'}:
@@ -185,8 +199,18 @@ def render_model(kind,req,fig,ax,table,parameter,meta,palette,cmap,rows):
             a=x[y==l];b=z[y==l];require(len(a)>=2 and len(np.unique(a))==len(a),'Each factor level requires unique evaluated primary levels.');o=np.argsort(a);ax.plot(a[o],b[o],marker='o',label=f'{req.y}={l:g}')
         ax.legend(frameon=False);setxy(req.x,req.z);save([req.x,req.y,req.z],x,y,z)
     elif kind=='point_density':
-        x,y=xy();h,xe,ye=np.histogram2d(x,y,bins=30);im=ax.pcolormesh(xe,ye,h.T,cmap=cmap);fig.colorbar(im,ax=ax,label='Point count');ax.set_aspect('equal');setxy(req.x,req.y)
-        xx,yy=np.meshgrid((xe[:-1]+xe[1:])/2,(ye[:-1]+ye[1:])/2,indexing='ij');save(['x_center','y_center','point_count'],xx.ravel(),yy.ravel(),h.ravel())
+        if req.point_mode=='voxel':
+            from .studio_calibrated_models import voxel_counts
+            x,y,z=xyz();centers,counts,origin=voxel_counts(x,y,z,req.voxel_size)
+            fig.delaxes(ax);ax=fig.add_subplot(111,projection='3d')
+            im=ax.scatter(*centers.T,c=counts,cmap=cmap,s=8+18*np.sqrt(counts/counts.max()),marker='s',alpha=.75)
+            fig.colorbar(im,ax=ax,label='Points per occupied voxel',shrink=.7);ax.set(xlabel=req.x,ylabel=req.y,zlabel=req.z)
+            ax.set_box_aspect(np.maximum(np.ptp(centers,axis=0),req.voxel_size))
+            meta.update(voxel_size=req.voxel_size,voxel_origin=origin.tolist(),occupied_voxels=int(len(counts)),point_count=int(counts.sum()),method_note='Sparse half-open cubic bins in shared metric coordinates; square markers denote voxel centers, not reconstructed surfaces.')
+            save(['x_center','y_center','z_center','point_count','points_per_cubic_unit'],*centers.T,counts,counts/req.voxel_size**3)
+        else:
+            x,y=xy();h,xe,ye=np.histogram2d(x,y,bins=30);im=ax.pcolormesh(xe,ye,h.T,cmap=cmap);fig.colorbar(im,ax=ax,label='Point count');ax.set_aspect('equal');setxy(req.x,req.y)
+            xx,yy=np.meshgrid((xe[:-1]+xe[1:])/2,(ye[:-1]+ye[1:])/2,indexing='ij');save(['x_center','y_center','point_count'],xx.ravel(),yy.ravel(),h.ravel())
     elif kind=='point_vertical':
         a,_=rows([req.y]);v=a[0];c,e=np.histogram(v,bins=30);ax.barh((e[:-1]+e[1:])/2,c,height=np.diff(e)*.9);setxy('Point count',req.y);save(['lower','upper','count'],e[:-1],e[1:],c)
     else:raise FigureInputError('Unimplemented table domain recipe: '+kind)
