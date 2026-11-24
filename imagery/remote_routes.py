@@ -18,7 +18,7 @@ from .remote_catalog import BY_ID,catalog,SERIES_IDS,HYPER_IDS
 from .remote_temporal_models import seasonal_metrics,segmented_means
 from .remote_hyperspectral import continuum_features
 from .remote_physics import thermal_uncertainty,angular_sar,register_translation,register_subpixel
-from .remote_classifiers import blocked_classifier
+from .remote_classifiers import blocked_classifier,nested_svm
 from .remote_inference import atmospheric_reflectance,robust_harmonization,irmad,cloud_buffer,series_break
 from .remote_research import surface_temperature,c_correction,ndvi_uncertainty,change_vectors,spatial_classifier,long_series,gamma_map,mad_distance
 from .remote_products import rgb_product
@@ -187,6 +187,7 @@ def execute(body):
     elif kind=='ndvi_uncertainty':out,meta=ndvi_uncertainty(v,params)
     elif kind in {'change_vector','change_mahalanobis'}:out,meta=change_vectors(v,kind=='change_mahalanobis')
     elif kind in {'spatial_rf_cv','spatial_svm_cv','spatial_lda_cv'}:out,headers,rows,meta=blocked_classifier(v,first,params,kind)
+    elif kind=='spatial_nested_svm':out,headers,rows,meta=nested_svm(v,first,params)
     elif kind=='spatial_lda':out,headers,rows,meta=spatial_classifier(v,first,params)
     elif kind in HYPER_IDS:
         out,headers,rows,meta=continuum_features(np.stack(list(v.values())),body.times,kind,params)
@@ -266,6 +267,9 @@ def execute(body):
     if kind=='spectral_endmembers':
         for i in range(params['endmembers']):
             add('Endmember '+str(i+1)+' candidate spectrum','basic_line',{'x':'wavelength_nm','y':'reflectance'},csv_text(headers,[r for r in rows if r[0]==i+1]))
+    if kind=='spatial_nested_svm':
+        add('Nested spatial outer-fold accuracy','basic_column',{'x':'fold','y':'accuracy'})
+        add('Nested spatial selected C','basic_column',{'x':'fold','y':'selected_c'})
     if kind=='pca':add('PCA explained variance','basic_column',{'x':'component','y':'explained_fraction'})
     if kind=='transition_matrix':add('Transition area by class pair','basic_column',{'x':'transition','y':'area_m2'},csv_text(['transition','area_m2'],[[str(a)+' → '+str(b),area] for a,b,_,area,_ in rows]) ) if len(rows)<=50 else None
     if kind in SERIES_IDS and any(row[2] is not None for row in rows):add('Acquisition mean time series','basic_line',{'x':'time','y':'mean'})

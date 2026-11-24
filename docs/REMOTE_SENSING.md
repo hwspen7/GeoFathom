@@ -47,3 +47,5 @@ Correlated LST uncertainty accepts all ten off-diagonal terms of a constant five
 Seasonal models now provide harmonic peak, onset, end and duration at a declared fraction of amplitude after detrending. Exact penalized dynamic programming provides multiple mean-shift count and first split time. Model phase is relative to the first acquisition; neither model phase nor penalized change points establish observed phenology or statistical significance.
 
 Subpixel translation uses a fixed complete calibration support, bounded Powell optimization of normalized correlation, no wrapping, and optional held-out mask 2 radiometric RMSE. It does not establish geometric accuracy against independent ground control points or implement orthorectification.
+
+Nested SVM selection evaluates a fixed three-C grid within each outer training partition, using only remaining spatial folds, with training-only scaling and optional block buffers. Outer labels cannot affect that fold's selection. Final map tunes and refits on all available labels; external validation remains separate.

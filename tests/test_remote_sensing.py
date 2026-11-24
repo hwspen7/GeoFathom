@@ -189,7 +189,7 @@ def test_remote_invalid_inputs_and_recovery():
         response=client.post('/analysis/remote-sensing/run',json=bad);assert response.status_code==422,response.text
     response=client.post('/analysis/remote-sensing/run',json=good);assert response.status_code==200,response.text
     np.testing.assert_allclose(grid(response.json()),.5)
-    assert client.get('/analysis/remote-sensing/catalog').json()['operation_count']==len(BY_ID)==96
+    assert client.get('/analysis/remote-sensing/catalog').json()['operation_count']==len(BY_ID)==97
 
 def test_temporal_independent_quality_masks():
     # Cloud at one date does not erase the other valid acquisitions.
@@ -600,3 +600,21 @@ def test_subpixel_registration_reference(kind):
     assert m['subpixel_column_shift']==pytest.approx(2.4,abs=.15)
     assert m['refined_correlation']>.98
     assert m['heldout_cells']==16 and m['heldout_rmse']<.05
+
+
+@pytest.mark.parametrize('kind',['spatial_nested_svm'])
+def test_nested_spatial_reference(kind):
+    rng=np.random.default_rng(17);row,col=np.indices((24,24));labels=1+(row%2)
+    a={r:np.where(labels==1,.2,.8)+rng.normal(0,.01,labels.shape) for r in ('blue','green','red','nir')}
+    a['training']=labels.copy();params={'block_m':40,'folds':5}
+    result=run(kind,a,params);m=result['receipt']['metrics']
+    assert m['oof_confusion_matrix_reference_rows']==[[288,0],[0,288]]
+    assert m['oof_cells']==576 and len(result['rows'])==5
+    assert sum(row[2] for row in result['rows'])==576
+    np.testing.assert_array_equal(grid(result),labels)
+    # Corrupt only one outer fold: its hyperparameter selection must not change.
+    hold=((col//4+2*(row//4))%5)==0
+    a['training']=np.where(hold,3-labels,labels)
+    changed=run(kind,a,params)
+    assert changed['rows'][0][3:5]==result['rows'][0][3:5]
+    assert changed['rows'][0][5]==0
