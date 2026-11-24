@@ -809,3 +809,22 @@ def test_disk_per_role_qa_and_calibration(tmp_path):
     with pytest.raises(FigureInputError,match='conflicts'):
         process('ndvi',bindings,tmp_path/'invalid.tif')
     assert not (tmp_path/'invalid.tif').exists()
+
+
+def test_public_fixture_transport_fallback_and_checksum(tmp_path,monkeypatch):
+    import io
+    import urllib.error
+    from scripts import remote_scene_reference as scene
+    data=b'example fixture bytes';expected=hashlib.md5(data).hexdigest();calls=[]
+    def request(req,timeout):
+        calls.append(req.full_url)
+        if len(calls)==1:raise urllib.error.HTTPError(req.full_url,403,'Forbidden',None,None)
+        return io.BytesIO(data)
+    monkeypatch.setattr(scene.urllib.request,'urlopen',request)
+    path=scene.obtain(tmp_path,'B04.tif',expected)
+    assert path.read_bytes()==data and '/api/records/' in calls[0] and '?download=1' in calls[1]
+    assert not list(tmp_path.glob('*.part'))
+    path.unlink()
+    monkeypatch.setattr(scene.urllib.request,'urlopen',lambda *a,**k:io.BytesIO(b'wrong'))
+    with pytest.raises(ValueError,match='checksum'):scene.obtain(tmp_path,'B04.tif',expected)
+    assert not path.exists() and not list(tmp_path.glob('*.part'))

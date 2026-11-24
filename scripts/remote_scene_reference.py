@@ -10,6 +10,8 @@ import json
 from pathlib import Path
 import sys
 import urllib.request
+import urllib.error
+from urllib.parse import quote
 
 import numpy as np
 import rasterio
@@ -31,17 +33,24 @@ def obtain(root,name,expected):
     root.mkdir(parents=True,exist_ok=True);dest=root/name
     if not dest.exists():
         temp=dest.with_suffix('.part')
-        try:
-            req=urllib.request.Request(RECORD+name+'?download=1',headers={'User-Agent':'GeoFathom scientific benchmark/1'})
-            with urllib.request.urlopen(req,timeout=60) as response,open(temp,'wb') as out:
-                count=0
-                while chunk:=response.read(1024*1024):
-                    count+=len(chunk)
-                    if count>16*1024*1024:raise ValueError('Unexpected fixture size.')
-                    out.write(chunk)
-            if hash_file(temp,'md5')!=expected:raise ValueError('Published fixture checksum mismatch.')
-            temp.replace(dest)
-        finally:temp.unlink(missing_ok=True)
+        urls=['https://zenodo.org/api/records/21917533/files/'+quote(name,safe='')+'/content',RECORD+quote(name,safe='')+'?download=1']
+        errors=[]
+        for url in urls:
+            try:
+                req=urllib.request.Request(url,headers={'User-Agent':'GeoFathom scientific benchmark/1','Accept':'application/octet-stream'})
+                with urllib.request.urlopen(req,timeout=60) as response,open(temp,'wb') as out:
+                    count=0
+                    while chunk:=response.read(1024*1024):
+                        count+=len(chunk)
+                        if count>16*1024*1024:raise ValueError('Unexpected fixture size.')
+                        out.write(chunk)
+                if hash_file(temp,'md5')!=expected:raise ValueError('Published fixture checksum mismatch.')
+                temp.replace(dest)
+                break
+            except (urllib.error.URLError,TimeoutError) as error:
+                errors.append(type(error).__name__+': '+str(error))
+            finally:temp.unlink(missing_ok=True)
+        if not dest.exists():raise RuntimeError('Published fixture unavailable: '+'; '.join(errors))
     if hash_file(dest,'md5')!=expected:raise ValueError('Published fixture checksum mismatch.')
     return dest
 
@@ -89,9 +98,15 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--public-scene',type=Path);parser.add_argument('--candidate',type=Path);parser.add_argument('--reference',type=Path)
     parser.add_argument('--atol',type=float,default=0);parser.add_argument('--rtol',type=float,default=0);parser.add_argument('--minimum',type=int,default=1);parser.add_argument('--output',type=Path,required=True);args=parser.parse_args()
     if not np.isfinite([args.atol,args.rtol]).all() or min(args.atol,args.rtol)<0 or args.minimum<1:parser.error('Invalid tolerance or sample minimum.')
-    if args.public_scene is not None:result=public_scene(args.public_scene)
-    elif args.candidate is not None and args.reference is not None:result=compare(args.candidate,args.reference,args.atol,args.rtol,args.minimum)
-    else:parser.error('Specify public scene or candidate and reference.')
+    try:
+        if args.public_scene is not None:result=public_scene(args.public_scene)
+        elif args.candidate is not None and args.reference is not None:result=compare(args.candidate,args.reference,args.atol,args.rtol,args.minimum)
+        else:parser.error('Specify public scene or candidate and reference.')
+    except Exception as error:
+        result={'passed':False,'dataset_doi':DOI if args.public_scene is not None else None,'error_type':type(error).__name__,'error':str(error),'scope':'Validation did not complete; no scientific accuracy claim.'}
+        args.output.write_text(json.dumps(result,indent=2),encoding='utf-8')
+        print(json.dumps(result,indent=2),file=sys.stderr)
+        return 1
     args.output.write_text(json.dumps(result,indent=2,allow_nan=False),encoding='utf-8')
     print(json.dumps(result,indent=2));return 0 if result.get('passed',True) else 1
 if __name__=='__main__':raise SystemExit(main())
