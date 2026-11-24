@@ -1,0 +1,39 @@
+name: Remote sensing scientific reference gate
+
+on:
+  push:
+    branches: [main, develop, feature/remote-sensing]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  remote-sensing-reference:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install locked scientific dependencies
+        run: python -m pip install -c requirements/linux.lock -e ".[dev]"
+      - name: Verify numerical methods and full scientific workflows
+        run: |
+          mkdir -p build
+          python -m pytest -q --junitxml=build/remote-sensing-tests.xml tests/test_remote_sensing.py
+          python scripts/remote_sensing_gate.py --junit build/remote-sensing-tests.xml --output build/remote-sensing-acceptance.json
+      - name: Preserve numerical evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: remote-sensing-scientific-reference
+          path: |
+            build/remote-sensing-tests.xml
+            build/remote-sensing-acceptance.json
+          if-no-files-found: warn
+          retention-days: 30

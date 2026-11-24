@@ -25,7 +25,7 @@ export default function RemoteSensingPanel({active,connected,resultsTarget,asset
  useEffect(()=>{if(!active&&!open)return;const ac=new AbortController();getRemoteCatalog(ac.signal).then(c=>{if(!ac.signal.aborted){setMethods(c.operations);setOp(old=>old||c.operations[0]?.id||'');}}).catch(e=>{if(!ac.signal.aborted)setError(String(e.message??e));});return()=>ac.abort();},[active,open]);
  useEffect(()=>()=>request.current?.abort(),[]);
  useEffect(()=>{if(!open)return;const last=document.activeElement as HTMLElement|null;dialog.current?.focus();return()=>last?.focus();},[open]);
- function choose(id:string){setOp(id);setParams({});setBindings({});setQuality(q=>q.map(x=>({...x,roles:[]})));setResult(null);setError('');}
+ function choose(id:string){setOp(id);setParams({});setBindings({});setQuality([]);setResult(null);setError('');}
  function close(){request.current?.abort();request.current=null;setBusy(false);setOpen(false);}
  function binding(role:string){return bindings[role]??emptyBinding();}
  function changeBinding(role:string,patch:Partial<RemoteBinding>){setBindings(old=>({...old,[role]:{...(old[role]??emptyBinding()),...patch}}));setResult(null);}
