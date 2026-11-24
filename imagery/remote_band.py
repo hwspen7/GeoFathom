@@ -19,6 +19,7 @@ def read_calibrated(ds,binding,quantity,window=None):
         scale,offset=(.0000275,-.2) if encoding=='landsat_sr' else (.00341802,149.)
         require((native_scale,native_offset)==(1.,0.) or (math.isclose(native_scale,scale,rel_tol=1e-7) and math.isclose(native_offset,offset,abs_tol=1e-7)),'Raster metadata conflicts with selected Landsat preset.')
         z[z==0]=np.nan
+    require(math.isfinite(scale) and scale>0 and math.isfinite(offset),'Invalid physical calibration.')
     if quantity=='class':require(scale==1 and offset==0,'Categorical and QA bands must not be radiometrically scaled.')
     z=z*scale+offset
     require(not np.isinf(z).any(),'Band calibration overflow.')

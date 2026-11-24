@@ -11,7 +11,7 @@ from rasterio.io import MemoryFile
 from rasterio.transform import from_origin
 
 from core.main import app
-from imagery.remote_catalog import BY_ID
+from imagery.remote_catalog import BY_ID,WINDOWED_IDS
 from imagery.remote_routes import RemoteInput,execute
 from terrain.studio_data import FigureInputError
 
@@ -757,3 +757,55 @@ def test_windowed_science_matches_inline_across_seams(kind,tmp_path):
             assert ds.transform==AFF and ds.crs.to_string()==CRS
             np.testing.assert_allclose(ds.read(1),expected,atol=1e-12,rtol=1e-12,equal_nan=True)
         assert report['valid_cells']==np.isfinite(expected).sum()
+
+
+@pytest.mark.parametrize('kind',sorted(WINDOWED_IDS))
+def test_every_disk_method_matches_inline(kind,tmp_path):
+    import rasterio
+    from imagery.remote_windowed import process
+    rng=np.random.default_rng(17);shape=(67,69);a={};bindings={}
+    for role,q in BY_ID[kind].roles:
+        if q=='class':
+            code={'sentinel_clear':4,'landsat_clear':64,'landsat_unsaturated':0}.get(kind,1)
+            z=np.full(shape,float(code));z[31:34,61:66]=9 if kind=='sentinel_clear' else 8 if kind.startswith('landsat_') else 0
+        elif q=='reflectance':z=rng.uniform(.2,.6,shape)
+        elif q in {'emissivity','transmittance','fraction'}:z=rng.uniform(.7,.95,shape)
+        elif q=='radiance':z=rng.uniform(9,11,shape) if role=='radiance' else rng.uniform(.8,1.2,shape)
+        elif q=='kelvin':z=rng.uniform(280,320,shape)
+        elif q=='db':z=rng.uniform(-20,-3,shape)
+        elif q in {'radiance_sd','fraction_sd','nonnegative'}:z=rng.uniform(.01,.03,shape)
+        elif role.endswith('_sd'):z=rng.uniform(.2,1.2,shape)
+        else:z=rng.uniform(.1,2,shape)
+        z[33,64]=np.nan;a[role]=z
+        path=tmp_path/(role+'.tif');path.write_bytes(base64.b64decode(source(z)['data']))
+        bindings[role]={'path':str(path),'unit':'m' if q=='numeric' else ''}
+    expected=grid(run(kind,a))
+    output=tmp_path/'disk.tif';receipt=process(kind,bindings,output,tile=64)
+    with rasterio.open(output) as ds:
+        assert ds.transform==AFF and ds.crs.to_string()==CRS
+        np.testing.assert_allclose(ds.read(1),expected,rtol=1e-11,atol=1e-11,equal_nan=True)
+    assert receipt['valid_cells']==int(np.isfinite(expected).sum())
+    assert receipt['sha256']==hashlib.sha256(output.read_bytes()).hexdigest()
+
+
+def test_disk_per_role_qa_and_calibration(tmp_path):
+    import rasterio
+    from imagery.remote_windowed import process
+    shape=(67,69);a=np.full(shape,24000.);b=np.full(shape,14000.)
+    mask=np.ones(shape);mask[62:65,63:66]=0
+    arrays={'nir':a,'red':b,'qa':mask};paths={}
+    for role,z in arrays.items():
+        path=tmp_path/(role+'.tif');path.write_bytes(base64.b64decode(source(z)['data']));paths[role]=path
+    bindings={r:{'path':str(paths[r]),'encoding':'landsat_sr'} for r in ('nir','red')}
+    quality=[{'path':str(paths['qa']),'scheme':'binary','roles':['nir']}]
+    report=process('ndvi',bindings,tmp_path/'ndvi.tif',quality=quality,tile=64)
+    expected=(.46-.185)/(.46+.185)
+    with rasterio.open(tmp_path/'ndvi.tif') as ds:
+        z=ds.read(1);assert np.isnan(z[mask==0]).all()
+        np.testing.assert_allclose(z[mask==1],expected,atol=1e-12)
+    assert report['quality_masks'][0]['roles']==['nir']
+    # Conflicting native physical calibration must fail before publication.
+    paths['nir'].write_bytes(base64.b64decode(source(a,scales=[.001],offsets=[0])['data']))
+    with pytest.raises(FigureInputError,match='conflicts'):
+        process('ndvi',bindings,tmp_path/'invalid.tif')
+    assert not (tmp_path/'invalid.tif').exists()

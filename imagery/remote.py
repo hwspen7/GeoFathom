@@ -156,9 +156,9 @@ def run_stac_ndvi(collection,item_id,threshold=.25,max_side=4096,
                 "height":output_height,
             }
             red_aligned=opened.enter_context(WarpedVRT(
-                red,resampling=Resampling.bilinear,**variables))
+                red,resampling=Resampling.bilinear,dtype='float64',nodata=np.nan,**variables))
             nir_aligned=opened.enter_context(WarpedVRT(
-                nir,resampling=Resampling.bilinear,**variables))
+                nir,resampling=Resampling.bilinear,dtype='float64',nodata=np.nan,**variables))
             scl_aligned=opened.enter_context(WarpedVRT(
                 scl,resampling=Resampling.nearest,**variables))
             accepted_count=cloud_excluded=classified_count=transitions=0
