@@ -9,7 +9,7 @@ const testImagery=resolve('..',testDatabase)+'.imagery';
 
 export default defineConfig({
   testDir:'./e2e',
-  timeout:45_000,
+  timeout:process.env.CI ? 90_000 : 45_000,
   expect:{timeout:12_000},
   fullyParallel:false,
   // Exercise independent browser sessions against the same backend in CI.

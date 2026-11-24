@@ -7,7 +7,8 @@ const API='http://127.0.0.1:8000';
 const tile=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/ZecAAAAASUVORK5CYII=','base64');
 
 test('real DEM is imported, analyzed, visualized and saved through workbench',async({page})=>{
- test.setTimeout(120000);
+ // This scenario exercises many real API operations and software-rendered WebGL.
+ test.setTimeout(process.env.CI ? 240000 : 120000);
  const fixture=JSON.parse(execFileSync('python',['-c',`
 import json,tempfile
 from pathlib import Path

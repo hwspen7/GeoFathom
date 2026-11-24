@@ -43,3 +43,7 @@ exit ([int]$env:GEOFATHOM_LAUNCHER_TEST_EXIT)
     Remove-Item Env:\GEOFATHOM_LAUNCHER_TEST_RECEIPT, Env:\GEOFATHOM_LAUNCHER_TEST_EXIT -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $fixture -Recurse -Force -ErrorAction SilentlyContinue
 }
+
+# All six assertions succeeded. Do not propagate the last intentionally failing child process.
+# Any unexpected exit code or receipt mismatch above still throws before this point.
+exit 0

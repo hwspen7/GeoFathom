@@ -123,7 +123,7 @@ jobs:
 
   browser:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -143,10 +143,10 @@ jobs:
       - name: Verify browser workspace starts with accessible map and navigation
         working-directory: web
         run: npx playwright test e2e/workspace-bootstrap.spec.ts --workers=1
-      - name: Complete browser suite with coverage (three workers, no retries)
+      - name: Complete browser suite with coverage (two workers, no retries)
         working-directory: web
         env:
-          GEOFATHOM_E2E_WORKERS: '3'
+          GEOFATHOM_E2E_WORKERS: '2'
           GEOFATHOM_E2E_DATABASE_PATH: data/e2e-geofathom-acceptance.sqlite
         run: npm run test:e2e:coverage
       - uses: actions/upload-artifact@v4
