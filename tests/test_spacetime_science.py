@@ -49,6 +49,18 @@ def test_every_spacetime_method_reference(kind):
     elif kind.startswith('kalman_'):params={'horizon':2,'process_variance':.01,'observation_variance':.1,'initial_velocity_variance':1}
     elif kind.startswith('forecast_'):params={'horizon':2}
     elif kind=='exceedance':params={'threshold':10}
+    if kind.startswith('multi_harmonic_'):
+        t=np.arange(48.);y=2+np.where(t>=16,7,0)-np.where(t>=32,4,0)+2*np.cos(2*np.pi*t/6)
+        a=np.broadcast_to(y[:,None,None],(48,3,4)).copy();r=run(kind,a,t,{'period':6,'min_segment':8,'max_breaks':2});z=grid(r)
+        if kind.endswith('_bic'):assert np.min(z)>0
+        else:np.testing.assert_allclose(z,{'multi_harmonic_count':2,'multi_harmonic_first':15.5,'multi_harmonic_last':31.5}[kind],atol=1e-9)
+        return
+    if kind.startswith(('rts_','fitted_state_')):
+        rng=np.random.default_rng(7);a=a+rng.normal(0,.3,a.shape);r=run(kind,a,t,{'trajectory_limit':2} if kind.startswith('fitted_') else {})
+        assert np.isfinite(grid(r)).all()
+        if kind.startswith('fitted_'):assert r['receipt']['metrics']['fitted_nll_per_observation']<=r['receipt']['metrics']['initial_nll_per_observation']+1e-8
+        if kind=='rts_sd':assert np.min(grid(r))>=0
+        return
     if kind.startswith('panel_'):
         t=np.arange(8.);rng=np.random.default_rng(19);x=rng.normal(size=(8,4,4));spatial=np.arange(16).reshape(4,4);y=2*x+spatial+t[:,None,None]
         r=run(kind,y,t,{'block_cells':2},sources=[source(y),source(x)],covariates=[{'source':1,'band':i+1,'unit':'index'} for i in range(8)])
@@ -255,3 +267,18 @@ def test_universal_kriging_augmented_reference():
     var=1.15-np.sum(sol[:len(x)]*cross,axis=0)-np.sum(sol[len(x):]*D.T,axis=0)
     np.testing.assert_allclose(sd,np.sqrt(meta['sill']*var),atol=1e-10)
     np.testing.assert_allclose(H.T@sol[:len(x)],D.T,atol=1e-10)
+
+
+def test_rts_batch_gaussian_and_fitted_holdout_isolation():
+    from analysis.spacetime_dynamic import smooth,estimate
+    t=np.array([0.,.5,2.,4.,4.5,7.,10.,11.,13.,15.]);y=np.array([2.,2.4,np.nan,4.1,4.4,5.8,8.,8.7,9.4,11.])
+    q,r,v=.03,.2,.4
+    def cov(a,b):
+        m=min(a,b);return r+v*a*b+q*(a*b*m-(a+b)*m*m/2+m**3/3)
+    ids=np.flatnonzero(np.isfinite(y)&(t>0));u=t[ids]
+    C=np.array([[cov(x,z) for z in u] for x in u])+r*np.eye(len(u));cross=np.array([[cov(x,z) for z in u] for x in t])
+    mu=y[0]+cross@np.linalg.solve(C,y[ids]-y[0])
+    var=np.array([cov(x,x) for x in t])-np.sum(cross*np.linalg.solve(C,cross.T).T,axis=1)
+    m,P=smooth(y,t,q,r,v);np.testing.assert_allclose(m[:,0],mu,atol=1e-9);np.testing.assert_allclose(P[:,0,0],var,atol=1e-9)
+    a=y[:,None,None];p={'minimum_observations':4,'holdout_dates':2,'trajectory_limit':1,'seed':2,'process_variance':q,'observation_variance':r,'initial_velocity_variance':v}
+    before=estimate(a,t,p);b=a.copy();b[-2:]+=200;assert before==estimate(b,t,p)

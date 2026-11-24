@@ -16,6 +16,8 @@ from .spacetime_kriging import kriging
 from .spacetime_change import harmonic_break,events
 from .spacetime_hotspots import hotspot
 from .spacetime_panel import panel
+from .spacetime_dynamic import dynamic
+from .spacetime_multibreak import multi_break
 from analysis.science_raster import require
 from analysis.science_routes import raster_product,raster_preview
 from analysis.science_figures import csv_text
@@ -23,14 +25,26 @@ from .spacetime_models import trend,temporal,forecast,spatial_lag,variogram
 
 router=APIRouter(prefix='/analysis/spatiotemporal',tags=['spatiotemporal science'])
 # parameter = (default,minimum,maximum,integer)
-P={'minimum_observations':(6,3,64,True),'lag':(1,1,32,True),'threshold':(0,-1e50,1e50,False),'horizon':(30,.000001,1e7,False),'radius':(3,1,20,True),'period':(365,.000001,1e7,False),'fraction':(.5,.01,.99,False),'minimum_amplitude':(.01,0,1e50,False),'min_segment':(3,2,32,True),'penalty':(1,.000001,1e50,False),'process_variance':(.01,1e-20,1e50,False),'observation_variance':(.1,1e-20,1e50,False),'initial_velocity_variance':(1,1e-20,1e50,False),'permutations':(199,19,999,True),'seed':(42,0,2147483647,True),'mode':(1,1,64,True),'block_length':(3,2,21,True),'spatial_range':(100,1e-6,1e8,False),'temporal_range':(30,1e-6,1e8,False),'nugget_ratio':(.1,1e-6,10,False),'sample_limit':(128,12,256,True),'fit_covariance':(0,0,1,True),'holdout_dates':(2,2,32,True),'buffer_cells':(0,0,100,True),'bic_threshold':(6,0,1000,False),'maximum_gap':(30,.000001,1e9,False),'alpha':(.05,.001,.2,False),'block_cells':(2,1,1000,True),'interaction':(.5,.05,1,False)}
+P={'minimum_observations':(6,3,64,True),'lag':(1,1,32,True),'threshold':(0,-1e50,1e50,False),'horizon':(30,.000001,1e7,False),'radius':(3,1,20,True),'period':(365,.000001,1e7,False),'fraction':(.5,.01,.99,False),'minimum_amplitude':(.01,0,1e50,False),'min_segment':(3,2,32,True),'penalty':(1,.000001,1e50,False),'process_variance':(.01,1e-20,1e50,False),'observation_variance':(.1,1e-20,1e50,False),'initial_velocity_variance':(1,1e-20,1e50,False),'permutations':(199,19,999,True),'seed':(42,0,2147483647,True),'mode':(1,1,64,True),'block_length':(3,2,21,True),'spatial_range':(100,1e-6,1e8,False),'temporal_range':(30,1e-6,1e8,False),'nugget_ratio':(.1,1e-6,10,False),'sample_limit':(128,12,256,True),'fit_covariance':(0,0,1,True),'holdout_dates':(2,2,32,True),'buffer_cells':(0,0,100,True),'bic_threshold':(6,0,1000,False),'maximum_gap':(30,.000001,1e9,False),'alpha':(.05,.001,.2,False),'block_cells':(2,1,1000,True),'interaction':(.5,.05,1,False),'target_date':(3,1,64,True),'trajectory_limit':(8,1,16,True),'max_breaks':(2,1,5,True)}
 KALMAN_P=('minimum_observations','horizon','process_variance','observation_variance','initial_velocity_variance')
 KRIGING_P=('spatial_range','temporal_range','nugget_ratio','sample_limit','fit_covariance','seed')
 BREAK_P=('period','min_segment','bic_threshold')
 EVENT_P=('threshold','maximum_gap','minimum_observations')
 HOT_P=('radius','permutations','seed','alpha')
 UNIVERSAL_P=KRIGING_P+('interaction',)
+RTS_P=('minimum_observations','process_variance','observation_variance','initial_velocity_variance','target_date')
+FITTED_P=('minimum_observations','process_variance','observation_variance','initial_velocity_variance','holdout_dates','trajectory_limit','seed')
+MULTI_P=('period','min_segment','max_breaks','bic_threshold')
 METHODS={
+ 'rts_level':('State space','RTS smoothed latent level',RTS_P),
+ 'rts_velocity':('State space','RTS smoothed latent velocity',RTS_P),
+ 'rts_sd':('State space','RTS conditional latent SD',RTS_P),
+ 'fitted_state_rmse':('Prediction validation','Training-fitted state model holdout RMSE',FITTED_P),
+ 'fitted_state_skill':('Prediction validation','Training-fitted state model persistence skill',FITTED_P),
+ 'multi_harmonic_count':('Structural change','Multiple seasonal structural break count',MULTI_P),
+ 'multi_harmonic_bic':('Structural change','Multi-segment BIC improvement',MULTI_P),
+ 'multi_harmonic_first':('Structural change','First seasonal structural break',MULTI_P),
+ 'multi_harmonic_last':('Structural change','Last seasonal structural break',MULTI_P),
  'st_universal_mean':('Joint geostatistics','Nonseparable universal kriging forecast',UNIVERSAL_P+('horizon',)),
  'st_universal_sd':('Joint geostatistics','Nonseparable universal kriging observation SD',UNIVERSAL_P+('horizon',)),
  'st_universal_holdout_rmse':('Joint validation','Universal kriging joint holdout RMSE',UNIVERSAL_P+('holdout_dates','buffer_cells')),
@@ -111,7 +125,7 @@ class CubeInput(BaseModel):
 
 @router.get('/catalog')
 def catalog():
-    return {'operations':[{'id':k,'group':g,'title':title,'requires_covariate':k.startswith('panel_'),'parameters':[{'name':p,'label':p.replace('_',' '),'default':6 if p=='min_segment' and k.startswith('harmonic_break_') else P[p][0],'minimum':P[p][1],'maximum':P[p][2],'integer':P[p][3]} for p in params]} for k,(g,title,params) in METHODS.items()],'operation_count':len(METHODS),'input_schema':CubeInput.model_json_schema()}
+    return {'operations':[{'id':k,'group':g,'title':title,'requires_covariate':k.startswith('panel_'),'parameters':[{'name':p,'label':p.replace('_',' '),'default':6 if p=='min_segment' and k.startswith(('harmonic_break_','multi_harmonic_')) else P[p][0],'minimum':P[p][1],'maximum':P[p][2],'integer':P[p][3]} for p in params]} for k,(g,title,params) in METHODS.items()],'operation_count':len(METHODS),'input_schema':CubeInput.model_json_schema()}
 
 def execute(body):
     require(body.operation in METHODS,'Unknown space-time method.')
@@ -121,7 +135,7 @@ def execute(body):
     params=METHODS[kind][2];require(set(body.parameters)<=set(params),'Unknown method parameter.')
     p={}
     for key in params:
-        default,lo,hi,integer=P[key];default=6 if key=='min_segment' and kind.startswith('harmonic_break_') else default;x=body.parameters.get(key,default)
+        default,lo,hi,integer=P[key];default=6 if key=='min_segment' and kind.startswith(('harmonic_break_','multi_harmonic_')) else default;x=body.parameters.get(key,default)
         require(math.isfinite(x) and lo<=x<=hi and (not integer or x==int(x)),'Parameter outside method bounds: '+key)
         p[key]=int(x) if integer else x
     if 'minimum_observations' in p:require(p['minimum_observations']<=n,'Minimum observations exceeds cube dates.')
@@ -168,6 +182,14 @@ def execute(body):
     elif kind.startswith(('forecast_','hindcast_')):
         out,cols,rows,meta=forecast(stack,t,kind,p);unit='index' if kind=='hindcast_skill' else unit
         if len(rows)>=2:plot('Expanding-window forecast versus persistence error','multi_line',cols,rows,x='time',columns=['trend_rmse','persistence_rmse'])
+    elif kind.startswith(('rts_','fitted_state_')):
+        out,cols,rows,meta=dynamic(stack,t,p,kind)
+        if kind=='rts_velocity':unit=unit+'/'+body.time_unit
+        if kind=='fitted_state_skill':unit='index'
+        if len(rows)>=2:plot('Fixed-origin holdout versus persistence','multi_line',cols,rows,x='time',columns=['state_rmse','persistence_rmse'])
+    elif kind.startswith('multi_harmonic_'):
+        out,cols,rows,meta=multi_break(stack,t,p,kind);unit='count' if kind.endswith('_count') else 'index' if kind.endswith('_bic') else body.time_unit
+        plot('Selected seasonal breakpoint count','basic_column',cols,rows,x='break_count',y='cells')
     elif kind.startswith('hotspot_'):
         out,cols,rows,meta=hotspot(stack,t,p,kind)
         unit='class' if kind=='hotspot_class' else 'probability' if kind.endswith('_p') else 'fraction' if kind.endswith('_fraction') else 'index'
