@@ -1,0 +1,32 @@
+name: Remote sensing real-scene reference
+
+on:
+  push:
+    branches: [feature/remote-sensing]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+jobs:
+  real-scene:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install numerical dependencies
+        run: python -m pip install -c requirements/linux.lock -e ".[dev]"
+      - name: Verify published Sentinel-2 scene and native arithmetic
+        run: |
+          mkdir -p build
+          python scripts/remote_scene_reference.py --public-scene build/scene --output build/remote-scene-reference.json
+      - name: Preserve real-scene evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: remote-real-scene-evidence
+          path: build/remote-scene-reference.json
+          if-no-files-found: warn
+          retention-days: 30

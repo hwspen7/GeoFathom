@@ -1,0 +1,97 @@
+"""Public Sentinel-2 integration benchmark and external raster reference comparison.
+
+The published fixture is an independently sourced real scene, not ground truth.
+Numerical agreement on that fixture is not atmospheric or field validation.
+"""
+import argparse
+import base64
+import hashlib
+import json
+from pathlib import Path
+import sys
+import urllib.request
+
+import numpy as np
+import rasterio
+from rasterio.io import MemoryFile
+from rasterio.windows import Window
+
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+DOI='10.5281/zenodo.21917533'
+RECORD='https://zenodo.org/records/21917533/files/'
+FILES={'B04.tif':'4c34549d9e0e6703ea5c21744ca63b5a','B08.tif':'66075fa9fb89d0c702da3ce08a701bd4'}
+
+def hash_file(path,algorithm='sha256'):
+    h=hashlib.new(algorithm)
+    with open(path,'rb') as f:
+        for chunk in iter(lambda:f.read(1024*1024),b''):h.update(chunk)
+    return h.hexdigest()
+
+def obtain(root,name,expected):
+    root.mkdir(parents=True,exist_ok=True);dest=root/name
+    if not dest.exists():
+        temp=dest.with_suffix('.part')
+        try:
+            req=urllib.request.Request(RECORD+name+'?download=1',headers={'User-Agent':'GeoFathom scientific benchmark/1'})
+            with urllib.request.urlopen(req,timeout=60) as response,open(temp,'wb') as out:
+                count=0
+                while chunk:=response.read(1024*1024):
+                    count+=len(chunk)
+                    if count>16*1024*1024:raise ValueError('Unexpected fixture size.')
+                    out.write(chunk)
+            if hash_file(temp,'md5')!=expected:raise ValueError('Published fixture checksum mismatch.')
+            temp.replace(dest)
+        finally:temp.unlink(missing_ok=True)
+    if hash_file(dest,'md5')!=expected:raise ValueError('Published fixture checksum mismatch.')
+    return dest
+
+def compare(candidate,reference,atol,rtol=0,minimum=1):
+    with rasterio.open(candidate) as a,rasterio.open(reference) as b:
+        if (a.crs,a.transform,a.shape)!=(b.crs,b.transform,b.shape):raise ValueError('Reference grids must match exactly.')
+        if a.count!=1 or b.count!=1:raise ValueError('Compare explicit single-band outputs.')
+        x=a.read(1,masked=True).astype(float).filled(np.nan);y=b.read(1,masked=True).astype(float).filled(np.nan)
+    am=np.isfinite(x);bm=np.isfinite(y);common=am&bm;n=int(common.sum())
+    if n<minimum:raise ValueError('Insufficient paired cells.')
+    d=x[common]-y[common]
+    return {'passed':bool(np.array_equal(am,bm) and np.allclose(x[common],y[common],atol=atol,rtol=rtol)),
+            'paired_cells':n,'mask_disagreement':int(np.count_nonzero(am!=bm)),'rmse':float(np.sqrt(np.mean(d*d))),
+            'bias':float(d.mean()),'maximum_absolute_error':float(np.max(abs(d))),
+            'candidate_sha256':hash_file(candidate),'reference_sha256':hash_file(reference),'atol':atol,'rtol':rtol}
+
+def public_scene(root):
+    from imagery.remote_routes import RemoteInput,execute
+    raw=[obtain(root,n,h) for n,h in FILES.items()]
+    with rasterio.open(raw[0]) as a,rasterio.open(raw[1]) as b:
+        if (a.crs,a.transform,a.shape)!=(b.crs,b.transform,b.shape):raise ValueError('Published red/NIR grids differ.')
+        # Use actual native-grid observations; do not assume undocumented scale or offset.
+        w=min(512,a.width);h=min(512,a.height);win=Window((a.width-w)//2,(a.height-h)//2,w,h)
+        aff=a.window_transform(win);crs=a.crs
+        red=a.read(1,window=win,masked=True).astype(float).filled(np.nan)
+        nir=b.read(1,window=win,masked=True).astype(float).filled(np.nan)
+        scales=[float(a.scales[0]),float(b.scales[0])];offsets=[float(a.offsets[0]),float(b.offsets[0])]
+    def write(path,z,unit):
+        with rasterio.open(path,'w',driver='GTiff',width=w,height=h,count=1,dtype='float64',crs=crs,transform=aff,nodata=np.nan) as ds:
+            ds.write(z,1);ds.update_tags(TERRAIN_UNIT=unit)
+    # Separate independent native-value arithmetic from physical-reflectance claims.
+    rs=root/'red_native.tif';ns=root/'nir_native.tif';write(rs,red,'DN');write(ns,nir,'DN')
+    inputs=[{'name':x.name,'data':base64.b64encode(x.read_bytes()).decode()} for x in (rs,ns)]
+    result=execute(RemoteInput(operation='difference',sources=inputs,bindings={'before':{'source':0,'unit':'DN'},'after':{'source':1,'unit':'DN'}}))
+    product=root/'difference_actual.tif';product.write_bytes(base64.b64decode(result['raster']['data']))
+    reference=root/'difference_reference.tif';write(reference,nir-red,'DN')
+    check=compare(product,reference,0,minimum=100)
+    report={'dataset_doi':DOI,'tile':'T33UUP','date':'2023-09-07','published_files':{p.name:hash_file(p) for p in raw},
+            'native_scales':scales,'native_offsets':offsets,'window':[int(win.col_off),int(win.row_off),w,h],
+            'native_difference':check,'scope':'Real-scene native arithmetic and masks. Not NDVI physical calibration or ground-truth retrieval accuracy.'}
+    if not check['passed']:raise ValueError('Real-scene native arithmetic reference failed.')
+    return report
+
+def main():
+    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--public-scene',type=Path);parser.add_argument('--candidate',type=Path);parser.add_argument('--reference',type=Path)
+    parser.add_argument('--atol',type=float,default=0);parser.add_argument('--rtol',type=float,default=0);parser.add_argument('--minimum',type=int,default=1);parser.add_argument('--output',type=Path,required=True);args=parser.parse_args()
+    if not np.isfinite([args.atol,args.rtol]).all() or min(args.atol,args.rtol)<0 or args.minimum<1:parser.error('Invalid tolerance or sample minimum.')
+    if args.public_scene is not None:result=public_scene(args.public_scene)
+    elif args.candidate is not None and args.reference is not None:result=compare(args.candidate,args.reference,args.atol,args.rtol,args.minimum)
+    else:parser.error('Specify public scene or candidate and reference.')
+    args.output.write_text(json.dumps(result,indent=2,allow_nan=False),encoding='utf-8')
+    print(json.dumps(result,indent=2));return 0 if result.get('passed',True) else 1
+if __name__=='__main__':raise SystemExit(main())

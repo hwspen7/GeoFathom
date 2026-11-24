@@ -642,3 +642,36 @@ def test_sar_complex_cloud_reference(kind):
         a['blue'][0,0]=.1;a['swir1'][0,1]=.05;a['nir'][0,2]=np.nan
         z=grid(run(kind,a));assert z[0,0]==0 and z[0,1]==0 and np.isnan(z[0,2])
         assert z[1,1]==1
+
+
+def test_external_reference_comparison(tmp_path):
+    from scripts.remote_scene_reference import compare
+    a=tmp_path/'actual.tif';b=tmp_path/'reference.tif'
+    z=np.arange(12,dtype=float).reshape(3,4);z[0,0]=np.nan
+    a.write_bytes(base64.b64decode(source(z)['data']));b.write_bytes(base64.b64decode(source(z+.01)['data']))
+    report=compare(a,b,.011,minimum=10);assert report['passed'] and report['paired_cells']==11
+    assert report['rmse']==pytest.approx(.01)
+    assert not compare(a,b,.005)['passed']
+    z[0,0]=0;b.write_bytes(base64.b64decode(source(z)['data']))
+    assert not compare(a,b,1)['passed'] and compare(a,b,1)['mask_disagreement']==1
+
+
+def test_new_research_figure_rendering():
+    from terrain.studio_routes import StudioInput
+    from terrain.studio_render import render
+    rng=np.random.default_rng(42);row,col=np.indices((24,24));labels=1+(row%2)
+    a={r:np.where(labels==1,.2,.8)+rng.normal(0,.01,labels.shape) for r in ('blue','green','red','nir')};a['training']=labels
+    results=[run('spatial_nested_svm',a,{'block_m':40,'folds':5})]
+    t=np.arange(12,dtype=float);data=np.array([constant(2+np.sin(2*np.pi*q/6)) for q in t]);s=source(data)
+    results.append(execute(RemoteInput(operation='season_peak',sources=[s],bindings={f'date{i+1}':{'source':0,'band':i+1,'unit':'index'} for i in range(len(t))},times=t.tolist(),parameters={'period':6})))
+    x=rng.normal(.4,.05,(100,3));y=x+rng.normal(0,.015,x.shape)
+    a={r+'_before':x[:,i].reshape(10,10) for i,r in enumerate(('red','nir','swir'))};a.update({r+'_after':y[:,i].reshape(10,10) for i,r in enumerate(('red','nir','swir'))})
+    results.append(run('irmad',a,{'iterations':3}))
+    titles=set()
+    for result in results:
+        for figure in result['figures']:
+            if figure['raster']:continue
+            image,_,_=render(StudioInput(recipe=figure['recipe'],csv=figure['csv'],**figure['bindings']))
+            assert image.startswith(b'\x89PNG') and len(image)>100
+            titles.add(figure['title'])
+    assert {'Nested spatial outer-fold accuracy','Nested spatial selected C','Acquisition mean time series','Canonical correlation convergence'}<=titles
