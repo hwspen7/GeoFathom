@@ -1,0 +1,39 @@
+name: Repository file check audit
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'scripts/audit_file_checks.py'
+      - '.github/workflows/file-check-audit.yml'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'scripts/audit_file_checks.py'
+      - '.github/workflows/file-check-audit.yml'
+permissions:
+  contents: read
+  checks: read
+  statuses: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Inspect every tracked path and its last commit checks
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/audit_file_checks.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: repository-file-check-audit
+          path: file-check-audit/
+          if-no-files-found: error
