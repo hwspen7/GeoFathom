@@ -39,14 +39,14 @@ def read_calibrated(ds,binding,quantity,window=None):
     if quantity=='slope':require(np.all((v>=0)&(v<=90)),'Slope must be in [0,90] degrees.')
     if quantity=='aspect':require(np.all((v>=0)&(v<=360)),'Aspect must be in [0,360] degrees.')
     if quantity=='db':require(np.all((v>=-1000)&(v<=1000)),'Radar dB outside supported numeric range.')
-    expected={'reflectance':'reflectance','class':'class','power':'linear_power','db':'dB','radiance':'radiance','kelvin':'K','emissivity':'unitless','transmittance':'unitless','fraction':'unitless','positive_gain':'unitless','radiance_sd':'radiance','fraction_sd':'unitless','nonnegative':'reflectance','slope':'degree','aspect':'degree'}.get(quantity)
+    expected={'reflectance':'reflectance','class':'class','power':'linear_power','signed_power':'linear_power','db':'dB','radiance':'radiance','kelvin':'K','emissivity':'unitless','transmittance':'unitless','fraction':'unitless','positive_gain':'unitless','radiance_sd':'radiance','fraction_sd':'unitless','nonnegative':'reflectance','slope':'degree','aspect':'degree'}.get(quantity)
     unit=expected or binding.unit or tag
     if quantity=='numeric':require(bool(unit),'Declare the physical unit of each numeric band.')
     if binding.unit and expected:require(binding.unit==expected,'Declared unit conflicts with required physical quantity.')
     # Explicit role binding asserts semantics; known incompatible tagged units cannot be overridden.
     if tag and quantity!='class':
         allowed={unit}
-        if quantity in {'reflectance','emissivity','power','transmittance','fraction','fraction_sd','positive_gain','nonnegative'}:allowed|={'unitless','1','dimensionless'}
+        if quantity in {'reflectance','emissivity','power','signed_power','transmittance','fraction','fraction_sd','positive_gain','nonnegative'}:allowed|={'unitless','1','dimensionless'}
         if quantity in {'slope','aspect'}:allowed|={'degrees','deg'}
         require(tag in allowed or encoding in {'landsat_sr','landsat_st','custom'},'GeoTIFF unit conflicts with selected band quantity.')
 

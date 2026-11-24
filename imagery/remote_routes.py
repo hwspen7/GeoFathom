@@ -16,6 +16,7 @@ from analysis.science_routes import raster_product,raster_preview,csv_output
 from analysis.science_figures import figure_sources,csv_text
 from .remote_catalog import BY_ID,catalog,SERIES_IDS,HYPER_IDS,LUT_IDS,GLOBAL_HYPER_IDS
 from .remote_spectral_inference import spectral_covariance,matched_filter,library_retrieval
+from .remote_advanced_models import dualpol,brdf,support_fusion,cloud_model
 from .remote_validation import aggregate_nested,continuous_reference,binary_reference
 from .remote_band import read_calibrated
 from .remote_fusion import fusion,canopy,unsupervised
@@ -142,6 +143,12 @@ def execute(body):
     elif aligning:
         out=v['source'];unit='fraction' if kind=='align_area_coverage' else grids['source'].unit
         meta.update(alignment_meta);meta['resampling']='nested_area' if kind.startswith('align_area_') else 'bilinear' if kind=='align_continuous' else 'nearest'
+    elif kind in {'sar_dual_entropy','sar_dual_purity','sar_dual_minor_fraction'}:out,meta=dualpol(v,kind)
+    elif kind=='brdf_ross_li':out,meta=brdf(v,params)
+    elif kind=='fusion_support_temporal':
+        require(first.is_meter,'Support fusion requires a projected metre grid.')
+        out,meta=support_fusion(v,params)
+    elif kind in {'cloud_probability_model','shadow_probability_model'}:out,headers,rows,meta=cloud_model(v,first,params,kind)
     elif kind=='continuous_reference_error':out,headers,rows,meta=continuous_reference(v)
     elif kind=='binary_reference_error':out,headers,rows,meta=binary_reference(v)
     elif kind=='calibrated_reflectance':out=v['band']
@@ -262,6 +269,9 @@ def execute(body):
         for i,row in enumerate(rows):add('Cluster '+str(i+1)+' mean spectrum','basic_line',{'x':'band','y':'reflectance'},csv_text(['band','reflectance'],[[j+1,z] for j,z in enumerate(row[2:])]))
     if kind=='continuous_reference_error':add('Reference residual quantiles','basic_line',{'x':'quantile','y':'residual'})
     if kind=='binary_reference_error':add('Reference error by outcome','basic_column',{'x':'outcome','y':'cells'})
+    if kind in {'cloud_probability_model','shadow_probability_model'}:
+        add('Spatial cloud probability Brier score','basic_column',{'x':'fold','y':'brier'})
+        add('Spatial cloud probability log loss','basic_column',{'x':'fold','y':'log_loss'})
     if kind=='spectral_mnf':add('MNF signal to noise variance ratio','basic_column',{'x':'component','y':'variance_ratio'})
     if kind=='pca':add('PCA explained variance','basic_column',{'x':'component','y':'explained_fraction'})
     if kind=='transition_matrix':add('Transition area by class pair','basic_column',{'x':'transition','y':'area_m2'},csv_text(['transition','area_m2'],[[str(a)+' → '+str(b),area] for a,b,_,area,_ in rows]) ) if len(rows)<=50 else None

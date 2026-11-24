@@ -189,7 +189,7 @@ def test_remote_invalid_inputs_and_recovery():
         response=client.post('/analysis/remote-sensing/run',json=bad);assert response.status_code==422,response.text
     response=client.post('/analysis/remote-sensing/run',json=good);assert response.status_code==200,response.text
     np.testing.assert_allclose(grid(response.json()),.5)
-    assert client.get('/analysis/remote-sensing/catalog').json()['operation_count']==len(BY_ID)==120
+    assert client.get('/analysis/remote-sensing/catalog').json()['operation_count']==len(BY_ID)==127
 
 def test_temporal_independent_quality_masks():
     # Cloud at one date does not erase the other valid acquisitions.
@@ -979,3 +979,41 @@ def test_spectral_inference_reference(kind):
             eig=np.linalg.eigvals(np.linalg.solve(noise,c)).real.max()
             assert result['rows'][0][1]==pytest.approx(eig)
             assert np.var(z,ddof=1)==pytest.approx(eig)
+
+
+@pytest.mark.parametrize('kind',['sar_dual_entropy','sar_dual_purity','sar_dual_minor_fraction','brdf_ross_li','fusion_support_temporal','cloud_probability_model','shadow_probability_model'])
+def test_advanced_analysis_ready_reference(kind):
+    if kind.startswith('sar_dual_'):
+        a={'c11':constant(3),'c22':constant(1),'c12_real':constant(1),'c12_imag':constant(.5)}
+        eigen=np.linalg.eigvalsh([[3,1+.5j],[1-.5j,1]])/4
+        expected={'sar_dual_entropy':-sum(eigen*np.log2(eigen)),'sar_dual_purity':eigen[1]-eigen[0],'sar_dual_minor_fraction':eigen[0]}[kind]
+        np.testing.assert_allclose(grid(run(kind,a)),expected,atol=1e-12)
+        a['c12_real']=constant(3)
+        with pytest.raises(FigureInputError,match='positive semidefinite'):run(kind,a)
+    elif kind=='brdf_ross_li':
+        a={'reflectance':constant(.3),'f_iso':constant(.3),'f_vol':constant(.05),'f_geo':constant(.02)}
+        # At nadir with sun at zenith both kernels vanish; source geometry
+        # uses a nonzero phase. Independent direct special-case calculation.
+        s=np.deg2rad(30);vol=((np.pi/2-s)*np.cos(s)+np.sin(s))/(np.cos(s)+1)-np.pi/4
+        t=np.arccos(np.clip(2*np.tan(s)/(1+1/np.cos(s)),-1,1))
+        geo=(t-np.sin(t)*np.cos(t))*(1+1/np.cos(s))/np.pi-(1+1/np.cos(s))+(1+np.cos(s))/(2*np.cos(s))
+        params={'solar_zenith':30,'view_zenith':0,'target_solar_zenith':0,'target_view_zenith':0}
+        np.testing.assert_allclose(grid(run(kind,a,params)),.3*.3/(.3+.05*vol+.02*geo),atol=1e-12)
+        params['target_solar_zenith']=30
+        np.testing.assert_allclose(grid(run(kind,a,params)),.3,atol=1e-12)
+    elif kind=='fusion_support_temporal':
+        fine=np.tile([[.2,.3],[.4,.5]],(3,3));coarse=np.repeat(np.repeat(np.array([[.35,.35,.35],[.35,.35,.35],[.35,.35,.35]]),2,0),2,1)
+        a={'fine_before':fine,'coarse_before':coarse,'coarse_after':coarse+.1}
+        z=grid(run(kind,a));np.testing.assert_allclose(z,fine+.1,atol=1e-12)
+        target=coarse.copy();target[:2,:2]+=.2;a['coarse_after']=target
+        z=grid(run(kind,a));np.testing.assert_allclose(z.reshape(3,2,3,2).mean(axis=(1,3)),target[::2,::2],atol=1e-12)
+        a['coarse_after'][0,0]+=.01
+        with pytest.raises(FigureInputError,match='replicated'):run(kind,a)
+    else:
+        rng=np.random.default_rng(42);row,col=np.indices((30,30));label=1+row%3
+        a={r:.15+.25*(label-1)+rng.normal(0,.005,label.shape) for r in ('blue','green','red','nir','swir1','swir2')};a['training']=label
+        r=run(kind,a,{'block_m':40,'iterations':80});m=r['receipt']['metrics'];z=grid(r)
+        target=2 if kind=='cloud_probability_model' else 3
+        assert np.mean(z[label==target])>.9 and np.mean(z[label!=target])<.1
+        assert m['oof_cells']==900 and m['oof_accuracy']>.98
+        assert m['oof_multiclass_brier']<.05 and m['oof_log_loss']<.15
