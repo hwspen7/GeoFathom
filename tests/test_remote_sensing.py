@@ -189,7 +189,7 @@ def test_remote_invalid_inputs_and_recovery():
         response=client.post('/analysis/remote-sensing/run',json=bad);assert response.status_code==422,response.text
     response=client.post('/analysis/remote-sensing/run',json=good);assert response.status_code==200,response.text
     np.testing.assert_allclose(grid(response.json()),.5)
-    assert client.get('/analysis/remote-sensing/catalog').json()['operation_count']==len(BY_ID)==114
+    assert client.get('/analysis/remote-sensing/catalog').json()['operation_count']==len(BY_ID)==120
 
 def test_temporal_independent_quality_masks():
     # Cloud at one date does not erase the other valid acquisitions.
@@ -945,3 +945,37 @@ def test_native_public_scene_crop_calibration(tmp_path,monkeypatch):
             np.testing.assert_allclose(ds.read(1),value)
         assert band['calibration']['offset']==-.1
     with pytest.raises(ValueError):remote_scene.read_scene('sentinel-2-c1-l2a','S2_test_scene',bbox,['invalid'])
+
+
+@pytest.mark.parametrize('kind',['spectral_rx','spectral_mnf','spectral_matched_filter','lai_library_mean','lai_library_sd','lai_library_misfit'])
+def test_spectral_inference_reference(kind):
+    rng=np.random.default_rng(132)
+    if kind.startswith('lai_'):
+        library=[[1.,1.,.2,.3,.4,.5],[3.,2.,.4,.5,.6,.7],[5.,1.,.6,.7,.8,.9]]
+        a={r:constant(z) for r,z in zip(('blue','green','red','nir'),(.31,.41,.51,.61))}
+        p={r+'_sd':.15 for r in a};p['max_chi2']=100
+        r=run(kind,a,p,library=library)
+        t=np.asarray(library);chi=np.sum(((t[:,2:]-np.array([.31,.41,.51,.61]))/.15)**2,axis=1)
+        weight=t[:,1]*np.exp(-chi/2);weight/=weight.sum();mean=weight@t[:,0]
+        expected={'lai_library_mean':mean,'lai_library_sd':np.sqrt(weight@((t[:,0]-mean)**2)),'lai_library_misfit':chi.min()}[kind]
+        np.testing.assert_allclose(grid(r),expected,atol=1e-12)
+        assert len(r['receipt']['metrics']['library_sha256'])==64
+    elif kind=='spectral_matched_filter':
+        a=rng.uniform(.2,.4,(4,8,8));mask=np.ones((8,8));mask[-1]=2;a[:,-1]+=.3
+        r=run(kind,{**dict(zip(('blue','green','red','nir'),a)),'calibration':mask})
+        z=grid(r);assert z[mask==1].mean()==pytest.approx(0,abs=1e-12);assert z[mask==2].mean()==pytest.approx(1)
+        b=a[:,mask==1].T;mu=b.mean(axis=0);delta=a[:,mask==2].mean(axis=1)-mu;c=np.cov(b,rowvar=False);c=.95*c+.05*np.trace(c)/4*np.eye(4)
+        w=np.linalg.inv(c)@delta;np.testing.assert_allclose(z,((a.reshape(4,-1).T-mu)@w/(delta@w)).reshape(8,8))
+    else:
+        a=rng.uniform(.2,.6,(6,8,8));s=source(a);wavelength=[400,450,500,600,700,800]
+        result=checked(execute(RemoteInput(operation=kind,sources=[s],bindings={f'band{i+1}':{'source':0,'band':i+1} for i in range(6)},times=wavelength)))
+        z=grid(result);x=a.reshape(6,-1).T;center=x-x.mean(axis=0);c=np.cov(x,rowvar=False)
+        if kind=='spectral_rx':
+            c=.95*c+.05*np.trace(c)/6*np.eye(6)
+            np.testing.assert_allclose(z.ravel(),np.einsum('ni,ij,nj->n',center,np.linalg.inv(c),center),atol=1e-10)
+        else:
+            d=np.concatenate([(a[:,:,1:]-a[:,:,:-1]).reshape(6,-1).T,(a[:,1:,:]-a[:,:-1,:]).reshape(6,-1).T])
+            noise=np.cov(d,rowvar=False)/2;noise=.95*noise+.05*np.trace(noise)/6*np.eye(6)
+            eig=np.linalg.eigvals(np.linalg.solve(noise,c)).real.max()
+            assert result['rows'][0][1]==pytest.approx(eig)
+            assert np.var(z,ddof=1)==pytest.approx(eig)

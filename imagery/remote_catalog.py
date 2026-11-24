@@ -39,7 +39,17 @@ FUSION=numeric('first','second','first_sd','second_sd')
 FUSION_P=(p('correlation','Error correlation',0,-.999,.999),)
 CANOPY=(p('extinction','Directional extinction coefficient',.5,.001,10),p('clumping','Clumping factor',1,.001,1),p('par_extinction','PAR extinction coefficient',.5,.001,10))
 CLUSTER=(p('clusters','Number of clusters',4,2,16,True),p('iterations','Maximum iterations',100,10,300,True),p('seed','Random seed',42,0,2147483647,True))
+SPECTRAL_COV=(p('shrinkage','Covariance shrinkage',.05,.001,1),)
+LUT_SD=tuple(p(r+'_sd',r+' reflectance standard deviation',.02,.00001,1) for r in ('blue','green','red','nir'))+(p('max_chi2','Maximum library misfit',25,.01,1e8),)
+LUT_IDS={'lai_library_mean','lai_library_sd','lai_library_misfit'}
+GLOBAL_HYPER_IDS={'spectral_rx','spectral_mnf'}
 METHODS=(
+m('spectral_rx','Spectral','Regularized global RX spectral anomaly',refl('band1','band2','band3','band4','band5','band6'),'index','Global regularized covariance Mahalanobis distance, 6–64 wavelengths; descriptive anomaly score.',SPECTRAL_COV),
+m('spectral_mnf','Spectral','Minimum noise fraction component',refl('band1','band2','band3','band4','band5','band6'),'index','Noise covariance from adjacent spectral differences; generalized eigenanalysis, globally fitted.',SPECTRAL_COV+(p('component','MNF component',1,1,64,True),)),
+m('spectral_matched_filter','Spectral','Regularized target spectral matched filter',SPECTRUM+(('calibration','class'),),'index','Mask 1=background, 2=target. Background covariance and target mean estimated from supplied spectra.',SPECTRAL_COV),
+m('lai_library_mean','Biophysical','Bayesian spectral library LAI posterior mean',SPECTRUM,'m2/m2','Supplied simulated or measured spectral library with LAI and prior masses; independent Gaussian band errors.',LUT_SD),
+m('lai_library_sd','Biophysical','Bayesian spectral library LAI posterior SD',SPECTRUM,'m2/m2','Conditional posterior spread of finite supplied library.',LUT_SD),
+m('lai_library_misfit','Biophysical','Minimum spectral library chi-square misfit',SPECTRUM,'index','Minimum squared standardized spectral residual; diagnostic for out-of-library conditions.',LUT_SD),
 m('align_area_mean','Preprocessing','Exact nested-grid area mean',(('target','template'),('source','numeric')),'source_band','Same projected metre CRS and exact integer nested grids; no spatial sharpening; valid support threshold.',(p('minimum_coverage','Minimum valid source fraction',.8,.01,1),)),
 m('align_area_coverage','Preprocessing','Nested-grid valid support fraction',(('target','template'),('source','numeric')),'fraction','Fraction of contributing native source cells with finite measurements; target footprint contained in source.',(p('minimum_coverage','Diagnostic support threshold',.8,.01,1),)),
 m('continuous_reference_error','Validation','Independent continuous reference residuals',numeric('prediction','reference'),'source','Paired aligned same-quantity measurements; bias, RMSE, MAE, NMAD, correlation and mask disagreement; reference independence externally established.'),
@@ -160,7 +170,8 @@ assert len(BY_ID)==len(METHODS)
 # Only operators with a proven finite dependency radius are eligible for tiles.
 WINDOWED_IDS={m.id for m in METHODS if m.group=='Optical'}|{'calibrated_reflectance','ndvi_change','dnbr','difference','relative_change','change_classes','surface_temperature_rte','brightness_temperature','temperature_celsius','lst_uncertainty','lst_correlated_uncertainty','sar_db','sar_linear','sar_ratio','dualpol_rvi','sar_log_change','sar_lee','sar_gamma_map','cloud_buffer','sentinel_clear','landsat_clear','landsat_unsaturated','fusion_gls','fusion_gls_sd','fusion_discrepancy','canopy_lai','canopy_fpar_proxy'}
 WINDOWED_HALO={'sar_lee','sar_gamma_map','cloud_buffer'}
-WINDOWED_CUBES=SERIES_IDS|(HYPER_IDS-{'spectral_endmembers'})
+HYPER_IDS|=GLOBAL_HYPER_IDS
+WINDOWED_CUBES=SERIES_IDS|(HYPER_IDS-{'spectral_endmembers'}-GLOBAL_HYPER_IDS)
 WINDOWED_IDS|=WINDOWED_CUBES
 
 def windowed_roles(operation,times):
@@ -178,4 +189,4 @@ assert WINDOWED_IDS<=set(BY_ID)
 def catalog():
     return [{'id':x.id,'group':x.group,'title':x.title,'roles':[{'id':r,'quantity':q} for r,q in x.roles],
              'parameters':[dict(zip(('name','label','default','minimum','maximum','integer'),v)) for v in x.parameters],
-             'unit':x.unit,'assumption':x.assumption,'variable_series':x.id in SERIES_IDS or x.id in HYPER_IDS,'axis':'wavelength' if x.id in HYPER_IDS else 'time','windowed':x.id in WINDOWED_IDS} for x in METHODS]
+             'unit':x.unit,'assumption':x.assumption,'variable_series':x.id in SERIES_IDS or x.id in HYPER_IDS,'axis':'wavelength' if x.id in HYPER_IDS else 'time','windowed':x.id in WINDOWED_IDS,'library':x.id in LUT_IDS} for x in METHODS]
