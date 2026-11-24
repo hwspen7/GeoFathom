@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - develop
     paths:
       - 'terrain/**'
       - 'tests/test_terrain_*'
@@ -11,12 +12,12 @@ on:
       - 'scripts/terrain_numerical_gate.py'
       - '.github/workflows/terrain-science.yml'
   pull_request:
-    branches: [main]
+    branches: [main, develop]
   workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.sha }}
+  cancel-in-progress: false
 
 jobs:
   independent-gdal:
