@@ -27,6 +27,10 @@ class NetworkInput(BaseModel):
     beta:Annotated[float,Field(gt=0,le=1000)]=.001
     closed_edges:list[str]=Field(default_factory=list,max_length=10000)
     multipliers:dict[str,Positive]=Field(default_factory=dict,max_length=10000)
+    test_edges:list[str]=Field(default_factory=list,max_length=256)
+    failure_probability:dict[str,Annotated[float,Field(ge=0,le=1)]]=Field(default_factory=dict,max_length=10000)
+    trials:int=Field(default=200,ge=20,le=2000)
+    seed:int=Field(default=42,ge=0,le=2147483647)
     raster:ExposureRaster|None=None
     spacing_m:Annotated[float,Field(ge=1,le=10000)]=30
     minimum_coverage:Annotated[float,Field(gt=0,le=1)]=1

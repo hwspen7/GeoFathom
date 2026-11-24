@@ -23,6 +23,9 @@ METHODS={
  "harmonic_centrality":("Harmonic centrality","Directed outgoing inverse-cost centrality with unreachable nodes contributing zero."),
  "betweenness":("Weighted betweenness","Exact weighted Brandes node centrality including equal-cost parallel paths."),
  "scenario_impact":("Disruption and resilience","Compare baseline and scenario OD costs, isolation and detour impacts."),
+ "circuity":("Geodesic network circuity","Distance-weighted network path divided by geodesic separation; unreachable pairs remain null."),
+ "edge_criticality":("Single-edge disruption criticality","Exact one-at-a-time removal on selected edges and directed OD pairs; not simultaneous failures."),
+ "stochastic_reliability":("Stochastic network reliability","Seeded independent edge-failure Monte Carlo; Wilson intervals quantify simulation error, not hazard-model uncertainty."),
  "hazard_exposure":("Raster edge exposure","Native raster sample mean, maximum and valid coverage along each edge.")
 }
 
@@ -197,6 +200,8 @@ def table_csv(cols,rows):
     s=io.StringIO();w=csv.writer(s);w.writerow(cols);w.writerows(rows);return s.getvalue()
 
 def execute(body):
+    serialized=json.dumps(body.network,sort_keys=True,separators=(',',':'),allow_nan=False)
+    require(len(serialized.encode())<=8_000_000,'Network JSON exceeds 8 MB.')
     g=Graph(body.network,body.cost_field);a=g.adjacency();kind=body.operation
     require(kind in METHODS,"Unknown network method.")
     origins=body.origins;destinations=body.destinations
@@ -205,6 +210,9 @@ def execute(body):
     for e,m in body.multipliers.items():require(e in g.ids and 1<=m<=1000,"Invalid edge multiplier.")
     require(set(body.closed_edges)<=g.ids,"Unknown closed edge ID.")
     require(not (body.closed_edges or body.multipliers) or kind=="scenario_impact","Closures and multipliers are scenario-only parameters.")
+    require(not body.failure_probability or kind=="stochastic_reliability","Failure probabilities are reliability-only parameters.")
+    require(not body.test_edges or kind=="edge_criticality","Selected test edges are criticality-only parameters.")
+    require(set(body.failure_probability)<=g.ids and set(body.test_edges)<=g.ids and len(set(body.test_edges))==len(body.test_edges),"Unknown or duplicated scenario edge.")
     require(body.raster is None or kind in ("hazard_exposure","scenario_impact"),"Raster is accepted only for exposure and scenario analysis.")
     n=len(g.nodes);arcs=sum(map(len,a.values()));features=[];rows=[];metrics={};cols=[];figures=[]
     def plot(title,recipe,x,y,columns=None,values=None):
@@ -255,6 +263,54 @@ def execute(body):
         cols=["node","score"];rows=[[u,scores[u]] for u in sorted(a)]
         features=[node_feature(g,u,score=scores[u]) for u in sorted(a)]
         ordered=sorted(scores.values(),reverse=True);plot("Centrality rank distribution","basic_line","rank","score",values=(["rank","score"],[[i+1,z] for i,z in enumerate(ordered)]))
+    elif kind in ("edge_criticality","stochastic_reliability","circuity"):
+        require(origins and destinations and len(origins)*len(destinations)<=10000,"Choose up to 10,000 OD pairs.")
+        if kind=="circuity":require(body.cost_field=="length_m","Circuity requires geodesic edge length costs.")
+        budget(len(origins))
+        baseline={s:dijkstra(a,s)[0] for s in origins};pairs=[(s,t,baseline[s].get(t)) for s in origins for t in destinations]
+        if kind=="circuity":
+            cols=["origin","destination","network_distance_m","geodesic_distance_m","circuity"]
+            for s,t,d in pairs:
+                _,_,direct=GEOD.inv(*g.nodes[s],*g.nodes[t]);ratio=d/direct if d is not None and direct>1e-6 else None
+                rows.append([s,t,d,direct,ratio])
+            values=[r for r in rows if r[-1] is not None]
+            metrics={"reachable_noncoincident_pairs":len(values),"mean_circuity":sum(r[-1] for r in values)/len(values) if values else None}
+            if values:plot("Network versus geodesic distance","basic_scatter","geodesic_distance_m","network_distance_m",values=(cols[2:4],[r[2:4] for r in values]))
+        elif kind=="edge_criticality":
+            tested=body.test_edges or sorted(g.ids)
+            require(len(tested)<=256,"Select at most 256 candidate edges.");budget(len(origins)*(len(tested)+1))
+            connected=[(s,t,d) for s,t,d in pairs if d is not None]
+            require(connected,"No baseline reachable pairs.")
+            cols=["edge","lost_pairs","lost_fraction","mean_retained_detour","retained_pairs"]
+            by_id={e.id:e for e in g.edges}
+            for eid in tested:
+                modified=g.adjacency({eid});dist={s:dijkstra(modified,s)[0] for s in origins}
+                changes=[dist[s][t]-d for s,t,d in connected if t in dist[s]];lost=len(connected)-len(changes)
+                mean=sum(changes)/len(changes) if changes else None
+                rows.append([eid,lost,lost/len(connected),mean,len(changes)])
+                features.append(edge_feature(by_id[eid],lost_fraction=lost/len(connected),mean_retained_detour=mean))
+            rows.sort(key=lambda r:(-r[1],-(r[3] or 0),r[0]))
+            metrics={"tested_edges":len(tested),"baseline_reachable_pairs":len(connected),"maximum_lost_fraction":max(r[2] for r in rows)}
+            plot("Edge criticality by disconnected OD fraction","horizontal_bar","edge","lost_fraction")
+        else:
+            import numpy as np
+            require(body.failure_probability,"Provide explicit independent failure probabilities for selected edges.")
+            budget(len(origins)*(body.trials+1));require(len(pairs)*body.trials<=5_000_000,"Reliability simulation exceeds OD trial budget.")
+            rng=np.random.default_rng(body.seed);selected=sorted(body.failure_probability);prob=np.array([body.failure_probability[e] for e in selected])
+            success=np.zeros(len(pairs),dtype=np.int64);cost_sum=np.zeros(len(pairs))
+            for _ in range(body.trials):
+                closed={e for e,q in zip(selected,rng.random(len(selected))<prob) if q}
+                modified=g.adjacency(closed);dist={s:dijkstra(modified,s)[0] for s in origins}
+                for i,(s,t,d) in enumerate(pairs):
+                    if t in dist[s]:success[i]+=1;cost_sum[i]+=dist[s][t]
+            cols=["origin","destination","baseline","reachable_probability","wilson_low","wilson_high","conditional_cost"]
+            z=1.959963984540054;T=body.trials
+            for i,(s,t,d) in enumerate(pairs):
+                p=float(success[i]/T);den=1+z*z/T;center=(p+z*z/(2*T))/den;half=z*math.sqrt(p*(1-p)/T+z*z/(4*T*T))/den
+                rows.append([s,t,d,p,max(0,center-half),min(1,center+half),float(cost_sum[i]/success[i]) if success[i] else None])
+            metrics={"trials":T,"seed":body.seed,"mean_pair_reliability":float(success.mean()/T),"failure_model":"Independent Bernoulli closures; Wilson intervals are Monte Carlo sampling intervals conditional on supplied probabilities."}
+            plot("OD reliability and simulation intervals","errorbar","pair","reachable_probability",values=(["pair","reachable_probability","low","high"],[[i+1,r[3],r[4],r[5]] for i,r in enumerate(rows)]))
+            figures[-1]["bindings"].update(low="low",high="high")
     elif kind=="hazard_exposure":
         require(body.raster is not None,"Provide an exposure raster.")
         exposure,meta=raster_exposure(g,body.raster,body.spacing_m);metrics.update(meta)
@@ -286,7 +342,8 @@ def execute(body):
             cols=["origin","destination","cost"]
             rows=[[s,t,ds[s].get(t)] for s in origins for t in destinations]
             metrics={"reachable_pairs":sum(r[-1] is not None for r in rows),"unreachable_pairs":sum(r[-1] is None for r in rows)}
-            if metrics["reachable_pairs"]:plot("OD cost distribution","normal_fit","cost","cost",values=(["cost"],[[r[-1]] for r in rows if r[-1] is not None]))
+            if metrics["reachable_pairs"]:
+                costs=sorted(r[-1] for r in rows if r[-1] is not None);plot("OD cumulative cost distribution","basic_line" if len(costs)>1 else "basic_column","cost","fraction",values=(["cost","fraction"],[[z,(i+1)/len(costs)] for i,z in enumerate(costs)]))
         elif kind=="nearest_facility":
             cols=["origin","facility","cost"]
             for s in origins:
@@ -308,5 +365,5 @@ def execute(body):
             else:score={s:sum(supply[t]*math.exp(-body.beta*ds[s][t]) for t in destinations if t in ds[s]) for s in origins}
             cols=["origin","accessibility"];rows=[[s,score[s]] for s in origins];features=[node_feature(g,s,accessibility=score[s]) for s in origins]
             plot("Origin accessibility","basic_column","origin","accessibility")
-    receipt={"schema":"geofathom-network-science","operation":kind,"assumption":METHODS[kind][1],"network_sha256":digest(body.network),"cost_field":body.cost_field,"cost_unit":body.cost_unit if body.cost_field!="length_m" else "m","nodes":n,"edges":len(g.edges),"directed_arcs":arcs,"parameters":body.model_dump(exclude={"network","raster"}),"metrics":metrics}
+    receipt={"schema":"geofathom-network-science","operation":kind,"assumption":METHODS[kind][1],"network_sha256":hashlib.sha256(serialized.encode()).hexdigest(),"cost_field":body.cost_field,"cost_unit":body.cost_unit if body.cost_field!="length_m" else "m","nodes":n,"edges":len(g.edges),"directed_arcs":arcs,"parameters":body.model_dump(exclude={"network","raster"}),"metrics":metrics}
     return {"operation":kind,"columns":cols,"rows":rows,"csv":table_csv(cols,rows),"features":{"type":"FeatureCollection","features":features},"figures":figures,"receipt":receipt}
