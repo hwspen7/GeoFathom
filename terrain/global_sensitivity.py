@@ -10,7 +10,7 @@ from .advanced import _window
 from .cancellation import checkpoint
 from .research import (execute, unpack, _metrics, software_revision, MAX_ENSEMBLE_CELLS,
                        MAX_SCENARIO_CELLS, SWEEP_PARAMETERS, INTEGER_PARAMETERS)
-from .studio_data import sobol_indices, morris_effects
+from .studio_data import sobol_indices, morris_effects, pareto_mask
 
 def design(method, bounds, samples, seed):
     """Generate independent uniform paired designs or randomized Morris paths.
@@ -54,6 +54,8 @@ def evaluate_global(body,resolve,cancel=None):
     dependencies={identifier:file_sha256(resolve(identifier)) for identifier in
                   [body.base.dsm_image_id,body.base.external_inflow_image_id] if identifier}
     names=[f.name for f in body.factors];k=len(names)
+    if body.method=='pareto':
+        return evaluate_pareto(body,path,resolve,checksum,dependencies,cancel)
     labels,physical,normalized=design(body.method,[(f.minimum,f.maximum) for f in body.factors],body.samples,body.seed)
     z,*_=_window(path,body.base.geometry,4096,MAX_SCENARIO_CELLS)
     if (len(physical)+1)*z.size>MAX_ENSEMBLE_CELLS:
@@ -116,3 +118,58 @@ def evaluate_global(body,resolve,cancel=None):
                         'cell_evaluations':int((len(y)+1)*z.size),
                         'warnings':['Small designs are screening estimates; check convergence with independent seeds and larger sample sizes.',
                                     'Independent uniform bounds are assumptions, not measured parameter distributions.']}}
+
+
+def evaluate_pareto(body,path,resolve,checksum,dependencies,cancel=None):
+    """Seeded space-filling exploration followed by bounded Pareto-front refinement.
+
+    The returned front is nondominated only among actual evaluated candidates;
+    no claim of a global optimum is made. All objectives are minimized.
+    """
+    from .routes import AdvancedTerrainInput
+    z,*_=_window(path,body.base.geometry,4096,MAX_SCENARIO_CELLS)
+    if (body.samples+1)*z.size>MAX_ENSEMBLE_CELLS:
+        raise RasterError('Optimization exceeds the 12,000,000 cell evaluation budget.')
+    baseline=execute(body.base,path,resolve,cancel,include_plot_data=False)
+    keys=[body.metric,body.second_metric];base_metrics=_metrics(baseline)
+    if any(key not in base_metrics for key in keys):raise RasterError('Both objective metrics must be available.')
+    base_raster=baseline.get('raster');base_grid=unpack(base_raster) if base_raster else None
+    base_mask=np.isfinite(base_grid[0]) if base_grid else None
+    names=[f.name for f in body.factors];lo=np.array([f.minimum for f in body.factors]);hi=np.array([f.maximum for f in body.factors])
+    rng=np.random.default_rng(body.seed);n=max(4,body.samples//2);k=len(names)
+    # Independent Latin-hypercube coordinates; one sample per stratum per factor.
+    initial=np.column_stack([(rng.permutation(n)+rng.random(n))/n for _ in names])
+    coords=[];responses=[]
+    for i in range(body.samples):
+        checkpoint(cancel)
+        if i<n:point=initial[i]
+        else:
+            y=np.asarray(responses);front=np.flatnonzero(pareto_mask(y[:,0],y[:,1]))
+            parent=coords[int(rng.choice(front))]
+            # Retain global exploration while refining nondominated neighborhoods.
+            fraction=(i-n)/max(1,body.samples-n)
+            if (i-n)%4==0:point=rng.random(k)
+            else:point=np.clip(parent+rng.normal(0,.22*(1-fraction)+.025,k),0,1)
+            if any(np.array_equal(point,p) for p in coords):point=rng.random(k)
+        physical=lo+(hi-lo)*point
+        variant=AdvancedTerrainInput.model_validate({**body.base.model_dump(),**dict(zip(names,map(float,physical)))})
+        output=execute(variant,path,resolve,cancel,include_plot_data=False);metrics=_metrics(output)
+        if any(key not in metrics for key in keys):raise RasterError('An objective is undefined at a candidate; no incomparable front is produced.')
+        candidate=output.get('raster')
+        if bool(candidate)!=bool(base_raster):raise RasterError('Optimization changes output type.')
+        if candidate:
+            grid,transform,crs=unpack(candidate)
+            if grid.shape!=base_grid[0].shape or transform!=base_grid[1] or crs!=base_grid[2] or candidate['unit']!=base_raster['unit'] or not np.array_equal(np.isfinite(grid),base_mask):
+                raise RasterError('Optimization changes output population or physical units.')
+        coords.append(point.copy());responses.append([metrics[key] for key in keys])
+    if file_sha256(path)!=checksum or any(file_sha256(resolve(i))!=v for i,v in dependencies.items()):raise RasterError('Source data changed during optimization.')
+    physical=lo+(hi-lo)*np.asarray(coords);y=np.asarray(responses);front=pareto_mask(y[:,0],y[:,1])
+    cols=['Objective 1: '+keys[0],'Objective 2: '+keys[1]]
+    indices=[{'factor':str(i+1),**{name:float(v) for name,v in zip(names,physical[i])},**{key:float(v) for key,v in zip(cols,y[i])}} for i in np.flatnonzero(front)]
+    return {'method':'pareto','metric':' / '.join(keys),'evaluations':len(y),'indices':indices,
+            'plot_csv':csv_text(cols,y),'bindings':{'x':cols[0],'y':cols[1],'columns':[]},
+            'design_csv':csv_text(['Evaluation',*names,*cols,'nondominated'],[[i+1,*p,*v,int(flag)] for i,(p,v,flag) in enumerate(zip(physical,y,front))]),
+            'method_note':'Seeded Latin-hypercube exploration and adaptive neighborhood refinement of evaluated nondominated solutions. Both objectives minimized. Observed Pareto front, not a proof of global optimality.',
+            'manifest':{'schema':'geofathom-pareto-search-1','input':body.model_dump(),'source_sha256':checksum,
+                'dependency_sha256':dependencies,'software':software_revision(),'generator':'numpy.default_rng/PCG64',
+                'baseline_metrics':{key:base_metrics[key] for key in keys},'cell_evaluations':int((len(y)+1)*z.size)}}

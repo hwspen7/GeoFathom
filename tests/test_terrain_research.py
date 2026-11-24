@@ -425,3 +425,21 @@ def test_spatial_uncertainty_production_engine(experiment_source):
     assert result['uncertainty']['model']=='gaussian_spatial'
     assert result['uncertainty']['correlation_length_m']==20
     assert result['uncertainty']['common_cells']==100
+
+
+def test_pareto_search_actual_terrain_and_reproducible_design(experiment_source):
+    from terrain.global_sensitivity import evaluate_global
+    from terrain.research_routes import GlobalSensitivity
+    from terrain.studio_data import pareto_mask
+    import csv,io
+    base,_,_=experiment_source
+    body=GlobalSensitivity(base=base,method='pareto',metric='cut_m3',second_metric='fill_m3',
+        factors=[{'name':'reference','minimum':88,'maximum':108},{'name':'design_east_grade','minimum':0,'maximum':.01}],samples=12,seed=5)
+    result=evaluate_global(body,image_file);second=evaluate_global(body,image_file)
+    assert result['evaluations']==12 and result['design_csv']==second['design_csv']
+    rows=list(csv.DictReader(io.StringIO(result['design_csv'])))
+    values=np.array([[float(r['Objective 1: cut_m3']),float(r['Objective 2: fill_m3'])] for r in rows])
+    front=pareto_mask(values[:,0],values[:,1])
+    assert front.tolist()==[r['nondominated']=='1' for r in rows]
+    assert len(result['indices'])==int(front.sum())
+    assert all(88<=float(r['reference'])<=108 for r in rows)

@@ -205,3 +205,5 @@ The studio also accepts individually selected bands from multi-band GeoTIFFs, ap
 The catalog now contains 40 basic figures (24 native and 16 table figures) and 168 professional recipes. The new basic figures calculate rank-size, Lorenz share/Gini, baseline indices and group mean/sample SD from observations.
 
 Ordinary kriging has bounded explicit NoData prediction and conditional SD outputs; observed cells are preserved, and extrapolation is distance-limited. Spatial regression supports an exact metric buffer excluding nearby training observations from held-out folds.
+
+Global research now also supports a two-objective bounded adaptive Pareto search. Actual terrain evaluations explore a seeded Latin hypercube, then refine neighborhoods of nondominated solutions. Both metrics are minimized; full evaluated parameter and response tables and a plot-ready Pareto table are preserved. This is a budgeted observed-front search, not a certified global optimizer.

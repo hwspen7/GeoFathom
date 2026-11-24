@@ -140,9 +140,10 @@ class GlobalFactor(BaseModel):
 class GlobalSensitivity(BaseModel):
     model_config=ConfigDict(extra='forbid',allow_inf_nan=False)
     base:AdvancedTerrainInput
-    method:Literal['sobol','morris']='sobol'
+    method:Literal['sobol','morris','pareto']='sobol'
     factors:list[GlobalFactor]=Field(min_length=2,max_length=6)
     metric:str=Field(min_length=1,max_length=120)
+    second_metric:str|None=Field(default=None,min_length=1,max_length=120)
     samples:int=Field(default=16,ge=8,le=128)
     seed:int=Field(default=42,ge=0,le=4294967295)
     expected_source_sha256:str|None=Field(default=None,pattern=r'^[0-9a-f]{64}$')
@@ -150,6 +151,7 @@ class GlobalSensitivity(BaseModel):
     @model_validator(mode='after')
     def validate_design(self):
         from .research import INTEGER_PARAMETERS
+        if self.method=='pareto' and (not self.second_metric or self.metric==self.second_metric):raise ValueError('Pareto search requires two distinct minimized metrics.')
         allowed=SWEEP_PARAMETERS.get(self.base.operation,[])
         names=[f.name for f in self.factors]
         if len(set(names))!=len(names):raise ValueError('Choose distinct factors.')
