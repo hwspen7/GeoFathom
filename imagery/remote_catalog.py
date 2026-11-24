@@ -223,6 +223,14 @@ METHODS=METHODS+(
  m('sar_wishart_statistic','Radar','Dual-pol complex Wishart change statistic',WISHART_ROLES,'index','Independent positive-definite complex covariance estimates; likelihood ratio statistic.',WISHART_P),
  m('sar_wishart_p','Radar','Dual-pol Wishart asymptotic p-value',WISHART_ROLES,'probability','Asymptotic chi-square with four degrees of freedom; supplied effective looks; pointwise.',WISHART_P),
 )
+LOS_ROLES=(('first_los','distance_m'),('second_los','distance_m'),('first_sd','distance_sd_m'),('second_sd','distance_sd_m'),
+ ('first_incidence','slope'),('second_incidence','slope'),('first_azimuth','aspect'),('second_azimuth','aspect'))
+LOS_PARAMS=(p('north_m','Prescribed north displacement (m)',0,-1000,1000),p('north_sd_m','Independent north uncertainty (m)',.02,0,1000),
+ p('los_correlation','LOS error correlation',0,-.999,.999),p('max_condition','Maximum east/up geometry condition',50,1,1000))
+METHODS=METHODS+tuple(m(i,'Radar',title,LOS_ROLES,unit,'Two simultaneous LOS tracks, positive toward sensor; local ENU look geometry; prescribed north motion and uncertainty.',LOS_PARAMS) for i,title,unit in (
+ ('insar_east_displacement','Two-track east displacement','m'),('insar_up_displacement','Two-track up displacement','m'),
+ ('insar_east_sd','Two-track east displacement uncertainty','m'),('insar_up_sd','Two-track up displacement uncertainty','m'),
+ ('insar_east_up_correlation','Two-track east/up error correlation','unitless'),('insar_geometry_condition','Two-track geometry condition number','unitless')))
 BY_ID={x.id:x for x in METHODS}
 assert len(BY_ID)==len(METHODS)
 # Only operators with a proven finite dependency radius are eligible for tiles.
@@ -231,6 +239,7 @@ WINDOWED_HALO={'sar_lee','sar_gamma_map','cloud_buffer'}
 HYPER_IDS|=GLOBAL_HYPER_IDS
 WINDOWED_CUBES=SERIES_IDS|(HYPER_IDS-{'spectral_endmembers'}-GLOBAL_HYPER_IDS)
 WINDOWED_IDS|={'atmospheric_reflectance_sd','atmospheric_reflectance_condition','sar_wishart_statistic','sar_wishart_p'}
+WINDOWED_IDS|={'insar_east_displacement','insar_up_displacement','insar_east_sd','insar_up_sd','insar_east_up_correlation','insar_geometry_condition'}
 WINDOWED_IDS|=WINDOWED_CUBES|{'sar_gamma_change_p','sar_gamma_ratio_low','sar_gamma_ratio_high','quality_weighted_mean','quality_weighted_sd','quality_effective_count'}
 
 def windowed_roles(operation,times):

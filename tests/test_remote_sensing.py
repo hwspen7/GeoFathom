@@ -189,7 +189,7 @@ def test_remote_invalid_inputs_and_recovery():
         response=client.post('/analysis/remote-sensing/run',json=bad);assert response.status_code==422,response.text
     response=client.post('/analysis/remote-sensing/run',json=good);assert response.status_code==200,response.text
     np.testing.assert_allclose(grid(response.json()),.5)
-    assert client.get('/analysis/remote-sensing/catalog').json()['operation_count']==len(BY_ID)==151
+    assert client.get('/analysis/remote-sensing/catalog').json()['operation_count']==len(BY_ID)==157
 
 def test_temporal_independent_quality_masks():
     # Cloud at one date does not erase the other valid acquisitions.
@@ -772,6 +772,8 @@ def test_every_disk_method_matches_inline(kind,tmp_path):
         if q=='class':
             code={'sentinel_clear':4,'landsat_clear':64,'landsat_unsaturated':0}.get(kind,1)
             z=np.full(shape,float(code));z[31:34,61:66]=9 if kind=='sentinel_clear' else 8 if kind.startswith('landsat_') else 0
+        elif kind.startswith('insar_') and role.endswith('azimuth'):z=rng.uniform(70,110,shape) if role.startswith('first') else rng.uniform(250,290,shape)
+        elif kind.startswith('insar_') and role.endswith('incidence'):z=rng.uniform(25,45,shape)
         elif kind.startswith('sar_wishart_'):z=rng.uniform(2.,3.,shape) if role.startswith(('c11','c22')) else rng.uniform(-.2,.2,shape)
         elif q=='reflectance':z=rng.uniform(.2,.6,shape)
         elif q in {'emissivity','transmittance','fraction'}:z=rng.uniform(.7,.95,shape)
@@ -1401,3 +1403,25 @@ def test_atmospheric_lut_disk_interpolation_no_extrapolation(tmp_path):
         np.testing.assert_allclose(actual[np.isfinite(actual)],expected,atol=1e-12)
     assert receipt['outside_lut_or_missing_cells']==2
     assert receipt['valid_cells']==33*34-2
+
+
+@pytest.mark.parametrize('kind',['insar_east_displacement','insar_up_displacement','insar_east_sd','insar_up_sd','insar_east_up_correlation','insar_geometry_condition'])
+def test_two_track_los_decomposition_reference(kind):
+    # Independent ENU matrix and covariance oracle.
+    t=np.deg2rad([32.,41.]);a=np.deg2rad([80.,280.])
+    look=np.column_stack((np.sin(t)*np.sin(a),np.sin(t)*np.cos(a),np.cos(t)))
+    truth=np.array([.12,.03,-.04]);los=look@truth
+    sd=np.array([.01,.02]);cor=.3;north_sd=.05
+    mat=look[:,[0,2]];inv=np.linalg.inv(mat)
+    covariance=np.diag(sd**2);covariance[0,1]=covariance[1,0]=cor*np.prod(sd)
+    covariance+=north_sd**2*np.outer(look[:,1],look[:,1]);output_cov=inv@covariance@inv.T
+    v={k:constant(z) for k,z in zip(('first_los','second_los','first_sd','second_sd','first_incidence','second_incidence','first_azimuth','second_azimuth'),
+          (*los,*sd,32.,41.,80.,280.))}
+    v['second_azimuth'][0,0]=80.;v['second_incidence'][0,0]=32.
+    expected={'insar_east_displacement':truth[0],'insar_up_displacement':truth[2],
+        'insar_east_sd':np.sqrt(output_cov[0,0]),'insar_up_sd':np.sqrt(output_cov[1,1]),
+        'insar_east_up_correlation':output_cov[0,1]/np.sqrt(np.prod(np.diag(output_cov))),
+        'insar_geometry_condition':np.linalg.cond(mat)}[kind]
+    r=run(kind,v,{'north_m':truth[1],'north_sd_m':north_sd,'los_correlation':cor})
+    z=grid(r);assert np.isnan(z[0,0]);np.testing.assert_allclose(z[np.isfinite(z)],expected,atol=1e-12)
+    assert r['receipt']['metrics']['ill_conditioned_cells']==1

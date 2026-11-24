@@ -40,7 +40,8 @@ def read_calibrated(ds,binding,quantity,window=None):
     if quantity=='aspect':require(np.all((v>=0)&(v<=360)),'Aspect must be in [0,360] degrees.')
     if quantity=='wrapped_phase':require(np.all((v>=-np.pi-1e-9)&(v<=np.pi+1e-9)),'Wrapped phase must be in [-pi, pi] radians.')
     if quantity=='db':require(np.all((v>=-1000)&(v<=1000)),'Radar dB outside supported numeric range.')
-    expected={'reflectance':'reflectance','class':'class','power':'linear_power','signed_power':'linear_power','wrapped_phase':'radian','db':'dB','radiance':'radiance','kelvin':'K','emissivity':'unitless','transmittance':'unitless','fraction':'unitless','positive_gain':'unitless','radiance_sd':'radiance','fraction_sd':'unitless','nonnegative':'reflectance','slope':'degree','aspect':'degree'}.get(quantity)
+    if quantity=='distance_sd_m':require(np.all(v>=0),'LOS distance uncertainty must be nonnegative.')
+    expected={'distance_m':'m','distance_sd_m':'m','reflectance':'reflectance','class':'class','power':'linear_power','signed_power':'linear_power','wrapped_phase':'radian','db':'dB','radiance':'radiance','kelvin':'K','emissivity':'unitless','transmittance':'unitless','fraction':'unitless','positive_gain':'unitless','radiance_sd':'radiance','fraction_sd':'unitless','nonnegative':'reflectance','slope':'degree','aspect':'degree'}.get(quantity)
     unit=expected or binding.unit or tag
     if quantity=='numeric':require(bool(unit),'Declare the physical unit of each numeric band.')
     if binding.unit and expected:require(binding.unit==expected,'Declared unit conflicts with required physical quantity.')

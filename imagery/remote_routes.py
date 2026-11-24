@@ -19,6 +19,7 @@ from .remote_spectral_inference import spectral_covariance,matched_filter,librar
 from .remote_advanced_models import dualpol,brdf,support_fusion,cloud_model
 from .remote_phase import reconstruct
 from .remote_joint_models import joint_retrieval,two_anchor,calibrated_cloud
+from .insar_decomposition import LOS_IDS,decompose
 from .satellite_lut_wishart import WISHART_IDS,wishart_change
 from .satellite_radiometry import ATMOS_IDS,atmospheric_error
 from .remote_quality_composite import QUALITY_IDS,quality_composite
@@ -153,6 +154,7 @@ def execute(body):
     elif aligning:
         out=v['source'];unit='fraction' if kind in {'align_area_coverage','align_overlap_coverage'} else grids['source'].unit
         meta.update(alignment_meta);meta['resampling']='exact_overlap' if kind.startswith('align_overlap_') else 'nested_area' if kind.startswith('align_area_') else 'bilinear' if kind=='align_continuous' else 'nearest'
+    elif kind in LOS_IDS:out,meta=decompose(v,params,kind)
     elif kind in WISHART_IDS:out,meta=wishart_change(v,params,kind)
     elif kind in ATMOS_IDS:out,meta=atmospheric_error(v,params,kind)
     elif kind in QUALITY_IDS:out,meta=quality_composite(v,params,kind)

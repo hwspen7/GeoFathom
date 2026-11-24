@@ -10,6 +10,7 @@ from imagery.remote_catalog import BY_ID,WINDOWED_IDS,WINDOWED_CUBES
 
 def expected_tests():
     groups={
+        'test_two_track_los_decomposition_reference':'insar_east_displacement insar_up_displacement insar_east_sd insar_up_sd insar_east_up_correlation insar_geometry_condition',
         'test_wishart_change_independent_reference':'sar_wishart_statistic sar_wishart_p',
         'test_atmospheric_jacobian_reference':'atmospheric_reflectance_sd atmospheric_reflectance_condition',
         'test_quality_composite_reference':'quality_weighted_mean quality_weighted_sd quality_effective_count',
