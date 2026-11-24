@@ -6,6 +6,7 @@ import threading
 import numpy as np
 from .studio_catalog import BY_ID, NOTES, OPTIONS, MIN_RASTERS
 from .studio_domain_catalog import IDS as DOMAIN_IDS
+from .studio_research import IDS as RESEARCH_IDS
 from .studio_data import (Table, read_grids, aligned_grids, normalized, pareto_mask, average_rank,
                           regular_series, rectangular_grid, linear_fit, sobol_indices, morris_effects,
                           FigureInputError)
@@ -41,7 +42,7 @@ def render(req, container=None, panel_label='', grid_sink=None):
     table=Table(req.csv) if source=='table' else None
     grids=read_grids(req.rasters) if source=='raster' else []
     if grids:_require(len(grids)>=MIN_RASTERS.get(kind,1),'Select the required number of rasters.')
-    if grids and kind not in DOMAIN_IDS and kind not in {'raster_matrix','raster_uncertainty','raster_exceedance','raster_difference','raster_significant_change','raster_profile'}:_require(len(grids)==1,'This recipe requires exactly one raster.')
+    if grids and kind not in DOMAIN_IDS and kind not in RESEARCH_IDS and kind not in {'raster_matrix','raster_uncertainty','raster_exceedance','raster_difference','raster_significant_change','raster_profile'}:_require(len(grids)==1,'This recipe requires exactly one raster.')
     if source=='raster':_require(bool(grids),'Select GeoTIFF input.')
     count=len(table.rows) if table else int(np.isfinite(grids[0].values).sum())
     meta={'recipe':kind,'method_note':NOTES.get(kind,''),'input_count':count,'used_count':count,
@@ -77,7 +78,11 @@ def render(req, container=None, panel_label='', grid_sink=None):
         is3d=(kind=='response_surface' and req.response_style=='surface') or kind in {'terrain_surface','terrain_wireframe','scatter_3d'}
         ax=fig.add_subplot(111,projection='3d' if is3d else 'polar' if kind=='radar' else None)
         xlabel=req.x or '';ylabel=req.y or ''
-        if kind in DOMAIN_IDS:
+        if kind in RESEARCH_IDS:
+            from .studio_research import render_table,render_raster
+            derived=render_table(kind,req,fig,ax,table,meta,palette,rows) if source=='table' else render_raster(kind,req,fig,ax,grids,meta)
+            ax=None
+        elif kind in DOMAIN_IDS:
             if source=='raster':
                 from .studio_domain_raster import render_raster_domain
                 if MIN_RASTERS.get(kind,1)==1:_require(len(grids)==1,'Select exactly one raster for this recipe.')
