@@ -119,4 +119,5 @@ def test_mesh_large_grid_budget_and_real_tile(host,tmp_path):
     with cr.task_resources():
         tile=stream_mesh_tile(path,polygon,1,0,0)
     assert tile["grid_cols"]==4097
-    assert tile["maximum_vertical_error_m"]==pytest.approx(0) if "maximum_vertical_error_m" in tile else tile["cols"]==33
+    assert tile["cols"]==33
+    assert tile["geometric_error_max_m"]==pytest.approx(0)

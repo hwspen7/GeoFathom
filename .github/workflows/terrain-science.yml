@@ -16,7 +16,7 @@ concurrency:
 jobs:
   independent-gdal:
     runs-on: ubuntu-24.04
-    timeout-minutes: 18
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -44,6 +44,8 @@ jobs:
       - name: Verify adaptive graph and resumable terrain scaling
         run: |
           python -m pytest -q --junitxml=build/terrain-scaling-tests.xml tests/test_terrain_compute_resources.py tests/test_terrain_scaling.py tests/test_terrain_runtime_delivery.py
+      - name: Measure hundred-million-cell streaming slope accuracy and memory
+        run: python benchmarks/terrain_scaling.py --output build/terrain-scaling-benchmark.json
       - name: Enforce >=95 foundational synthetic numerical score for every Terrain operation
         run: |
           python scripts/terrain_numerical_gate.py --junit build/terrain-foundation-tests.xml --reference build/terrain-reference.json --output build/terrain-foundation-matrix.json
@@ -64,5 +66,6 @@ jobs:
             build/terrain-foundation-matrix.json
             build/terrain-methods-tests.xml
             build/terrain-scaling-tests.xml
+            build/terrain-scaling-benchmark.json
           if-no-files-found: warn
           retention-days: 30
