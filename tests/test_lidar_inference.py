@@ -49,3 +49,20 @@ def test_multiscale_planar_normal_and_degenerate_line():
     np.testing.assert_allclose(out[:,6:9],np.tile(np.array([-1,-2,1])/np.sqrt(6),(len(p),1)),atol=1e-10)
     _,m=multiscale_geometry(np.column_stack((np.arange(20.),np.zeros((20,2)))),12)
     assert m["valid_points"]==0
+
+def test_watershed_regional_maxima_plateau_and_disconnected_islands():
+    p=np.array([[.1,.1,8],[1.1,.1,8],[2.1,.1,7],[3.1,.1,6],[4.1,.1,5],
+                [6.1,.1,7],[7.1,.1,6]])
+    out,m=canopy_watershed(p,np.zeros(len(p)),1.,10.,2.)
+    assert m["candidate_crowns"]==2
+    assert m["regional_maxima"]==2
+    assert m["observed_components"]==2
+    assert m["assigned_cells"]==7
+    assert len(set(out[:5,3]))==1 and len(set(out[5:,3]))==1
+    assert out[0,3]!=out[-1,3]
+
+def test_watershed_downhill_tail_is_not_a_peak():
+    p=np.column_stack((np.arange(12)+.1,np.full(12,.1),np.arange(15.,3.,-1)))
+    out,m=canopy_watershed(p,np.zeros(len(p)),1.,2.,2.)
+    assert m["candidate_crowns"]==1
+    assert np.all(out[:,3]==0)

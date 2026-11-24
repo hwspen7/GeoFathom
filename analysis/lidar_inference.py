@@ -96,7 +96,7 @@ def clustered_normal_change(current,reference,cores,k,radius,half_depth,block,re
     and independent; normals are treated as fixed. BY controls dependence
     across tests conditional on valid marginal p-values.
     """
-    if len(reference)<k or len(cores)>10000 or block<=0 or minimum<3:
+    if len(reference)<k or len(cores)>10000 or not .001<=block<=1e6 or minimum<3:
         raise ValueError("Invalid clustered change support or block size.")
     a,b=cKDTree(current),cKDTree(reference)
     reach=float(np.hypot(radius,half_depth))
@@ -155,14 +155,46 @@ def canopy_watershed(p,ground,size,radius,threshold):
     if not good.any():raise ValueError("No supported canopy returns above threshold.")
     keys,inv=np.unique(np.floor(p[good,:2]/size).astype(np.int64),axis=0,return_inverse=True)
     top=np.full(len(keys),-np.inf);np.maximum.at(top,inv,h[good])
-    xy=(keys+.5)*size;tree=cKDTree(xy)
-    order=np.lexsort((keys[:,1],keys[:,0],-top))
-    suppressed=np.zeros(len(keys),bool);seeds=[]
-    for i in order:
-        if suppressed[i]:continue
-        seeds.append(int(i))
-        suppressed[tree.query_ball_point(xy[i],radius)]=True
+    xy=(keys+.5)*size
     lookup={tuple(key):i for i,key in enumerate(keys)}
+    offsets=((-1,-1),(-1,0),(-1,1),(0,-1),(0,1),(1,-1),(1,0),(1,1))
+    def neighbors(i):
+        x,y=keys[i]
+        return [lookup[(x+dx,y+dy)] for dx,dy in offsets if (x+dx,y+dy) in lookup]
+    # Find observed connected components and true regional maxima. Flat
+    # plateaus are one marker; downhill cells cannot become spurious peaks.
+    component=np.full(len(keys),-1,int);plateau_seen=np.zeros(len(keys),bool)
+    groups=[];peaks=[]
+    for start in range(len(keys)):
+        if component[start]>=0:continue
+        label=len(groups);component[start]=label;stack=[start];members=[]
+        while stack:
+            i=stack.pop();members.append(i)
+            for j in neighbors(i):
+                if component[j]<0:
+                    component[j]=label;stack.append(j)
+        groups.append(members);peaks.append([])
+    for start in range(len(keys)):
+        if plateau_seen[start]:continue
+        plateau_seen[start]=True;stack=[start];regional_maximum=True;representative=start
+        while stack:
+            i=stack.pop();representative=min(representative,i)
+            for j in neighbors(i):
+                if top[j]>top[start]:regional_maximum=False
+                elif top[j]==top[start] and not plateau_seen[j]:
+                    plateau_seen[j]=True;stack.append(j)
+        if regional_maximum:peaks[component[start]].append(representative)
+    seeds=[]
+    for group in peaks:
+        ids=np.array(sorted(group,key=lambda i:(-top[i],i)),dtype=int)
+        if not len(ids):raise ValueError("Observed canopy component has no regional maximum.")
+        tree=cKDTree(xy[ids]);suppressed=np.zeros(len(ids),bool)
+        for local,i in enumerate(ids):
+            if suppressed[local]:continue
+            seeds.append(int(i))
+            suppressed[tree.query_ball_point(xy[ids[local]],radius)]=True
+    # Components are suppressed independently: a missing-data gap cannot
+    # suppress the only marker on a neighboring disconnected island.
     labels=np.full(len(keys),-1,int);score=np.full(len(keys),-np.inf)
     queue=[];fixed=set(seeds)
     for label,i in enumerate(seeds):
@@ -180,7 +212,7 @@ def canopy_watershed(p,ground,size,radius,threshold):
             new=min(s,top[j])
             if new>score[j] or (new==score[j] and label<labels[j]):
                 score[j]=new;labels[j]=label;heapq.heappush(queue,(-new,label,j))
-    # Suppression may remove all markers on a disconnected island; leave it unknown.
+    # Every observed component has at least one marker; never bridge gaps.
     counts=np.bincount(inv,minlength=len(keys))
     table=np.column_stack((xy,top,labels,counts,np.where(labels>=0,score,np.nan)))
     assigned=labels>=0
@@ -190,7 +222,7 @@ def canopy_watershed(p,ground,size,radius,threshold):
     for label,i in enumerate(seeds[:100]):
         summary.append({"id":label,"apex_xy_m":xy[i].tolist(),"apex_height_m":float(top[i]),
             "occupied_footprint_m2":float(cells_by_label[label]*size**2),"returns":int(returns_by_label[label])})
-    return table,{"candidate_crowns":len(seeds),"assigned_cells":int((labels>=0).sum()),
+    return table,{"candidate_crowns":len(seeds),"regional_maxima":sum(map(len,peaks)),"observed_components":len(groups),"assigned_cells":int((labels>=0).sum()),
         "unassigned_cells":int((labels<0).sum()),"unsupported_ground_returns":int((~np.isfinite(h)).sum()),
         "crowns":summary[:100],"reported_crown_summaries":len(summary),
         "assumption":"occupied CHM footprint only; candidate instances, not validated biological crowns"}
