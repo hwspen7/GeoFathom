@@ -17,7 +17,7 @@ from analysis.science_figures import figure_sources,csv_text
 from .remote_catalog import BY_ID,catalog,SERIES_IDS,HYPER_IDS
 from .remote_temporal_models import seasonal_metrics,segmented_means
 from .remote_hyperspectral import continuum_features
-from .remote_physics import thermal_uncertainty,angular_sar,register_translation
+from .remote_physics import thermal_uncertainty,angular_sar,register_translation,register_subpixel
 from .remote_classifiers import blocked_classifier
 from .remote_inference import atmospheric_reflectance,robust_harmonization,irmad,cloud_buffer,series_break
 from .remote_research import surface_temperature,c_correction,ndvi_uncertainty,change_vectors,spatial_classifier,long_series,gamma_map,mad_distance
@@ -180,6 +180,7 @@ def execute(body):
     elif kind=='cloud_buffer':out,meta=cloud_buffer(v['qa'],params['radius'])
     elif kind in {'lst_uncertainty','lst_correlated_uncertainty'}:out,meta=thermal_uncertainty(v,params)
     elif kind in {'sar_terrain_volume','sar_terrain_validity'}:out,meta=angular_sar(v,params,kind=='sar_terrain_validity')
+    elif kind=='register_subpixel':out,meta=register_subpixel(v,params)
     elif kind=='register_translation':out,meta=register_translation(v,params)
     elif kind=='surface_temperature_rte':out,meta=surface_temperature(v,params)
     elif kind=='topographic_c':out,meta=c_correction(v,params)

@@ -189,7 +189,7 @@ def test_remote_invalid_inputs_and_recovery():
         response=client.post('/analysis/remote-sensing/run',json=bad);assert response.status_code==422,response.text
     response=client.post('/analysis/remote-sensing/run',json=good);assert response.status_code==200,response.text
     np.testing.assert_allclose(grid(response.json()),.5)
-    assert client.get('/analysis/remote-sensing/catalog').json()['operation_count']==len(BY_ID)==95
+    assert client.get('/analysis/remote-sensing/catalog').json()['operation_count']==len(BY_ID)==96
 
 def test_temporal_independent_quality_masks():
     # Cloud at one date does not erase the other valid acquisitions.
@@ -586,3 +586,17 @@ def test_temporal_model_extension(kind):
     data=np.array([constant(v) for v in y]);s=source(data)
     result=checked(execute(RemoteInput(operation=kind,sources=[s],bindings={f'date{i+1}':{'source':0,'band':i+1,'unit':'index'} for i in range(len(t))},times=t.tolist(),parameters=params)))
     np.testing.assert_allclose(grid(result),expected,atol=1e-9)
+
+
+@pytest.mark.parametrize('kind',['register_subpixel'])
+def test_subpixel_registration_reference(kind):
+    from scipy.ndimage import gaussian_filter,map_coordinates
+    rng=np.random.default_rng(163);ref=gaussian_filter(rng.normal(size=(64,64)),1.5)
+    rr,cc=np.indices(ref.shape,dtype=float);candidate=map_coordinates(ref,[rr-1.25,cc+2.4],order=3,mode='constant',cval=np.nan)
+    mask=np.zeros_like(ref);mask[8:-8,8:-8]=1;mask[20:24,20:24]=2
+    result=run(kind,{'reference':ref,'candidate':candidate,'calibration':mask},{'peak_margin':.001})
+    m=result['receipt']['metrics']
+    assert m['subpixel_row_shift']==pytest.approx(-1.25,abs=.15)
+    assert m['subpixel_column_shift']==pytest.approx(2.4,abs=.15)
+    assert m['refined_correlation']>.98
+    assert m['heldout_cells']==16 and m['heldout_rmse']<.05

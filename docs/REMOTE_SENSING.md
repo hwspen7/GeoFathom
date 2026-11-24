@@ -45,3 +45,5 @@ SAR now also provides Gamma MAP intensity filtering, paired log-ratio change, an
 Correlated LST uncertainty accepts all ten off-diagonal terms of a constant five-input correlation matrix, checks positive semidefiniteness and propagates per-pixel marginal standard deviations. Order: radiance, emissivity, transmittance, upwelling, downwelling. This is first-order conditional uncertainty, not structural model error or field validation.
 
 Seasonal models now provide harmonic peak, onset, end and duration at a declared fraction of amplitude after detrending. Exact penalized dynamic programming provides multiple mean-shift count and first split time. Model phase is relative to the first acquisition; neither model phase nor penalized change points establish observed phenology or statistical significance.
+
+Subpixel translation uses a fixed complete calibration support, bounded Powell optimization of normalized correlation, no wrapping, and optional held-out mask 2 radiometric RMSE. It does not establish geometric accuracy against independent ground control points or implement orthorectification.

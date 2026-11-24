@@ -60,3 +60,33 @@ def register_translation(v,p):
     out=np.full(ref.shape,np.nan);ry,cy=slices(dy,h);rx,cx=slices(dx,w);out[ry,rx]=candidate[cy,cx]
     return out,{'row_shift':dy,'column_shift':dx,'correlation':best,'peak_margin':best-runner,'matched_calibration_cells':k,
                 'at_search_boundary':bool(abs(dy)==r or abs(dx)==r),'interpretation':'Integer pixel translation only; no wrap, rotation, subpixel adjustment or independent control-point accuracy.'}
+
+
+def register_subpixel(v,p):
+    from scipy.ndimage import map_coordinates
+    from scipy.optimize import minimize
+    _,meta=register_translation(v,p)
+    ref=v['reference'];candidate=v['candidate'];h,w=ref.shape;dy=meta['row_shift'];dx=meta['column_shift']
+    require(not meta['at_search_boundary'],'Integer peak at search boundary; increase search radius.')
+    row,col=np.nonzero(np.isfinite(ref)&(v['calibration']==1))
+    yy=row-dy;xx=col-dx
+    ok=(yy>=1)&(yy<h-1)&(xx>=1)&(xx<w-1);row,col,yy,xx=(a[ok] for a in (row,col,yy,xx))
+    for i in (-1,0,1):
+        for j in (-1,0,1):
+            ok=np.isfinite(candidate[yy+i,xx+j]);row,col,yy,xx=(a[ok] for a in (row,col,yy,xx))
+    require(len(row)>=64,'Insufficient fixed complete support for subpixel refinement.')
+    a=ref[row,col];a=a-a.mean();norm=np.linalg.norm(a);require(norm>0,'Reference support must vary.')
+    def objective(shift):
+        b=map_coordinates(candidate,[row-shift[0],col-shift[1]],order=1,mode='constant',cval=np.nan,prefilter=False)
+        if not np.isfinite(b).all():return 2.
+        b=b-b.mean();den=norm*np.linalg.norm(b)
+        return 1-float(np.clip(a@b/den,-1,1)) if den>0 else 2.
+    fit=minimize(objective,[dy,dx],method='Powell',bounds=[(dy-.9,dy+.9),(dx-.9,dx+.9)],options={'xtol':1e-6,'ftol':1e-10,'maxiter':80})
+    require(fit.success and np.isfinite(fit.fun) and fit.fun<=objective([dy,dx])+1e-10,'Subpixel refinement failed.')
+    rr,cc=np.indices(ref.shape,dtype=float);out=map_coordinates(candidate,[rr-fit.x[0],cc-fit.x[1]],order=1,mode='constant',cval=np.nan,prefilter=False)
+    hold=np.isfinite(ref)&np.isfinite(out)&(v['calibration']==2)
+    meta.update(subpixel_row_shift=float(fit.x[0]),subpixel_column_shift=float(fit.x[1]),refined_correlation=float(1-fit.fun),
+                fixed_support_cells=len(row),heldout_cells=int(hold.sum()),
+                heldout_rmse=float(np.sqrt(np.mean((out[hold]-ref[hold])**2))) if hold.any() else None,
+                interpretation='Bilinear subpixel translation refinement; mask 2 evaluates radiometric residuals only; not independent geometric control-point accuracy.')
+    return out,meta

@@ -34,6 +34,7 @@ CORRELATIONS=tuple(p('rho'+str(i)+str(j),'Correlation of thermal inputs '+str(i+
 SEASON=(p('period','Season period (time units)',365,.0001,1e6),p('season_fraction','Relative seasonal threshold',.2,.01,.99),p('min_amplitude','Minimum harmonic amplitude',.01,1e-10,1e6))
 SEGMENT=(p('min_segment','Minimum observations per segment',3,2,16,True),p('penalty','SSE penalty per breakpoint',.05,1e-12,1e100))
 METHODS=(
+m('register_subpixel','Preprocessing','Subpixel translation refinement',numeric('reference','candidate')+(('calibration','class'),),'source','Bounded integer correlation followed by continuous bilinear refinement on fixed complete stable support; mask 2 is held-out radiometric validation.',(p('max_shift','Maximum shift (pixels)',4,1,16,True),p('min_overlap','Minimum calibration overlap',.8,.5,1),p('min_correlation','Minimum peak correlation',.8,.1,1),p('peak_margin','Minimum peak separation',.03,.0001,1))),
 m('season_peak','Time Series','Harmonic seasonal peak phase',numeric('date1','date2','date3','date4','date5','date6'),'time','Phase relative to first acquisition, modulo period; detrended seasonal model.',SEASON),
 m('season_start','Time Series','Harmonic season onset phase',numeric('date1','date2','date3','date4','date5','date6'),'time','Relative amplitude threshold rising crossing, modulo period.',SEASON),
 m('season_end','Time Series','Harmonic season end phase',numeric('date1','date2','date3','date4','date5','date6'),'time','Relative amplitude threshold falling crossing, modulo period.',SEASON),
