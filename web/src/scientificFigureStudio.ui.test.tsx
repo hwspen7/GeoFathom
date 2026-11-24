@@ -41,8 +41,8 @@ it('collects two actual render receipts and composes them without image stitchin
  fireEvent.change(screen.getByLabelText('Figure field x'),{target:{value:'cost'}});
  fireEvent.change(screen.getByLabelText('Figure field y'),{target:{value:'benefit'}});
  fireEvent.click(screen.getByRole('button',{name:'Render figure'}));await screen.findByAltText('Pareto dominance preview');
- fireEvent.click(screen.getByRole('button',{name:'Add to composition (0/6)'}));
- fireEvent.click(screen.getByRole('button',{name:'Add to composition (1/6)'}));
+ fireEvent.click(screen.getByRole('button',{name:'Add to composition (0/12)'}));
+ fireEvent.click(screen.getByRole('button',{name:'Add to composition (1/12)'}));
  fireEvent.click(screen.getByRole('button',{name:'Figure composer (2)'}));
  fireEvent.change(screen.getByLabelText('Composition title'),{target:{value:'Study'}});
  fireEvent.click(screen.getByRole('button',{name:'Render composition'}));await screen.findByAltText('Publication composition preview');
