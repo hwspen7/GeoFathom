@@ -6,7 +6,7 @@ import math
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from starlette.concurrency import run_in_threadpool
-from .figure_routes import FigureValidationRoute
+from .figure_routes import FigureValidationRoute, FigurePDFInput
 from .studio_catalog import catalog, BY_ID
 from .studio_data import FigureInputError, raster_table
 from .studio_render import render
@@ -109,9 +109,15 @@ async def studio_raster_table(body:RasterTableInput):
         raise HTTPException(status_code=422,detail=str(error)) from error
 
 
+class LegacyPanel(BaseModel):
+    model_config=ConfigDict(extra='forbid',allow_inf_nan=False)
+    scene:FigurePDFInput
+    table:list[list[str|float|None]]=Field(default_factory=list,max_length=20001)
+    provenance:dict=Field(default_factory=dict)
+
 class CompositionInput(BaseModel):
     model_config=ConfigDict(extra='forbid',allow_inf_nan=False)
-    panels:list[StudioInput]=Field(min_length=2,max_length=6)
+    panels:list[StudioInput|LegacyPanel]=Field(min_length=2,max_length=6)
     title:str=Field(default='',max_length=200)
     caption:str=Field(default='',max_length=600)
     columns:int=Field(default=2,ge=1,le=3)
@@ -123,7 +129,7 @@ class CompositionInput(BaseModel):
 
     @model_validator(mode='after')
     def budget(self):
-        if sum(len(p.csv)+sum(len(r.data) for r in p.rasters) for p in self.panels)>64_000_000:
+        if sum(len(p.csv)+sum(len(r.data) for r in p.rasters) if isinstance(p,StudioInput) else len(p.model_dump_json()) for p in self.panels)>64_000_000:
             raise ValueError('Composition data exceeds payload limit.')
         if self.width_mm*self.height_mm*(self.dpi/25.4)**2>45_000_000:
             raise ValueError('Composition exceeds 45 megapixels.')
@@ -139,7 +145,7 @@ def render_composition(body):
     from matplotlib.backends.backend_agg import FigureCanvasAgg
     from matplotlib import rc_context
     from .studio_render import LOCK
-    from .studio_publication import layout_receipt
+    from .studio_publication import layout_receipt,draw_legacy_panel
     with LOCK,rc_context({'pdf.fonttype':42,'svg.fonttype':'none','font.family':'sans-serif','font.size':9}):
         fig=Figure(figsize=(body.width_mm/25.4,body.height_mm/25.4),layout='constrained',facecolor='white')
         FigureCanvasAgg(fig)
@@ -154,8 +160,12 @@ def render_composition(body):
         containers=top.subfigures(nrows,body.columns,squeeze=False,wspace=body.spacing,hspace=body.spacing)
         receipts=[]
         for i,panel in enumerate(body.panels):
-            _,meta,table=render(panel,container=containers.flat[i],panel_label=f'({chr(97+i)}) ')
-            meta['csv_sha256']=hashlib.sha256(panel.csv.encode()).hexdigest() if panel.csv else None
+            if isinstance(panel,LegacyPanel):
+                draw_legacy_panel(containers.flat[i],panel.scene,f'({chr(97+i)})')
+                meta={'recipe':'native_vector_figure','title':panel.scene.title,'provenance':panel.provenance};table=panel.table
+            else:
+                _,meta,table=render(panel,container=containers.flat[i],panel_label=f'({chr(97+i)}) ')
+                meta['csv_sha256']=hashlib.sha256(panel.csv.encode()).hexdigest() if panel.csv else None
             receipts.append({'label':chr(97+i),'metadata':meta,'table':table})
         if body.title:fig.suptitle(body.title,fontsize=12,fontweight='medium')
         layout=layout_receipt(fig)

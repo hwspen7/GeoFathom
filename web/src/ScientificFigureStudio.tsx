@@ -1,11 +1,11 @@
 import {useEffect,useMemo,useRef,useState} from 'react';
 import {createPortal} from 'react-dom';
-import {getStudioCatalog,getStudioRasterTable,renderStudio,composeStudio,type StudioComposition,type StudioInput,type StudioOutput,type StudioRaster,type StudioRecipe} from './api';
+import {getStudioCatalog,getStudioRasterTable,renderStudio,composeStudio,type StudioComposition,type StudioLegacyPanel,type StudioInput,type StudioOutput,type StudioRaster,type StudioRecipe} from './api';
 import {saveFigureBlob} from './figureExport';
 import {tableCSV} from './figureLibrary';
 
 export interface StudioTableSource {name:string;csv:string;provenance?:unknown}
-export interface StudioSource {name:string;csv?:string;tables?:StudioTableSource[];rasters?:StudioRaster[];provenance?:unknown}
+export interface StudioSource {name:string;csv?:string;tables?:StudioTableSource[];rasters?:StudioRaster[];provenance?:unknown;nativePanel?:StudioLegacyPanel}
 const empty:StudioInput={recipe:'',csv:'',rasters:[],x:'',y:'',z:'',group:'',low:'',high:'',columns:[],title:'',x_label:'',y_label:'',parameter:null,maximize_x:false,maximize_y:false,palette:'color',font:'sans',font_size:10,grid:true,width_mm:180,height_mm:125,dpi:120,format:'png'};
 const fieldLabels:Record<string,string>={x:'X / category / design A',y:'Y / response / design B',z:'Z / secondary quantity',group:'Group',low:'Lower bound / low-setting response',high:'Upper bound / high-setting response'};
 function columns(csv:string):string[]{
@@ -36,7 +36,7 @@ export default function ScientificFigureStudio({source,onClose}:{source:StudioSo
  const [completed,setCompleted]=useState<StudioInput|null>(null),[fileName,setFileName]=useState(source.csv?'Current result data table':'No CSV selected');
  const [tableSource,setTableSource]=useState('current'),[tableProvenance,setTableProvenance]=useState<unknown>(source.provenance);
  const [rasterReceipt,setRasterReceipt]=useState<Record<string,unknown>|null>(null);
- const [composer,setComposer]=useState(false),[panels,setPanels]=useState<Array<{input:StudioInput;name:string;provenance:unknown}>>([]);
+ const [composer,setComposer]=useState(false),[panels,setPanels]=useState<Array<{input:StudioInput|StudioLegacyPanel;name:string;provenance:unknown}>>(()=>source.nativePanel?[{input:source.nativePanel,name:source.nativePanel.scene.title,provenance:source.provenance}]:[]);
  const [composition,setComposition]=useState<Omit<StudioComposition,'panels'|'format'|'dpi'>>({title:'',caption:'',columns:2,width_mm:240,height_mm:180,spacing:.06});
  const [combined,setCombined]=useState<StudioOutput|null>(null),[combinedInput,setCombinedInput]=useState<StudioComposition|null>(null);
  const [breakText,setBreakText]=useState('');

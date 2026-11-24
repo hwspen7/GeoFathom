@@ -97,3 +97,27 @@ def layout_receipt(fig):
             clipped.append(i+1)
     return {'canvas_pixels':[width,height],'axes_bounds_normalized':axes,
             'potentially_clipped_axes':clipped,'layout_check':'canvas bounds only; visual review still required'}
+
+def draw_legacy_panel(container, scene, label):
+    """Render the native gallery's validated vector scene without rasterizing it."""
+    from matplotlib.patches import Rectangle, Circle, Polygon
+    ax=container.add_subplot(111)
+    ax.set_xlim(0,scene.width);ax.set_ylim(scene.height,0);ax.set_aspect('equal');ax.axis('off')
+    # The scene's native coordinates are pixels. Scale strokes and text to
+    # the actual panel width in points; maintain geometry in scene units.
+    parent=container.get_figure(root=True)
+    factor=min(container.bbox.width/parent.dpi*72/scene.width,container.bbox.height/parent.dpi*72/scene.height)*.88
+    for p in scene.primitives:
+        face=p.fill;edge=p.stroke;lw=p.line_width*factor
+        style='--' if p.dashed else '-'
+        if p.kind=='line':ax.plot([p.x,p.x2],[p.y,p.y2],color=edge,linewidth=lw,linestyle=style)
+        elif p.kind=='rect':ax.add_patch(Rectangle((p.x,p.y),p.width,p.height,facecolor=face,edgecolor=edge if lw else 'none',linewidth=lw,linestyle=style))
+        elif p.kind=='circle':ax.add_patch(Circle((p.x,p.y),p.radius,facecolor=face,edgecolor=edge if lw else 'none',linewidth=lw))
+        elif p.kind in {'polyline','polygon'} and p.points:
+            if p.kind=='polygon':ax.add_patch(Polygon(p.points,closed=True,facecolor=face,edgecolor=edge,linewidth=lw,linestyle=style))
+            else:ax.plot(*zip(*p.points),color=edge,linewidth=lw,linestyle=style)
+        elif p.kind=='text':
+            ax.text(p.x,p.y,p.text,ha={'start':'left','middle':'center','end':'right'}[p.anchor],
+                    va='baseline',rotation=-p.angle,rotation_mode='anchor',fontsize=max(3,p.font_size*factor),
+                    fontfamily='serif' if p.font=='serif' else 'sans-serif',color=face if face!='none' else '#222222')
+    container.suptitle(label, x=.025,ha='left',fontsize=10,fontweight='medium')

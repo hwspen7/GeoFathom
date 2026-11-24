@@ -58,8 +58,9 @@ def render(req, container=None, panel_label=''):
         _require(len(keys)<=24,'Maximum 24 groups.')
         return keys,[v[g==k] for k in keys]
     def save_rows(headers,*arrays):
-        derived.clear();derived.append(headers)
-        for row in zip(*arrays):derived.append([v.item() if isinstance(v,np.generic) else v for v in row])
+        derived.clear();derived.extend(numeric_rows(headers,*arrays))
+    # Every recipe reports its actual source and selection contract.
+    meta.update(family=recipe[2],source_type=source,required_fields=fields.split(),software={'numpy':np.__version__,'matplotlib':__import__('matplotlib').__version__})
     palette=COLORS if req.palette!='mono' else ['#1e1e1e','#777777','#a0a0a0','#4e4e4e','#b4b4b4','#333333','#8d8d8d','#555555']
     cmap={'mono':'Greys','earth':'terrain','color':'viridis'}[req.palette]
     color=palette[0]
@@ -236,7 +237,11 @@ def render(req, container=None, panel_label=''):
                 v=normalized(matrix)
                 if kind=='parallel_coordinates':
                     _require(len(v)<=2000,'Parallel coordinates supports up to 2,000 complete observations.')
-                    for i,line in enumerate(v):ax.plot(range(len(a)),line,color=palette[i%8],alpha=.25 if len(v)>20 else .75,linewidth=.8)
+                    # The final normalized metric supplies a continuous legend instead of arbitrary repeating colors.
+                    for i,line in enumerate(v):ax.plot(range(len(a)),line,color=colormaps['viridis' if req.palette!='mono' else 'Greys'](line[-1]),alpha=.35 if len(v)>20 else .85,linewidth=req.line_width)
+                    from matplotlib.cm import ScalarMappable
+                    from matplotlib.colors import Normalize
+                    fig.colorbar(ScalarMappable(norm=Normalize(0,1),cmap=colormaps['viridis' if req.palette!='mono' else 'Greys'].resampled(128)),ax=ax,label=req.columns[-1]+' (normalized)',shrink=.85)
                     ax.set_xticks(range(len(a)),req.columns,rotation=25,ha='right');ax.set_ylim(0,1);xlabel='Metric';ylabel='Normalized value'
                     save_rows(req.columns,*v.T)
                 else:
@@ -248,12 +253,12 @@ def render(req, container=None, panel_label=''):
         elif kind in {'sobol','morris'}:
             _require(1<=len(req.columns)<=12,'Choose one to twelve factors.')
             if kind=='sobol':
-                a,_=rows([req.x,req.y,*req.columns]);first,total=sobol_indices(a[0],a[1],a[2:])
+                a,_=rows([req.x,req.y,*req.columns]);_require(count==len(table.rows),'Sobol design rows cannot be missing; supply the complete aligned design.');first,total=sobol_indices(a[0],a[1],a[2:])
                 pos=np.arange(len(first));ax.bar(pos-.18,first,.36,label='First order');ax.bar(pos+.18,total,.36,label='Total order')
                 ax.axhline(0,color='#444444',linewidth=.7);ax.set_xticks(pos,req.columns,rotation=30,ha='right');ax.legend(frameon=False)
                 xlabel='Factor';ylabel='Sobol index';save_rows(['factor','first_order','total_order'],req.columns,first,total)
             else:
-                a,c=rows([req.y,*req.columns],[req.x]);mu,sigma=morris_effects(c[0],a[0],np.column_stack(a[1:]))
+                a,c=rows([req.y,*req.columns],[req.x]);_require(count==len(table.rows),'Morris design rows cannot be missing.');mu,sigma=morris_effects(c[0],a[0],np.column_stack(a[1:]))
                 ax.scatter(mu,sigma,color=color)
                 for name,x,y in zip(req.columns,mu,sigma):ax.annotate(name,(x,y),xytext=(3,3),textcoords='offset points',fontsize=8)
                 xlabel='μ* (mean absolute effect)';ylabel='σ (effect SD)';save_rows(['factor','mu_star','sigma'],req.columns,mu,sigma)
@@ -309,7 +314,7 @@ def render(req, container=None, panel_label=''):
             meta.update(used_count=int(valid.sum()),grid_positions=int(z.size),missing_positions=int((~valid).sum()),response_style=style,
                         interpolation='none' if style=='heatmap' else 'visual interpolation within complete evaluated cells only')
         elif kind in {'time_trend','rolling_mean','seasonal_cycle','seasonal_anomaly','autocorrelation','lag_scatter','seasonal_heatmap'}:
-            x,y=xy();x,y=regular_series(x,y,kind!='time_trend')
+            x,y=xy();_require(kind=='time_trend' or count==len(table.rows),'Regular time series must contain every observation; explicitly handle missing samples before analysis.');x,y=regular_series(x,y,kind!='time_trend')
             if kind=='time_trend':
                 fitted,residual,slope,intercept=linear_fit(x,y);ax.plot(x,y,label='Observed');ax.plot(x,fitted,'--',label='Linear trend');ax.legend(frameon=False);meta.update(slope=slope,intercept=intercept);save_rows([req.x,req.y,'trend'],x,y,fitted)
             else:
@@ -472,6 +477,8 @@ def render(req, container=None, panel_label=''):
         if table and not derived:meta['derived_note']='The plot uses the selected complete observations; original CSV is retained in the request.'
         if table and req.x_label:meta['x_label']=req.x_label
         if table and req.y_label:meta['y_label']=req.y_label
+        meta['omitted_count']=max(0,meta['input_count']-meta['used_count'])
+        meta['plot_table_rows']=max(0,len(derived)-1)
         if container is not None:return b'',meta,derived
         meta['layout']=layout_receipt(fig)
         buffer=io.BytesIO()

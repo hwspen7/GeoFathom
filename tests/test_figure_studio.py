@@ -81,6 +81,24 @@ def test_every_recipe_renders_actual_data(recipe,raster_fixture):
     assert image[:8]==b'\x89PNG\r\n\x1a\n'
     assert len(image)>2000
     assert metadata['recipe']==recipe and metadata['used_count']>0
+    assert metadata['family']==BY_ID[recipe][2]
+    assert metadata['layout']['canvas_pixels'][0]>0
+    assert metadata['plot_table_rows']==max(0,len(table)-1)
+    import os,json
+    from pathlib import Path
+    target=os.environ.get('GEOFATHOM_FIGURE_REVIEW_DIR')
+    if target:
+        folder=Path(target);folder.mkdir(parents=True,exist_ok=True)
+        (folder/(recipe+'.png')).write_bytes(image)
+        (folder/(recipe+'.json')).write_text(json.dumps(metadata,indent=2,allow_nan=False),encoding='utf-8')
+    # Verify vector output for each recipe, not only one representative plot.
+    svg,_,_=render(body.model_copy(update={'format':'svg'}))
+    assert svg.startswith(b'<?xml') and b'<svg' in svg
+    pdf,_,_=render(body.model_copy(update={'format':'pdf'}))
+    assert pdf.startswith(b'%PDF')
+    from pypdf import PdfReader
+    page=PdfReader(io.BytesIO(pdf)).pages[0]
+    assert float(page.mediabox.width)==pytest.approx(body.width_mm/25.4*72,abs=.01)
     if BY_ID[recipe][3]=='table':assert len(table)>=2
     if recipe=='raster_difference':
         assert metadata['mean']==pytest.approx(2)
@@ -249,3 +267,22 @@ def test_publication_composer_vector_export_and_reproducible_raster(raster_fixtu
     assert float(page.mediabox.width)==pytest.approx(240/25.4*72,abs=.01)
     svg,_=render_composition(body.model_copy(update={'format':'svg'}))
     assert b'Combined scientific figure' in svg and b'Response grid' in svg
+
+def test_native_vector_panel_composes_with_extended_recipes():
+    from terrain.studio_routes import CompositionInput,LegacyPanel,render_composition
+    from terrain.figure_routes import FigurePDFInput
+    from pypdf import PdfReader
+    scene=FigurePDFInput(title='Native exact histogram',primitives=[
+        {'kind':'rect','x':100,'y':150,'width':50,'height':200,'fill':'#24639b'},
+        {'kind':'text','x':100,'y':100,'text':'Native histogram','font_size':22,'fill':'#222222'}])
+    legacy=LegacyPanel(scene=scene,table=[['bin','count'],[1,3]],provenance={'source':'recorded'})
+    body=CompositionInput(panels=[legacy,table_input('pareto')],format='pdf')
+    pdf,meta=render_composition(body)
+    assert meta['panels'][0]['table']==[['bin','count'],[1,3]]
+    assert 'Native histogram' in PdfReader(io.BytesIO(pdf)).pages[0].extract_text()
+
+def test_missing_global_design_and_regular_series_rejected():
+    with pytest.raises(FigureInputError,match='complete aligned design'):
+        render(StudioInput(recipe='sobol',csv='A,B,H\n1,2,3\n2,,4\n3,4,5',x='A',y='B',columns=['H']))
+    with pytest.raises(FigureInputError,match='every observation'):
+        render(StudioInput(recipe='rolling_mean',csv='x,y\n0,1\n1,\n2,3\n3,4',x='x',y='y',parameter=2))
