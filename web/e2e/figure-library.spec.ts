@@ -50,7 +50,7 @@ with tempfile.TemporaryDirectory() as directory:
  await dialog.getByLabel('Figure title').fill('Slope distribution in the study area');
  await dialog.getByLabel('Font',{exact:true}).selectOption('serif');
  await dialog.getByLabel('Style name').fill('Publication monochrome');await dialog.getByRole('button',{name:'Save style',exact:true}).click();
- await page.screenshot({path:testInfo.outputPath('figure-library.png')});
+ await page.screenshot({path:testInfo.outputPath('survey-figure-library.png')});
  const getFile=async(name:string)=>{const event=page.waitForEvent('download');await dialog.getByRole('button',{name,exact:true}).click();const file=await event;const path=await file.path();expect(path).toBeTruthy();return {data:readFileSync(path!),path:path!,name:file.suggestedFilename()};};
  const csv=await getFile('CSV');expect(csv.name).toBe('terrain-slope_map-histogram.csv');
  const lines=csv.data.toString('utf8').trim().split(/\r?\n/);expect(lines.length).toBe(81);
