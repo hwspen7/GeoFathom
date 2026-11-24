@@ -19,7 +19,7 @@ jobs:
       - name: Install locked scientific dependencies
         run: python -m pip install -c requirements/${{ matrix.os == 'windows-latest' && 'windows' || 'linux' }}.lock -e ".[dev,lidar]"
       - name: Execute independent metric point-cloud reference tests
-        run: python -m pytest tests/test_lidar_science.py tests/test_lidar_advanced.py tests/test_lidar_geometry.py tests/test_lidar_disk_uncertainty.py tests/test_lidar_registration.py tests/test_lidar_reconstruction.py -q --junitxml=lidar-reference.xml
+        run: python -m pytest tests/test_lidar_science.py tests/test_lidar_advanced.py tests/test_lidar_geometry.py tests/test_lidar_disk_uncertainty.py tests/test_lidar_registration.py tests/test_lidar_reconstruction.py tests/test_lidar_inference.py -q --junitxml=lidar-reference.xml
       - uses: actions/upload-artifact@v4
         if: always()
         with:

@@ -18,9 +18,15 @@ from .lidar_registration import progressive_morphology, coarse_pca_registration,
 
 from .lidar_reconstruction import poisson_grid, progressive_tin
 
+from .lidar_inference import feature_registration, clustered_normal_change, canopy_watershed, multiscale_geometry
+
 MAX_POINTS = 100_000
 MAX_BYTES = 16 * 1024 * 1024
 METHODS = {
+    "feature_registration": ("Reciprocal feature RANSAC registration", "Rigid-invariant kNN distances, reciprocal ratio matches, bounded RANSAC and bidirectional overlap."),
+    "clustered_normal_change": ("Cluster-aware normal change inference", "Tangent-block variance, conditional t inference and Benjamini–Yekutieli FDR adjustment."),
+    "canopy_watershed": ("Sparse CHM marker watershed", "Maximum-bottleneck graph watershed on observed canopy cells; no gap bridging."),
+    "multiscale_geometry": ("Multiscale covariance geometry", "Entropy-selected neighborhood scale with identifiable normals."),
     "poisson_grid": ("Uniform-grid Poisson reconstruction", "Padded FFT Poisson approximation for closed star-shaped clouds; centroid-oriented normals."),
     "progressive_tin": ("Progressive TIN ground densification", "Coarse-to-fine lower-envelope proposals constrained by supported TIN residuals."),
     "progressive_morphology": ("Progressive morphological ground filter", "Multiscale lower-envelope opening, progressive elevation tolerance and supported TIN interpolation."),
@@ -191,14 +197,37 @@ def analyze(operation, p, reference=None, *, k=16, size=1., radius=2., max_edge=
         raise ValueError("Unknown point-cloud operation.")
     if not 3 <= k <= 64 or not all(np.isfinite(v) and .001 <= v <= 1e6 for v in (size,radius,max_edge)):
         raise ValueError("Invalid metric analysis parameters.")
+    for cloud in (p,reference):
+        if cloud is not None and (cloud.ndim!=2 or cloud.shape[1]!=3 or not 0<len(cloud)<=MAX_POINTS or not np.isfinite(cloud).all() or np.max(np.abs(cloud))>1e9):
+            raise ValueError("Invalid bounded metric XYZ array.")
+    if not .5<=trim_fraction<=1 or not 1<=max_iterations<=100 or not 1e-9<=tolerance<=1:
+        raise ValueError("Invalid registration parameters.")
     columns = ["x_m","y_m","z_m"]
     metrics = {"input_points":len(p)}
     if not (np.isfinite(threshold) and 0 <= threshold <= 1e6 and np.isfinite(registration_sigma) and 0 <= registration_sigma <= 1e6 and 3 <= min_neighbors <= 1000):
         raise ValueError("Invalid diagnostic or uncertainty parameters.")
-    if operation in ("cloud_distance","surface_change","ground_height","rigid_registration","normal_change","canopy_structure","point_plane_icp","crown_candidates","correlated_change","coarse_pca","generalized_icp") and reference is None:
+    if operation in ("cloud_distance","surface_change","ground_height","rigid_registration","normal_change","canopy_structure","point_plane_icp","crown_candidates","correlated_change","coarse_pca","generalized_icp","feature_registration","clustered_normal_change","canopy_watershed") and reference is None:
         raise ValueError("This method needs a reference cloud in the same CRS and vertical datum.")
     if operation == "stream_voxels":
         raise ValueError("Streaming operation requires the file-backed endpoint.")
+    elif operation == "feature_registration":
+        table,info=feature_registration(p,reference,k,radius,threshold,max_iterations,min_neighbors)
+        columns += ["residual_m","inlier_flag"]
+        metrics.update(info)
+    elif operation == "clustered_normal_change":
+        _,inverse,counts=_groups(reference,size,3)
+        cores=np.column_stack([np.bincount(inverse,weights=reference[:,i])/counts for i in range(3)])
+        table,info=clustered_normal_change(p,reference,cores,k,radius,max_edge,threshold,registration_sigma,min_neighbors)
+        columns += ["normal_x","normal_y","normal_z","current_count","reference_count","current_blocks","reference_blocks","signed_change_m","standard_error_m","lod95_m","lower95_m","upper95_m","p_value","q_by","significant_fdr"]
+        metrics.update(info)
+    elif operation == "canopy_watershed":
+        table,info=canopy_watershed(p,_ground(p,reference,max_edge),size,radius,threshold)
+        columns=["x_m","y_m","canopy_height_m","crown_id","count","saddle_height_m"]
+        metrics.update(info)
+    elif operation == "multiscale_geometry":
+        table,info=multiscale_geometry(p,k)
+        columns += ["selected_neighbors","support_radius_m","eigenentropy","normal_x","normal_y","normal_z","roughness_m","planarity"]
+        metrics.update(info)
     elif operation == "correlated_change":
         table,info=correlated_change(p,reference,size,registration_sigma,radius,min_neighbors)
         columns=["x_m","y_m","reference_z_m","current_z_m","delta_z_m","standard_error_m","lod95_m","lower95_m","upper95_m","above_lod","current_count","reference_count"]

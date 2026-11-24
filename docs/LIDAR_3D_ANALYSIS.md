@@ -36,9 +36,13 @@ For real-scene validation, acquire a classified LAS/LAZ tile from USGS 3DEP (htt
 
 Progressive TIN densification admits lower-envelope candidates using current supported TIN height residuals, not all classic adaptive angle criteria. Uniform-grid Poisson uses centroid-oriented local normals, trilinear splats, a padded FFT Poisson solve and marching cubes for approximately star-shaped closed surfaces. It is not adaptive octree or screened reconstruction. It reports boundary and nonmanifold edges. TIN, alpha and Poisson export indexed OBJ; common-cell change and canopy p95 export CRS-aware GeoTIFF with unobserved cells as NaN, bounded to two million cells.
 
+## Feature matching and spatial inference
+
+Reciprocal k-nearest-distance descriptor matching and bounded RANSAC provide a partial-overlap initializer under comparable sampling density. Registration quality includes independently computed forward and reverse nearest-distance overlap. The cluster-aware normal change operation uses tangent-plane blocks, return-weighted cluster sandwich variance, conservative conditional t intervals and Benjamini–Yekutieli adjusted p values. Blocks are assumed independent; the method does not estimate full measurement covariance or normal uncertainty. Zero-variance tests are withheld. Sparse CHM marker watershed uses a maximum-bottleneck graph flood without filling missing cells; occupied footprint is not full crown area. Multiscale covariance geometry selects an identifiable neighborhood via normalized eigenentropy, a heuristic rather than validated optimal scale.
+
 ## Verification
 
-Run python -m pytest tests/test_lidar_science.py tests/test_lidar_advanced.py tests/test_lidar_geometry.py tests/test_lidar_disk_uncertainty.py tests/test_lidar_registration.py tests/test_lidar_reconstruction.py -q. Tests cover analytical planes, degenerate neighborhoods, exact voxel counts, scaled LAS coordinates, partial overlap, directed distance, TIN interpolation, malformed input and HTTP contracts. These are synthetic reference tests, not real-flight validation.
+Run python -m pytest tests/test_lidar_science.py tests/test_lidar_advanced.py tests/test_lidar_geometry.py tests/test_lidar_disk_uncertainty.py tests/test_lidar_registration.py tests/test_lidar_reconstruction.py tests/test_lidar_inference.py -q. Tests cover analytical planes, degenerate neighborhoods, exact voxel counts, scaled LAS coordinates, partial overlap, directed distance, TIN interpolation, malformed input and HTTP contracts. These are synthetic reference tests, not real-flight validation.
 
 ## Remaining research work
 
