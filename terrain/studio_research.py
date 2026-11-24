@@ -90,10 +90,10 @@ def render_table(kind,req,fig,ax,table,meta,palette,rows):
         for i,(name,v) in enumerate(zip(req.columns,data[1:])):
             s=float(v.std(ddof=1));require(s>0,'Constant prediction cannot be positioned on a Taylor diagram.')
             r=float(np.clip(np.corrcoef(ref,v)[0,1],-1,1));cr=float(np.sqrt(np.mean(((v-v.mean())-(ref-ref.mean()))**2)*len(ref)/(len(ref)-1)))
-            ax.scatter(np.arccos(r),s,s=32,label=name,color=palette[i%len(palette)]);records.append([name,r,s,cr])
-        ax.scatter(0,sd,marker='*',s=64,color='#222222',label='Reference');ax.set_thetamin(0);ax.set_thetamax(180)
+            ax.scatter(np.arccos(r),s,s=32,label=name,color=palette[i%len(palette)],clip_on=False,zorder=5);records.append([name,r,s,cr])
+        ax.scatter(0,sd,marker='*',s=64,color='#222222',label='Reference',clip_on=False,zorder=6);ax.set_thetamin(0);ax.set_thetamax(180)
         limit=max(sd,max(r[2] for r in records))*1.15;theta=np.linspace(0,np.pi,181);rad=np.linspace(0,limit,100);T,R=np.meshgrid(theta,rad);err=np.sqrt(np.maximum(0,sd*sd+R*R-2*sd*R*np.cos(T)));contour=ax.contour(T,R,err,levels=5,colors='#808080',linewidths=.55,linestyles='dotted');ax.clabel(contour,fontsize=7,fmt='%.2g');ax.set_ylim(0,limit)
-        ticks=np.array([1,.9,.7,.5,0,-.5,-1]);ax.set_xticks(np.arccos(ticks),[str(v) for v in ticks]);ax.set_ylabel('Sample SD');ax.legend(loc='upper right',bbox_to_anchor=(1.2,1.12))
+        ticks=np.array([1,.9,.7,.5,0,-.5,-1]);ax.set_xticks(np.arccos(ticks),[str(v) for v in ticks]);ax.set_ylabel('Sample SD');ax.legend(loc='upper center',bbox_to_anchor=(.5,-.13),ncol=min(4,len(records)+1),frameon=False)
         meta['reference_sd']=sd
         return [['model','correlation','sample_sd','centered_rmse'],*records]
     if kind=='research_time_fan':
@@ -110,7 +110,10 @@ def render_table(kind,req,fig,ax,table,meta,palette,rows):
         fig.delaxes(ax);axes=fig.subplots(1,2,sharex=True,sharey=True)
         for target,v,title in zip(axes,[a,b],['Semivariance','Valid pair count']):
             # Actual nonuniform bin spacing retained by explicit cell edges.
-            im=target.pcolormesh(cell_edges(xs),cell_edges(ys),v,cmap='viridis',shading='flat');fig.colorbar(im,ax=target,shrink=.85);target.set(xlabel=req.x,title=title)
+            from matplotlib import colormaps
+            cm=colormaps['viridis'].copy();cm.set_bad('#e9e9e9');xe=cell_edges(xs);ye=cell_edges(ys);xe[0]=max(0.,xe[0]);ye[0]=max(0.,ye[0])
+            im=target.pcolormesh(xe,ye,v,cmap=cm,shading='flat');fig.colorbar(im,ax=target,shrink=.85);target.set(xlabel=req.x,title=title)
+            target.set_xticks(xs[::max(1,int(np.ceil(len(xs)/8)))]);target.set_yticks(ys[::max(1,int(np.ceil(len(ys)/8)))])
         axes[0].set_ylabel(req.y);meta['missing_bins']=int(np.isnan(a).sum())
         return save([req.x,req.y,req.z,req.columns[0]],x,y,z,n)
     raise FigureInputError('Unknown research table recipe.')
@@ -155,7 +158,11 @@ def render_raster(kind,req,fig,ax,grids,meta):
     fig.delaxes(ax)
     if kind=='research_map_change':
         a,b,c=fig.subplots(1,3,sharex=True,sharey=True)
-        lo=min(x.min(),y.min());hi=max(x.max(),y.max());im=draw(a,a0,grids[0].name,lo=lo,hi=hi,colorbar=False);draw(b,a1,grids[1].name,lo=lo,hi=hi,colorbar=False);fig.colorbar(im,ax=[a,b],shrink=.78,label=unit);draw(c,delta,'Candidate − baseline','RdBu_r',-lim,lim)
+        lo=min(x.min(),y.min());hi=max(x.max(),y.max());im=draw(a,a0,grids[0].name,lo=lo,hi=hi,colorbar=False);draw(b,a1,grids[1].name,lo=lo,hi=hi,colorbar=False)
+        diff=draw(c,delta,'Candidate − baseline','RdBu_r',-lim,lim,colorbar=False)
+        fig.colorbar(im,ax=[a,b],orientation='horizontal',shrink=.85,aspect=30,pad=.12,label=unit)
+        fig.colorbar(diff,ax=c,orientation='horizontal',shrink=.9,aspect=18,pad=.12,label='Difference ('+unit+')')
+        b.set_ylabel('');c.set_ylabel('')
     else:
         a,b=fig.subplots(1,2);draw(a,delta,'Candidate − reference','RdBu_r',-lim,lim)
         im=b.hexbin(x,y,gridsize=35,mincnt=1,bins='log',cmap='viridis');fig.colorbar(im,ax=b,label='Cell count',shrink=.78);lo=min(x.min(),y.min());hi=max(x.max(),y.max());b.plot([lo,hi],[lo,hi],'--',color='#555555');b.set(xlabel=grids[0].name,ylabel=grids[1].name,aspect='equal',title='Paired native cells')

@@ -16,3 +16,5 @@ Research archive ZIP contains rendered PDF, embedded original CSV/GeoTIFF inputs
 
 ## Acceptance
 Run python -m pytest -q tests/test_studio_publication_research.py . Mandatory per-recipe references render actual PNG, SVG and PDF, test analytical metrics, missing bins, layout overlap, a twelve-panel composition, source hashes, archive roundtrip and fixed display ranges. Full repository and browser regression must pass before release. No claim of complete test execution is made here.
+
+Local isolated render evidence at 11ae368: all eleven new recipe kernels rendered PNG/SVG/PDF (33 format checks), archive byte hashes and reproduction data roundtrip passed, and native weighted spanning Matplotlib subfigure mechanics passed. The exact research and archive Git blobs were checked locally using a minimal table/grid harness, not the full application. Visual inspection prompted horizontal atlas colorbars, unclipped Taylor endpoint markers, and explicit nonnegative observed lag ticks. Custom span editing uses numeric controls rather than requiring JSON.

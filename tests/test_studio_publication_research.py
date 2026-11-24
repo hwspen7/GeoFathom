@@ -88,3 +88,17 @@ def test_fixed_display_range_records_out_of_range_without_changing_source():
     _,meta,_=render(body)
     assert meta['display_below']==1 and meta['display_above']==1 and meta['display_min']==0 and meta['display_max']==4
     assert meta['raster_sources'][0]['sha256']==hashlib.sha256(base64.b64decode(body.rasters[0].data)).hexdigest()
+
+
+def test_research_lag_uses_observed_ticks_and_nonnegative_extent():
+    from matplotlib.figure import Figure
+    from matplotlib.backends.backend_agg import FigureCanvasAgg
+    from terrain.studio_data import Table
+    from terrain.studio_research import render_table
+    q=req('research_spacetime_lag');table=Table(q.csv)
+    fig=Figure(figsize=(10,5));FigureCanvasAgg(fig);ax=fig.add_subplot(111)
+    def rows(names,labels=()):
+        a,b,_=table.aligned(names,labels);return a,b
+    render_table(q.recipe,q,fig,ax,table,{},['#0072B2'],rows)
+    np.testing.assert_array_equal(fig.axes[0].get_xticks(),[0,2,5])
+    assert fig.axes[0].get_xlim()[0]==0
