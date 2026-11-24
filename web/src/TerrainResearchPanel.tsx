@@ -7,6 +7,7 @@ import type {PersistedTerrainResult} from './terrainResultStore';
 import {researchBase,parseParameter,parseSweep,downloadResearch,loadResearch,saveResearch} from './terrainResearch';
 const fmt=(n:number|null|undefined)=>n==null?'Undefined':n.toLocaleString('en-US',{maximumSignificantDigits:7});
 const label=(s:string)=>s.replaceAll('_',' ');
+const initialFigureSource=(result:ResearchResult):ResearchFigureSource=>result.mode==='uncertainty'?'interval':result.mode==='sensitivity'?(result.factorial?'factorial':'response'):'values';
 type Page='experiment'|'comparison'|'figures'|'report';
 function ResponsePlot({points,parameter,metric}:{points:Array<[number,number]>;parameter:string;metric:string}){
  if(!points.length)return null;
@@ -59,7 +60,7 @@ export default function TerrainResearchPanel(p:{projectId:string|null;record:Per
  useEffect(()=>{
   let current=true;
   getResearchCatalog().then(value=>{if(current)setCatalog(value);}).catch(e=>{if(current)setError(String(e.message??e));});
-  loadResearch(p.projectId).then(value=>{if(current&&value&&!interacted.current)setResult(value.result);})
+  loadResearch(p.projectId).then(value=>{if(current&&value&&!interacted.current){setResult(value.result);setMetricFigureSource(initialFigureSource(value.result));}})
    .catch(()=>{if(current)setCacheWarning('Saved experiment could not be restored. You can still run and export a new experiment.');});
   return()=>{current=false;controller.current?.abort();};
  },[p.projectId]);
@@ -78,7 +79,7 @@ export default function TerrainResearchPanel(p:{projectId:string|null;record:Per
   const request=new AbortController();controller.current=request;setBusy(true);
   try{
    const output=await analyzeResearch(input,request.signal);if(request.signal.aborted)return;
-   setResult(output);setProductIndex(0);setFigureMode('difference');setMetric('');setPage('comparison');
+   setResult(output);setMetricFigureSource(initialFigureSource(output));setProductIndex(0);setFigureMode('difference');setMetric('');setPage('comparison');
    try{await saveResearch(p.projectId,input,output);}catch(e){if(!request.signal.aborted)setCacheWarning('Cache: '+(e as Error).message);}
   }catch(e){if(!request.signal.aborted)setError((e as Error).message);}
   finally{if(controller.current===request){controller.current=null;setBusy(false);}}
