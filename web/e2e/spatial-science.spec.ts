@@ -16,6 +16,14 @@ test('spatial science workbench computes actual sample points, exports and previ
  await dialog.getByLabel('Sample count').fill('5');
  await dialog.getByRole('button',{name:'Run analysis',exact:true}).click();
  await expect(dialog).toContainText('5 features');
+ await dialog.getByRole('button',{name:'Polygon sample distribution',exact:true}).click();
+ const studio=page.getByRole('dialog',{name:'Scientific figure studio'});
+ await expect(studio).toBeVisible();
+ await expect(studio.getByRole('button',{name:'Render figure'})).toBeEnabled();
+ await studio.getByRole('button',{name:'Render figure'}).click();
+ await expect(studio.getByRole('button',{name:'Render figure'})).toBeEnabled({timeout:60000});
+ await page.keyboard.press('Escape');
+ await expect(studio).not.toBeVisible();
  const download=page.waitForEvent('download');
  await dialog.getByRole('button',{name:'GeoJSON',exact:true}).click();
  expect((await download).suggestedFilename()).toBe('spatial-result.geojson');

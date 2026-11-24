@@ -44,6 +44,7 @@ class SpatialInput(BaseModel):
     regression_view:Literal['prediction','residual']='prediction'
 
 def raster_product(name,z,transform,crs,unit):
+    require(not np.isinf(z).any(),'Numerical overflow in derived raster; rescale the input quantities.')
     valid=np.isfinite(z);require(valid.any(),'Operation produced no valid cells.')
     require(np.max(np.abs(z[valid]))<=1e100,'Output exceeds numerical range.')
     with MemoryFile() as mem:

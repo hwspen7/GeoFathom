@@ -258,12 +258,12 @@ def test_spatial_medium_grid_mass_and_mask_conservation():
 
 
 def test_spatial_gate_rejects_missing_or_skipped_method_evidence(tmp_path):
-    from scripts.spatial_science_gate import expected_tests,evaluate
+    from scripts.spatial_science_gate import expected_tests,required_tests,evaluate
     from xml.etree import ElementTree as ET
     root=ET.Element('testsuite')
     names=expected_tests()
     for method,name in names.items():ET.SubElement(root,'testcase',name=name)
-    for name in ('test_contract_count_and_invalid_input_rejections','test_spatial_gdal_cli_alignment_reference','test_spatial_medium_grid_mass_and_mask_conservation'):
+    for name in required_tests():
         ET.SubElement(root,'testcase',name=name)
     path=tmp_path/'junit.xml';ET.ElementTree(root).write(path)
     assert evaluate(path)['passed']
@@ -348,7 +348,7 @@ def test_dirichlet_analytic_uncertainty_opposed_criteria():
     ('sample_polygon',lambda:{'vectors':[vectors(box(X,Y-100,X+100,Y))]},{'count':10},'spatial_sample_design'),
     ('blocked_regression',lambda:{'rasters':[raster(3+2*np.arange(64).reshape(8,8)),raster(np.arange(64).reshape(8,8))]},{'block_size_m':20,'folds':4,'ridge_penalty':0,'buffer_m':1},'spatial_oof_agreement'),
     ('zonal_statistics',lambda:{'rasters':[raster()],'vectors':[vectors(box(X,Y-10,X+15,Y))]},{},'spatial_zonal_coverage'),
-])
+],ids=['null','lag','sample','prediction','coverage'])
 def test_spatial_actual_result_figure_pipeline(kind,inputs,parameters,recipe):
     from terrain.studio_routes import StudioInput
     from terrain.studio_render import render
@@ -358,3 +358,53 @@ def test_spatial_actual_result_figure_pipeline(kind,inputs,parameters,recipe):
     assert image.startswith(b'\x89PNG') and len(table)>1 and metadata['recipe']==recipe
     svg,_,svg_table=render(StudioInput(recipe=plot['recipe'],csv=plot['csv'],format='svg',**plot['bindings']))
     assert b'<svg' in svg and svg_table==table
+
+
+def test_independent_distance_reference_with_nodata():
+    from analysis.science_advanced import euclidean_distance
+    z=np.zeros((13,17));z[1,3]=1;z[10,11]=1;z[4:7,5:8]=np.nan
+    actual=euclidean_distance(z,7,13)
+    targets=np.argwhere(z==1)
+    expected=np.array([[min(np.hypot((c-tc)*7,(r-tr)*13) for tr,tc in targets) for c in range(z.shape[1])] for r in range(z.shape[0])])
+    expected[~np.isfinite(z)]=np.nan
+    np.testing.assert_allclose(actual,expected,atol=1e-10,equal_nan=True)
+
+def test_spatial_randomization_exact_reference():
+    from itertools import permutations
+    from analysis.science_raster import permutation_stat
+    z=np.arange(6,dtype=float).reshape(2,3);n=z.size
+    edges=[(i,j) for i in range(n) for j in range(i+1,n) if abs(i//3-j//3)+abs(i%3-j%3)==1]
+    u=z.ravel()-z.mean();ss=u@u
+    def independent(v):return n*sum(v[i]*v[j] for i,j in edges)/(len(edges)*ss)
+    observed=independent(u);expectation=-1/(n-1)
+    exact=np.mean([abs(independent(v)-expectation)>=abs(observed-expectation)-1e-14 for v in permutations(u)])
+    m,null=permutation_stat(z,'global_moran',999,314,return_null=True)
+    assert m['observed']==pytest.approx(observed) and abs(m['p_two_sided']-exact)<.06
+    assert len(null)==999 and abs(null.mean()-expectation)<.06
+
+def test_integrated_coverage_with_nodata():
+    z=Z.copy();z[0,1]=np.nan
+    result=run('zonal_statistics',rasters=[raster(z)],vectors=[vectors(box(X,Y-10,X+15,Y))])
+    row=result['rows'][0]
+    assert row[1]==pytest.approx(150,abs=1e-6)
+    assert row[2]==pytest.approx(150,abs=1e-6)
+    assert row[3]==pytest.approx(100,abs=1e-6)
+    assert row[4]==pytest.approx(1)
+
+def test_decision_extreme_weight_normalization():
+    z=np.array([[0.,1.],[0.,1.]])
+    result=run('weighted_overlay',rasters=[raster(z),raster(1-z)],weights=[1e308,1e308],directions=['benefit','benefit'])
+    out,_=result_grid(result);np.testing.assert_allclose(out,.5)
+    assert result['receipt']['metrics']['normalized_weights']==[.5,.5]
+
+def test_sampling_design_expected_totals():
+    from analysis.science_raster import sample_cells
+    z=np.arange(30,dtype=float).reshape(5,6);z[1,1]=np.nan
+    actual=np.nansum(z);n=np.isfinite(z).sum()
+    for kind in ('sample_random','sample_systematic','sample_spatial_balanced'):
+        estimates=[]
+        for seed in range(200):
+            idx,w=sample_cells(z,kind,7,seed)
+            assert w.sum()==pytest.approx(n) and len(set(idx))==7
+            estimates.append(np.sum(z.flat[idx]*w))
+        assert np.mean(estimates)==pytest.approx(actual,rel=.06)

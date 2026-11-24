@@ -25,6 +25,9 @@ def expected_tests():
     if set(out)!=set(BY_ID):raise RuntimeError('Every registered method must have an explicit numeric oracle.')
     return out
 
+def required_tests():
+    return ['test_contract_count_and_invalid_input_rejections','test_spatial_gdal_cli_alignment_reference','test_spatial_medium_grid_mass_and_mask_conservation','test_overlay_shared_edges_preserve_area_and_valid_inverse_projection','test_queen_weights_and_permutation_table','test_dirichlet_analytic_uncertainty_opposed_criteria','test_independent_distance_reference_with_nodata','test_spatial_randomization_exact_reference','test_integrated_coverage_with_nodata','test_decision_extreme_weight_normalization','test_sampling_design_expected_totals',*[f'test_spatial_actual_result_figure_pipeline[{i}]' for i in ('null','lag','sample','prediction','coverage')]]
+
 def evaluate(path):
     root=ET.parse(path).getroot()
     status={}
@@ -32,16 +35,16 @@ def evaluate(path):
         name=case.attrib.get('name','')
         passed=not any(case.find(tag) is not None for tag in ('failure','error','skipped'))
         status[name]=passed and status.get(name,True)
-    required=['test_contract_count_and_invalid_input_rejections','test_spatial_gdal_cli_alignment_reference','test_spatial_medium_grid_mass_and_mask_conservation']
+    required=required_tests()
     common=all(status.get(test,False) for test in required)
     cases=[{'method':method,'oracle':test,'oracle_passed':status.get(test,False),
             'numerical_fixture_score':90*int(status.get(test,False))+10*int(common)}
            for method,test in sorted(expected_tests().items())]
     passed=common and all(c['oracle_passed'] for c in cases)
     return {'passed':passed,'methods':len(cases),'methods_passing':sum(c['oracle_passed'] for c in cases),
-            'minimum_fixture_score':min(c['numerical_fixture_score'] for c in cases),
+            'minimum_fixture_score':min(c['numerical_fixture_score'] for c in cases),'required_minimum_score':95,
             'common_checks':{test:status.get(test,False) for test in required},
-            'scope':'Synthetic analytic fixtures and bounded medium-grid checks; not field accuracy or production certification.',
+            'scope':'Method-specific analytic fixtures, independent comparisons, statistical design, numerical safeguards, and actual-result figure pipelines. This score measures declared test evidence, not field accuracy or production maturity.',
             'results':cases}
 
 def main():

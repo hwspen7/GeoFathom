@@ -86,7 +86,7 @@ def decision(stack,common,kind,weights,directions,pairwise):
         out=pareto_mask(x[:,0],x[:,1],directions[0]=='benefit',directions[1]=='benefit').astype(float)
     else:
         if kind=='ahp_overlay':
-            a=np.asarray(pairwise,float);require(a.shape==(k,k) and np.all(np.isfinite(a)) and np.all(a>0),'AHP requires a positive square pairwise matrix.')
+            a=np.asarray(pairwise,float);require(a.shape==(k,k) and np.all(np.isfinite(a)) and np.all((a>=1e-6)&(a<=1e6)),'AHP requires a positive square pairwise matrix.')
             require(np.allclose(np.diag(a),1,rtol=0,atol=1e-8) and np.allclose(a*a.T,1,rtol=1e-6,atol=1e-8),'AHP matrix must be reciprocal with diagonal ones.')
             eig,vec=np.linalg.eig(a);j=np.argmax(eig.real);w=np.abs(vec[:,j].real);w/=w.sum()
             ri=[0,0,.58,.90,1.12,1.24,1.32,1.41][k-1];cr=max(0,float((eig[j].real-k)/(k-1)/ri)) if ri else 0.
@@ -94,7 +94,8 @@ def decision(stack,common,kind,weights,directions,pairwise):
             meta['consistency_ratio']=cr
         else:
             w=np.asarray(weights,float);require(w.shape==(k,) and np.all(np.isfinite(w)) and np.all(w>0),'Provide one positive weight per criterion.')
-            w=w/w.sum()
+            w=w/w.max();w=w/w.sum()
+            require(np.all(w>0),'Weights exceed representable relative precision.')
         meta['normalized_weights']=w.tolist()
         if kind=='topsis':
             norms=np.linalg.norm(x,axis=0);require(np.all(norms>0),'TOPSIS requires nonzero criterion norms.')
