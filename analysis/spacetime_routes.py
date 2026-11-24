@@ -1,5 +1,5 @@
 """Independent spatiotemporal workbench with explicit dated raster bindings."""
-import base64,hashlib,math
+import base64,hashlib,math,json
 import numpy as np
 from fastapi import APIRouter,HTTPException
 from pydantic import BaseModel,ConfigDict,Field
@@ -170,8 +170,11 @@ def execute(body):
     if product:
         figures.insert(0,{'title':METHODS[kind][1]+' map','recipe':'raster_continuous','bindings':{},'csv':None,'raster':True})
         if not rows:cols=['quantile','value'];rows=product['summary']['quantiles']
-    receipt={'schema':'geofathom-spatiotemporal','operation':kind,'crs':str(first.crs),'unit':unit,'times':body.times,'time_unit':body.time_unit,'time_origin':body.time_origin,'parameters':p,'observations':bindings,'quality':quality_receipt,'metrics':meta}
-    return {'operation':kind,'receipt':receipt,'features':None,'raster':product,'preview':raster_preview(product) if product else None,'figures':figures,'columns':cols,'rows':rows,'csv':csv_text(cols,rows)}
+    csv=csv_text(cols,rows)
+    receipt={'table_sha256':hashlib.sha256(csv.encode()).hexdigest(),'raster_sha256':product['sha256'] if product else None,'schema':'geofathom-spatiotemporal','operation':kind,'crs':str(first.crs),'unit':unit,'times':body.times,'time_unit':body.time_unit,'time_origin':body.time_origin,'parameters':p,'observations':bindings,'quality':quality_receipt,'metrics':meta}
+    result={'operation':kind,'receipt':receipt,'features':None,'raster':product,'preview':raster_preview(product) if product else None,'figures':figures,'columns':cols,'rows':rows,'csv':csv}
+    json.dumps(result,allow_nan=False)
+    return result
 
 @router.post('/run')
 def run(body:CubeInput):

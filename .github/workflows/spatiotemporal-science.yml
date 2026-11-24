@@ -1,0 +1,29 @@
+name: Spatiotemporal scientific reference
+on:
+  pull_request:
+  workflow_dispatch:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('{0}-{1}', github.ref, github.sha) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+permissions:
+  contents: read
+jobs:
+  science:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install application dependencies
+        run: python -m pip install -r requirements.txt pytest
+      - name: Compile scientific modules
+        run: python -m compileall -q analysis imagery terrain
+      - name: Run space-time reference and actual figure tests
+        run: python -m pytest -q tests/test_spacetime_science.py --junitxml=spacetime-reference.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: spatiotemporal-reference
+          path: spacetime-reference.xml
