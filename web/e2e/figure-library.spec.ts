@@ -78,7 +78,8 @@ with tempfile.TemporaryDirectory() as directory:
  await studio.getByRole('button',{name:/Continuous georeferenced map/}).click();
  await studio.getByRole('button',{name:'Render figure'}).click();
  await expect(studio.getByAltText('Continuous georeferenced map preview')).toBeVisible({timeout:30000});
- await studio.getByRole('button',{name:'Add to composition (0/6)'}).click();
+ await expect(studio.getByRole('button',{name:'Figure composer (1)'})).toBeVisible();
+ await studio.getByRole('button',{name:'Add to composition (1/6)',exact:true}).click();
  await studio.getByLabel('Figure category').selectOption('Scenarios');
  await studio.getByRole('button',{name:/Pareto dominance and trade-offs/}).click();
  await studio.getByLabel('Figure CSV data').fill('cost,benefit\n1,1\n2,3\n3,2\n4,5');
@@ -91,8 +92,8 @@ with tempfile.TemporaryDirectory() as directory:
  await studio.getByRole('button',{name:'PDF',exact:true}).click();
  expect((await studioDownload).suggestedFilename()).toBe('geofathom-pareto.pdf');
  await page.screenshot({path:testInfo.outputPath('extended-scientific-figure.png')});
- await studio.getByRole('button',{name:'Add to composition (1/6)'}).click();
- await studio.getByRole('button',{name:'Figure composer (2)'}).click();
+ await studio.getByRole('button',{name:'Add to composition (2/6)',exact:true}).click();
+ await studio.getByRole('button',{name:'Figure composer (3)'}).click();
  await studio.getByLabel('Composition title').fill('Terrain and tradeoff study');
  await studio.getByRole('button',{name:'Render composition'}).click();
  await expect(studio.getByAltText('Publication composition preview')).toBeVisible({timeout:30000});

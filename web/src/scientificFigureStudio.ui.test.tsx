@@ -48,3 +48,14 @@ it('collects two actual render receipts and composes them without image stitchin
  fireEvent.click(screen.getByRole('button',{name:'Render composition'}));await screen.findByAltText('Publication composition preview');
  expect(mocked.composeStudio).toHaveBeenCalledWith(expect.objectContaining({title:'Study',panels:[expect.objectContaining({recipe:'pareto',x:'cost'}),expect.objectContaining({recipe:'pareto',y:'benefit'})]}),expect.any(AbortSignal));
 });
+
+it('separates basic and professional recipes with a compatible initial selection',async()=>{
+ const common={source:'table' as const,fields:['x','y'],note:'',minimum_rasters:1,option:null};
+ mocked.getStudioCatalog.mockResolvedValue({recipes:[{...common,id:'basic_line',title:'Simple numeric line',family:'Basic',tier:'basic'},{...common,id:'model_roc',title:'Binary ROC',family:'GeoAI validation',tier:'professional'}]});
+ render(<ScientificFigureStudio source={{name:'Recorded table',csv:'x,y\n1,2\n2,3'}} initialTier="basic" onClose={()=>{}}/>);
+ await screen.findByRole('button',{name:/Simple numeric line/});
+ expect(screen.queryByRole('button',{name:/Binary ROC/})).toBeNull();
+ fireEvent.change(screen.getByLabelText('Figure library tier'),{target:{value:'professional'}});
+ expect(screen.getByRole('button',{name:/Binary ROC/}).getAttribute('aria-pressed')).toBe('true');
+ expect(screen.queryByRole('button',{name:/Simple numeric line/})).toBeNull();
+});

@@ -22,7 +22,7 @@ export default function FigureGallery(p:{record?:PersistedTerrainResult;research
  const [data,setData]=useState<PlotData|null>(()=>research?.data??(record?localPlotData(record):null));
  const [loading,setLoading]=useState(!data),[error,setError]=useState(''),[exporting,setExporting]=useState(false);
  const [settings,setSettings]=useState<FigureSettings|null>(()=>data?defaultFigure(data):null);
- const [studioOpen,setStudioOpen]=useState(false);
+ const [studioOpen,setStudioOpen]=useState(false),[studioTier,setStudioTier]=useState<'basic'|'professional'>('professional');
  const [page,setPage]=useState<'charts'|'appearance'|'axes'|'data'>('charts');
  const [dataPage,setDataPage]=useState(0),[styleName,setStyleName]=useState(''),[threshold,setThreshold]=useState('');
  const styleKey='geofathom-figure-styles:'+(p.projectId??'local');
@@ -79,7 +79,7 @@ export default function FigureGallery(p:{record?:PersistedTerrainResult;research
    else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus();}
   }
  }}>
-  <header><div><strong>Scientific figure library</strong><small>{research?.title??record?.title} {record&&' · '+record.source.name}</small></div><span><button type="button" onClick={()=>setStudioOpen(true)}>Extended figure studio</button> <button type="button" onClick={p.onClose}>Close figure library</button></span></header>
+  <header><div><strong>Scientific figure library</strong><small>{research?.title??record?.title} {record&&' · '+record.source.name}</small></div><span><button type="button" onClick={()=>{setStudioTier('basic');setStudioOpen(true);}}>Basic table figures</button> <button type="button" onClick={()=>{setStudioTier('professional');setStudioOpen(true);}}>Extended figure studio</button> <button type="button" onClick={p.onClose}>Close figure library</button></span></header>
   {loading&&<p role="status">Preparing numerical plot tables from the recorded terrain input…</p>}
   {error&&<p role="alert" className="discovery-error">{error}</p>}
   {scene?.error&&<p role="alert">{scene.error}</p>}
@@ -124,6 +124,6 @@ export default function FigureGallery(p:{record?:PersistedTerrainResult;research
    </section>
   </div>}
   {settings&&<footer><div className="figure-size-controls"><label>Width (mm)<input aria-label="Width (mm)" type="number" min="60" max="300" value={settings.width_mm} onChange={e=>change('width_mm',Math.max(60,Math.min(300,Number(e.target.value)||160)))}/></label><label>Height (mm)<input aria-label="Height (mm)" type="number" min="40" max="300" value={settings.height_mm} onChange={e=>change('height_mm',Math.max(40,Math.min(300,Number(e.target.value)||110)))}/></label><label>PNG resolution<select aria-label="PNG resolution" value={settings.dpi} onChange={e=>change('dpi',Number(e.target.value))}><option value="300">300 DPI</option><option value="600">600 DPI</option></select></label></div><div className="figure-downloads">{['SVG','PDF','PNG','CSV','JSON','Python'].map(format=><button type="button" key={format} disabled={exporting||(!!scene?.error&&!['CSV','JSON'].includes(format))} onClick={()=>void download(format)}>{format==='Python'?'Python script':format}</button>)}</div></footer>}
- {studioOpen&&<ScientificFigureStudio source={{nativePanel:scene&&!scene.error&&table?{scene:{width:scene.width,height:scene.height,width_mm:scene.width_mm,height_mm:scene.height_mm,title:scene.title,primitives:scene.primitives},table:[table.columns,...table.rows],provenance:metadata}:undefined,name:research?.title??record?.title??'Selected result',csv:table?tableCSV(table):undefined,rasters:record?.advanced?.raster?[{name:record.title,data:record.advanced.raster.geotiff,unit:record.advanced.raster.unit??''}]:[],provenance:metadata}} onClose={()=>setStudioOpen(false)}/>}
+ {studioOpen&&<ScientificFigureStudio initialTier={studioTier} source={{nativePanel:scene&&!scene.error&&table?{scene:{width:scene.width,height:scene.height,width_mm:scene.width_mm,height_mm:scene.height_mm,title:scene.title,primitives:scene.primitives},table:[table.columns,...table.rows],provenance:metadata}:undefined,name:research?.title??record?.title??'Selected result',csv:table?tableCSV(table):undefined,rasters:record?.advanced?.raster?[{name:record.title,data:record.advanced.raster.geotiff,unit:record.advanced.raster.unit??''}]:[],provenance:metadata}} onClose={()=>setStudioOpen(false)}/>}
  </div></div>,document.body);
 }

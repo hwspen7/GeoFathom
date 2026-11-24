@@ -191,6 +191,7 @@ def render_raster_domain(kind,req,fig,ax,grids,parameter,meta,cmap):
     elif kind.startswith('spatial_'):
         if kind in {'spatial_variogram','spatial_covariogram','spatial_correlogram'}:
             require(g.is_meter,'Metric lag analysis requires projected metre coordinates.')
+            require(float(parameter).is_integer(),'Maximum lag must be an integer.')
             mu=np.nanmean(z);rows=[]
             for direction,spacing,grid in [('East',g.transform.a,z),('North',-g.transform.e,z.T)]:
                 for lag in range(1,min(int(parameter),grid.shape[1]-1)+1):
