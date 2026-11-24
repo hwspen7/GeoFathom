@@ -19,6 +19,7 @@ from .remote_spectral_inference import spectral_covariance,matched_filter,librar
 from .remote_advanced_models import dualpol,brdf,support_fusion,cloud_model
 from .remote_phase import reconstruct
 from .remote_joint_models import joint_retrieval,two_anchor,calibrated_cloud
+from .remote_satellite import gamma_change, area_overlap, SAR_GAMMA_IDS
 from .remote_validation import aggregate_nested,continuous_reference,binary_reference
 from .remote_band import read_calibrated
 from .remote_fusion import fusion,canopy,unsupervised
@@ -100,7 +101,7 @@ def execute(body):
         data=base64.b64decode(source.data,validate=True);require(len(data)<=24_000_000,'Source exceeds inline GeoTIFF budget.')
         raw.append(data);hashes.append(hashlib.sha256(data).hexdigest())
     grids={};provenance={};first=None;cells=0
-    aligning=method.id in {'align_continuous','align_categorical','align_area_mean','align_area_coverage'}
+    aligning=method.id in {'align_continuous','align_categorical','align_area_mean','align_area_coverage','align_overlap_mean','align_overlap_coverage'}
     if aligning:require(not body.quality,'Apply QA before or after explicit alignment, not during reprojection.')
     def load(binding,quantity,allow_mismatch=False):
         nonlocal first,cells
@@ -126,7 +127,10 @@ def execute(body):
         units={grids[r].unit for r,q in roles.items() if q=='numeric'}
         require(len(units)==1,'Comparable numerical bands must share physical units.')
     alignment_meta={}
-    if kind in {'align_area_mean','align_area_coverage'}:
+    if kind in {'align_overlap_mean','align_overlap_coverage'}:
+        require(grids['source'].unit!='class','Area means require continuous measurements.')
+        v['source'],alignment_meta=area_overlap(grids['source'],grids['target'],params,kind)
+    elif kind in {'align_area_mean','align_area_coverage'}:
         require(grids['source'].unit!='class','Area means require continuous measurements.')
         v['source'],alignment_meta=aggregate_nested(grids['source'],grids['target'],params,kind)
     elif aligning:
@@ -144,8 +148,9 @@ def execute(body):
     if kind in {'true_color','false_color'}:
         rgb=rgb_product(kind,np.stack(list(v.values())),first,list(v));meta['display_channel_order']=list(v)
     elif aligning:
-        out=v['source'];unit='fraction' if kind=='align_area_coverage' else grids['source'].unit
-        meta.update(alignment_meta);meta['resampling']='nested_area' if kind.startswith('align_area_') else 'bilinear' if kind=='align_continuous' else 'nearest'
+        out=v['source'];unit='fraction' if kind in {'align_area_coverage','align_overlap_coverage'} else grids['source'].unit
+        meta.update(alignment_meta);meta['resampling']='exact_overlap' if kind.startswith('align_overlap_') else 'nested_area' if kind.startswith('align_area_') else 'bilinear' if kind=='align_continuous' else 'nearest'
+    elif kind in SAR_GAMMA_IDS:out,meta=gamma_change(v,params,kind)
     elif kind in {'insar_phase_wls','insar_relative_range'}:
         if kind=='insar_relative_range':require(params['range_sign'] in (-1,1),'Range sign must be +1 or -1.')
         out,meta=reconstruct(v,params,kind)

@@ -193,6 +193,15 @@ m('spectral_angle','Spectral','Spectral angle between acquisitions',refl('red_be
 m('minimum_distance','Classification','Supervised minimum-distance classification',SPECTRUM+(('training','class'),),'class','Positive integer training labels; class centroids in reflectance space, no independent accuracy implied.'),
 m('classification_accuracy','Classification','Classification reference agreement',(('prediction','class'),('reference','class')),'','Paired independent reference labels supplied by user; unweighted confusion matrix, overall accuracy, precision, recall and kappa; not area-adjusted.'),
 )
+GAMMA_PARAMS=(p('enl_before','Before equivalent looks',4,.1,1000),p('enl_after','After equivalent looks',4,.1,1000),p('confidence','Confidence level',.95,.5,.999))
+OVERLAP_PARAMS=(p('minimum_coverage','Minimum valid area fraction',.8,0,1),)
+METHODS=METHODS+(
+ m('sar_gamma_change_p','Radar','Gamma intensity change p-value',(('before','power'),('after','power')),'probability','Independent Gamma multilook intensity with supplied ENL; pointwise two-sided F test.',GAMMA_PARAMS),
+ m('sar_gamma_ratio_low','Radar','Gamma change lower confidence bound',(('before','power'),('after','power')),'dB','Pointwise independent Gamma ratio confidence lower bound.',GAMMA_PARAMS),
+ m('sar_gamma_ratio_high','Radar','Gamma change upper confidence bound',(('before','power'),('after','power')),'dB','Pointwise independent Gamma ratio confidence upper bound.',GAMMA_PARAMS),
+ m('align_overlap_mean','Alignment','Exact non-nested area-weighted alignment',numeric('target','source'),'source','Same projected metre CRS; exact overlap of rectangular cells, valid support only.',OVERLAP_PARAMS),
+ m('align_overlap_coverage','Alignment','Exact non-nested valid area fraction',numeric('target','source'),'fraction','Same projected metre CRS; includes partial extent and missing data.',OVERLAP_PARAMS),
+)
 BY_ID={x.id:x for x in METHODS}
 assert len(BY_ID)==len(METHODS)
 # Only operators with a proven finite dependency radius are eligible for tiles.
@@ -200,7 +209,7 @@ WINDOWED_IDS={m.id for m in METHODS if m.group=='Optical'}|{'calibrated_reflecta
 WINDOWED_HALO={'sar_lee','sar_gamma_map','cloud_buffer'}
 HYPER_IDS|=GLOBAL_HYPER_IDS
 WINDOWED_CUBES=SERIES_IDS|(HYPER_IDS-{'spectral_endmembers'}-GLOBAL_HYPER_IDS)
-WINDOWED_IDS|=WINDOWED_CUBES
+WINDOWED_IDS|=WINDOWED_CUBES|{'sar_gamma_change_p','sar_gamma_ratio_low','sar_gamma_ratio_high'}
 
 def windowed_roles(operation,times):
     import math

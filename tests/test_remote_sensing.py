@@ -189,7 +189,7 @@ def test_remote_invalid_inputs_and_recovery():
         response=client.post('/analysis/remote-sensing/run',json=bad);assert response.status_code==422,response.text
     response=client.post('/analysis/remote-sensing/run',json=good);assert response.status_code==200,response.text
     np.testing.assert_allclose(grid(response.json()),.5)
-    assert client.get('/analysis/remote-sensing/catalog').json()['operation_count']==len(BY_ID)==139
+    assert client.get('/analysis/remote-sensing/catalog').json()['operation_count']==len(BY_ID)==144
 
 def test_temporal_independent_quality_masks():
     # Cloud at one date does not erase the other valid acquisitions.
@@ -1132,3 +1132,26 @@ def test_joint_prosail_adapter_retains_cab():
     config={'sensor':'synthetic response fixture','responses':responses,'samples':[{**sample,'lai':1,'cab':20,'prior':2},{**sample,'lai':3,'cab':60,'prior':1}]}
     rows=simulate(config,lambda **kw: .1+WAVELENGTH*.0001+kw['lai']*.02,joint=True)
     np.testing.assert_allclose(rows,[[1,20,2,.168,.175,.186,.204],[3,60,1,.208,.215,.226,.244]],atol=1e-12)
+
+
+@pytest.mark.parametrize('kind',['sar_gamma_change_p','sar_gamma_ratio_low','sar_gamma_ratio_high'])
+def test_gamma_change_reference(kind):
+    # For one independent look in each epoch, F(2,2) has CDF r/(1+r).
+    result=run(kind,{'before':constant(1.),'after':constant(3.)},
+               {'enl_before':1,'enl_after':1,'confidence':.95})
+    expected={'sar_gamma_change_p':.5,'sar_gamma_ratio_low':10*np.log10(3/39),
+              'sar_gamma_ratio_high':10*np.log10(3*39)}[kind]
+    np.testing.assert_allclose(grid(result),expected,atol=1e-12)
+
+@pytest.mark.parametrize('kind',['align_overlap_mean','align_overlap_coverage'])
+def test_exact_overlap_reference(kind):
+    # A shifted 10 m target intersects two source cells by 5 m each.
+    target=source(constant(1.),'target',aff=AFF)
+    moving=source(np.tile([2.,4.,6.,8.],(3,1)),'source',aff=from_origin(500005,4500000,10,10))
+    body=RemoteInput(operation=kind,sources=[target,moving],
+        bindings={'target':{'source':0,'unit':'m'},'source':{'source':1,'unit':'m'}},
+        parameters={'minimum_coverage':.5})
+    result=checked(execute(body))
+    expected=[2.,3.,5.,7.] if kind=='align_overlap_mean' else [.5,1.,1.,1.]
+    np.testing.assert_allclose(grid(result),np.tile(expected,(3,1)))
+    assert result['receipt']['metrics']['observed_support_area_m2']==1050

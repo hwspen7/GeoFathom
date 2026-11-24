@@ -8,9 +8,11 @@ from .remote_physics import thermal_uncertainty
 from .remote_inference import cloud_buffer,series_break
 from .remote_temporal_models import seasonal_metrics,segmented_means
 from .remote_hyperspectral import continuum_features
+from .remote_satellite import gamma_change, SAR_GAMMA_IDS
 from .remote_fusion import fusion,canopy
 
 def compute(kind,v,p,times=()):
+    if kind in SAR_GAMMA_IDS:return gamma_change(v,p,kind)[0]
     if kind in SERIES_IDS:
         stack=np.stack(list(v.values()))
         if kind.startswith('season_'):return seasonal_metrics(stack,times,p,kind)[0]
