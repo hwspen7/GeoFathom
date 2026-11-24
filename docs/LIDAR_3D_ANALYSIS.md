@@ -26,9 +26,15 @@ Install the optional LiDAR extension with python -m pip install -e ".[lidar]". L
 
 The common-cell change operation estimates conditional volume uncertainty by combining within-cell mean sampling variances with an operator-specified exponential spatial covariance of registration error. All pairs are evaluated in bounded memory blocks. No empirical variogram calibration or autocorrelation adjustment to within-cell sampling error is claimed.
 
+## Progressive morphology and registration
+
+The PMF operation uses bounded multiscale grayscale openings and a progressive slope-related tolerance. Its nearest-filled intermediate surface is not an observed DEM; final ground estimates use supported TIN interpolation. Coarse PCA orientation initialization evaluates all 24 proper axis permutations and reports the best and second scores, but does not guarantee arbitrary partial-overlap alignment. GICP uses source and reference neighborhood covariances, positive noise floors, rotating covariances, whitened rigid least squares and six-dimensional rank validation.
+
+For real-scene validation, acquire a classified LAS/LAZ tile from USGS 3DEP (https://www.usgs.gov/the-national-map-data-delivery/gis-data-download). Run scripts/lidar_scene_reference.py with an explicit metre EPSG, projected bounding box and output JSON. The script reports confusion matrices, coverage and F1 against existing LAS labels; those labels are not independent survey truth. The operator must select the crop before evaluation. No real-scene result is asserted by the code alone.
+
 ## Verification
 
-Run python -m pytest tests/test_lidar_science.py tests/test_lidar_advanced.py tests/test_lidar_geometry.py tests/test_lidar_disk_uncertainty.py -q. Tests cover analytical planes, degenerate neighborhoods, exact voxel counts, scaled LAS coordinates, partial overlap, directed distance, TIN interpolation, malformed input and HTTP contracts. These are synthetic reference tests, not real-flight validation.
+Run python -m pytest tests/test_lidar_science.py tests/test_lidar_advanced.py tests/test_lidar_geometry.py tests/test_lidar_disk_uncertainty.py tests/test_lidar_registration.py -q. Tests cover analytical planes, degenerate neighborhoods, exact voxel counts, scaled LAS coordinates, partial overlap, directed distance, TIN interpolation, malformed input and HTTP contracts. These are synthetic reference tests, not real-flight validation.
 
 ## Remaining research work
 

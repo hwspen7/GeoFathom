@@ -14,9 +14,14 @@ from .lidar_geometry import ground_filter, tin_mesh, alpha_boundary, plane_icp, 
 
 from .lidar_uncertainty import correlated_change
 
+from .lidar_registration import progressive_morphology, coarse_pca_registration, generalized_icp
+
 MAX_POINTS = 100_000
 MAX_BYTES = 16 * 1024 * 1024
 METHODS = {
+    "progressive_morphology": ("Progressive morphological ground filter", "Multiscale lower-envelope opening, progressive elevation tolerance and supported TIN interpolation."),
+    "coarse_pca": ("Coarse PCA orientation initialization", "24 proper axis permutations; approximate global orientation for similar extent clouds."),
+    "generalized_icp": ("Generalized ICP", "Alternating local covariance-weighted rigid Gauss–Newton alignment."),
     "stream_voxels": ("Disk-backed LAS / LAZ voxel statistics", "Chunked LAS/LAZ decoding and exact count aggregation; 10 million input points, 100,000 occupied voxels."),
     "correlated_change": ("Spatial covariance change uncertainty", "Common cell means with supplied exponential registration covariance; conditional volume uncertainty."),
     "ground_filter": ("Local slope ground filter", "Local lower-envelope seeds and slope allowance; TIN interpolation within supported area."),
@@ -186,7 +191,7 @@ def analyze(operation, p, reference=None, *, k=16, size=1., radius=2., max_edge=
     metrics = {"input_points":len(p)}
     if not (np.isfinite(threshold) and 0 <= threshold <= 1e6 and np.isfinite(registration_sigma) and 0 <= registration_sigma <= 1e6 and 3 <= min_neighbors <= 1000):
         raise ValueError("Invalid diagnostic or uncertainty parameters.")
-    if operation in ("cloud_distance","surface_change","ground_height","rigid_registration","normal_change","canopy_structure","point_plane_icp","crown_candidates","correlated_change") and reference is None:
+    if operation in ("cloud_distance","surface_change","ground_height","rigid_registration","normal_change","canopy_structure","point_plane_icp","crown_candidates","correlated_change","coarse_pca","generalized_icp") and reference is None:
         raise ValueError("This method needs a reference cloud in the same CRS and vertical datum.")
     if operation == "stream_voxels":
         raise ValueError("Streaming operation requires the file-backed endpoint.")
@@ -194,8 +199,16 @@ def analyze(operation, p, reference=None, *, k=16, size=1., radius=2., max_edge=
         table,info=correlated_change(p,reference,size,registration_sigma,radius,min_neighbors)
         columns=["x_m","y_m","reference_z_m","current_z_m","delta_z_m","standard_error_m","lod95_m","lower95_m","upper95_m","above_lod","current_count","reference_count"]
         metrics.update(info)
-    elif operation == "ground_filter":
-        table,info=ground_filter(p,size,radius,threshold)
+    elif operation in ("coarse_pca","generalized_icp"):
+        if operation=="coarse_pca":
+            table,info=coarse_pca_registration(p,reference,radius,trim_fraction)
+            columns += ["residual_m","inlier_flag"]
+        else:
+            table,info=generalized_icp(p,reference,k,radius,trim_fraction,max_iterations,tolerance,threshold)
+            columns += ["residual_m","mahalanobis_squared","inlier_flag"]
+        metrics.update(info)
+    elif operation in ("ground_filter","progressive_morphology"):
+        table,info=(progressive_morphology if operation=="progressive_morphology" else ground_filter)(p,size,radius,threshold)
         columns += ["ground_z_m","height_m","ground_flag"]
         metrics.update(info)
     elif operation in ("tin_mesh","alpha_boundary"):
