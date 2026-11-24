@@ -70,9 +70,17 @@ def make_report(result, cancel=None):
     for run in result['runs']:
         checkpoint(cancel)
         paragraph(run['label'],'Heading3')
-        # Include every validated parameter, including defaults, in the formal
-        # report. Geometry coordinates remain in the reproducibility manifest.
-        parameters={k:v for k,v in run['input'].items() if k not in {'geometry'}}
+        # Display parameters used by this operation; the manifest retains the
+        # entire validated request, including unrelated engine defaults.
+        from .research import SCENARIO_PARAMETERS
+        operation=run['input']['operation']
+        relevant={'operation',*SCENARIO_PARAMETERS[operation]}
+        if operation in {'volume','cutfill_map'}:
+            relevant.update({'design_max_grade','elevation_sigma_m'})
+        if operation in {'visibility','viewshed_multi'}:
+            relevant.update({'point','observer_points','dsm_image_id'})
+        if operation=='flow_accumulation':relevant.add('external_inflow_image_id')
+        parameters={k:v for k,v in run['input'].items() if k in relevant and v is not None}
         paragraph('; '.join(f'{k}={v}' for k,v in parameters.items()))
         paragraph(run['warning'])
         if run.get('quality'):

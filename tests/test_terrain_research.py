@@ -222,8 +222,6 @@ def test_two_gradient_algorithms_are_compared_on_identical_cells(experiment_sour
     # ZT requires a complete stencil: only the 8x8 interior is shared.
     assert delta['statistics']['common_cells']==64
     assert delta['statistics']['rms_difference']>0
-    assert result['comparison_warning']
-    assert next(row for row in result['metric_table'] if row['metric']=='product_mean')['deltas'][1] is None
     assert delta['raster']['unit'] in {'degree','degrees','deg'}
 
 
@@ -237,6 +235,8 @@ def test_surface_scenarios_share_a_display_range_without_changing_geotiff_values
     assert a['raster']['preview_scale']['shared_across_scenarios']
     z1,_,_=unpack(a['raster']);z2,_,_=unpack(b['raster'])
     assert not np.allclose(z1,z2,equal_nan=True)
+    assert result['comparison_warning']
+    assert next(row for row in result['metric_table'] if row['metric']=='product_mean')['deltas'][1] is None
     assert sum(x['cells'] for x in b['raster']['legend'])==np.isfinite(z2).sum()
 
 
