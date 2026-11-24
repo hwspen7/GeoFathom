@@ -189,7 +189,7 @@ def test_remote_invalid_inputs_and_recovery():
         response=client.post('/analysis/remote-sensing/run',json=bad);assert response.status_code==422,response.text
     response=client.post('/analysis/remote-sensing/run',json=good);assert response.status_code==200,response.text
     np.testing.assert_allclose(grid(response.json()),.5)
-    assert client.get('/analysis/remote-sensing/catalog').json()['operation_count']==len(BY_ID)==144
+    assert client.get('/analysis/remote-sensing/catalog').json()['operation_count']==len(BY_ID)==147
 
 def test_temporal_independent_quality_masks():
     # Cloud at one date does not erase the other valid acquisitions.
@@ -1207,3 +1207,39 @@ def test_satellite_affine_control_checkpoints_and_robustness():
     assert fit_affine(controls,b2,32617,huber_m=.1)['affine']==robust['affine']
     with pytest.raises(FigureInputError):
         fit_affine(controls,controls[:3],32617)
+
+
+@pytest.mark.parametrize('kind',['quality_weighted_mean','quality_weighted_sd','quality_effective_count'])
+def test_quality_composite_reference(kind):
+    arrays={'observation1':constant(.2),'observation2':constant(.6),'observation3':constant(.9),
+            'quality1':constant(1.),'quality2':constant(.5),'quality3':constant(0.)}
+    arrays['observation3'][0,0]=np.nan
+    result=run(kind,arrays)
+    mean=(.2+.5*.6)/1.5
+    expected={'quality_weighted_mean':mean,'quality_weighted_sd':np.sqrt(((.2-mean)**2+.5*(.6-mean)**2)/1.5),
+              'quality_effective_count':1.5**2/1.25}[kind]
+    np.testing.assert_allclose(grid(result),expected,atol=1e-12)
+
+def test_insar_network_reference_and_disconnection(tmp_path):
+    import rasterio
+    from imagery.insar_timeseries import invert,process
+    times=[0,12,24];pairs=[[0,1],[1,2],[0,2]];sigma=[.2,.3,.4]
+    a=np.array([[1.,0.],[-1.,1.],[0.,1.]])
+    x=np.array([2.,5.]);phase=(a@x)[:,None,None]*np.ones((3,17,19))
+    phase[1:,0,0]=np.nan
+    result,meta=invert(phase,times,pairs,sigma,.056,-1)
+    factor=-.056/(4*np.pi);cov=np.linalg.inv(a.T@np.diag(1/np.array(sigma)**2)@a)
+    np.testing.assert_allclose(result[:2,1,1],factor*x)
+    np.testing.assert_allclose(result[2:4,1,1],abs(factor)*np.sqrt(np.diag(cov)))
+    assert result[4,1,1]==pytest.approx(0,abs=1e-20)
+    assert result[5,1,1]==1
+    assert np.isnan(result[:,0,0]).all() and meta['unidentified_cells']==1
+    path=tmp_path/'phase.tif';path.write_bytes(base64.b64decode(source(phase,unit='radian')['data']))
+    out=tmp_path/'range.tif';receipt=process(path,out,times,pairs,sigma,.056,-1,tile=16)
+    with rasterio.open(out) as ds:
+        np.testing.assert_allclose(ds.read(),result,equal_nan=True)
+        assert ds.descriptions[0]=='relative_range_m_at_12'
+    assert receipt['identifiable_cells']==17*19-1
+    assert receipt['output_sha256']==hashlib.sha256(out.read_bytes()).hexdigest()
+    with pytest.raises(FigureInputError):
+        invert(phase[:2],times,[[0,1],[0,1]],[.2,.3],.056,-1)

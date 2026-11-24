@@ -55,7 +55,8 @@ def transfer(source_path,target_path,output,*,mode="mean",minimum_coverage=.8,ti
                     t=dstgrid.window_transform(win);h,w=int(win.height),int(win.width);a=src.transform
                     c0=max(0,math.floor((t.c-a.c)/a.a));c1=min(src.width,math.ceil((t.c+w*t.a-a.c)/a.a))
                     r0=max(0,math.floor((a.f-t.f)/(-a.e)));r1=min(src.height,math.ceil((a.f-(t.f+h*t.e))/(-a.e)))
-                    valid=~np.ma.getmaskarray(dstgrid.read(target_band,window=win,masked=True))
+                    mask_values=dstgrid.read(target_band,window=win,masked=True).astype(float).filled(np.nan)
+                    valid=np.isfinite(mask_values)
                     target=SimpleNamespace(values=np.where(valid,1.,np.nan),transform=t,crs=src.crs,is_meter=True)
                     if c1<=c0 or r1<=r0:
                         z=np.where(valid,0.,np.nan) if mode=="coverage" else np.full((h,w),np.nan)

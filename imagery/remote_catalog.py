@@ -202,6 +202,13 @@ METHODS=METHODS+(
  m('align_overlap_mean','Alignment','Exact non-nested area-weighted alignment',numeric('target','source'),'source','Same projected metre CRS; exact overlap of rectangular cells, valid support only.',OVERLAP_PARAMS),
  m('align_overlap_coverage','Alignment','Exact non-nested valid area fraction',numeric('target','source'),'fraction','Same projected metre CRS; includes partial extent and missing data.',OVERLAP_PARAMS),
 )
+QUALITY_ROLES=tuple((f'observation{i}','reflectance') for i in range(1,4))+tuple((f'quality{i}','fraction') for i in range(1,4))
+QUALITY_P=(p('minimum_observations','Minimum supported acquisitions',2,1,3,True),)
+METHODS=METHODS+tuple(m(i,'Time Series',title,QUALITY_ROLES,unit,'Supplied quality weights; missing and zero-weight observations omitted.',QUALITY_P) for i,title,unit in (
+ ('quality_weighted_mean','Quality-weighted reflectance composite','reflectance'),
+ ('quality_weighted_sd','Quality-weighted reflectance spread','reflectance'),
+ ('quality_effective_count','Quality-weighted effective observation count','count'),
+))
 BY_ID={x.id:x for x in METHODS}
 assert len(BY_ID)==len(METHODS)
 # Only operators with a proven finite dependency radius are eligible for tiles.
@@ -209,7 +216,7 @@ WINDOWED_IDS={m.id for m in METHODS if m.group=='Optical'}|{'calibrated_reflecta
 WINDOWED_HALO={'sar_lee','sar_gamma_map','cloud_buffer'}
 HYPER_IDS|=GLOBAL_HYPER_IDS
 WINDOWED_CUBES=SERIES_IDS|(HYPER_IDS-{'spectral_endmembers'}-GLOBAL_HYPER_IDS)
-WINDOWED_IDS|=WINDOWED_CUBES|{'sar_gamma_change_p','sar_gamma_ratio_low','sar_gamma_ratio_high'}
+WINDOWED_IDS|=WINDOWED_CUBES|{'sar_gamma_change_p','sar_gamma_ratio_low','sar_gamma_ratio_high','quality_weighted_mean','quality_weighted_sd','quality_effective_count'}
 
 def windowed_roles(operation,times):
     import math

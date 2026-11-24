@@ -19,6 +19,7 @@ from .remote_spectral_inference import spectral_covariance,matched_filter,librar
 from .remote_advanced_models import dualpol,brdf,support_fusion,cloud_model
 from .remote_phase import reconstruct
 from .remote_joint_models import joint_retrieval,two_anchor,calibrated_cloud
+from .remote_quality_composite import QUALITY_IDS,quality_composite
 from .remote_satellite import gamma_change, area_overlap, SAR_GAMMA_IDS
 from .remote_validation import aggregate_nested,continuous_reference,binary_reference
 from .remote_band import read_calibrated
@@ -150,6 +151,7 @@ def execute(body):
     elif aligning:
         out=v['source'];unit='fraction' if kind in {'align_area_coverage','align_overlap_coverage'} else grids['source'].unit
         meta.update(alignment_meta);meta['resampling']='exact_overlap' if kind.startswith('align_overlap_') else 'nested_area' if kind.startswith('align_area_') else 'bilinear' if kind=='align_continuous' else 'nearest'
+    elif kind in QUALITY_IDS:out,meta=quality_composite(v,params,kind)
     elif kind in SAR_GAMMA_IDS:out,meta=gamma_change(v,params,kind)
     elif kind in {'insar_phase_wls','insar_relative_range'}:
         if kind=='insar_relative_range':require(params['range_sign'] in (-1,1),'Range sign must be +1 or -1.')

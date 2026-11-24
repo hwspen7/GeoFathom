@@ -21,6 +21,7 @@ from .remote_catalog import BY_ID,WINDOWED_IDS,WINDOWED_HALO,WINDOWED_CUBES,SERI
 from .remote_kernels import quality_mask
 from .remote_band import read_calibrated
 from .remote_tile_kernels import compute
+from .remote_quality_composite import QUALITY_IDS
 from types import SimpleNamespace
 
 def digest(path):
@@ -108,7 +109,7 @@ def process(operation,bindings,output,parameters=None,quality=(),tile=512,progre
                         for role in roles:v[role][~mask]=np.nan
                     common=np.logical_and.reduce([np.isfinite(z) for z in v.values()])
                     z=compute(operation,v,params,times)
-                    if operation not in SERIES_IDS:z[~common]=np.nan
+                    if operation not in SERIES_IDS and operation not in QUALITY_IDS:z[~common]=np.nan
                     dr=int(window.row_off)-r0;dc=int(window.col_off)-c0
                     z=z[dr:dr+int(window.height),dc:dc+int(window.width)]
                     require(not np.isinf(z).any(),'Numerical overflow.')

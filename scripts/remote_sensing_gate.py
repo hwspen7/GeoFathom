@@ -10,6 +10,7 @@ from imagery.remote_catalog import BY_ID,WINDOWED_IDS,WINDOWED_CUBES
 
 def expected_tests():
     groups={
+        'test_quality_composite_reference':'quality_weighted_mean quality_weighted_sd quality_effective_count',
         'test_gamma_change_reference':'sar_gamma_change_p sar_gamma_ratio_low sar_gamma_ratio_high',
         'test_exact_overlap_reference':'align_overlap_mean align_overlap_coverage',
         'test_joint_research_reference':'joint_lai joint_cab joint_lai_sd joint_cab_sd joint_parameter_correlation joint_effective_hypotheses fusion_two_anchor fusion_anchor_disagreement cloud_calibrated_probability shadow_calibrated_probability',
@@ -44,7 +45,7 @@ def expected_tests():
     return cases
 
 def required_tests():
-    return ['test_disk_non_nested_overlap_matches_inline_across_windows','test_satellite_affine_control_checkpoints_and_robustness','test_sensor_calibration_and_quality_roles','test_thermal_landsat_surface_temperature_preset',
+    return ['test_insar_network_reference_and_disconnection','test_disk_non_nested_overlap_matches_inline_across_windows','test_satellite_affine_control_checkpoints_and_robustness','test_sensor_calibration_and_quality_roles','test_thermal_landsat_surface_temperature_preset',
             'test_remote_invalid_inputs_and_recovery','test_temporal_independent_quality_masks',
             'test_remote_to_spatial_and_figure_workflow','test_remote_medium_grid_and_undefined_ratio','test_remote_gdal_reference','test_rgb_actual_figure_workflow','test_windowed_scene_above_inline_budget','test_external_reference_comparison','test_new_research_figure_rendering','test_managed_disk_job_snapshot_and_cancellation',*[f'test_windowed_science_matches_inline_across_seams[{kind}]' for kind in ('sar_lee','sar_gamma_map','cloud_buffer','ndvi_change','surface_temperature_rte','fusion_gls','canopy_lai')],*[f'test_every_disk_method_matches_inline[{kind}]' for kind in sorted(WINDOWED_IDS-WINDOWED_CUBES)],*[f'test_disk_cube_matches_inline[{kind}]' for kind in sorted(WINDOWED_CUBES)],'test_disk_per_role_qa_and_calibration','test_stac_ndvi_streams_separate_bands_and_excludes_scl_clouds','test_stac_calibration_rejects_ambiguous_and_conflicting_metadata','test_public_fixture_transport_fallback_and_checksum','test_external_reference_streaming_across_windows','test_native_public_scene_crop_calibration','test_prosail_library_response_integration','test_joint_research_result_figures_render','test_joint_ambiguity_and_nonzero_anchor_disagreement','test_joint_prosail_adapter_retains_cab']
 
