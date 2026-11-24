@@ -1293,7 +1293,7 @@ export function reopenStudio(input:unknown,provenance:unknown,signal?:AbortSigna
 
 
 export interface LidarMethod {id:string;title:string;assumption:string}
-export interface LidarResult {operation:string;columns:string[];rows:(number|null)[][];row_count:number;csv:string;figure_csv:string;metrics:Record<string,unknown>;assumption:string;receipt:Record<string,unknown>}
+export interface LidarResult {mesh_obj?:string;raster_geotiff?:string|null;operation:string;columns:string[];rows:(number|null)[][];row_count:number;csv:string;figure_csv:string;metrics:Record<string,unknown>;assumption:string;receipt:Record<string,unknown>}
 export function getLidarCatalog(signal?:AbortSignal):Promise<{operations:LidarMethod[]}>{return request('/analysis/lidar/catalog',{signal});}
 export function runLidar(params:Record<string,string>,cloud:File,reference:File|null,signal?:AbortSignal):Promise<LidarResult>{
  const body=new FormData();body.append('cloud',cloud);if(reference)body.append('reference',reference);

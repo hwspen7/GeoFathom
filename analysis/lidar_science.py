@@ -16,9 +16,13 @@ from .lidar_uncertainty import correlated_change
 
 from .lidar_registration import progressive_morphology, coarse_pca_registration, generalized_icp
 
+from .lidar_reconstruction import poisson_grid, progressive_tin
+
 MAX_POINTS = 100_000
 MAX_BYTES = 16 * 1024 * 1024
 METHODS = {
+    "poisson_grid": ("Uniform-grid Poisson reconstruction", "Padded FFT Poisson approximation for closed star-shaped clouds; centroid-oriented normals."),
+    "progressive_tin": ("Progressive TIN ground densification", "Coarse-to-fine lower-envelope proposals constrained by supported TIN residuals."),
     "progressive_morphology": ("Progressive morphological ground filter", "Multiscale lower-envelope opening, progressive elevation tolerance and supported TIN interpolation."),
     "coarse_pca": ("Coarse PCA orientation initialization", "24 proper axis permutations; approximate global orientation for similar extent clouds."),
     "generalized_icp": ("Generalized ICP", "Alternating local covariance-weighted rigid Gauss–Newton alignment."),
@@ -207,12 +211,15 @@ def analyze(operation, p, reference=None, *, k=16, size=1., radius=2., max_edge=
             table,info=generalized_icp(p,reference,k,radius,trim_fraction,max_iterations,tolerance,threshold)
             columns += ["residual_m","mahalanobis_squared","inlier_flag"]
         metrics.update(info)
-    elif operation in ("ground_filter","progressive_morphology"):
-        table,info=(progressive_morphology if operation=="progressive_morphology" else ground_filter)(p,size,radius,threshold)
+    elif operation in ("ground_filter","progressive_morphology","progressive_tin"):
+        method={"ground_filter":ground_filter,"progressive_morphology":progressive_morphology,"progressive_tin":progressive_tin}[operation]
+        table,info=method(p,size,radius,threshold)
         columns += ["ground_z_m","height_m","ground_flag"]
         metrics.update(info)
-    elif operation in ("tin_mesh","alpha_boundary"):
-        table,info=tin_mesh(p,max_edge) if operation=="tin_mesh" else alpha_boundary(p,radius)
+    elif operation in ("tin_mesh","alpha_boundary","poisson_grid"):
+        if operation=="tin_mesh":table,info=tin_mesh(p,max_edge)
+        elif operation=="alpha_boundary":table,info=alpha_boundary(p,radius)
+        else:table,info=poisson_grid(p,k,size)
         columns=[f"{axis}{i}_m" for i in (1,2,3) for axis in ("x","y","z")]+["surface_area_m2"]
         if operation=="tin_mesh":columns+=["projected_area_m2"]
         metrics.update(info)
@@ -299,5 +306,9 @@ def analyze(operation, p, reference=None, *, k=16, size=1., radius=2., max_edge=
         metrics.update(valid_points=int(valid.sum()),unsupported_points=int((~valid).sum()),max_triangle_edge_m=max_edge,
                        median_height_m=float(np.median(height[valid])) if valid.any() else None)
     data, figure, rows = _serialize(columns,table)
-    return {"operation":operation,"columns":columns,"rows":rows,"row_count":len(table),"csv":data,"figure_csv":figure,
+    result = {"operation":operation,"columns":columns,"rows":rows,"row_count":len(table),"csv":data,"figure_csv":figure,
             "metrics":metrics,"assumption":METHODS[operation][1]}
+    if operation in ("tin_mesh","alpha_boundary","poisson_grid"):
+        from .lidar_exports import mesh_obj
+        result["mesh_obj"]=mesh_obj(table)
+    return result

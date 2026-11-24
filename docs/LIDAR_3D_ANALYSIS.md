@@ -32,9 +32,13 @@ The PMF operation uses bounded multiscale grayscale openings and a progressive s
 
 For real-scene validation, acquire a classified LAS/LAZ tile from USGS 3DEP (https://www.usgs.gov/the-national-map-data-delivery/gis-data-download). Run scripts/lidar_scene_reference.py with an explicit metre EPSG, projected bounding box and output JSON. The script reports confusion matrices, coverage and F1 against existing LAS labels; those labels are not independent survey truth. The operator must select the crop before evaluation. No real-scene result is asserted by the code alone.
 
+## Reconstruction and scientific exports
+
+Progressive TIN densification admits lower-envelope candidates using current supported TIN height residuals, not all classic adaptive angle criteria. Uniform-grid Poisson uses centroid-oriented local normals, trilinear splats, a padded FFT Poisson solve and marching cubes for approximately star-shaped closed surfaces. It is not adaptive octree or screened reconstruction. It reports boundary and nonmanifold edges. TIN, alpha and Poisson export indexed OBJ; common-cell change and canopy p95 export CRS-aware GeoTIFF with unobserved cells as NaN, bounded to two million cells.
+
 ## Verification
 
-Run python -m pytest tests/test_lidar_science.py tests/test_lidar_advanced.py tests/test_lidar_geometry.py tests/test_lidar_disk_uncertainty.py tests/test_lidar_registration.py -q. Tests cover analytical planes, degenerate neighborhoods, exact voxel counts, scaled LAS coordinates, partial overlap, directed distance, TIN interpolation, malformed input and HTTP contracts. These are synthetic reference tests, not real-flight validation.
+Run python -m pytest tests/test_lidar_science.py tests/test_lidar_advanced.py tests/test_lidar_geometry.py tests/test_lidar_disk_uncertainty.py tests/test_lidar_registration.py tests/test_lidar_reconstruction.py -q. Tests cover analytical planes, degenerate neighborhoods, exact voxel counts, scaled LAS coordinates, partial overlap, directed distance, TIN interpolation, malformed input and HTTP contracts. These are synthetic reference tests, not real-flight validation.
 
 ## Remaining research work
 
