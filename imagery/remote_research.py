@@ -121,3 +121,38 @@ def long_series(kind,stack,times,period):
     return out,{'acquisitions':n,'times':times,'minimum_observations':0 if kind=='series_count' else 2 if kind=='series_median' else 3 if kind=='series_slope' else 6,
                 'model':'Harmonic intercept, linear trend, sine and cosine with fixed period' if kind in {'series_amplitude','series_harmonic_rmse'} else kind,
                 'period':period if kind in {'series_amplitude','series_harmonic_rmse'} else None}
+
+
+def gamma_map(z,r,enl):
+    from analysis.science_raster import focal
+    mean=focal(z,r,'focal_mean');var=focal(z,r,'focal_sd')**2
+    out=z.copy();valid=np.isfinite(z)&(mean>0)
+    cv2=np.divide(var,mean**2,out=np.zeros(z.shape),where=valid)
+    cu2=1/enl;flat=valid&(cv2<=cu2);mid=valid&(cv2>cu2)&(cv2<2*cu2)
+    out[flat]=mean[flat]
+    alpha=(1+cu2)/(cv2[mid]-cu2);b=alpha-enl-1;mu=mean[mid];x=z[mid]
+    # Normalize the quadratic by alpha to avoid cancellation near the lower threshold.
+    q=b/alpha;d=enl/alpha
+    out[mid]=(q*mu+np.sqrt((q*mu)**2+4*d*mu*x))/2
+    return out,{'homogeneous_cells':int(flat.sum()),'adaptive_cells':int(mid.sum()),'edge_cells':int((valid&~flat&~mid).sum()),'enl':enl}
+
+def mad_distance(v):
+    a=np.stack([v[k+'_before'] for k in ('red','nir','swir')])
+    b=np.stack([v[k+'_after'] for k in ('red','nir','swir')])
+    valid=np.isfinite(a).all(axis=0)&np.isfinite(b).all(axis=0)
+    x=a[:,valid].T;y=b[:,valid].T;stable=v['calibration'][valid]==1
+    require(stable.sum()>=12,'MAD requires at least twelve stable complete observations.')
+    mx=x[stable].mean(axis=0);my=y[stable].mean(axis=0);xc=x[stable]-mx;yc=y[stable]-my
+    def whiten(z):
+        c=z.T@z/(len(z)-1);eig,vec=np.linalg.eigh(c)
+        require(eig[0]>eig[-1]*1e-9 and eig[-1]>0,'Stable spectral covariance is rank deficient.')
+        return (vec/np.sqrt(eig))@vec.T
+    wx=whiten(xc);wy=whiten(yc);cross=(xc@wx).T@(yc@wy)/(len(xc)-1)
+    u,rho,vt=np.linalg.svd(cross,full_matrices=False)
+    require(np.all(rho<1-1e-9),'MAD is undefined for perfectly correlated canonical components.')
+    left=wx@u;right=wy@vt.T
+    delta=(x-mx)@left-(y-my)@right
+    variance=2*(1-rho);out=np.full(valid.shape,np.nan)
+    out[valid]=np.sum(delta**2/variance,axis=1)
+    return out,{'canonical_correlations':rho.tolist(),'stable_cells':int(stable.sum()),'degrees_of_freedom':3,
+                'interpretation':'Sum of squared standardized canonical alteration components; calibration-mask conditional descriptive statistic.'}

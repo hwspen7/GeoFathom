@@ -189,7 +189,7 @@ def test_remote_invalid_inputs_and_recovery():
         response=client.post('/analysis/remote-sensing/run',json=bad);assert response.status_code==422,response.text
     response=client.post('/analysis/remote-sensing/run',json=good);assert response.status_code==200,response.text
     np.testing.assert_allclose(grid(response.json()),.5)
-    assert client.get('/analysis/remote-sensing/catalog').json()['operation_count']==len(BY_ID)==66
+    assert client.get('/analysis/remote-sensing/catalog').json()['operation_count']==len(BY_ID)==70
 
 def test_temporal_independent_quality_masks():
     # Cloud at one date does not erase the other valid acquisitions.
@@ -417,3 +417,33 @@ def test_windowed_scene_above_inline_budget(tmp_path):
     bad=tmp_path/'bad.tif'
     with pytest.raises(FigureInputError):process('ndvi',bindings,bad,quality=quality,tile=256)
     assert not bad.exists() and not list(tmp_path.glob('.remote-*'))
+
+
+@pytest.mark.parametrize('kind',['sar_gamma_map','sar_log_change','sar_gamma0_flat','mad_distance'])
+def test_sar_mad_reference(kind):
+    if kind=='sar_gamma_map':
+        a=np.array([[.5,.5,.5],[.5,1.6,.5],[.5,.5,.5]])
+        result=run(kind,{'power':a},{'radius':1,'enl':4});mu=a.mean();cv2=a.var()/mu**2
+        alpha=1.25/(cv2-.25);b=alpha-5
+        expected=(b*mu+np.sqrt((b*mu)**2+16*alpha*mu*a[1,1]))/(2*alpha)
+        assert .25<cv2<.5
+        assert grid(result)[1,1]==pytest.approx(expected)
+        np.testing.assert_allclose(grid(run(kind,{'power':constant(.5)})),.5)
+    elif kind=='sar_log_change':
+        a=constant(.1);b=constant(.2);a[0,0]=0
+        z=grid(run(kind,{'before':a,'after':b}));assert np.isnan(z[0,0])
+        assert z[1,1]==pytest.approx(10*np.log10(2))
+    elif kind=='sar_gamma0_flat':
+        a=constant(60);a[0,0]=90
+        z=grid(run(kind,{'sigma0':constant(.2),'incidence':a}));assert np.isnan(z[0,0]);assert z[1,1]==pytest.approx(.4)
+    else:
+        rng=np.random.default_rng(91);x=rng.normal(.4,.05,(100,3));y=x+rng.normal(0,.01,x.shape)
+        y[99]+=.2;cal=np.ones(100);cal[99]=0
+        a={r+'_before':x[:,i].reshape(10,10) for i,r in enumerate(('red','nir','swir'))}
+        a.update({r+'_after':y[:,i].reshape(10,10) for i,r in enumerate(('red','nir','swir'))});a['calibration']=cal.reshape(10,10)
+        r=run(kind,a);out=grid(r).ravel()
+        # Each of the three standardized stable canonical differences has
+        # sample variance one and mean zero by construction.
+        assert np.sum(out[:99])==pytest.approx(3*98,abs=1e-7)
+        assert out[99]>np.quantile(out[:99],.99)
+        assert all(0<=q<1 for q in r['receipt']['metrics']['canonical_correlations'])

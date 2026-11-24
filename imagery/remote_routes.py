@@ -15,7 +15,7 @@ from analysis.science_raster import require
 from analysis.science_routes import raster_product,raster_preview,csv_output
 from analysis.science_figures import figure_sources,csv_text
 from .remote_catalog import BY_ID,catalog,SERIES_IDS
-from .remote_research import surface_temperature,c_correction,ndvi_uncertainty,change_vectors,spatial_classifier,long_series
+from .remote_research import surface_temperature,c_correction,ndvi_uncertainty,change_vectors,spatial_classifier,long_series,gamma_map,mad_distance
 from .remote_products import rgb_product
 from .remote_kernels import ratio,nd,optical,quality_mask,transition,agreement,temporal,pca,classify,sen_slope,temporal_slope_se,lee_filter,unmix,stratified_accuracy
 
@@ -193,6 +193,12 @@ def execute(body):
     elif kind=='sar_linear':out=np.power(10,v['backscatter']/10)
     elif kind=='sar_ratio':out=ratio(v['cross'],v['co'])
     elif kind=='dualpol_rvi':out=4*ratio(v['cross'],v['co']+v['cross'])
+    elif kind=='sar_gamma_map':out,meta=gamma_map(v['power'],params['radius'],params['enl'])
+    elif kind=='sar_log_change':
+        a,b=v['before'],v['after'];out=10*(np.log10(np.where(b>0,b,np.nan))-np.log10(np.where(a>0,a,np.nan)))
+    elif kind=='sar_gamma0_flat':
+        a=v['incidence'];out=np.divide(v['sigma0'],np.cos(np.deg2rad(a)),out=np.full(a.shape,np.nan),where=a<89)
+    elif kind=='mad_distance':out,meta=mad_distance(v)
     elif kind=='sar_lee':out=lee_filter(v['power'],params['radius'],params['enl'])
     elif kind=='temporal_sen':out,meta=sen_slope(np.stack(list(v.values())),params)
     elif kind=='temporal_trend_se':out,meta=temporal_slope_se(np.stack(list(v.values())),params)
