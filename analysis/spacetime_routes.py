@@ -9,6 +9,8 @@ from imagery.remote_routes import Source,Binding,Quality,read_band
 from imagery.remote_kernels import quality_mask
 from imagery.remote_research import long_series
 from imagery.remote_temporal_models import seasonal_metrics,segmented_means
+from imagery.remote_inference import series_break
+from .spacetime_state import kalman,permutation_lag
 from analysis.science_raster import require
 from analysis.science_routes import raster_product,raster_preview
 from analysis.science_figures import csv_text
@@ -16,8 +18,25 @@ from .spacetime_models import trend,temporal,forecast,spatial_lag,variogram
 
 router=APIRouter(prefix='/analysis/spatiotemporal',tags=['spatiotemporal science'])
 # parameter = (default,minimum,maximum,integer)
-P={'minimum_observations':(6,3,64,True),'lag':(1,1,32,True),'threshold':(0,-1e50,1e50,False),'horizon':(30,.000001,1e7,False),'radius':(3,1,20,True),'period':(365,.000001,1e7,False),'fraction':(.5,.01,.99,False),'minimum_amplitude':(.01,0,1e50,False),'min_segment':(3,2,32,True),'penalty':(1,.000001,1e50,False)}
+P={'minimum_observations':(6,3,64,True),'lag':(1,1,32,True),'threshold':(0,-1e50,1e50,False),'horizon':(30,.000001,1e7,False),'radius':(3,1,20,True),'period':(365,.000001,1e7,False),'fraction':(.5,.01,.99,False),'minimum_amplitude':(.01,0,1e50,False),'min_segment':(3,2,32,True),'penalty':(1,.000001,1e50,False),'process_variance':(.01,1e-20,1e50,False),'observation_variance':(.1,1e-20,1e50,False),'initial_velocity_variance':(1,1e-20,1e50,False),'permutations':(199,19,999,True),'seed':(42,0,2147483647,True)}
+KALMAN_P=('minimum_observations','horizon','process_variance','observation_variance','initial_velocity_variance')
 METHODS={
+ 'kalman_level':('State space','Filtered terminal level',KALMAN_P),
+ 'kalman_velocity':('State space','Filtered terminal rate',KALMAN_P),
+ 'kalman_forecast':('State space','Irregular-time state-space forecast',KALMAN_P),
+ 'kalman_forecast_sd':('State space','Conditional state-space observation SD',KALMAN_P),
+ 'kalman_hindcast_rmse':('Prediction validation','Prequential state-space RMSE',KALMAN_P),
+ 'kalman_hindcast_skill':('Prediction validation','Prequential state-space skill',KALMAN_P),
+ 'lag_permutation':('Space-time inference','Lagged spatial exchangeability test',('permutations','seed')),
+ 'season_peak':('Phenology','Harmonic peak phase',('period','fraction','minimum_amplitude')),
+ 'season_start':('Phenology','Harmonic seasonal start phase',('period','fraction','minimum_amplitude')),
+ 'season_end':('Phenology','Harmonic seasonal end phase',('period','fraction','minimum_amplitude')),
+ 'season_duration':('Phenology','Harmonic seasonal duration',('period','fraction','minimum_amplitude')),
+ 'segmented_count':('Change detection','Penalized multiple change count',('min_segment','penalty')),
+ 'segmented_first_break':('Change detection','First penalized break time',('min_segment','penalty')),
+ 'series_break_time':('Change detection','Single mean-shift time',('min_segment',)),
+ 'series_break_jump':('Change detection','Single mean-shift magnitude',('min_segment',)),
+ 'series_break_strength':('Change detection','Single mean-shift explained variance',('min_segment',)),
  'coverage':('Cube quality','Valid acquisition fraction',()),
  'exceedance':('Temporal extremes','Observed exceedance fraction',('threshold','minimum_observations')),
  'lag_correlation':('Temporal dependence','Lagged temporal Pearson correlation',('lag','minimum_observations')),
@@ -93,17 +112,34 @@ def execute(body):
         out,meta=temporal(stack,t,kind,p);unit='index' if kind=='lag_correlation' else 'fraction'
     elif kind.startswith(('forecast_','hindcast_')):
         out,cols,rows,meta=forecast(stack,t,kind,p);unit='index' if kind=='hindcast_skill' else unit
-        if rows:plot('Expanding-window forecast versus persistence error','multi_line',cols,rows,x='time',columns=['trend_rmse','persistence_rmse'])
+        if len(rows)>=2:plot('Expanding-window forecast versus persistence error','multi_line',cols,rows,x='time',columns=['trend_rmse','persistence_rmse'])
+    elif kind.startswith('kalman_'):
+        out,cols,rows,meta=kalman(stack,t,p,kind)
+        if kind=='kalman_velocity':unit=unit+'/'+body.time_unit
+        if kind=='kalman_hindcast_skill':unit='index'
+        if len(rows)>=2:plot('Prequential model versus persistence RMSE','multi_line',cols,rows,x='time',columns=['model_rmse','persistence_rmse'])
+        if rows:plot('Normalized innovation diagnostic','basic_column',cols,rows,x='time',y='mean_normalized_innovation_squared')
+    elif kind=='lag_permutation':
+        cols,rows,meta=permutation_lag(stack,p)
+        if len(rows)>=2:plot('Raw and multiplicity-adjusted randomization probabilities','multi_line',cols,rows,x='acquisition',columns=['p_value','by_q'])
+    elif kind.startswith('season_'):
+        out,meta=seasonal_metrics(stack,body.times,{'period':p['period'],'min_amplitude':p['minimum_amplitude'],'season_fraction':p['fraction']},kind);unit=body.time_unit
+    elif kind.startswith('segmented_'):
+        out,meta=segmented_means(stack,body.times,p,kind);unit='count' if kind=='segmented_count' else body.time_unit
+    elif kind.startswith('series_break_'):
+        out,meta=series_break(stack,body.times,p['min_segment'],kind)
+        if kind=='series_break_time':unit=body.time_unit
+        if kind=='series_break_strength':unit='fraction'
     elif kind=='space_time_lag':
         out,cols,rows,meta=spatial_lag(stack,kind,p);unit='index'
-        if any(r[-1] is not None for r in rows):plot('Lagged neighborhood association by acquisition','basic_line',cols,[r for r in rows if r[-1] is not None],x='acquisition',y='lag_product')
+        if sum(r[-1] is not None for r in rows)>=2:plot('Lagged neighborhood association by acquisition','basic_line',cols,[r for r in rows if r[-1] is not None],x='acquisition',y='lag_product')
     elif kind=='space_time_variogram':
         cols,rows,meta=variogram(stack,t,first,p)
-        for direction in ('east','north','temporal'):
+        for direction in ('east','south','temporal'):
             sub=[r for r in rows if r[0]==direction]
             if sub:plot(direction+' directional space-time semivariance','basic_scatter' if direction=='temporal' else 'basic_scatter',cols,sub,x='time_lag' if direction=='temporal' else 'space_m',y='semivariance')
     else:
-        out,meta=long_series(kind,stack,t,p.get('period',365))
+        out,meta=long_series(kind,stack,body.times,p.get('period',365))
         if kind=='series_count':unit='count'
         if kind=='series_slope':unit=unit+'/'+body.time_unit
     # Independent cube diagnostic for every analysis: actual per-date coverage
@@ -115,6 +151,7 @@ def execute(body):
     if coverage:
         plot('Observed cube coverage by date','basic_column',['time','cells','median','q25','q75'],coverage,x='time',y='cells')
         plot('Observed spatial median and interquartile range','errorbar',['time','cells','median','q25','q75'],coverage,x='time',y='median',low='q25',high='q75')
+    if out is not None and not np.isfinite(out).any():require(False,'No valid output cells meet the model assumptions.')
     product=raster_product(kind,out,first.transform,first.crs,unit) if out is not None else None
     if product:
         figures.insert(0,{'title':METHODS[kind][1]+' map','recipe':'raster_continuous','bindings':{},'csv':None,'raster':True})

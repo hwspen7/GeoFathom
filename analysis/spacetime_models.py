@@ -42,7 +42,7 @@ def temporal(stack,t,kind,p):
 def forecast(stack,t,kind,p):
     """Fixed-design trend prediction evaluated on strictly future holdouts."""
     n,h,w=stack.shape
-    require(n*h*w<=1_500_000,'Forecast work budget exceeded.')
+    require(n*n*h*w<=12_000_000,'Forecast work budget exceeded.')
     horizon=p['horizon'];cut=p['minimum_observations'];require(cut+2<=n,'Need training observations and at least two future dates.')
     out=np.full((h,w),np.nan);rows=[];squared=np.zeros(n);baseline=np.zeros(n);counts=np.zeros(n,int)
     origin=t[0];scale=t[-1]-origin;u=(t-origin)/scale
@@ -50,12 +50,11 @@ def forecast(stack,t,kind,p):
     for r,c in zip(*np.where(np.isfinite(stack).sum(axis=0)>=cut)):
         y=stack[:,r,c];ok=np.isfinite(y)
         def fit(mask,x):
-            a=np.column_stack((np.ones(mask.sum()),u[mask]));z=y[mask]
-            b,_,rank,_=np.linalg.lstsq(a,z,rcond=None)
-            if rank!=2:return None
-            v=np.array([1.,x]);prediction=float(v@b)
-            residual=z-a@b
-            sd=float(np.sqrt(max(0,(residual@residual)/(len(z)-2)*(1+v@np.linalg.solve(a.T@a,v))))) if len(z)>2 else np.nan
+            tt=u[mask];z=y[mask];center=tt-tt.mean();den=center@center
+            if den<=1e-16:return None
+            slope=center@(z-z.mean())/den;prediction=float(z.mean()+slope*(x-tt.mean()))
+            residual=z-z.mean()-slope*center
+            sd=float(np.sqrt(max(0,(residual@residual)/(len(z)-2)*(1+1/len(z)+(x-tt.mean())**2/den))))
             return prediction,sd
         if kind in ('forecast_mean','forecast_sd'):
             result=fit(ok,future)
@@ -107,11 +106,11 @@ def variogram(stack,t,grid,p):
     for k in range(lag+1):
         for d in range(r+1):
             if k==d==0:continue
-            for axis in ('east','north') if d else ('temporal',):
-                if (axis=='east' and d>=w) or (axis=='north' and d>=h):continue
+            for axis in ('east','south') if d else ('temporal',):
+                if (axis=='east' and d>=w) or (axis=='south' and d>=h):continue
                 a=stack[:n-k];b=stack[k:]
                 if axis=='east':a,b=a[:,:,:w-d],b[:,:,d:]
-                elif axis=='north':a,b=a[:,:h-d,:],b[:,d:,:]
+                elif axis=='south':a,b=a[:,:h-d,:],b[:,d:,:]
                 ok=np.isfinite(a)&np.isfinite(b);delta=a[ok]-b[ok]
                 if len(delta):
                     distance=d*(grid.transform.a if axis=='east' else abs(grid.transform.e))
