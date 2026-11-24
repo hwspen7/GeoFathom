@@ -24,7 +24,7 @@ def run(kind,network=NETWORK,**kw):
 def metrics(r):return r['receipt']['metrics']
 
 def test_catalog_and_topology():
-    r=run('topology');assert len(METHODS)==18
+    r=run('topology');assert len(METHODS)==22
     assert r['receipt']['nodes']==6 and r['receipt']['directed_arcs']==6
     assert metrics(r)['weak_components']==2
     assert {row[0]:row[3] for row in r['rows']}=={'A':2,'B':1,'C':0,'D':1,'E':1,'F':1}
@@ -182,3 +182,22 @@ def test_correlated_failure_limit_and_seed():
     assert abs(corr['rows'][0][3]-.5)<.05
     assert abs(ind['rows'][0][3]-.75)<.05
     assert metrics(corr)['maximum_off_diagonal_latent_correlation']==pytest.approx(1)
+
+
+def test_facility_location_exact_and_capacity_conservation():
+    kw={'origins':['A','B'],'destinations':['B','C'],'demand':{'A':2,'B':4}}
+    p=run('p_median',**kw);assert metrics(p)['selected_facilities']==['B'] and metrics(p)['objective']==4
+    q=run('maximum_coverage',**kw,threshold=1);assert metrics(q)['selected_facilities']==['B'] and metrics(q)['covered_demand']==4
+    r=run('capacitated_allocation',**kw,supply={'B':3,'C':1},threshold=10)
+    m=metrics(r);assert m['served_demand']==pytest.approx(4) and m['unserved_demand']==pytest.approx(2)
+    assert m['total_transport_cost']==pytest.approx(3)
+    assert {row[1]:sum(q[2] for q in r['rows'] if q[1]==row[1]) for row in r['rows']}==pytest.approx({'B':3,'C':1})
+    with pytest.raises(NetworkError,match='No facility set'):
+        run('p_median',origins=['A','E'],destinations=['B','C'],demand={'A':1,'E':1})
+
+def test_enhanced_catchment_mass_conservation():
+    r=run('enhanced_two_step_fca',origins=['A','B','E'],destinations=['B','C'],demand={'A':2,'B':4,'E':1},supply={'B':12,'C':18},threshold=3,beta=.2)
+    ratio=12/(2*math.exp(-.4)+4)
+    assert r['rows'][0][1]==pytest.approx(ratio*math.exp(-.4))
+    assert r['rows'][1][1]==pytest.approx(ratio+4.5)
+    assert r['rows'][2][1]==0 and metrics(r)['allocated_supply']==pytest.approx(30)

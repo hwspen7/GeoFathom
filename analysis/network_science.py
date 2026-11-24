@@ -30,6 +30,10 @@ METHODS={
  "raster_impedance":("Raster-adjusted network impedance","Exponential nonnegative exposure penalty with explicit reference, scale and sensitivity; conditional scenario model."),
  "raster_least_cost":("Raster-adjusted least-cost path","Directed least-cost path with exposure-weighted native edge costs; model-dependent."),
  "correlated_reliability":("Spatially correlated network reliability","Gaussian copula edge failures, exponential spatial covariance and explicit marginal probabilities."),
+ "enhanced_two_step_fca":("Distance-decayed two-step catchment","Exponential decay in both demand competition and facility access within a cutoff."),
+ "p_median":("Exact demand-weighted p-median","Enumerate small candidate sets; minimize demand-weighted directed cost, all origins must be reachable."),
+ "maximum_coverage":("Exact maximum demand coverage","Enumerate small candidate sets; maximize covered demand within a cost threshold."),
+ "capacitated_allocation":("Capacity-constrained network allocation","Lexicographic LP maximizes served demand then minimizes total transport cost."),
  "hazard_exposure":("Raster edge exposure","Native raster sample mean, maximum and valid coverage along each edge.")
 }
 
@@ -394,6 +398,23 @@ def execute(body):
             metrics={"reachable_pairs":sum(r[-1] is not None for r in rows),"unreachable_pairs":sum(r[-1] is None for r in rows)}
             if metrics["reachable_pairs"]:
                 costs=sorted(r[-1] for r in rows if r[-1] is not None);plot("OD cumulative cost distribution","basic_line" if len(costs)>1 else "basic_column","cost","fraction",values=(["cost","fraction"],[[z,(i+1)/len(costs)] for i,z in enumerate(costs)]))
+        elif kind in ("p_median","maximum_coverage","capacitated_allocation"):
+            from .network_location import location,allocate
+            require(set(body.demand)==set(origins),"Provide positive demand for every origin.")
+            if kind=="capacitated_allocation":
+                require(set(body.supply)==set(destinations),"Provide positive capacity for every destination.")
+                cols=["origin","facility","allocated_demand","unit_cost","total_cost"]
+                rows,metrics=allocate(ds,origins,destinations,body.demand,body.supply,body.threshold)
+                served=defaultdict(float)
+                for s,t,q,_,_ in rows:served[s]+=q
+                features=[node_feature(g,s,served_demand=served[s],served_fraction=served[s]/body.demand[s]) for s in origins]
+                plot("Served and unserved demand","grouped_bar","origin","served",columns=["served","unserved"],values=(["origin","served","unserved"],[[s,served[s],max(0.,body.demand[s]-served[s])] for s in origins]))
+            else:
+                cols=["origin","facility","cost","demand","covered"]
+                rows,metrics=location(ds,origins,destinations,body.demand,body.threshold,body.facility_count,kind)
+                features=[node_feature(g,s,facility=t,cost=z,demand=q,covered=covered,color="#31876d" if covered else "#b94f46") for s,t,z,q,covered in rows]
+                features.extend(node_feature(g,t,selected_facility=True,color="#215fa5",display_radius=9) for t in metrics["selected_facilities"])
+                plot("Facility coverage by origin","basic_column","origin","covered_demand",values=(["origin","covered_demand"],[[s,q if covered else 0] for s,_,_,q,covered in rows]))
         elif kind=="nearest_facility":
             cols=["origin","facility","cost"]
             for s in origins:
@@ -403,20 +424,25 @@ def execute(body):
         else:
             require(set(body.supply)==set(destinations),"Provide explicit positive supply for every facility.")
             supply=body.supply
-            if kind=="two_step_fca":
+            if kind in ("two_step_fca","enhanced_two_step_fca"):
                 require(set(body.demand)==set(origins),"Provide explicit positive demand for every origin.")
+                def weight(s,t):
+                    z=ds[s].get(t,math.inf)
+                    return (math.exp(-body.beta*z) if kind=="enhanced_two_step_fca" else 1.) if z<=body.threshold else 0.
+                weights={(s,t):weight(s,t) for s in origins for t in destinations}
                 ratios={}
                 for t in destinations:
-                    demand=sum(body.demand[s] for s in origins if ds[s].get(t,math.inf)<=body.threshold)
+                    demand=sum(body.demand[s]*weights[s,t] for s in origins)
                     ratios[t]=supply[t]/demand if demand else 0.
-                score={s:sum(ratios[t] for t in destinations if ds[s].get(t,math.inf)<=body.threshold) for s in origins}
+                    require(math.isfinite(ratios[t]),"Demand decay underflow; reduce beta or change cost units.")
+                score={s:sum(ratios[t]*weights[s,t] for t in destinations) for s in origins}
                 metrics["unserved_supply"]=sum(supply[t] for t in destinations if ratios[t]==0)
                 metrics["allocated_supply"]=sum(body.demand[s]*score[s] for s in origins)
             else:score={s:sum(supply[t]*math.exp(-body.beta*ds[s][t]) for t in destinations if t in ds[s]) for s in origins}
             cols=["origin","accessibility"];rows=[[s,score[s]] for s in origins];features=[node_feature(g,s,accessibility=score[s]) for s in origins]
             plot("Origin accessibility","basic_column","origin","accessibility")
     # Display styling is separate from raw values and never changes numerical products.
-    field={'harmonic_centrality':'score','betweenness':'score','gravity_access':'accessibility','two_step_fca':'accessibility','edge_criticality':'lost_fraction','hazard_exposure':'mean','raster_impedance':'multiplier','raster_least_cost':'multiplier'}.get(kind)
+    field={'harmonic_centrality':'score','betweenness':'score','gravity_access':'accessibility','two_step_fca':'accessibility','enhanced_two_step_fca':'accessibility','capacitated_allocation':'served_fraction','edge_criticality':'lost_fraction','hazard_exposure':'mean','raster_impedance':'multiplier','raster_least_cost':'multiplier'}.get(kind)
     if field:
         values=[f['properties'][field] for f in features if f['properties'].get(field) is not None]
         if values:

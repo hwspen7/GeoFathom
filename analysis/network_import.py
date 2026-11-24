@@ -27,7 +27,7 @@ def build_osm(data,speeds):
         elif kind=='way':
             key=oid(item.get('id'));require(key not in seen,'Duplicate OSM way.');seen.add(key)
             ways.append(item)
-    features=[];excluded=0;restrictions=sum(isinstance(e,dict) and e.get('type')=='relation' and (e.get('tags') or {}).get('type')=='restriction' for e in elements)
+    features=[];excluded=0;restrictions=sum(isinstance(e,dict) and e.get('type')=='relation' and isinstance(e.get('tags'),dict) and e['tags'].get('type')=='restriction' for e in elements)
     for way in sorted(ways,key=lambda x:x['id']):
         tags=way.get('tags') or {};require(isinstance(tags,dict),'Invalid OSM way tags.')
         highway=tags.get('highway')

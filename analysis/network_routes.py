@@ -31,6 +31,7 @@ class NetworkInput(BaseModel):
     failure_probability:dict[str,Annotated[float,Field(ge=0,le=1)]]=Field(default_factory=dict,max_length=10000)
     trials:int=Field(default=200,ge=20,le=2000)
     seed:int=Field(default=42,ge=0,le=2147483647)
+    facility_count:int=Field(default=1,ge=1,le=24)
     secondary_cost_field:str=Field(default='length_m',min_length=1,max_length=80)
     secondary_cost_unit:str=Field(default='m',min_length=1,max_length=80)
     spatial_range_m:Annotated[float,Field(ge=1,le=1e7)]=1000

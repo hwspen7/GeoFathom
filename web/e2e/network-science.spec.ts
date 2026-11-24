@@ -6,7 +6,7 @@ test('network workbench computes a directed route, exports and previews it',asyn
  await page.goto('/');await activateWorkspaceModule(page,'Network Analysis');
  await page.getByRole('button',{name:'Open Network Analysis'}).click();
  const d=page.getByRole('dialog',{name:'Network science workbench'});
- await expect(d).toContainText('18 scientific methods');
+ await expect(d).toContainText('22 scientific methods');
  const edge=(id:string,source:string,target:string,a:number,b:number,minutes:number)=>({type:'Feature',geometry:{type:'LineString',coordinates:[[a,0],[b,0]]},properties:{edge_id:id,source,target,direction:'forward',minutes}});
  const graph={type:'FeatureCollection',features:[edge('ab','A','B',0,.001,2),edge('bc','B','C',.001,.002,3)]};
  await d.getByLabel('Network GeoJSON').setInputFiles({name:'network.geojson',mimeType:'application/geo+json',buffer:Buffer.from(JSON.stringify(graph))});
