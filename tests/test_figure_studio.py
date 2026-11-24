@@ -424,3 +424,25 @@ def test_multiband_physical_values_and_mixed_units_table():
     assert report['table']['columns'][0]['missing']==1
     assert report['rasters'][1]['band_count']==2
     with pytest.raises(FigureInputError,match='band'):read_grids([RasterInput(name='Bad',data=raw,band=3)])
+
+
+def test_geostatistics_covariance_and_kriging_oracles():
+    from terrain.studio_geostatistics import semivariance,fit_variogram,ordinary_kriging
+    h=np.linspace(5,100,20);v=semivariance(h,'exponential',.2,3.,30.)
+    fit=fit_variogram(h,v,np.ones_like(h),'exponential')
+    assert fit['scale_m']==pytest.approx(30,rel=.07)
+    assert fit['weighted_rmse']<.02
+    points=np.array([[0.,0.],[1.,0.],[0.,1.],[1.,1.]])
+    spec={'model':'exponential','nugget':0.,'partial_sill':2.,'scale_m':1.}
+    estimate,var=ordinary_kriging(points,np.array([1.,2.,3.,4.]),[.5,.5],spec)
+    assert estimate==pytest.approx(2.5) and var>0
+    estimate,var=ordinary_kriging(points,np.array([1.,2.,3.,4.]),[0.,0.],spec)
+    assert estimate==1 and var==0
+
+
+def test_variogram_fit_and_conditional_kriging_views(raster_fixture):
+    body=domain_input('spatial_variogram',raster_fixture)
+    _,meta,table=render(body.model_copy(update={'variogram_model':'exponential'}))
+    assert meta['variogram_fit']['partial_sill']>=0 and table[0][-1]=='fitted_semivariance'
+    _,meta,table=render(body.model_copy(update={'variogram_model':'exponential','variogram_view':'kriging_validation','kriging_neighbors':8}))
+    assert meta['validation_count']==168 and meta['rmse']>=0 and len(table)==169

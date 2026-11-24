@@ -405,3 +405,23 @@ def test_global_design_rejects_invalid_bounds_and_constant_response(experiment_s
     base,_,_=experiment_source
     with pytest.raises(ValueError,match='distinct'):
         GlobalSensitivity(base=base,metric='cut_m3',factors=[{'name':'reference','minimum':90,'maximum':95}]*2)
+
+
+def test_spatial_gaussian_noise_variance_and_neighbor_covariance():
+    from terrain.studio_geostatistics import correlated_noise
+    rng=np.random.default_rng(12)
+    fields=np.array([correlated_noise(rng,(20,30),10,10,20,2) for _ in range(120)])
+    assert fields.std()==pytest.approx(2,rel=.08)
+    a=fields[:,:,:-1].ravel();b=fields[:,:,1:].ravel()
+    assert np.corrcoef(a,b)[0,1]==pytest.approx(np.exp(-100/800),abs=.04)
+    first=correlated_noise(np.random.default_rng(2),(5,6),10,10,20,1)
+    second=correlated_noise(np.random.default_rng(2),(5,6),10,10,20,1)
+    assert np.array_equal(first,second)
+
+
+def test_spatial_uncertainty_production_engine(experiment_source):
+    base,_,_=experiment_source
+    result=run({**base,'operation':'elevation'},mode='uncertainty',samples=20,seed=5,error_model='gaussian_spatial',correlation_length_m=20)
+    assert result['uncertainty']['model']=='gaussian_spatial'
+    assert result['uncertainty']['correlation_length_m']==20
+    assert result['uncertainty']['common_cells']==100

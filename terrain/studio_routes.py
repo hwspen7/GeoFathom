@@ -47,6 +47,9 @@ class StudioInput(BaseModel):
     height_mm:float=Field(default=125,ge=40,le=250)
     dpi:Literal[120,300,600]=120
     format:Literal['png','pdf','svg','tiff']='png'
+    variogram_model:Literal['none','exponential','gaussian','spherical']='none'
+    variogram_view:Literal['fit','kriging_validation']='fit'
+    kriging_neighbors:int=Field(default=24,ge=3,le=48)
     export_grid:bool=False
     spatial_inference:Literal['statistic','p','q','cluster']='statistic'
     permutations:int=Field(default=199,ge=99,le=9999)

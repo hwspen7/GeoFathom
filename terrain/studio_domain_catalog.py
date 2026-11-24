@@ -157,7 +157,7 @@ OPTIONS = {
 MIN_RASTERS = {**{r[0]:2 for r in RASTER if r[0].startswith('ensemble_') or r[0].startswith('land_transition') or r[0] in ('land_gain_loss','spatial_relative_change','spatial_absolute_change','spatial_z_change','spatial_rmse_tiles','spatial_mae_tiles')},
  **{r[0]:2 for r in RASTER if r[0].startswith('spectral_')},'spectral_rgb':3,'spectral_evi':3,'spectral_angle':2,'spatial_z_change':3}
 NOTES={
- 'spatial_variogram':'Directional cardinal grid lags in projected metres; empirical semivariance only, no fitted variogram or kriging.',
+ 'spatial_variogram':'Directional cardinal grid lags in projected metres; optional isotropic covariance fit and conditional ordinary-kriging leave-one-out diagnostics.',
  'spatial_covariogram':'Directional cardinal grid lags with full-population mean centering; descriptive covariance.',
  'spatial_correlogram':'Pairwise Pearson correlation by cardinal grid lag; no independence claim.',
  'time_crosscorr':'Positive lag pairs the first series at t with the second at t+lag; regular complete sampling required.',

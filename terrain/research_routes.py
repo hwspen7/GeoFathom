@@ -29,7 +29,8 @@ class Experiment(BaseModel):
     sigma_m: float = Field(default=1, gt=0, le=1000)
     samples: int = Field(default=100, ge=20, le=500)
     seed: int = Field(default=42, ge=0, le=4294967295)
-    error_model: Literal['independent','common_offset'] = 'independent'
+    error_model: Literal['independent','common_offset','gaussian_spatial'] = 'independent'
+    correlation_length_m: float = Field(default=100, gt=0, le=100000)
     coverage: float = Field(default=.95, ge=.5, le=.99)
     expected_source_sha256: str | None = Field(default=None, pattern=r'^[0-9a-f]{64}$')
 

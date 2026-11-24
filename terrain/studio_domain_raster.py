@@ -211,6 +211,31 @@ def render_raster_domain(kind,req,fig,ax,grids,parameter,meta,cmap,grid_sink=Non
                 selected=[r for r in rows if r[0]==direction]
                 if selected:ax.plot([r[1] for r in selected],[r[3] for r in selected],marker='o',label=direction)
             ax.legend(frameon=False);ax.set(xlabel='Lag (m)',ylabel={'spatial_variogram':'Semivariance','spatial_covariogram':'Covariance','spatial_correlogram':'Correlation'}[kind]);derived.extend([['direction','lag_m','pairs','statistic'],*map(list,rows)])
+            if kind=='spatial_variogram' and req.variogram_model!='none':
+                from .studio_geostatistics import fit_variogram,semivariance,leave_one_out
+                fit=fit_variogram([r[1] for r in rows],[r[3] for r in rows],[r[2] for r in rows],req.variogram_model)
+                meta['variogram_fit']=fit
+                meta['method_note']='Pooled isotropic covariance fit to cardinal directional empirical lags, weighted by pair counts. Assumes stationary residuals; inspect directional differences before inference.'
+                if req.variogram_view=='fit':
+                    h=np.linspace(0,max(r[1] for r in rows),200)
+                    ax.plot(h,semivariance(h,fit['model'],fit['nugget'],fit['partial_sill'],fit['scale_m']),color='#333333',linestyle='--',label='Fitted '+fit['model'])
+                    ax.legend(frameon=False)
+                    derived[0].append('fitted_semivariance')
+                    for row in derived[1:]:row.append(float(semivariance(row[1],fit['model'],fit['nugget'],fit['partial_sill'],fit['scale_m'])))
+                else:
+                    indices=np.flatnonzero(np.isfinite(z));stride=max(1,int(np.ceil(len(indices)/240)));indices=indices[::stride]
+                    yy,xx=np.unravel_index(indices,z.shape);east,north=g.axes
+                    points=np.column_stack((east[xx],north[yy]));v=z[yy,xx]
+                    pred,var=leave_one_out(points,v,fit,req.kriging_neighbors)
+                    error=pred-v
+                    ax.clear();ax.scatter(v,pred,c=np.sqrt(var),cmap=cmap,s=18,alpha=.8)
+                    fig.colorbar(ax.collections[0],ax=ax,label='Conditional kriging SD')
+                    lo=min(v.min(),pred.min());hi=max(v.max(),pred.max());ax.plot([lo,hi],[lo,hi],'--',color='#555555')
+                    ax.set(xlabel='Observed ('+unit+')',ylabel='Leave-one-out prediction ('+unit+')')
+                    meta.update(validation_count=int(len(v)),validation_stride=stride,rmse=float(np.sqrt(np.mean(error**2))),mae=float(np.mean(np.abs(error))),bias=float(error.mean()),
+                        validation='Conditional leave-one-out on systematic sample; covariance parameters fitted to the full raster, not independent validation.')
+                    ax.text(.02,.98,f"RMSE={meta['rmse']:.3g}\\nMAE={meta['mae']:.3g}",transform=ax.transAxes,va='top',fontsize=8)
+                    save(['easting','northing','observed','prediction','variance','error'],points[:,0],points[:,1],v,pred,var,error)
         else:
             mean,sd,span,rms,count=local_moments(z)
             if kind=='spatial_local_mean':show(mean,unit,output_unit=g.unit)

@@ -361,11 +361,20 @@ def _uncertainty(body, path, resolve, z, valid, affine, crs, baseline, result, c
     metrics = []
     with rasterio.open(path) as source:
         tags = source.tags()
+    if body.error_model=='gaussian_spatial':
+        if not crs.is_projected or crs.linear_units_factor[1]!=1 or affine.b!=0 or affine.d!=0:
+            raise RasterError('Spatial Gaussian error requires a north-up projected metre grid.')
+        from .studio_geostatistics import correlated_noise,gaussian_kernel
+        ky=gaussian_kernel(body.correlation_length_m,abs(affine.e));kx=gaussian_kernel(body.correlation_length_m,abs(affine.a))
+        if body.samples*(z.shape[0]+2*len(ky)-2)*(z.shape[1]+2*len(kx)-2)>60_000_000:
+            raise RasterError('Spatial correlation ensemble exceeds padded FFT work budget.')
     with tempfile.TemporaryDirectory(prefix='geofathom-research-') as directory:
         temporary = Path(directory) / 'perturbed.tif'
         for index in range(body.samples):
             checkpoint(cancel)
-            noise = rng.normal(0, body.sigma_m, z.shape if body.error_model == 'independent' else 1)
+            if body.error_model=='gaussian_spatial':
+                noise=correlated_noise(rng,z.shape,abs(affine.a),abs(affine.e),body.correlation_length_m,body.sigma_m)
+            else:noise = rng.normal(0, body.sigma_m, z.shape if body.error_model == 'independent' else 1)
             perturbed = z + noise
             with rasterio.open(temporary, 'w', driver='GTiff', height=z.shape[0], width=z.shape[1],
                 count=1, dtype='float64', crs=crs, transform=affine, nodata=float('nan')) as dst:
@@ -395,6 +404,8 @@ def _uncertainty(body, path, resolve, z, valid, affine, crs, baseline, result, c
         'realizations': realizations,
         'warning': 'Assumed Gaussian vertical errors, not measured accuracy or a confidence interval of the mean. '
             'Pointwise intervals are not simultaneous spatial bounds. Split-half endpoint differences diagnose sampling instability; convergence is not certified.'}
+    if body.error_model=='gaussian_spatial':
+        result['uncertainty'].update(correlation_length_m=body.correlation_length_m, covariance='Discrete L2-normalized separable Gaussian convolution of independent normal noise; approximates exp(-distance²/(2*length²)); padded valid interior.')
     if arrays:
         stack = np.stack(arrays)
         common = np.isfinite(stack).all(axis=0)

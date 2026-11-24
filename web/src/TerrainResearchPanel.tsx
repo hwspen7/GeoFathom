@@ -43,7 +43,8 @@ export default function TerrainResearchPanel(p:{projectId:string|null;record:Per
  const [secondParameter,setSecondParameter]=useState(''),[secondSweep,setSecondSweep]=useState('');
  const [sweep,setSweep]=useState(''),[sigma,setSigma]=useState('1'),[samples,setSamples]=useState('100');
  const [seed,setSeed]=useState('42'),[coverage,setCoverage]=useState('0.95');
- const [errorModel,setErrorModel]=useState<'independent'|'common_offset'>('independent');
+ const [errorModel,setErrorModel]=useState<'independent'|'common_offset'|'gaussian_spatial'>('independent');
+ const [correlationLength,setCorrelationLength]=useState('100');
  const [result,setResult]=useState<ResearchResult|null>(null),[error,setError]=useState(''),[cacheWarning,setCacheWarning]=useState(''),[busy,setBusy]=useState(false);
  const [metric,setMetric]=useState(''),[productIndex,setProductIndex]=useState(0),[wipe,setWipe]=useState(50);
  const [galleryData,setGalleryData]=useState<PlotData|null>(null);
@@ -84,7 +85,7 @@ export default function TerrainResearchPanel(p:{projectId:string|null;record:Per
   try{
    input={title,baseline_name:'Baseline',base,mode,scenarios:mode==='comparison'?scenarios:[],
     ...(mode==='sensitivity'?{parameter:parameterChoice,values:parseSweep(sweep),...(secondaryChoice?{secondary_parameter:secondaryChoice,secondary_values:parseSweep(secondSweep)}:{})}:{}),
-    sigma_m:Number(sigma),samples:Number(samples),seed:Number(seed),error_model:errorModel,coverage:Number(coverage),expected_source_sha256:p.record?.source.sha256};
+    sigma_m:Number(sigma),samples:Number(samples),seed:Number(seed),error_model:errorModel,correlation_length_m:Number(correlationLength),coverage:Number(coverage),expected_source_sha256:p.record?.source.sha256};
    if(mode==='sensitivity'&&secondaryChoice&&((input.values?.length??0)>4||(input.secondary_values?.length??0)>4))throw new Error('A two-factor grid accepts two to four values on each axis.');
    if(mode==='comparison'&&scenarios.some(s=>Object.keys(s.parameters).length===0))throw new Error('Apply at least one parameter to each alternative scenario.');
   }catch(e){setError((e as Error).message);return;}
@@ -136,7 +137,7 @@ export default function TerrainResearchPanel(p:{projectId:string|null;record:Per
   {mode==='sensitivity'&&<><label>Sweep parameter<select aria-label="Sweep parameter" value={parameterChoice} onChange={e=>setParameter(e.target.value)}>{parameters.map(key=><option key={key} value={key}>{label(key)}</option>)}</select></label><label>Sweep values<input aria-label="Sweep values" value={sweep} onChange={e=>setSweep(e.target.value)} placeholder="e.g. 95, 100, 105"/></label><label>Second sweep parameter<select aria-label="Second sweep parameter" value={secondaryChoice} disabled={parameters.length<2} onChange={e=>setSecondParameter(e.target.value)}><option value="">None — one-factor response</option>{parameters.filter(k=>k!==parameterChoice).map(k=><option key={k} value={k}>{label(k)}</option>)}</select></label>{secondaryChoice&&<label>Second sweep values<input aria-label="Second sweep values" value={secondSweep} onChange={e=>setSecondSweep(e.target.value)} placeholder="e.g. 0, 0.01, 0.02"/></label>}<p>{secondaryChoice?'Two to four values per axis. Every combination runs the production engine.':'Enter two to eight values. Response slopes use the recorded baseline.'}</p></>}
   {mode==='uncertainty'&&<>
    <label>DEM vertical standard deviation (m)<input aria-label="DEM vertical standard deviation (m)" type="number" min="0.001" max="1000" step="any" value={sigma} onChange={e=>setSigma(e.target.value)}/></label>
-   <label>Spatial error model<select aria-label="Spatial error model" value={errorModel} onChange={e=>setErrorModel(e.target.value as typeof errorModel)}><option value="independent">Independent cell errors</option><option value="common_offset">Common vertical offset</option></select></label>
+   <label>Spatial error model<select aria-label="Spatial error model" value={errorModel} onChange={e=>setErrorModel(e.target.value as typeof errorModel)}><option value="independent">Independent cell errors</option><option value="common_offset">Common vertical offset</option><option value="gaussian_spatial">Spatial Gaussian correlation</option></select></label>{errorModel==='gaussian_spatial'&&<label>Correlation length (m)<input aria-label="Spatial correlation length" type="number" min="1" step="any" value={correlationLength} onChange={e=>setCorrelationLength(e.target.value)}/></label>}
    <label>Realizations<input aria-label="Realizations" type="number" min="20" max="500" value={samples} onChange={e=>setSamples(e.target.value)}/></label><label>Random seed<input aria-label="Random seed" type="number" min="0" max="4294967295" value={seed} onChange={e=>setSeed(e.target.value)}/></label>
    <label>Coverage probability<select aria-label="Coverage probability" value={coverage} onChange={e=>setCoverage(e.target.value)}><option value="0.9">90%</option><option value="0.95">95%</option><option value="0.99">99%</option></select></label><p>Gaussian error assumptions determine these intervals. Sampling stability is reported.</p>
   </>}

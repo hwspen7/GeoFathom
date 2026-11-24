@@ -1163,7 +1163,7 @@ export interface ResearchExperiment {
  base:Record<string,unknown> & {image_id:string;geometry:GeoJSON.Geometry;operation:string};
  scenarios:Array<{name:string;parameters:Record<string,unknown>}>;
  parameter?:string;values?:number[];secondary_parameter?:string;secondary_values?:number[];sigma_m?:number;samples?:number;seed?:number;
- error_model?:'independent'|'common_offset';coverage?:number;expected_source_sha256?:string;
+ error_model?:'independent'|'common_offset'|'gaussian_spatial';correlation_length_m?:number;coverage?:number;expected_source_sha256?:string;
 }
 export interface ResearchProduct {name:string;role?:string;kind?:string;raster:TerrainRaster;
  statistics?:Record<string,unknown>;plot_data?:PlotData|null}
@@ -1219,7 +1219,7 @@ export interface StudioRecipe {id:string;title:string;family:string;source:'tabl
 export interface StudioRaster {name:string;data:string;unit:string;band?:number}
 export interface StudioInput {recipe:string;csv:string;rasters:StudioRaster[];x:string;y:string;z:string;group:string;low:string;high:string;columns:string[];
  title:string;x_label:string;y_label:string;parameter:number|null;maximize_x:boolean;maximize_y:boolean;palette:'mono'|'color'|'earth';font:'sans'|'serif';font_size:number;grid:boolean;width_mm:number;height_mm:number;dpi:120|300|600;format:'png'|'pdf'|'svg'|'tiff';
- export_grid?:boolean;spatial_inference?:'statistic'|'p'|'q'|'cluster';permutations?:number;random_seed?:number;alpha?:number;response_style?:'heatmap'|'filled'|'contour'|'surface';contour_levels?:number;show_values?:boolean;show_points?:boolean;optimum?:'none'|'min'|'max';profile_style?:'series'|'overlay'|'delta'|'bands';map_style?:'continuous'|'diverging'|'categorical';map_columns?:number|null;map_common_mask?:boolean;map_min?:number|null;map_max?:number|null;class_breaks?:number[];line_width?:number;legend_position?:'best'|'upper left'|'upper right'|'lower left'|'lower right'|'center left'|'center right'}
+ variogram_model?:'none'|'exponential'|'gaussian'|'spherical';variogram_view?:'fit'|'kriging_validation';kriging_neighbors?:number;export_grid?:boolean;spatial_inference?:'statistic'|'p'|'q'|'cluster';permutations?:number;random_seed?:number;alpha?:number;response_style?:'heatmap'|'filled'|'contour'|'surface';contour_levels?:number;show_values?:boolean;show_points?:boolean;optimum?:'none'|'min'|'max';profile_style?:'series'|'overlay'|'delta'|'bands';map_style?:'continuous'|'diverging'|'categorical';map_columns?:number|null;map_common_mask?:boolean;map_min?:number|null;map_max?:number|null;class_breaks?:number[];line_width?:number;legend_position?:'best'|'upper left'|'upper right'|'lower left'|'lower right'|'center left'|'center right'}
 export interface StudioOutput {figure:string;media_type:string;metadata:Record<string,unknown>;table:Array<Array<string|number|null>>;derived_rasters?:Array<StudioRaster&{sha256:string}>}
 export function getStudioCatalog(signal?:AbortSignal):Promise<{legacy_recipe_count:number;additional_recipe_count:number;basic_recipe_count?:number;professional_recipe_count?:number;recipes:StudioRecipe[]}>{return request('/terrain/studio/catalog',{signal});}
 export function renderStudio(body:StudioInput,signal?:AbortSignal):Promise<StudioOutput>{return request('/terrain/studio/render',{method:'POST',signal,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});}
