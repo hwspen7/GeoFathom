@@ -189,7 +189,7 @@ def test_remote_invalid_inputs_and_recovery():
         response=client.post('/analysis/remote-sensing/run',json=bad);assert response.status_code==422,response.text
     response=client.post('/analysis/remote-sensing/run',json=good);assert response.status_code==200,response.text
     np.testing.assert_allclose(grid(response.json()),.5)
-    assert client.get('/analysis/remote-sensing/catalog').json()['operation_count']==len(BY_ID)==147
+    assert client.get('/analysis/remote-sensing/catalog').json()['operation_count']==len(BY_ID)==149
 
 def test_temporal_independent_quality_masks():
     # Cloud at one date does not erase the other valid acquisitions.
@@ -1243,3 +1243,36 @@ def test_insar_network_reference_and_disconnection(tmp_path):
     assert receipt['output_sha256']==hashlib.sha256(out.read_bytes()).hexdigest()
     with pytest.raises(FigureInputError):
         invert(phase[:2],times,[[0,1],[0,1]],[.2,.3],.056,-1)
+
+
+@pytest.mark.parametrize('kind',['atmospheric_reflectance_sd','atmospheric_reflectance_condition'])
+def test_atmospheric_jacobian_reference(kind):
+    v={'toa':constant(.3),'path':constant(.1),'transmission':constant(.8),'spherical_albedo':constant(.2)}
+    # Numerical central differences of the independent forward inversion.
+    x=np.array([.3,.1,.8,.2]);delta=1e-6
+    def f(a):
+        return (a[0]-a[1])/(a[2]+a[3]*(a[0]-a[1]))
+    jac=np.array([(f(x+e)-f(x-e))/(2*delta) for e in np.eye(4)*delta])
+    if kind.endswith('_sd'):
+        sd=np.array([.01,.02,.03,.04])
+        v.update({k+'_sd':constant(z) for k,z in zip(v.copy(),sd)})
+        c=np.eye(4);c[0,1]=c[1,0]=.5
+        expected=np.sqrt((jac*sd)@c@(jac*sd))
+        r=run(kind,v,{'rho01':.5})
+        with pytest.raises(FigureInputError):
+            run(kind,v,{'rho01':.9,'rho02':.9,'rho12':-.9})
+    else:
+        r=run(kind,v);expected=np.linalg.norm(jac)
+    np.testing.assert_allclose(grid(r),expected,rtol=1e-8)
+
+def test_exact_spectral_response_and_no_extrapolation():
+    from imagery.satellite_radiometry import spectral_response
+    # On normalized interval u in [0,1], spectrum=u, response=u,
+    # solar=u: integral u^3 / integral u^2 = 3/4.
+    r=spectral_response([400,500],[[0,1],[.4,.4]],[400,450,500],[0,.5,1],solar=[0,1])
+    np.testing.assert_allclose(r['band_values'],[.75,.4],atol=1e-12)
+    assert r['effective_wavelength']==pytest.approx(475.)
+    r=spectral_response([400,500],[0,1],[400,500],[1,1])
+    assert r['band_values']==pytest.approx([.5])
+    with pytest.raises(FigureInputError):
+        spectral_response([410,500],[0,1],[400,500],[1,1])

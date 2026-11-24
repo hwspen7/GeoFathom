@@ -8,11 +8,13 @@ from .remote_physics import thermal_uncertainty
 from .remote_inference import cloud_buffer,series_break
 from .remote_temporal_models import seasonal_metrics,segmented_means
 from .remote_hyperspectral import continuum_features
+from .satellite_radiometry import ATMOS_IDS,atmospheric_error
 from .remote_quality_composite import QUALITY_IDS,quality_composite
 from .remote_satellite import gamma_change, SAR_GAMMA_IDS
 from .remote_fusion import fusion,canopy
 
 def compute(kind,v,p,times=()):
+    if kind in ATMOS_IDS:return atmospheric_error(v,p,kind)[0]
     if kind in QUALITY_IDS:return quality_composite(v,p,kind)[0]
     if kind in SAR_GAMMA_IDS:return gamma_change(v,p,kind)[0]
     if kind in SERIES_IDS:
