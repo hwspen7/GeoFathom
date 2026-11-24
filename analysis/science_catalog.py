@@ -67,6 +67,8 @@ m('sample_stratified','Sampling','Stratified categorical sample','raster',1,1,(N
 m('sample_spatial_balanced','Sampling','Spatially balanced cell sample','raster',1,1,(N,S),'table','Recursive longest-axis spatial partition with one random cell per partition.'),
 m('sample_polygon','Sampling','Uniform polygon point sample','vector',1,1,(N,S),'vector','Uniform projected area; rejection sampling with bounded attempts.'),
 m('global_moran','Statistics','Global Moran I','raster',1,1,(P,S),'table','Rook adjacency, symmetric binary weights, exchangeability permutation null.'),
+m('local_moran','Statistics','Local Moran I and conditional significance','raster',1,1,(P,S,A),'raster','Rook adjacency, conditional randomization and dependence-robust BY adjustment.'),
+m('getis_ord_gi_star','Statistics','Getis–Ord Gi* hotspot inference','raster',1,1,(P,S,A),'raster','Rook neighborhood plus focal cell; random-label permutation p values, BY adjustment.'),
 m('global_geary','Statistics','Global Geary C','raster',1,1,(P,S),'table','Rook adjacency, symmetric binary weights, exchangeability permutation null.'),
 m('join_count','Statistics','Binary join counts','raster',1,1,(P,S),'table','Binary 0/1 cells, undirected rook joins, permutation null.'),
 m('point_nearest_neighbor','Statistics','Point nearest-neighbor distances','vector',1,1,(),'table','Observed distances only; no implicit study area or CSR significance.'),
@@ -86,13 +88,14 @@ m('extract_points','Integrated','Extract raster at points','integrated',1,1,(),'
 m('polygonize','Integrated','Polygonize categorical raster','raster',1,1,(),'vector','Four-connected integer classes, original grid boundaries.'),
 )
 BY_ID={method.id:method for method in METHODS}
-assert len(BY_ID)==len(METHODS)==50
+assert len(BY_ID)==len(METHODS)==52
 
 def catalog():
     return [{'id':m.id,'group':m.group,'title':m.title,'source':m.source,
              'minimum':m.minimum,'maximum':m.maximum,
              'parameters':[dict(zip(('name','label','default','minimum','maximum','integer'),p)) for p in m.parameters],
              'result':m.result,'assumption':m.assumption,
+             'requires_local_view':m.id in {'local_moran','getis_ord_gi_star'},
              'requires_breaks':m.id=='reclassify','requires_resampling':m.id=='resample_grid',
              'requires_weights':m.id in {'weighted_overlay','topsis'},
              'requires_pairwise':m.id=='ahp_overlay',

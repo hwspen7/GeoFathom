@@ -180,7 +180,7 @@ def test_integrated_operators_analytic_spatial_fixture(kind):
 
 def test_contract_count_and_invalid_input_rejections():
     client=TestClient(app);response=client.get('/analysis/science/catalog')
-    assert response.status_code==200 and response.json()['operation_count']==len(BY_ID)==50
+    assert response.status_code==200 and response.json()['operation_count']==len(BY_ID)==52
     assert set(m['group'] for m in response.json()['operations'])=={'Vector','Raster','Sampling','Statistics','Decision','Integrated'}
     assert response.json()['ai_tool']['input_schema']['properties']['operation']
     bad=[
@@ -207,3 +207,17 @@ def test_explicit_resampling_and_class_breaks():
     np.testing.assert_array_equal(z,np.array([[0]*4,[1]*4,[2]*4,[2]*4]))
     response=TestClient(app).post('/analysis/science/run',json={'operation':'reclassify','rasters':[raster()],'breaks':[1,1,2]})
     assert response.status_code==422
+
+
+@pytest.mark.parametrize('kind',['local_moran','getis_ord_gi_star'])
+def test_local_statistics_and_multiplicity(kind):
+    r=run(kind,rasters=[raster()],parameters={'permutations':99})
+    z,_=result_grid(r)
+    u=(Z-8.5)/Z.std()
+    expected=u[0,0]*(u[0,1]+u[1,0])/2 if kind=='local_moran' else (u[0,0]+u[0,1]+u[1,0])/np.sqrt(3*13/15)
+    assert z[0,0]==pytest.approx(expected)
+    p,_=result_grid(run(kind,rasters=[raster()],local_view='p',parameters={'permutations':99,'seed':7}))
+    q,_=result_grid(run(kind,rasters=[raster()],local_view='q',parameters={'permutations':99,'seed':7}))
+    assert np.isfinite(p).all() and np.all((p>=.01)&(p<=1)) and np.all(q>=p-1e-12)
+    assert r['preview']['png'].startswith('data:image/png;base64,')
+    assert r['preview']['corners'][0][1]>r['preview']['corners'][3][1]

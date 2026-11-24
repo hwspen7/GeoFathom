@@ -123,3 +123,55 @@ def raster_operation(kind,stack,common,grid,params):
                  'raster_min':lambda:stack.min(axis=0),'raster_max':lambda:stack.max(axis=0)}[kind]()
         out[~common]=np.nan
     return out,transform,unit
+
+
+def local_stat(z,kind,view,permutations,seed,alpha):
+    from terrain.studio_inference import conditional_moran,adjust_by
+    values,a,b=adjacency(z);n=len(values);valid=np.isfinite(z)
+    require(n>=5 and len(a)>0,'Local spatial analysis requires at least five cells and spatial adjacency.')
+    centered=values-values.mean();sd=float(np.sqrt(np.mean(centered**2)))
+    require(sd>0,'Local statistics undefined for a constant population.')
+    standardized=centered/sd
+    source=np.r_[a,b];target=np.r_[b,a];degree=np.bincount(source,minlength=n)
+    eligible=degree>0
+    lag=np.divide(np.bincount(source,weights=standardized[target],minlength=n),degree,
+                  out=np.full(n,np.nan),where=eligible)
+    def to_grid(v):
+        out=np.full(z.shape,np.nan);out[valid]=v;return out
+    if kind=='local_moran':
+        statistic=standardized*lag
+        if view=='statistic':return to_grid(statistic),{'tested_cells':int(eligible.sum())},'unitless'
+        p,q=conditional_moran(to_grid(standardized),to_grid(lag),np.where(valid,to_grid(degree),0),permutations,seed)
+        pv=p[valid];qv=q[valid]
+    else:
+        # Gi* weights are binary rook neighbors plus focal cell, and
+        # denominator uses the finite population variance.
+        count=degree+1;denom=np.sqrt(count*(n-count)/(n-1))
+        eligible=eligible&(denom>0)
+        require(eligible.any(),'No nondegenerate Gi* neighborhoods.')
+        def gi(v):
+            sums=v+np.bincount(source,weights=v[target],minlength=n)
+            return np.divide(sums,denom,out=np.full(n,np.nan),where=eligible)
+        statistic=gi(standardized)
+        if view=='statistic':return to_grid(statistic),{'tested_cells':int(eligible.sum())},'unitless'
+        require((len(source)+n)*(permutations+1)<=30_000_000,'Gi* permutation work budget exceeded.')
+        rng=np.random.default_rng(seed);extreme=np.zeros(n,np.int32)
+        for _ in range(permutations):
+            simulated=gi(rng.permutation(standardized))
+            extreme[eligible]+=np.abs(simulated[eligible])>=np.abs(statistic[eligible])-1e-12
+        pv=np.full(n,np.nan);qv=np.full(n,np.nan)
+        pv[eligible]=(1+extreme[eligible])/(permutations+1);qv[eligible]=adjust_by(pv[eligible])
+    significant=np.isfinite(qv)&(qv<=alpha)
+    if view=='p':out=pv;unit='probability'
+    elif view=='q':out=qv;unit='probability'
+    else:
+        out=np.where(np.isfinite(qv),0.,np.nan);unit='class'
+        if kind=='local_moran':
+            out[significant&(standardized>0)&(lag>0)]=1
+            out[significant&(standardized<0)&(lag<0)]=2
+            out[significant&(standardized>0)&(lag<0)]=3
+            out[significant&(standardized<0)&(lag>0)]=4
+        else:
+            out[significant&(statistic>0)]=1;out[significant&(statistic<0)]=2
+    return to_grid(out),{'tested_cells':int(np.isfinite(qv).sum()),'significant_cells':int(significant.sum()),'minimum_p':1/(permutations+1),
+                        'correction':'Benjamini–Yekutieli','cluster_codes':{'0':'not significant','1':'high-high or hotspot','2':'low-low or coldspot',**({'3':'high-low','4':'low-high'} if kind=='local_moran' else {})}},unit

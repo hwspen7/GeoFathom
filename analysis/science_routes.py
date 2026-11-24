@@ -19,7 +19,7 @@ from pyproj.exceptions import ProjError
 from terrain.studio_data import read_grids,aligned_grids,FigureInputError
 from terrain.studio_routes import RasterInput
 from .science_catalog import BY_ID,catalog
-from .science_raster import require,raster_operation,sample_cells,permutation_stat,decision
+from .science_raster import require,raster_operation,sample_cells,permutation_stat,decision,local_stat
 from .science_vector import load_layers,vector_operation,integrated
 
 router=APIRouter(prefix='/analysis/science',tags=['spatial science'])
@@ -37,6 +37,7 @@ class SpatialInput(BaseModel):
     pairwise:list[list[float]]=Field(default_factory=list,max_length=8)
     breaks:list[float]=Field(default_factory=list,max_length=25)
     resampling:Literal['nearest','bilinear']='nearest'
+    local_view:Literal['statistic','p','q','cluster']='statistic'
 
 def raster_product(name,z,transform,crs,unit):
     valid=np.isfinite(z);require(valid.any(),'Operation produced no valid cells.')
@@ -46,7 +47,40 @@ def raster_product(name,z,transform,crs,unit):
                       transform=transform,nodata=float('nan'),compress='deflate') as ds:
             ds.write(z,1);ds.update_tags(TERRAIN_UNIT=unit,SPATIAL_METHOD=name)
         raw=mem.read()
+    require(len(raw)<=24_000_000,'Derived raster exceeds the inline export budget.')
     return {'name':name,'data':base64.b64encode(raw).decode(),'unit':unit,'sha256':hashlib.sha256(raw).hexdigest(),'band':1}
+
+
+def raster_preview(product):
+    """Render a separate Mercator-aligned display image; never resample the scientific product."""
+    from rasterio.transform import array_bounds,from_bounds
+    from rasterio.warp import calculate_default_transform,reproject,Resampling
+    from PIL import Image
+    from matplotlib import colormaps
+    try:
+        with MemoryFile(base64.b64decode(product['data'])) as mem,mem.open() as ds:
+            transform,w,h=calculate_default_transform(ds.crs,'EPSG:3857',ds.width,ds.height,*ds.bounds)
+            if w<=0 or h<=0:return None
+            west,south,east,north=array_bounds(h,w,transform)
+            reverse=Transformer.from_crs(3857,4326,always_xy=True)
+            lon0,lat0=reverse.transform(west,south);lon1,lat1=reverse.transform(east,north)
+            if not(-180<=lon0<lon1<=180 and lon1-lon0<170 and -85.0512<=lat0<lat1<=85.0512):return None
+            scale=min(1,640/max(w,h));ww=max(1,round(w*scale));hh=max(1,round(h*scale))
+            target=from_bounds(west,south,east,north,ww,hh)
+            out=np.full((hh,ww),np.nan)
+            reproject(ds.read(1),out,src_transform=ds.transform,src_crs=ds.crs,src_nodata=np.nan,
+                      dst_transform=target,dst_crs='EPSG:3857',dst_nodata=np.nan,resampling=Resampling.nearest)
+            valid=np.isfinite(out)
+            if not valid.any():return None
+            lo=float(np.nanmin(out));hi=float(np.nanmax(out))
+            normalized=np.divide(out-lo,hi-lo,out=np.zeros_like(out),where=valid) if hi>lo else np.full_like(out,.5)
+            rgba=colormaps['viridis'](np.where(valid,np.clip(normalized,0,1),0),bytes=True)
+            rgba[:,:,3]=np.where(valid,255,0);buffer=io.BytesIO();Image.fromarray(rgba).save(buffer,format='PNG')
+            return {'png':'data:image/png;base64,'+base64.b64encode(buffer.getvalue()).decode(),'corners':[[lon0,lat1],[lon1,lat1],[lon1,lat0],[lon0,lat0]],
+                    'width':ww,'height':hh,'valid_cells':int(valid.sum()),'minimum':lo,'maximum':hi,'unit':product['unit'],
+                    'method':'Nearest-neighbor display only; original GeoTIFF remains unchanged.'}
+    except (ValueError,RuntimeError,OSError,ProjError):
+        return None
 
 def csv_output(headers,rows):
     if not headers:return ''
@@ -86,6 +120,9 @@ def execute(body):
         meta={'sample_count':len(rows),'valid_population':int(np.isfinite(g.values).sum()),'weight_sum':float(weights.sum())}
     elif kind in {'global_moran','global_geary','join_count'}:
         meta=permutation_stat(g.values,kind,params['permutations'],params['seed']);headers=list(meta);rows=[list(meta.values())]
+    elif kind in {'local_moran','getis_ord_gi_star'}:
+        out,meta,unit=local_stat(g.values,kind,body.local_view,params['permutations'],params['seed'],params['alpha'])
+        product=raster_product(kind,out,g.transform,g.crs,unit);meta['view']=body.local_view
     elif kind=='raster_quantile':
         v=g.values[np.isfinite(g.values)];meta={'count':len(v),'quantile':params['quantile'],'value':float(np.quantile(v,params['quantile'])),'mean':float(v.mean()),'sample_sd':float(v.std(ddof=1)) if len(v)>1 else None}
         headers=list(meta);rows=[list(meta.values())]
@@ -118,9 +155,9 @@ def execute(body):
     receipt={'schema':'geofathom-spatial-science-1','operation':kind,'assumption':method.assumption,'parameters':params,
              'crs':str(g.crs) if nr else 'EPSG:'+str(body.epsg),'raster_sources':[{'name':x.name,'sha256':x.sha256,'band':x.band,'unit':x.unit,'scale':x.scale,'offset':x.offset} for x in grids],
              'vector_sources':[hashlib.sha256(json.dumps(x,sort_keys=True,separators=(',',':'),allow_nan=False).encode()).hexdigest() for x in body.vectors],
-             'weights':body.weights,'directions':body.directions,'pairwise':body.pairwise,'breaks':body.breaks,'resampling':body.resampling,'metrics':meta,
+             'weights':body.weights,'directions':body.directions,'pairwise':body.pairwise,'breaks':body.breaks,'resampling':body.resampling,'local_view':body.local_view,'metrics':meta,
              'vector_count':len(features['features']) if features else 0,'table_rows':len(rows),'raster_sha256':product['sha256'] if product else None}
-    result={'operation':kind,'receipt':receipt,'features':features,'raster':product,'columns':headers,'rows':rows,'csv':csv_output(headers,rows)}
+    result={'operation':kind,'receipt':receipt,'features':features,'raster':product,'preview':raster_preview(product) if product else None,'columns':headers,'rows':rows,'csv':csv_output(headers,rows)}
     json.dumps(result,allow_nan=False)
     return result
 

@@ -1,6 +1,6 @@
 # Spatial Analysis: scientific computing contract
 
-Spatial Analysis is independent of the Terrain module. Its catalog exposes 50 executable methods across vector, raster, sampling, spatial statistics, decision and integrated operations. The same validated endpoint is used by the manual workbench and the future AI research orchestrator. No language model is required for numerical computation.
+Spatial Analysis is independent of the Terrain module. Its catalog exposes 52 executable methods across vector, raster, sampling, spatial statistics, decision and integrated operations. The same validated endpoint is used by the manual workbench and the future AI research orchestrator. No language model is required for numerical computation.
 
 ## Inputs and outputs
 
@@ -11,7 +11,7 @@ Spatial Analysis is independent of the Terrain module. Its catalog exposes 50 ex
 
 ## Scope
 
-The 50 methods include exact fractional overlap zonal statistics/class area, Gaussian point intensity, spatially balanced and stratified sampling with design weights, permutation Moran/Geary/join-count diagnostics, AHP consistency-ratio enforcement, TOPSIS, weighted overlay and exact two-criterion Pareto cells. The module intentionally excludes full geostatistical inference, SAR, routing, time-series modeling and LiDAR, which belong to dedicated research modules. Geometry measurement is planar within the selected metre CRS; it is not a geodetic field-survey certification.
+The 52 methods include exact fractional overlap zonal statistics/class area, Gaussian point intensity, spatially balanced and stratified sampling with design weights, permutation Moran/Geary/join-count diagnostics, AHP consistency-ratio enforcement, TOPSIS, weighted overlay and exact two-criterion Pareto cells. The module intentionally excludes full geostatistical inference, SAR, routing, time-series modeling and LiDAR, which belong to dedicated research modules. Geometry measurement is planar within the selected metre CRS; it is not a geodetic field-survey certification.
 
 ## Acceptance
 
@@ -20,3 +20,5 @@ tests/test_spatial_science.py contains parameterized analytic checks across the 
 The workbench provides a bounded synchronous request. Cancelling the browser request discards the response; it does not guarantee server-side interruption. Persistent background execution and multi-step automated chaining remain future work.
 
 Managed rasters, complete saved project layers and Terrain output GeoTIFFs can be selected directly. Raster alignment is an explicit operation (nearest or continuous bilinear); classification uses ordered numerical breaks. Derived rasters can be reused as inputs. Zonal coverage ignores fractional slivers smaller than 1e-8 of a cell area, to suppress inverse-projection round-trip artifacts.
+
+Local Moran and Getis–Ord Gi* expose statistics, permutation p, BY-adjusted q and significant class rasters. Significance is conditional on random-label exchangeability, neighborhood definition and multiplicity correction, not proof of a physical causal process. Raster results have a separate bounded, Mercator-aligned PNG map preview; scientific GeoTIFFs retain their original full-resolution grid.
