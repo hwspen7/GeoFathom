@@ -83,9 +83,11 @@ export default function ScientificFigureStudio({source,onClose,initialTier='prof
   }catch(e){if(!ac.signal.aborted)setError((e as Error).message);}finally{if(controller.current===ac){controller.current=null;setBusy(false);}}
  }
  function cancel(){controller.current?.abort();controller.current=null;setBusy(false);}
+ // Disabled render buttons can drop browser focus; handle Escape for the topmost modal.
+ useEffect(()=>{function escape(e:KeyboardEvent){if(e.key!=='Escape'||e.isComposing)return;const modals=Array.from(document.querySelectorAll<HTMLElement>('[role="dialog"][aria-modal="true"]')).filter(n=>n.getClientRects().length>0);if(modals.at(-1)!==dialog.current)return;e.preventDefault();e.stopPropagation();cancel();onClose();}document.addEventListener('keydown',escape,true);return()=>document.removeEventListener('keydown',escape,true);},[onClose]);
  function exportData(){if(!output?.table.length)return;saveFigureBlob(new Blob([tableCSV({columns:output.table[0].map(String),rows:output.table.slice(1),x_label:'',y_label:'',unit:''})],{type:'text/csv;charset=utf-8'}),'geofathom-'+active?.id+'-plot-data.csv');}
  return createPortal(<div className="figure-studio-backdrop"><div className="figure-studio" role="dialog" aria-modal="true" aria-label="Scientific figure studio" tabIndex={-1} ref={dialog} onKeyDown={e=>{
-  e.stopPropagation();if(e.key==='Escape'){e.preventDefault();if(busy)cancel();else onClose();}
+  e.stopPropagation();if(e.key==='Escape'){e.preventDefault();cancel();onClose();}
   if(e.key==='Tab'){const nodes=Array.from(e.currentTarget.querySelectorAll<HTMLElement>('button:enabled,input:enabled,select:enabled,textarea:enabled')).filter(n=>n.getClientRects().length>0);const first=nodes[0],last=nodes[nodes.length-1];if(e.shiftKey&&(document.activeElement===first||document.activeElement===dialog.current)){e.preventDefault();last?.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus();}}
  }}>
  <header><div><strong>Scientific figure studio</strong><small>{source.name} · Basic and professional figure libraries</small></div><span><label>Open reproduction<input type="file" accept=".json,application/json" disabled={busy} onChange={e=>void importReproduction(e.target.files?.[0])}/></label><button type="button" disabled={busy} onClick={()=>{setComposer(v=>!v);setError('');}}>{composer?'Back to figure editor':'Figure composer ('+panels.length+')'}</button> <button type="button" onClick={()=>{cancel();onClose();}}>Close studio</button></span></header>
