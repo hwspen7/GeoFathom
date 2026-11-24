@@ -49,6 +49,15 @@ def test_every_spacetime_method_reference(kind):
     elif kind.startswith('kalman_'):params={'horizon':2,'process_variance':.01,'observation_variance':.1,'initial_velocity_variance':1}
     elif kind.startswith('forecast_'):params={'horizon':2}
     elif kind=='exceedance':params={'threshold':10}
+    if kind.startswith('harmonic_break_'):
+        t=np.arange(36.);a=(2+np.where(t>=18,7,0)+(2+np.where(t>=18,1,0))*np.cos(2*np.pi*t/6))[:,None,None]+np.zeros((36,3,4))
+        r=run(kind,a,t,{'period':6,'min_segment':8});z=grid(r)
+        if kind.endswith('_bic'):assert np.min(z)>6
+        else:np.testing.assert_allclose(z,{'harmonic_break_flag':1,'harmonic_break_time':17.5,'harmonic_break_level':7,'harmonic_break_amplitude':1}[kind],atol=1e-8)
+        return
+    if kind.startswith('event_'):
+        t=np.array([0.,1.,2.,3.,4.,10.,11.,12.]);a=np.broadcast_to(np.array([0,3,5,np.nan,4,4,6,0])[:,None,None],(8,3,4)).copy()
+        r=run(kind,a,t,{'threshold':2,'maximum_gap':2});np.testing.assert_allclose(grid(r),{'event_count':3,'event_longest_span':1,'event_total_span':2,'event_integrated_excess':5}[kind]);return
     if kind.startswith(('st_kriging_','st_holdout_')):
         r=run(kind,a,t,{'sample_limit':24});z=grid(r)
         assert np.isfinite(z).any()
@@ -152,3 +161,10 @@ def test_kriging_independent_dense_reference_and_holdout_isolation():
     for key in ('spatial_range','temporal_range','sill','training_indices','training_mean','reml_objective'):
         assert original[key]==changed[key]
     assert original['rmse']!=changed['rmse']
+
+
+def test_harmonic_no_change_and_gap_boundary():
+    t=np.arange(36.);a=(2+.05*t+2*np.cos(2*np.pi*t/6))[:,None,None]+np.zeros((36,3,4))
+    r=run('harmonic_break_flag',a,t,{'period':6,'min_segment':8});np.testing.assert_allclose(grid(r),0)
+    t=np.array([0,1,2,3,9,10,11,12],float);a=np.full((8,3,4),4.)
+    r=run('event_total_span',a,t,{'threshold':2,'maximum_gap':2});np.testing.assert_allclose(grid(r),6)

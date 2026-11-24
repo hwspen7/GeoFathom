@@ -13,6 +13,7 @@ from imagery.remote_inference import series_break
 from .spacetime_state import kalman,permutation_lag
 from .spacetime_modes import eof,block_trend
 from .spacetime_kriging import kriging
+from .spacetime_change import harmonic_break,events
 from analysis.science_raster import require
 from analysis.science_routes import raster_product,raster_preview
 from analysis.science_figures import csv_text
@@ -20,10 +21,21 @@ from .spacetime_models import trend,temporal,forecast,spatial_lag,variogram
 
 router=APIRouter(prefix='/analysis/spatiotemporal',tags=['spatiotemporal science'])
 # parameter = (default,minimum,maximum,integer)
-P={'minimum_observations':(6,3,64,True),'lag':(1,1,32,True),'threshold':(0,-1e50,1e50,False),'horizon':(30,.000001,1e7,False),'radius':(3,1,20,True),'period':(365,.000001,1e7,False),'fraction':(.5,.01,.99,False),'minimum_amplitude':(.01,0,1e50,False),'min_segment':(3,2,32,True),'penalty':(1,.000001,1e50,False),'process_variance':(.01,1e-20,1e50,False),'observation_variance':(.1,1e-20,1e50,False),'initial_velocity_variance':(1,1e-20,1e50,False),'permutations':(199,19,999,True),'seed':(42,0,2147483647,True),'mode':(1,1,64,True),'block_length':(3,2,21,True),'spatial_range':(100,1e-6,1e8,False),'temporal_range':(30,1e-6,1e8,False),'nugget_ratio':(.1,1e-6,10,False),'sample_limit':(128,12,256,True),'fit_covariance':(0,0,1,True),'holdout_dates':(2,2,32,True),'buffer_cells':(0,0,100,True)}
+P={'minimum_observations':(6,3,64,True),'lag':(1,1,32,True),'threshold':(0,-1e50,1e50,False),'horizon':(30,.000001,1e7,False),'radius':(3,1,20,True),'period':(365,.000001,1e7,False),'fraction':(.5,.01,.99,False),'minimum_amplitude':(.01,0,1e50,False),'min_segment':(3,2,32,True),'penalty':(1,.000001,1e50,False),'process_variance':(.01,1e-20,1e50,False),'observation_variance':(.1,1e-20,1e50,False),'initial_velocity_variance':(1,1e-20,1e50,False),'permutations':(199,19,999,True),'seed':(42,0,2147483647,True),'mode':(1,1,64,True),'block_length':(3,2,21,True),'spatial_range':(100,1e-6,1e8,False),'temporal_range':(30,1e-6,1e8,False),'nugget_ratio':(.1,1e-6,10,False),'sample_limit':(128,12,256,True),'fit_covariance':(0,0,1,True),'holdout_dates':(2,2,32,True),'buffer_cells':(0,0,100,True),'bic_threshold':(6,0,1000,False),'maximum_gap':(30,.000001,1e9,False)}
 KALMAN_P=('minimum_observations','horizon','process_variance','observation_variance','initial_velocity_variance')
 KRIGING_P=('spatial_range','temporal_range','nugget_ratio','sample_limit','fit_covariance','seed')
+BREAK_P=('period','min_segment','bic_threshold')
+EVENT_P=('threshold','maximum_gap','minimum_observations')
 METHODS={
+ 'harmonic_break_bic':('Structural change','Seasonal structural break BIC improvement',BREAK_P),
+ 'harmonic_break_flag':('Structural change','Seasonally adjusted break selection',BREAK_P),
+ 'harmonic_break_time':('Structural change','Seasonal structural break time',BREAK_P),
+ 'harmonic_break_level':('Structural change','Deseasonalized break level shift',BREAK_P),
+ 'harmonic_break_amplitude':('Structural change','Seasonal amplitude change at break',BREAK_P),
+ 'event_count':('Temporal extremes','Observed exceedance run count',EVENT_P),
+ 'event_longest_span':('Temporal extremes','Longest observed exceedance span',EVENT_P),
+ 'event_total_span':('Temporal extremes','Total observed exceedance span',EVENT_P),
+ 'event_integrated_excess':('Temporal extremes','Integrated excess across observed runs',EVENT_P),
  'st_kriging_mean':('Joint geostatistics','Space-time ordinary kriging forecast',KRIGING_P+('horizon',)),
  'st_kriging_sd':('Joint geostatistics','Space-time kriging observation SD',KRIGING_P+('horizon',)),
  'st_holdout_rmse':('Joint validation','Joint space and future-time holdout RMSE',KRIGING_P+('holdout_dates','buffer_cells')),
@@ -81,7 +93,7 @@ class CubeInput(BaseModel):
 
 @router.get('/catalog')
 def catalog():
-    return {'operations':[{'id':k,'group':g,'title':title,'parameters':[{'name':p,'label':p.replace('_',' '),'default':P[p][0],'minimum':P[p][1],'maximum':P[p][2],'integer':P[p][3]} for p in params]} for k,(g,title,params) in METHODS.items()],'operation_count':len(METHODS),'input_schema':CubeInput.model_json_schema()}
+    return {'operations':[{'id':k,'group':g,'title':title,'parameters':[{'name':p,'label':p.replace('_',' '),'default':6 if p=='min_segment' and k.startswith('harmonic_break_') else P[p][0],'minimum':P[p][1],'maximum':P[p][2],'integer':P[p][3]} for p in params]} for k,(g,title,params) in METHODS.items()],'operation_count':len(METHODS),'input_schema':CubeInput.model_json_schema()}
 
 def execute(body):
     require(body.operation in METHODS,'Unknown space-time method.')
@@ -91,7 +103,7 @@ def execute(body):
     params=METHODS[kind][2];require(set(body.parameters)<=set(params),'Unknown method parameter.')
     p={}
     for key in params:
-        default,lo,hi,integer=P[key];x=body.parameters.get(key,default)
+        default,lo,hi,integer=P[key];default=6 if key=='min_segment' and kind.startswith('harmonic_break_') else default;x=body.parameters.get(key,default)
         require(math.isfinite(x) and lo<=x<=hi and (not integer or x==int(x)),'Parameter outside method bounds: '+key)
         p[key]=int(x) if integer else x
     if 'minimum_observations' in p:require(p['minimum_observations']<=n,'Minimum observations exceeds cube dates.')
@@ -128,6 +140,14 @@ def execute(body):
     elif kind.startswith(('forecast_','hindcast_')):
         out,cols,rows,meta=forecast(stack,t,kind,p);unit='index' if kind=='hindcast_skill' else unit
         if len(rows)>=2:plot('Expanding-window forecast versus persistence error','multi_line',cols,rows,x='time',columns=['trend_rmse','persistence_rmse'])
+    elif kind.startswith('harmonic_break_'):
+        out,meta=harmonic_break(stack,t,p,kind)
+        if kind=='harmonic_break_time':unit=body.time_unit
+        elif kind in ('harmonic_break_bic','harmonic_break_flag'):unit='index' if kind.endswith('_bic') else 'class'
+    elif kind.startswith('event_'):
+        out,cols,rows,meta=events(stack,t,p,kind)
+        unit='count' if kind=='event_count' else unit+'*'+body.time_unit if kind=='event_integrated_excess' else body.time_unit
+        plot('Observed event starts and active cells','multi_line',cols,rows,x='time',columns=['event_starts','active_cells'])
     elif kind.startswith(('st_kriging_','st_holdout_')):
         out,cols,rows,meta=kriging(stack,t,first,p,kind)
         if kind=='st_holdout_coverage':unit='fraction'

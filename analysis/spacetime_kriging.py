@@ -47,7 +47,7 @@ def fit(x,y,p):
 def kriging(stack,t,grid,p,kind):
     n,h,w=stack.shape
     require(grid.is_meter,'Kriging requires projected metre coordinates.')
-    hold=kind.startswith('st_holdout_');cut=n-p['holdout_dates']
+    hold=kind.startswith('st_holdout_');cut=n-p.get('holdout_dates',0)
     require(not hold or (cut>=4 and w>=3),'Holdout needs four training dates and at least three columns.')
     # Contiguous right-hand spatial block held out at all dates; final dates
     # held out across the entire scene. Optional buffer separates training.
