@@ -731,3 +731,29 @@ def test_fusion_biophysical_reference(kind):
         r=run(kind,a,{'clusters':3,'seed':12})
         np.testing.assert_allclose(grid(r),labels if kind=='spectral_kmeans' else 0,atol=1e-12)
         assert [row[1] for row in r['rows']]==[16,16,16]
+
+
+@pytest.mark.parametrize('kind',['sar_lee','sar_gamma_map','cloud_buffer','ndvi_change','surface_temperature_rte','fusion_gls','canopy_lai'])
+def test_windowed_science_matches_inline_across_seams(kind,tmp_path):
+    import rasterio
+    from imagery.remote_windowed import process
+    rng=np.random.default_rng(12);shape=(131,137)
+    a={}
+    for role,quantity in BY_ID[kind].roles:
+        if quantity=='class':z=np.ones(shape);z[62:66,62:66]=0
+        elif quantity=='reflectance':z=rng.uniform(.15,.7,shape)
+        elif quantity in {'emissivity','transmittance','fraction'}:z=rng.uniform(.7,.98,shape)
+        elif quantity=='radiance':z=np.full(shape,10. if role=='radiance' else 1.)
+        else:z=rng.uniform(.5,1.5,shape)
+        z[63:65,65:67]=np.nan;a[role]=z
+    expected=grid(run(kind,a))
+    bindings={}
+    for role,quantity in BY_ID[kind].roles:
+        path=tmp_path/(role+'.tif');path.write_bytes(base64.b64decode(source(a[role])['data']))
+        bindings[role]={'path':str(path),'unit':'m' if quantity=='numeric' else ''}
+    for tile in (64,96):
+        out=tmp_path/(str(tile)+'.tif');report=process(kind,bindings,out,tile=tile)
+        with rasterio.open(out) as ds:
+            assert ds.transform==AFF and ds.crs.to_string()==CRS
+            np.testing.assert_allclose(ds.read(1),expected,atol=1e-12,rtol=1e-12,equal_nan=True)
+        assert report['valid_cells']==np.isfinite(expected).sum()

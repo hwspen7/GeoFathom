@@ -5,7 +5,7 @@ from uuid import UUID
 from pydantic import BaseModel,ConfigDict,Field
 from typing import Literal
 import rasterio
-from .remote_catalog import BY_ID
+from .remote_catalog import BY_ID,WINDOWED_IDS
 from .remote_windowed import process
 from analysis.science_raster import require
 from storage.snapshots import copy_verified
@@ -14,7 +14,8 @@ class DiskBand(BaseModel):
     model_config=ConfigDict(extra='forbid',allow_inf_nan=False)
     image_id:UUID
     band:int=Field(default=1,ge=1,le=1024)
-    encoding:Literal['metadata','raw','landsat_sr','custom']='metadata'
+    encoding:Literal['metadata','raw','landsat_sr','landsat_st','custom']='metadata'
+    unit:str=Field(default='',max_length=80)
     scale:float=Field(default=1,gt=0,le=1e12)
     offset:float=Field(default=0,ge=-1e12,le=1e12)
 
@@ -23,11 +24,12 @@ class DiskQuality(BaseModel):
     image_id:UUID
     band:int=Field(default=1,ge=1,le=1024)
     scheme:Literal['binary','sentinel_clear','landsat_clear','landsat_unsaturated']='binary'
+    roles:list[str]=Field(default_factory=list,max_length=12)
 
 class DiskInput(BaseModel):
     model_config=ConfigDict(extra='forbid',allow_inf_nan=False)
     operation:str=Field(max_length=80)
-    bindings:dict[str,DiskBand]=Field(min_length=1,max_length=8)
+    bindings:dict[str,DiskBand]=Field(min_length=1,max_length=12)
     quality:list[DiskQuality]=Field(default_factory=list,max_length=8)
     parameters:dict[str,float]=Field(default_factory=dict,max_length=12)
     tile:int=Field(default=512,ge=64,le=1024)
@@ -40,7 +42,7 @@ def result_path(job_id):
 
 def validate(body):
     p=DiskInput.model_validate(body);m=BY_ID.get(p.operation)
-    require(m is not None and m.group=='Optical' and m.id!='ndvi_uncertainty','Disk job supports the twenty pointwise optical indices.')
+    require(p.operation in WINDOWED_IDS,'Operation is not certified for finite-neighborhood disk processing.')
     require(set(p.bindings)=={r for r,_ in m.roles},'Bind every required role.')
     return p
 

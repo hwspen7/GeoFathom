@@ -17,8 +17,11 @@ import numpy as np
 import rasterio
 from rasterio.windows import Window
 from analysis.science_raster import require
-from .remote_catalog import BY_ID
-from .remote_kernels import optical,quality_mask
+from .remote_catalog import BY_ID,WINDOWED_IDS,WINDOWED_HALO
+from .remote_kernels import quality_mask
+from .remote_band import read_calibrated
+from .remote_tile_kernels import compute
+from types import SimpleNamespace
 
 def digest(path):
     h=hashlib.sha256()
@@ -36,22 +39,21 @@ def windows(width,height,tile):
 
 def process(operation,bindings,output,parameters=None,quality=(),tile=512,progress=None):
     method=BY_ID.get(operation)
-    require(method is not None and method.group=='Optical' and operation!='ndvi_uncertainty',
-            'Windowed processing currently supports the twenty original pointwise optical indices.')
+    require(operation in WINDOWED_IDS,'Operation is not certified for finite-neighborhood disk processing.')
     require(set(bindings)=={r for r,_ in method.roles},'Bind every required role.')
     require(isinstance(tile,int) and 64<=tile<=1024,'Tile size must be 64–1024.')
     params={n:default for n,_,default,lo,hi,integer in method.parameters}
     overrides=parameters or {};require(set(overrides)<=set(params),'Unknown parameter.')
     for n,_,default,lo,hi,integer in method.parameters:
         x=overrides.get(n,default);require(math.isfinite(x) and lo<=x<=hi and (not integer or float(x).is_integer()),'Invalid parameter: '+n)
-        params[n]=x
+        params[n]=int(x) if integer else float(x)
     output=Path(output).resolve();require(not output.exists(),'Output must not already exist.')
     require(output.parent.is_dir(),'Output directory must exist.')
     require(len(quality)<=8,'At most eight global quality masks.')
     tmp=None
     with ExitStack() as ctx:
         bands={};mask_inputs=[];first=None;provenance={}
-        def open_band(spec,categorical=False):
+        def open_band(spec,quantity):
             nonlocal first
             path=Path(spec['path']).resolve();require(path!=output,'Input and output paths must differ.')
             ds=ctx.enter_context(rasterio.open(path));b=spec.get('band',1)
@@ -59,24 +61,26 @@ def process(operation,bindings,output,parameters=None,quality=(),tile=512,progre
             a=ds.transform;require(a.b==0 and a.d==0 and a.a>0 and a.e<0,'Use north-up grids.')
             if first is None:first=ds
             else:require(same_grid(first,ds),'All band grids must match exactly.')
-            if categorical:scale,offset=1.,0.
-            elif spec.get('encoding','metadata')=='landsat_sr':
-                scale,offset=.0000275,-.2
-                native=(ds.scales[b-1],ds.offsets[b-1])
-                require(native==(1.,0.) or (math.isclose(native[0],scale,rel_tol=1e-7) and math.isclose(native[1],offset,abs_tol=1e-7)),'Raster metadata conflicts with selected Landsat preset.')
-            elif spec.get('encoding','metadata')=='custom':scale,offset=float(spec['scale']),float(spec['offset'])
-            else:
-                require(spec.get('encoding','metadata') in {'metadata','raw'},'Unknown encoding.')
-                scale,offset=(ds.scales[b-1],ds.offsets[b-1]) if spec.get('encoding','metadata')=='metadata' else (1.,0.)
-            require(math.isfinite(scale) and scale>0 and math.isfinite(offset),'Invalid calibration.')
-            return ds,b,scale,offset,spec.get('encoding','metadata'),str(path)
-        for role,_ in method.roles:
-            item=open_band(bindings[role]);bands[role]=item
-            provenance[role]={'path':item[-1],'band':item[1],'scale':item[2],'offset':item[3],'sha256':digest(item[-1])}
+            encoding=spec.get('encoding','metadata')
+            require(encoding in {'metadata','raw','landsat_sr','landsat_st','custom'},'Unknown encoding.')
+            binding=SimpleNamespace(band=b,encoding=encoding,scale=float(spec.get('scale',1)),offset=float(spec.get('offset',0)),unit=spec.get('unit',''))
+            require(math.isfinite(binding.scale) and binding.scale>0 and math.isfinite(binding.offset),'Invalid calibration.')
+            # Validate metadata using one native pixel, before opening output.
+            _,unit,scale,offset=read_calibrated(ds,binding,quantity,Window(0,0,1,1))
+            return ds,binding,quantity,unit,scale,offset,str(path)
+        for role,quantity in method.roles:
+            item=open_band(bindings[role],quantity);bands[role]=item
+            provenance[role]={'path':item[-1],'band':item[1].band,'quantity':quantity,'unit':item[3],'scale':item[4],'offset':item[5],'sha256':digest(item[-1])}
+        numeric_units={item[3] for item in bands.values() if item[2]=='numeric'}
+        require(len(numeric_units)<=1,'Comparable numerical bands must share physical units.')
+        unit=next(iter(bands.values()))[3] if method.unit=='source' else method.unit
         for spec in quality:
             require(spec['scheme'] in {'binary','sentinel_clear','landsat_clear','landsat_unsaturated'},'Unknown quality scheme.')
-            item=open_band(spec,True);mask_inputs.append((item,spec['scheme']))
-        quality_receipt=[{'path':item[-1],'band':item[1],'scheme':scheme,'sha256':digest(item[-1])} for item,scheme in mask_inputs]
+            roles=spec.get('roles',[]) or list(bindings)
+            require(set(roles)<=set(bindings),'Unknown quality mask target role.')
+            item=open_band({**spec,'encoding':'raw'},'class');mask_inputs.append((item,spec['scheme'],roles))
+        quality_receipt=[{'path':item[-1],'band':item[1].band,'scheme':scheme,'roles':roles,'sha256':digest(item[-1])} for item,scheme,roles in mask_inputs]
+        halo=params['radius'] if operation in WINDOWED_HALO else 0
         count=0;total=0.;minimum=np.inf;maximum=-np.inf;tiles=0
         total_tiles=math.ceil(first.width/tile)*math.ceil(first.height/tile)
         try:
@@ -84,16 +88,24 @@ def process(operation,bindings,output,parameters=None,quality=(),tile=512,progre
             profile=dict(driver='GTiff',width=first.width,height=first.height,count=1,dtype='float64',crs=first.crs,
                          transform=first.transform,nodata=np.nan,compress='deflate',tiled=True,blockxsize=256,blockysize=256,BIGTIFF='IF_SAFER')
             with rasterio.open(tmp,'w',**profile) as dst:
-                dst.update_tags(TERRAIN_UNIT=method.unit,REMOTE_METHOD=operation,PROCESSING='windowed')
+                dst.update_tags(TERRAIN_UNIT=unit,REMOTE_METHOD=operation,PROCESSING='windowed')
                 for window in windows(first.width,first.height,tile):
-                    v={}
-                    for role,(ds,b,scale,offset,encoding,path) in bands.items():
-                        z=ds.read(b,window=window,masked=True).astype(float).filled(np.nan)
-                        if encoding=='landsat_sr':
-                            valid=np.isfinite(z);require(np.all(z[valid]==np.floor(z[valid])) and np.all((z[valid]>=0)&(z[valid]<=65535)),'Landsat preset requires raw DN.')
-                            z[z==0]=np.nan
-                        z=z*scale+offset;valid=np.isfinite(z)
-                        require(not np.isinf(z).any() and np.all((z[valid]>=-.2-1e-9)&(z[valid]<=1.6+1e-9)),'Invalid calibrated reflectance.')
+                    # Read the exact finite support including halo; clip only
+                    # at scene boundaries, never at artificial tile boundaries.
+                    r0=max(0,int(window.row_off)-halo);c0=max(0,int(window.col_off)-halo)
+                    r1=min(first.height,int(window.row_off+window.height)+halo)
+                    c1=min(first.width,int(window.col_off+window.width)+halo)
+                    expanded=Window(c0,r0,c1-c0,r1-r0)
+                    v={role:read_calibrated(ds,binding,quantity,expanded)[0] for role,(ds,binding,quantity,_,_,_,_) in bands.items()}
+                    for (ds,binding,quantity,_,_,_,_),scheme,roles in mask_inputs:
+                        q=read_calibrated(ds,binding,quantity,expanded)[0]
+                        mask=quality_mask(q,scheme)==1
+                        for role in roles:v[role][~mask]=np.nan
+                    common=np.logical_and.reduce([np.isfinite(z) for z in v.values()])
+                    z=compute(operation,v,params);z[~common]=np.nan
+                    dr=int(window.row_off)-r0;dc=int(window.col_off)-c0
+                    z=z[dr:dr+int(window.height),dc:dc+int(window.width)]
+                    require(not np.isinf(z).any() and np.all((z[valid]>=-.2-1e-9)&(z[valid]<=1.6+1e-9)),'Invalid calibrated reflectance.')
                         v[role]=z
                     common=np.logical_and.reduce([np.isfinite(z) for z in v.values()])
                     for (ds,b,_,_,_,_),scheme in mask_inputs:
@@ -107,7 +119,7 @@ def process(operation,bindings,output,parameters=None,quality=(),tile=512,progre
                     if progress is not None:progress(tiles/total_tiles)
             require(count>0,'No valid output pixels.')
             receipt={'operation':operation,'parameters':params,'bands':provenance,'quality_masks':quality_receipt,
-                     'width':first.width,'height':first.height,'tile_size':tile,'windows':tiles,'valid_cells':count,
+                     'width':first.width,'height':first.height,'tile_size':tile,'halo_cells':halo,'unit':unit,'windows':tiles,'valid_cells':count,
                      'nodata_cells':first.width*first.height-count,'minimum':minimum,'maximum':maximum,'mean':total/count,
                      'sha256':digest(tmp),'crs':str(first.crs),'transform':list(first.transform)[:6]}
             # A hard link creates the destination without overwriting an existing

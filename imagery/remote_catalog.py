@@ -153,8 +153,12 @@ m('classification_accuracy','Classification','Classification reference agreement
 )
 BY_ID={x.id:x for x in METHODS}
 assert len(BY_ID)==len(METHODS)
+# Only operators with a proven finite dependency radius are eligible for tiles.
+WINDOWED_IDS={m.id for m in METHODS if m.group=='Optical'}|{'calibrated_reflectance','ndvi_change','dnbr','difference','relative_change','change_classes','surface_temperature_rte','brightness_temperature','temperature_celsius','lst_uncertainty','lst_correlated_uncertainty','sar_db','sar_linear','sar_ratio','dualpol_rvi','sar_log_change','sar_lee','sar_gamma_map','cloud_buffer','sentinel_clear','landsat_clear','landsat_unsaturated','fusion_gls','fusion_gls_sd','fusion_discrepancy','canopy_lai','canopy_fpar_proxy'}
+WINDOWED_HALO={'sar_lee','sar_gamma_map','cloud_buffer'}
+assert WINDOWED_IDS<=set(BY_ID)
 
 def catalog():
     return [{'id':x.id,'group':x.group,'title':x.title,'roles':[{'id':r,'quantity':q} for r,q in x.roles],
              'parameters':[dict(zip(('name','label','default','minimum','maximum','integer'),v)) for v in x.parameters],
-             'unit':x.unit,'assumption':x.assumption,'variable_series':x.id in SERIES_IDS or x.id in HYPER_IDS,'axis':'wavelength' if x.id in HYPER_IDS else 'time'} for x in METHODS]
+             'unit':x.unit,'assumption':x.assumption,'variable_series':x.id in SERIES_IDS or x.id in HYPER_IDS,'axis':'wavelength' if x.id in HYPER_IDS else 'time','windowed':x.id in WINDOWED_IDS} for x in METHODS]
