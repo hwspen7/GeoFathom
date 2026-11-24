@@ -41,12 +41,38 @@ def render_table_domain(kind,req,fig,ax,table,parameter,meta,palette,cmap,rows):
         require(float(v).is_integer() and 1<=v<=limit,'Choose an integer parameter within the data length.');return int(v)
     color=palette[0]
     if kind.startswith('basic_'):
-        if kind in {'basic_line','basic_area','basic_running_total'}:
+        if kind in {'basic_rank','basic_lorenz'}:
+            a,_=rows([req.y]);v=np.sort(a[0])
+            if kind=='basic_rank':
+                v=v[::-1];rank=np.arange(1,len(v)+1);ax.plot(rank,v,marker='o' if req.show_points and len(v)<=100 else None)
+                setxy('Descending rank',req.y);save(['rank',req.y],rank,v)
+            else:
+                require(np.all(v>=0) and v.sum()>0,'Lorenz shares require nonnegative values and positive total.')
+                population=np.arange(len(v)+1)/len(v);share=np.r_[0,np.cumsum(v)/v.sum()]
+                ax.plot(population,share,label='Observed');ax.plot([0,1],[0,1],'--',color='gray',label='Equal share')
+                ax.set(xlim=(0,1),ylim=(0,1));ax.legend(frameon=False)
+                setxy('Cumulative population fraction','Cumulative value fraction')
+                meta['gini']=float(1-np.sum(np.diff(population)*(share[:-1]+share[1:])))
+                save(['population_fraction','value_fraction'],population,share)
+        elif kind=='basic_group_summary':
+            a,c=rows([req.y],[req.group]);v=a[0];groups=c[0];names=list(dict.fromkeys(groups))
+            require(len(names)<=24,'Maximum 24 groups.')
+            counts=np.array([(groups==n).sum() for n in names]);means=np.array([v[groups==n].mean() for n in names])
+            sd=np.array([v[groups==n].std(ddof=1) if k>1 else np.nan for n,k in zip(names,counts)])
+            positions=np.arange(len(names));ax.scatter(positions,means,zorder=3)
+            valid=np.isfinite(sd)
+            if valid.any():ax.errorbar(positions[valid],means[valid],yerr=sd[valid],fmt='none',capsize=3)
+            ax.set_xticks(positions,names,rotation=35,ha='right');setxy(req.group,req.y+' (mean ± sample SD)')
+            meta['method_note']='Descriptive sample standard deviation, not a confidence interval. Singleton groups have undefined SD.'
+            save(['group','count','mean','sample_sd'],names,counts,means,sd)
+        elif kind in {'basic_line','basic_area','basic_running_total','basic_index'}:
             x,y=xy()
             if kind=='basic_line':ax.plot(x,y,marker='o' if req.show_points else None,markersize=3);v=y
             elif kind=='basic_area':ax.fill_between(x,0,y,alpha=.35);ax.plot(x,y);v=y
+            elif kind=='basic_index':
+                require(y[0]!=0,'Baseline index requires a nonzero first observation.');v=100*y/y[0];ax.plot(x,v);ax.axhline(100,color='gray',linestyle='--');meta['baseline_value']=float(y[0]);meta['baseline_x']=float(x[0])
             else:v=np.cumsum(y);ax.plot(x,v)
-            setxy(req.x,'Running sum' if kind=='basic_running_total' else req.y);save([req.x,'value'],x,v)
+            setxy(req.x,'Running sum' if kind=='basic_running_total' else 'Index (first = 100)' if kind=='basic_index' else req.y);save([req.x,'value'],x,v)
         elif kind=='basic_scatter':
             x,y=xy(ordered=False);ax.scatter(x,y,s=12,alpha=.65);setxy(req.x,req.y);save([req.x,req.y],x,y)
         elif kind=='basic_category_count':

@@ -17,6 +17,10 @@ BASIC = (
 ('basic_paired_change','Paired value change','Basic','table','x y z'),
 ('basic_stacked_area','Stacked area series','Basic','table','x columns'),
 ('basic_pareto_frequency','Category Pareto frequency','Basic','table','x y'),
+('basic_rank','Rank-size plot','Basic','table','y'),
+('basic_lorenz','Lorenz cumulative share','Basic','table','y'),
+('basic_index','Baseline-indexed series','Basic','table','x y'),
+('basic_group_summary','Group mean and sample SD','Basic','table','group y'),
 )
 RASTER = (
 ('spatial_local_moran','Local Moran I raster','Spatial statistics','raster',''),

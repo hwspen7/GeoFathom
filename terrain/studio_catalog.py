@@ -1,6 +1,6 @@
 """Scientific figure recipes and explicit input requirements.
 
-The native terrain gallery supplies 24 data-dependent quick recipes; this catalog adds 12 basic and 168 professional recipes. A recipe is never enabled without its required data.
+The native terrain gallery supplies 24 data-dependent quick recipes; this catalog adds 16 basic and 168 professional recipes. A recipe is never enabled without its required data.
 """
 # ID, display name, family, source type, required field bindings.
 RECIPES = (

@@ -126,8 +126,8 @@ def test_every_recipe_renders_actual_data(recipe,raster_fixture):
 
 
 def test_catalog_count_and_unique_recipes():
-    assert len(RECIPES)==len(BY_ID)==len(catalog())==180
-    assert len({r['title'] for r in catalog()})==180
+    assert len(RECIPES)==len(BY_ID)==len(catalog())==184
+    assert len({r['title'] for r in catalog()})==184
 
 
 @pytest.mark.parametrize('fmt,magic',[('svg',b'<?xml'),('pdf',b'%PDF'),('tiff',b'II*\x00')])
@@ -183,8 +183,8 @@ def test_api_catalog_render_metadata_and_validation():
     with TestClient(app) as client:
         response=client.get('/terrain/studio/catalog')
         assert response.status_code==200
-        assert response.json()['additional_recipe_count']+response.json()['legacy_recipe_count']==204
-        assert response.json()['basic_recipe_count']==36 and response.json()['professional_recipe_count']==168
+        assert response.json()['additional_recipe_count']+response.json()['legacy_recipe_count']==208
+        assert response.json()['basic_recipe_count']==40 and response.json()['professional_recipe_count']==168
         response=client.post('/terrain/studio/render',json=table_input('pareto').model_dump())
         assert response.status_code==200,response.text
         result=response.json()
@@ -376,10 +376,10 @@ def test_domain_actual_values(raster_fixture):
 
 def test_domain_recipe_counts_and_tiers():
     from terrain.studio_domain_catalog import BASIC,PROFESSIONAL
-    assert len(BASIC)==12 and len(PROFESSIONAL)==116
+    assert len(BASIC)==16 and len(PROFESSIONAL)==116
     entries=catalog()
     assert sum(r['tier']=='professional' for r in entries)==168
-    assert sum(r['tier']=='basic' for r in entries)==12
+    assert sum(r['tier']=='basic' for r in entries)==16
 
 
 def test_conditional_local_inference_is_reproducible_and_adjusted():
@@ -510,3 +510,14 @@ def test_publication_preflight_measures_actual_tick_overlaps():
     fit_publication_text(fig);after=layout_receipt(fig)
     assert len(after['tick_overlaps'])<=len(before['tick_overlaps'])
     assert '\n' in publication_title('A long scientific title that cannot fit onto a narrow journal column',65,12)
+
+
+def test_basic_new_numeric_outputs():
+    _,meta,table=render(StudioInput(recipe='basic_lorenz',csv='v\n1\n1\n1',y='v'))
+    assert meta['gini']==pytest.approx(0) and table[-1]==[1.,1.]
+    _,_,table=render(StudioInput(recipe='basic_index',csv='t,v\n2,6\n1,3',x='t',y='v'))
+    assert table[-1]==[2.,200.]
+    _,_,table=render(StudioInput(recipe='basic_rank',csv='v\n2\n1\n5',y='v'))
+    assert table[1:]==[[1,5.],[2,2.],[3,1.]]
+    _,_,table=render(StudioInput(recipe='basic_group_summary',csv='g,v\na,1\na,3\nb,5',group='g',y='v'))
+    assert table[1][2]==2 and table[1][3]==pytest.approx(np.sqrt(2)) and table[2][3] is None
