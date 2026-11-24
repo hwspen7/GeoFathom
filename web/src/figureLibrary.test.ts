@@ -64,4 +64,21 @@ describe('scientific figure recipes',()=>{
   while(offset<output.length){const view=new DataView(output.buffer,offset);const n=view.getUint32(0),name=String.fromCharCode(...output.slice(offset+4,offset+8));if(name==='pHYs'){found++;expect(view.getUint32(8)).toBe(Math.round(600/.0254));}offset+=n+12;}
   expect(found).toBe(1);expect(()=>withPNGDpi(new Uint8Array(),300)).toThrow();
  });
+ it('uses a quartile-matched Q–Q reference for skewed populations',()=>{
+  const data={...plotFixture,summary:{...plotFixture.summary!,q1:1,median:2,q3:7}};
+  const scene=makeFigure(data,{...defaultFigure(data),kind:'qq'});
+  const reference=scene.primitives.find(p=>p.kind==='line'&&p.dashed)!;
+  expect(reference).toBeTruthy();
+  const xZero=(115+855)/2;
+  const referenceAtZero=reference.y!+(reference.y2!-reference.y!)*(xZero-reference.x!)/(reference.x2!-reference.x!);
+  // The fitted quartile line crosses x=0 at (q1+q3)/2=4, on y=[0,30].
+  expect(referenceAtZero).toBeCloseTo(470-395*4/30,8);
+ });
+ it('shows isolated valid profile stations without bridging NoData gaps',()=>{
+  const data:PlotData={schema:'test',kind:'profile',quantity:'Elevation',unit:'m',valid_cells:1,cell_area_m2:0,classes:[],notes:[],profiles:[{name:'Sparse',points:[{x:0,y:null},{x:10,y:5},{x:20,y:null}]}]};
+  const scene=makeFigure(data,defaultFigure(data));
+  expect(scene.primitives.filter(p=>p.kind==='circle')).toHaveLength(1);
+  expect(scene.primitives.filter(p=>p.kind==='polyline')).toHaveLength(0);
+ });
+
 });

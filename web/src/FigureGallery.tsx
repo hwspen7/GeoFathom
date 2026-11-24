@@ -20,11 +20,11 @@ export default function FigureGallery(p:{record:PersistedTerrainResult;projectId
  const [data,setData]=useState<PlotData|null>(()=>localPlotData(p.record));
  const [loading,setLoading]=useState(!data),[error,setError]=useState(''),[exporting,setExporting]=useState(false);
  const [settings,setSettings]=useState<FigureSettings|null>(()=>data?defaultFigure(data):null);
- const [page,setPage]=useState<'charts'|'appearance'|'data'>('charts');
+ const [page,setPage]=useState<'charts'|'appearance'|'axes'|'data'>('charts');
  const [dataPage,setDataPage]=useState(0),[styleName,setStyleName]=useState(''),[threshold,setThreshold]=useState('');
  const styleKey='geofathom-figure-styles:'+(p.projectId??'local');
  const [styles,setStyles]=useState<StylePreset[]>(()=>readStyles(styleKey));
- const [selectedStyle,setSelectedStyle]=useState('');
+ const [selectedStyle,setSelectedStyle]=useState(''),[chartPage,setChartPage]=useState(0);
  const svg=useRef<SVGSVGElement>(null),dialog=useRef<HTMLDivElement>(null);
  useEffect(()=>{
   const previous=document.activeElement as HTMLElement|null;dialog.current?.focus();
@@ -58,6 +58,7 @@ export default function FigureGallery(p:{record:PersistedTerrainResult;projectId
  }
  function chooseChart(kind:FigureSettings['kind']){
   if(!settings||!data)return;
+  setChartPage(Math.floor(Math.max(0,recipes.findIndex(r=>r.id===kind))/4));
   const auto=data.quantity.replaceAll('_',' ')+': '+FIGURES.find(f=>f.id===settings.kind)?.title;
   setSettings({...settings,kind,x_log:false,y_log:false,x_label:'',y_label:'',title:settings.title===auto?data.quantity.replaceAll('_',' ')+': '+FIGURES.find(f=>f.id===kind)!.title:settings.title});setDataPage(0);setError('');
  }
@@ -78,10 +79,11 @@ export default function FigureGallery(p:{record:PersistedTerrainResult;projectId
   {error&&<p role="alert" className="discovery-error">{error}</p>}
   {scene?.error&&<p role="alert">{scene.error}</p>}
   {data&&settings&&scene&&table&&<div className="figure-gallery-body">
-   <aside aria-label="Figure settings"><nav aria-label="Figure settings pages">{(['charts','appearance','data'] as const).map(tab=><button type="button" key={tab} aria-pressed={page===tab} onClick={()=>setPage(tab)}>{{charts:'Charts',appearance:'Style',data:'Data'}[tab]}</button>)}</nav>
+   <aside aria-label="Figure settings"><nav aria-label="Figure settings pages">{(['charts','appearance','axes','data'] as const).map(tab=><button type="button" key={tab} aria-pressed={page===tab} onClick={()=>setPage(tab)}>{{charts:'Charts',appearance:'Style',axes:'Axes',data:'Data'}[tab]}</button>)}</nav>
     {page==='charts'&&<>
      <label>Chart type<select aria-label="Chart type" value={settings.kind} onChange={e=>chooseChart(e.target.value as FigureSettings['kind'])}>{recipes.map(r=><option key={r.id} value={r.id}>{r.title}</option>)}</select></label>
-     <div className="figure-recipe-grid">{recipes.map(r=><button type="button" key={r.id} aria-pressed={settings.kind===r.id} title={r.description} onClick={()=>chooseChart(r.id)}><svg viewBox="80 55 790 455" aria-hidden="true">{thumbnails.find(t=>t.id===r.id)?.scene.primitives.filter(p=>p.kind!=='text').map((p,i)=><PrimitiveView key={i} p={p}/>)}</svg>{r.title}</button>)}</div>
+     <div className="figure-recipe-grid">{recipes.slice(chartPage*4,chartPage*4+4).map(r=><button type="button" key={r.id} aria-pressed={settings.kind===r.id} title={r.description} onClick={()=>chooseChart(r.id)}><svg viewBox="80 55 790 455" aria-hidden="true">{thumbnails.find(t=>t.id===r.id)?.scene.primitives.filter(p=>p.kind!=='text').map((p,i)=><PrimitiveView key={i} p={p}/>)}</svg>{r.title}</button>)}</div>
+     {recipes.length>4&&<div className="figure-chart-pages"><button type="button" disabled={chartPage===0} onClick={()=>setChartPage(i=>i-1)}>Previous charts</button><span>{chartPage+1} / {Math.ceil(recipes.length/4)}</span><button type="button" disabled={chartPage>=Math.ceil(recipes.length/4)-1} onClick={()=>setChartPage(i=>i+1)}>Next charts</button></div>}
      <small>{active?.description}</small>
      {['histogram','density'].includes(settings.kind)&&<label>Numerical bins<select aria-label="Numerical bins" value={data.histograms?.[String(settings.bins)]?settings.bins:Object.keys(data.histograms??{})[0]} onChange={e=>change('bins',Number(e.target.value))}>{Object.keys(data.histograms??{}).map(n=><option key={n} value={n}>{n} bins</option>)}</select></label>}
      {['histogram','class_bar','class_dot','rose'].includes(settings.kind)&&<label>Vertical quantity<select aria-label="Vertical quantity" value={settings.measure} onChange={e=>change('measure',e.target.value as FigureSettings['measure'])}><option value="percent">Area share (%)</option><option value="cells">Valid cell count</option><option value="area">Projected area (m²)</option></select></label>}
@@ -89,14 +91,16 @@ export default function FigureGallery(p:{record:PersistedTerrainResult;projectId
      {['profile','grade'].includes(settings.kind)&&<label>Profile series<select aria-label="Profile series" value={settings.series} onChange={e=>change('series',Number(e.target.value))}>{data.profiles?.map((r,i)=><option key={i} value={i}>{r.name}</option>)}</select></label>}
      {settings.kind==='metrics'&&<label>Metric unit group<select aria-label="Metric unit group" value={metricUnit(table.rows[0]?.[0] as string??'')} onChange={e=>change('metric_keys',plotValues.filter(k=>metricUnit(k)===e.target.value))}>{Array.from(new Set(plotValues.map(metricUnit))).map(group=><option key={group} value={group}>{group}</option>)}</select></label>}
     </>}
-    {page==='appearance'&&<>
-     <label>Figure title<input aria-label="Figure title" value={settings.title} maxLength={160} onChange={e=>change('title',e.target.value)}/></label>
+    {page==='axes'&&<>
      <label>X axis label<input aria-label="X axis label" value={settings.x_label} placeholder={table.x_label} maxLength={120} onChange={e=>change('x_label',e.target.value)}/></label>
      <label>Y axis label<input aria-label="Y axis label" value={settings.y_label} placeholder={table.y_label} maxLength={120} onChange={e=>change('y_label',e.target.value)}/></label>
+     <div className="figure-control-pair"><label>X scale<select aria-label="X scale" disabled={['class_bar','class_dot','metrics','box','rose'].includes(settings.kind)} value={settings.x_log?'log':'linear'} onChange={e=>change('x_log',e.target.value==='log')}><option value="linear">Linear</option><option value="log">Logarithmic</option></select></label><label>Y scale<select aria-label="Y scale" disabled={settings.kind==='rose'} value={settings.y_log?'log':'linear'} onChange={e=>change('y_log',e.target.value==='log')}><option value="linear">Linear</option><option value="log">Logarithmic</option></select></label></div>
+    </>}
+    {page==='appearance'&&<>
+     <label>Figure title<input aria-label="Figure title" value={settings.title} maxLength={160} onChange={e=>change('title',e.target.value)}/></label>
      <div className="figure-control-pair"><label>Palette<select aria-label="Palette" value={settings.palette} onChange={e=>change('palette',e.target.value as FigureSettings['palette'])}><option value="mono">Black and white</option><option value="blue">Blue</option><option value="earth">Earth</option></select></label><label>Font<select aria-label="Font" value={settings.font} onChange={e=>change('font',e.target.value as FigureSettings['font'])}><option value="sans">Sans serif</option><option value="serif">Serif</option></select></label></div>
      <label>Label size<input aria-label="Label size" type="number" min="12" max="22" value={settings.font_size} onChange={e=>change('font_size',Math.min(22,Math.max(12,Number(e.target.value)||16)))}/></label>
      <label className="figure-toggle"><input type="checkbox" checked={settings.grid} onChange={e=>change('grid',e.target.checked)}/>Grid lines</label>
-     <div className="figure-control-pair"><label>X scale<select aria-label="X scale" disabled={['class_bar','class_dot','metrics','box','rose'].includes(settings.kind)} value={settings.x_log?'log':'linear'} onChange={e=>change('x_log',e.target.value==='log')}><option value="linear">Linear</option><option value="log">Logarithmic</option></select></label><label>Y scale<select aria-label="Y scale" disabled={settings.kind==='rose'} value={settings.y_log?'log':'linear'} onChange={e=>change('y_log',e.target.value==='log')}><option value="linear">Linear</option><option value="log">Logarithmic</option></select></label></div>
      <label>Style name<input aria-label="Style name" value={styleName} maxLength={80} onChange={e=>setStyleName(e.target.value)}/></label>
      <button type="button" disabled={!styleName.trim()} onClick={()=>{try{const next=[{name:styleName.trim(),settings},...styles.filter(s=>s.name!==styleName.trim())].slice(0,12);localStorage.setItem(styleKey,JSON.stringify(next));setStyles(next);setSelectedStyle(styleName.trim());}catch{setError('Style could not be saved in this browser.');}}}>Save style</button>
      {styles.length>0&&<label>Saved styles<select aria-label="Saved styles" value={selectedStyle} onChange={e=>{setSelectedStyle(e.target.value);const preset=styles.find(s=>s.name===e.target.value);if(preset){const compatible=recipes.some(r=>r.id===preset.settings.kind);setSettings({...preset.settings,kind:compatible?preset.settings.kind:settings.kind});}}}><option value="">Choose a style</option>{styles.map(s=><option key={s.name}>{s.name}</option>)}</select></label>}

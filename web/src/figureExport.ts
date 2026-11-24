@@ -60,7 +60,7 @@ elif kind in ("qq", "scatter"):
     if summary and kind == "qq":
         slope = (summary["q3"]-summary["q1"])/(2*0.6744897501960817)
         ends = [rows[0][0], rows[-1][0]]
-        ax.plot(ends, [summary["median"]+slope*x for x in ends], "--", color="0.5", linewidth=0.8)
+        ax.plot(ends, [(summary["q1"]+summary["q3"])/2+slope*x for x in ends], "--", color="0.5", linewidth=0.8)
 elif kind in ("class_bar", "class_dot", "metrics"):
     values = [r[1 if kind == "metrics" else measure] for r in rows]
     positions = list(range(len(rows)))
@@ -76,7 +76,7 @@ elif kind == "rose":
     ticks = [maximum*i/4 for i in range(1,5)]
     ax.set_yticks([math.sqrt(t) for t in ticks], [f"{t:.3g}" for t in ticks])
 else:
-    ax.plot([r[0] for r in rows], [float("nan") if r[1] is None else r[1] for r in rows], color=color)
+    ax.plot([r[0] for r in rows], [float("nan") if r[1] is None else r[1] for r in rows], color=color, marker="o" if kind in ("profile", "grade") else None, markersize=2)
 if kind != "rose":
     if settings["x_log"] and kind not in ("box", "class_bar", "class_dot", "metrics"): ax.set_xscale("log")
     if settings["y_log"]: ax.set_yscale("log")

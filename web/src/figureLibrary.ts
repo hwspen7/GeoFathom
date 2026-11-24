@@ -4,8 +4,6 @@ import type {PersistedTerrainResult} from './terrainResultStore';
 export type FigureKind='histogram'|'cdf'|'exceedance'|'density'|'box'|'quantile'|'qq'|'class_bar'|'class_dot'|'rose'|'profile'|'grade'|'metrics'|'scatter'|'joint_density';
 export interface FigureRecipe {id:FigureKind;title:string;description:string;category:string}
 export const FIGURES:FigureRecipe[]=[
- {id:'scatter',title:'Elevation–result scatter',description:'Aligned value pairs with explicit sampling and all-cell correlation',category:'Relationships'},
- {id:'joint_density',title:'Elevation–result density',description:'Two-dimensional frequency using every aligned valid cell',category:'Relationships'},
  {id:'histogram',title:'Histogram',description:'Exact counts or area within numerical bins',category:'Distribution'},
  {id:'cdf',title:'Cumulative distribution',description:'Area at or below a value',category:'Distribution'},
  {id:'exceedance',title:'Exceedance curve',description:'Area strictly above a value',category:'Distribution'},
@@ -13,6 +11,8 @@ export const FIGURES:FigureRecipe[]=[
  {id:'box',title:'Box and whisker',description:'Quartiles, median and observed 1.5 IQR whiskers',category:'Distribution'},
  {id:'quantile',title:'Quantile curve',description:'Recorded quantiles of the numerical population',category:'Distribution'},
  {id:'qq',title:'Normal Q–Q',description:'Observed versus theoretical normal quantiles',category:'Diagnostics'},
+ {id:'scatter',title:'Elevation–result scatter',description:'Aligned value pairs with explicit sampling and all-cell correlation',category:'Relationships'},
+ {id:'joint_density',title:'Elevation–result density',description:'Two-dimensional frequency using every aligned valid cell',category:'Relationships'},
  {id:'class_bar',title:'Class area bars',description:'Classified area or frequency by class',category:'Composition'},
  {id:'class_dot',title:'Class dot plot',description:'Compact class comparison without filled bars',category:'Composition'},
  {id:'rose',title:'Aspect rose',description:'Directional frequencies; flat cells excluded',category:'Direction'},
@@ -192,7 +192,7 @@ export function makeFigure(data:PlotData,s:FigureSettings):FigureScene{
   text(450,555,s.y_label||table.y_label,'middle');
  }else{
   let segment:Array<[number,number]>=[];
-  const flush=()=>{if(segment.length>1)poly(segment);segment=[];};
+  const flush=()=>{if(segment.length>1)poly(segment);else if(segment.length===1)p.push({kind:'circle',x:segment[0][0],y:segment[0][1],radius:2.5,fill:ink,stroke:ink,line_width:0});segment=[];};
   points.forEach(pt=>{
    if(!okay(pt)){flush();return;}
    const xx=x(pt[0]),yy=y(pt[1]!);
@@ -205,9 +205,10 @@ export function makeFigure(data:PlotData,s:FigureSettings):FigureScene{
    }
   });flush();
   if(s.kind==='qq'&&data.summary){
-   const slope=(data.summary.q3-data.summary.q1)/(2*.6744897501960817),intercept=data.summary.median;
-   const y1=intercept+slope*xmin,y2=intercept+slope*xmax;
-   if(y1>=ymin&&y2<=ymax)line(x(xmin),y(y1),x(xmax),y(y2),'#888888',true);
+   const slope=(data.summary.q3-data.summary.q1)/(2*.6744897501960817),intercept=(data.summary.q1+data.summary.q3)/2;
+   const start=slope>0?Math.max(xmin,(ymin-intercept)/slope):xmin;
+   const end=slope>0?Math.min(xmax,(ymax-intercept)/slope):xmax;
+   if(end>=start&&intercept+slope*start>=ymin&&intercept+slope*end<=ymax)line(x(start),y(intercept+slope*start),x(end),y(intercept+slope*end),'#888888',true);
   }
  }
  const note=(s.kind==='scatter'&&data.joint?`Shown ${data.joint.sample_cells} / ${data.joint.population_cells} aligned pairs; r = ${data.joint.pearson_r?.toPrecision(4)??'undefined'}. `:'')+(logX||logY?'Log axes omit non-positive values. ':'')+`n = ${(s.kind==='rose'?(data.directional_cells??data.valid_cells):data.valid_cells).toLocaleString('en-US')} ${s.kind==='rose'?'directional cells':data.kind==='profile'?'valid profile samples':'valid raster cells'}`;
