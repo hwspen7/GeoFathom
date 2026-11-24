@@ -32,3 +32,6 @@ SAR now also provides Gamma MAP intensity filtering, paired log-ratio change, an
 
 ## Inference and correction extensions
 77 catalog methods include conditional Lambertian atmospheric inversion (externally supplied path, transmission and spherical albedo), robust Huber cross-scene harmonization with disjoint calibration and reference pixels, iteratively reweighted MAD with effective sample size and convergence diagnostics, Euclidean cloud-buffer dilation, and exact single-mean-shift breakpoint time/jump/strength for variable date series. Nonconverged IR-MAD is explicitly diagnostic; breakpoint strength is descriptive, not a statistical significance test. These are not automated aerosol retrieval or general land-cover disturbance detection.
+
+## Spatial classification cross-validation
+80 catalog methods now include scikit-learn random forest, RBF SVM and shrinkage LDA, with all spatial folds evaluated, training-only preprocessing, fixed hyperparameters, optional block buffer, OOF confusion matrix, macro F1 and balanced accuracy. The final deployable classification refits all labels; its reported accuracy is explicitly out-of-fold, not in-sample. Dependencies are pinned in platform constraints. No automatic hyperparameter tuning or external validation is implied.

@@ -189,7 +189,7 @@ def test_remote_invalid_inputs_and_recovery():
         response=client.post('/analysis/remote-sensing/run',json=bad);assert response.status_code==422,response.text
     response=client.post('/analysis/remote-sensing/run',json=good);assert response.status_code==200,response.text
     np.testing.assert_allclose(grid(response.json()),.5)
-    assert client.get('/analysis/remote-sensing/catalog').json()['operation_count']==len(BY_ID)==77
+    assert client.get('/analysis/remote-sensing/catalog').json()['operation_count']==len(BY_ID)==80
 
 def test_temporal_independent_quality_masks():
     # Cloud at one date does not erase the other valid acquisitions.
@@ -488,3 +488,20 @@ def test_inference_reference(kind):
         data[1,0,0]=np.nan;s=source(data);bindings={f'date{i+1}':{'source':0,'band':i+1,'unit':'index'} for i in range(len(t))}
         result=checked(execute(RemoteInput(operation=kind,sources=[s],bindings=bindings,times=t,parameters={'min_segment':3})))
         np.testing.assert_allclose(grid(result),{'series_break_time':5.5,'series_break_jump':5,'series_break_strength':1}[kind],atol=1e-12)
+
+
+@pytest.mark.parametrize('kind',['spatial_rf_cv','spatial_svm_cv','spatial_lda_cv'])
+def test_blocked_classifier_reference(kind):
+    rng=np.random.default_rng(17);row,col=np.indices((24,24));labels=1+(row%2)
+    a={r:np.where(labels==1,.2,.8)+rng.normal(0,.01,labels.shape) for r in ('blue','green','red','nir')}
+    a['training']=labels.copy();params={'block_m':40,'folds':5}
+    if kind=='spatial_rf_cv':params.update(trees=32,seed=7)
+    r=run(kind,a,params);m=r['receipt']['metrics']
+    np.testing.assert_array_equal(grid(r),labels)
+    assert m['oof_confusion_matrix_reference_rows']==[[288,0],[0,288]]
+    assert m['oof_cells']==576 and m['oof_macro_f1']==1
+    assert sum(row[2] for row in r['rows'])==576
+    assert all(row[1]+row[2]==576 and row[4]==1 for row in r['rows'])
+    assert run(kind,a,params)['rows']==r['rows']
+    with pytest.raises(FigureInputError,match='Each spatial fold'):
+        run(kind,a,{**params,'block_m':10000})

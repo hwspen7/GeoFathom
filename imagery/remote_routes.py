@@ -15,6 +15,7 @@ from analysis.science_raster import require
 from analysis.science_routes import raster_product,raster_preview,csv_output
 from analysis.science_figures import figure_sources,csv_text
 from .remote_catalog import BY_ID,catalog,SERIES_IDS
+from .remote_classifiers import blocked_classifier
 from .remote_inference import atmospheric_reflectance,robust_harmonization,irmad,cloud_buffer,series_break
 from .remote_research import surface_temperature,c_correction,ndvi_uncertainty,change_vectors,spatial_classifier,long_series,gamma_map,mad_distance
 from .remote_products import rgb_product
@@ -173,6 +174,7 @@ def execute(body):
     elif kind=='topographic_c':out,meta=c_correction(v,params)
     elif kind=='ndvi_uncertainty':out,meta=ndvi_uncertainty(v,params)
     elif kind in {'change_vector','change_mahalanobis'}:out,meta=change_vectors(v,kind=='change_mahalanobis')
+    elif kind in {'spatial_rf_cv','spatial_svm_cv','spatial_lda_cv'}:out,headers,rows,meta=blocked_classifier(v,first,params,kind)
     elif kind=='spatial_lda':out,headers,rows,meta=spatial_classifier(v,first,params)
     elif kind in SERIES_IDS:
         stack=np.stack(list(v.values()))
@@ -241,6 +243,10 @@ def execute(body):
     def add(title,recipe,bindings,table=None):
         plots.append({'title':title,'recipe':recipe,'bindings':bindings,'csv':csv if table is None else table,'raster':False})
     if kind=='irmad':add('Canonical correlation convergence','multi_line',{'x':'iteration','columns':['rho1','rho2','rho3']})
+    if kind in {'spatial_rf_cv','spatial_svm_cv','spatial_lda_cv'}:
+        add('Spatial fold accuracy','basic_column',{'x':'fold','y':'accuracy'})
+        add('Spatial fold balanced accuracy','basic_column',{'x':'fold','y':'balanced_accuracy'})
+        add('Spatial fold sample support','basic_column',{'x':'fold','y':'validation_cells'})
     if kind=='pca':add('PCA explained variance','basic_column',{'x':'component','y':'explained_fraction'})
     if kind=='transition_matrix':add('Transition area by class pair','basic_column',{'x':'transition','y':'area_m2'},csv_text(['transition','area_m2'],[[str(a)+' → '+str(b),area] for a,b,_,area,_ in rows]) ) if len(rows)<=50 else None
     if kind in SERIES_IDS and any(row[2] is not None for row in rows):add('Acquisition mean time series','basic_line',{'x':'time','y':'mean'})

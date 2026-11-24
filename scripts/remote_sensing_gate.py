@@ -10,6 +10,7 @@ from imagery.remote_catalog import BY_ID
 
 def expected_tests():
     groups={
+        'test_blocked_classifier_reference':'spatial_rf_cv spatial_svm_cv spatial_lda_cv',
         'test_inference_reference':'atmospheric_reflectance robust_harmonization irmad cloud_buffer series_break_time series_break_jump series_break_strength',
         'test_sar_mad_reference':'sar_gamma_map sar_log_change sar_gamma0_flat mad_distance',
         'test_research_depth_reference':'surface_temperature_rte topographic_c ndvi_uncertainty change_vector change_mahalanobis spatial_lda series_median series_count series_slope series_amplitude series_harmonic_rmse',
