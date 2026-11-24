@@ -46,9 +46,6 @@ def node_id(value):
     require(isinstance(value,str) and 0<len(value)<=128 and value.strip()==value,"Node/edge IDs must be nonempty strings up to 128 characters.")
     return value
 
-def digest(data):
-    return hashlib.sha256(json.dumps(data,sort_keys=True,separators=(",",":"),allow_nan=False).encode()).hexdigest()
-
 @dataclass(frozen=True)
 class Edge:
     id:str
@@ -240,7 +237,7 @@ def execute(body):
                 e=by_id[eid];coords=e.coords if u==e.source else e.coords[::-1]
                 rows.append([i,eid,u,v,e.cost,d[v]]);features.append(edge_feature(e,coords,sequence=i,cost=e.cost))
         metrics={"reachable":t in d,"total_cost":d.get(t),"route_length_m":sum(by_id[e].length for _,_,e in path) if t in d else None}
-        if rows:plot("Cumulative route impedance","basic_line","sequence","cumulative_cost")
+        if rows:plot("Cumulative route impedance","basic_line" if len(rows)>1 else "basic_column","sequence","cumulative_cost")
     elif kind=="service_area":
         require(1<=len(origins)<=64,"Choose service origins.");budget(len(origins))
         distance={}
@@ -256,7 +253,7 @@ def execute(body):
                 if left>0:features.append(edge_feature(e,partial(e.coords,left),reachable_fraction=left))
                 if right>0:features.append(edge_feature(e,partial(e.coords[::-1],right),reachable_fraction=right))
         reach=sorted(distance.values());metrics={"reachable_nodes":len(reach),"reachable_length_m":sum(GEOD.line_length(*zip(*f["geometry"]["coordinates"])) for f in features),"threshold":body.threshold}
-        plot("Network service reach curve","basic_line","cost","nodes",values=(["cost","nodes"],[[z,i+1] for i,z in enumerate(reach)]))
+        plot("Network service reach curve","basic_line" if len(reach)>1 else "basic_column","cost","nodes",values=(["cost","nodes"],[[z,i+1] for i,z in enumerate(reach)]))
     elif kind in ("harmonic_centrality","betweenness"):
         budget(n);require(n<=2000,"Exact all-node centrality limited to 2,000 nodes.")
         scores=brandes(a) if kind=="betweenness" else {u:sum(1/z for v,z in dijkstra(a,u)[0].items() if v!=u)/(n-1) for u in a}
@@ -307,7 +304,7 @@ def execute(body):
             z=1.959963984540054;T=body.trials
             for i,(s,t,d) in enumerate(pairs):
                 p=float(success[i]/T);den=1+z*z/T;center=(p+z*z/(2*T))/den;half=z*math.sqrt(p*(1-p)/T+z*z/(4*T*T))/den
-                rows.append([s,t,d,p,max(0,center-half),min(1,center+half),float(cost_sum[i]/success[i]) if success[i] else None])
+                rows.append([s,t,d,p,0. if p==0 else max(0,center-half),1. if p==1 else min(1,center+half),float(cost_sum[i]/success[i]) if success[i] else None])
             metrics={"trials":T,"seed":body.seed,"mean_pair_reliability":float(success.mean()/T),"failure_model":"Independent Bernoulli closures; Wilson intervals are Monte Carlo sampling intervals conditional on supplied probabilities."}
             plot("OD reliability and simulation intervals","errorbar","pair","reachable_probability",values=(["pair","reachable_probability","low","high"],[[i+1,r[3],r[4],r[5]] for i,r in enumerate(rows)]))
             figures[-1]["bindings"].update(low="low",high="high")

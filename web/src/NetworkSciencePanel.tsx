@@ -34,7 +34,7 @@ export default function NetworkSciencePanel({active,connected,resultsTarget,proj
  useEffect(()=>{if(!active&&!open)return;const ac=new AbortController();getNetworkScienceCatalog(ac.signal).then(x=>{if(!ac.signal.aborted)setMethods(x.operations);}).catch(e=>{if(!ac.signal.aborted)setError(String(e.message));});return()=>ac.abort();},[active,open]);
  useEffect(()=>{if(!open)return;const previous=document.activeElement as HTMLElement|null;dialog.current?.focus();return()=>previous?.focus();},[open]);
  function invalidate(){setResult(null);setError('');}
- function load(raw:unknown,label:string){setNetwork(graph(raw));setName(label);setNodeIds([]);setOrigins('');setDestinations('');invalidate();onPreview([]);}
+ function load(raw:unknown,label:string){setNetwork(graph(raw));setName(label);setNodeIds([]);setOrigins('');setDestinations('');setDemand('{}');setSupply('{}');setClosed('');setMultipliers('{}');setTestEdges('');setFailure('{}');invalidate();onPreview([]);}
  function close(){request.current?.abort();request.current=null;setBusy(false);setOpen(false);}
  async function importGraph(file:File){try{if(file.size>8_000_000)throw Error('Network exceeds 8 MB.');const raw=JSON.parse(await file.text());if(mounted.current)load(raw,file.name);}catch(e){if(mounted.current)setError(String((e as Error).message));}}
  async function importRaster(file:File){try{if(file.size>12_000_000)throw Error('Raster exceeds 12 MB.');const reader=new FileReader();reader.onload=()=>{if(mounted.current){setRaster({name:file.name,data:String(reader.result).split(',')[1]});setBand(1);invalidate();}};reader.onerror=()=>setError('Raster read failed.');reader.readAsDataURL(file);}catch(e){setError(String((e as Error).message));}}
