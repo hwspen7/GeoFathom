@@ -21,9 +21,9 @@ export default function LidarCloudView({csv,columns,zField}:{csv:string;columns:
    function project(p:number[]){
      const [x,y,z]=p.map((v,i)=>(v-center[i])/span);
      const u=Math.cos(a)*x-Math.sin(a)*y,v=Math.sin(a)*x+Math.cos(a)*y;
-     return {x:210+350*u,y:132-350*(Math.cos(e)*z-Math.sin(e)*v),depth:Math.cos(e)*v+Math.sin(e)*z};
+     return {x:210+230*u,y:132-230*(Math.cos(e)*z-Math.sin(e)*v),depth:Math.cos(e)*v+Math.sin(e)*z};
    }
-   const points=cloud.map((p,i)=>({...project(p),id:i,ratio:hi[2]===lo[2]?.5:(p[2]-lo[2])/(hi[2]-lo[2])})).sort((a,b)=>a.depth-b.depth);
+   const points=cloud.map((p,i)=>({...project(p),id:i,ratio:hi[2]===lo[2] ? .5 : (p[2]-lo[2])/(hi[2]-lo[2])})).sort((a,b)=>a.depth-b.depth);
    const origin=project(lo);
    const axes=[0,1,2].map(i=>{const end=[...lo];end[i]+=span*.13;return project(end);});
    return {points,origin,axes,lo,hi};
