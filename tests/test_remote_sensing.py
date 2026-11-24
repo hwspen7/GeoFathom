@@ -1155,3 +1155,55 @@ def test_exact_overlap_reference(kind):
     expected=[2.,3.,5.,7.] if kind=='align_overlap_mean' else [.5,1.,1.,1.]
     np.testing.assert_allclose(grid(result),np.tile(expected,(3,1)))
     assert result['receipt']['metrics']['observed_support_area_m2']==1050
+
+
+def test_disk_non_nested_overlap_matches_inline_across_windows(tmp_path):
+    import rasterio
+    from imagery.remote_support_disk import transfer
+    from types import SimpleNamespace
+    from imagery.remote_satellite import area_overlap
+    from rasterio.transform import from_origin
+    shape=(70,73);rng=np.random.default_rng(82)
+    a=rng.uniform(2,7,shape);a[20:24,30:35]=np.nan
+    b=np.ones((52,60));b[14,10]=np.nan
+    ta=from_origin(500000,4500000,10,10)
+    tb=from_origin(499997,4500003,12,13)
+    paths=[tmp_path/'source.tif',tmp_path/'target.tif']
+    paths[0].write_bytes(base64.b64decode(source(a,aff=ta,unit='m')['data']))
+    paths[1].write_bytes(base64.b64decode(source(b,aff=tb,unit='m')['data']))
+    for mode in ('mean','coverage'):
+        expected,_=area_overlap(SimpleNamespace(values=a,transform=ta,crs=CRS,is_meter=True),
+            SimpleNamespace(values=b,transform=tb,crs=CRS,is_meter=True),{'minimum_coverage':.5},'align_overlap_'+mode)
+        for tile in (16,32):
+            out=tmp_path/f'{mode}-{tile}.tif'
+            receipt=transfer(*paths,out,mode=mode,minimum_coverage=.5,tile=tile)
+            with rasterio.open(out) as ds:
+                assert ds.transform==tb
+                np.testing.assert_allclose(ds.read(1),expected,rtol=1e-10,atol=1e-10,equal_nan=True)
+            assert receipt['output_sha256']==hashlib.sha256(out.read_bytes()).hexdigest()
+            assert receipt['maximum_source_window_cells']<2000
+    with pytest.raises(FigureInputError):
+        transfer(*paths,tmp_path/'mean-16.tif')
+
+def test_satellite_affine_control_checkpoints_and_robustness():
+    from imagery.satellite_geometry import fit_affine
+    from affine import Affine
+    x,y=np.meshgrid(np.arange(5.)*100,np.arange(5.)*100)
+    pixels=np.column_stack((x.ravel(),y.ravel()))
+    matrix=np.array([[10.,.2],[-.1,-10.]])
+    offset=np.array([500000.,4500000.])
+    mapxy=lambda z:z@matrix.T+offset
+    controls=np.column_stack((pixels,mapxy(pixels)))
+    checkpoints=np.array([[50.,50.],[150.,220.],[330.,120.],[280.,330.]])
+    b=np.column_stack((checkpoints,mapxy(checkpoints)))
+    fit=fit_affine(controls,b,32617)
+    assert fit['checkpoint_rmse_m']<1e-8
+    t=Affine(*fit['affine'])
+    np.testing.assert_allclose(t*(50.5,50.5),b[0,2:],atol=1e-8)
+    controls[12,2:]+=[200.,-200.]
+    robust=fit_affine(controls,b,32617,huber_m=.1)
+    assert robust['checkpoint_rmse_m']<.01
+    b2=b.copy();b2[:,2:]+=1000
+    assert fit_affine(controls,b2,32617,huber_m=.1)['affine']==robust['affine']
+    with pytest.raises(FigureInputError):
+        fit_affine(controls,controls[:3],32617)

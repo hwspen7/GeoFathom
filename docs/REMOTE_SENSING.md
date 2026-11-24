@@ -108,3 +108,9 @@ Additional mandatory regressions test nonidentifiable physical libraries (identi
 ## Satellite statistical change and arbitrary grid support
 
 144 catalog outputs include a two-sided Gamma multilook intensity ratio F test and pointwise log-ratio confidence bounds with explicitly supplied before/after ENL. The three kernels are available in disk execution and do not infer ENL, calibration, temporal independence or multiplicity correction. Exact non-nested rectangular overlap uses sparse separable axis intersection matrices to remap intensive measurements and report valid-area support on shifted or non-integer-resolution grids in the same projected metre CRS. It is not an equal-area geodetic transformation or sharpening algorithm. Analytic reference and disk parity fixtures are mandatory.
+
+## Local satellite geometry and full-scene conservative transfer
+
+Run python -m imagery.satellite_geometry controls.json to fit a robust Huber affine mapping of explicitly paired pixel centers and projected ground control points. The independent checkpoint set is excluded from fitting, with axis RMSE, radial P95, bias, conditioning and convergence reported. The output affine follows the pixel-corner convention. It is local geometric calibration, not RPC-based orthorectification or an automatic image resampling service.
+
+Run python -m imagery.remote_support_disk config.json output.tif for exact area support and coverage between non-nested native grids. The config supplies source_path, target_path, source_band, target_band, unit, mode, minimum_coverage and tile. The implementation reads only exact source support for each target window, respects masks, limits work, records input/output hashes, checks that source files did not change, and publishes only completed output without overwriting files. The two tile sizes and independent inline reference are mandatory tests. Currently local CLI only.
