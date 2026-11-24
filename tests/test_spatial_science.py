@@ -180,7 +180,7 @@ def test_integrated_operators_analytic_spatial_fixture(kind):
 
 def test_contract_count_and_invalid_input_rejections():
     client=TestClient(app);response=client.get('/analysis/science/catalog')
-    assert response.status_code==200 and response.json()['operation_count']==len(BY_ID)==67
+    assert response.status_code==200 and response.json()['operation_count']==len(BY_ID)==72
     assert set(m['group'] for m in response.json()['operations'])=={'Vector','Raster','Sampling','Statistics','Decision','Integrated'}
     assert response.json()['ai_tool']['input_schema']['properties']['operation']
     bad=[
@@ -540,3 +540,68 @@ def test_geographically_weighted_multiple_coefficients():
     r=run('geographically_weighted_regression',rasters=[raster(y),raster(x),raster(z)],parameters={'bandwidth_m':30})
     assert r['columns'][-2:]==['local_coefficient_first_predictor','local_coefficient_predictor_2']
     np.testing.assert_allclose(np.array(r['rows'])[:,-2:],np.tile([2,-3],(36,1)),atol=1e-9)
+
+
+@pytest.mark.parametrize('kind',['ordinary_kriging','kriging_uncertainty','spatial_error_regression','difference_probability','sample_srs_estimation'])
+def test_geostatistical_oracles(kind):
+    if kind in ('ordinary_kriging','kriging_uncertainty'):
+        # Independent augmented ordinary kriging linear system for each target.
+        z=np.full((4,4),np.nan);z[0,0]=2;z[0,3]=5;z[3,0]=7;z[3,3]=11
+        mask=np.ones_like(z);range_m=17.;sill=4.;nugget=.2
+        r=run(kind,rasters=[raster(mask),raster(z)],parameters={'range_m':range_m,'sill':sill,'nugget_ratio':nugget})
+        out,_=result_grid(r);xy=np.argwhere(np.isfinite(z))*10;v=z[np.isfinite(z)]
+        c=sill*np.exp(-np.linalg.norm(xy[:,None]-xy[None,:],axis=2)/range_m)+nugget*sill*np.eye(4)
+        aug=np.block([[c,np.ones((4,1))],[np.ones((1,4)),np.zeros((1,1))]])
+        for q in np.ndindex(z.shape):
+            k=sill*np.exp(-np.linalg.norm(xy-np.array(q)*10,axis=1)/range_m)
+            weights=np.linalg.solve(aug,np.r_[k,1.]);w=weights[:-1]
+            expected=w@v if kind=='ordinary_kriging' else np.sqrt(sill-2*w@k+w@c@w)
+            assert out[q]==pytest.approx(expected,abs=1e-9)
+        for i,row in enumerate(r['rows']):
+            keep=np.arange(4)!=i;cc=c[np.ix_(keep,keep)]
+            system=np.block([[cc,np.ones((3,1))],[np.ones((1,3)),np.zeros((1,1))]])
+            w=np.linalg.solve(system,np.r_[c[keep,i],1.])[:-1]
+            assert row[3]==pytest.approx(w@v[keep],abs=1e-9)
+    elif kind=='spatial_error_regression':
+        rng=np.random.default_rng(74);x=rng.normal(size=(6,6));n=x.size
+        coords=np.indices(x.shape).reshape(2,-1).T
+        w=(np.abs(coords[:,None]-coords[None,:]).sum(axis=2)==1).astype(float);w/=w.sum(axis=1,keepdims=True)
+        y=3+2*x.ravel()+np.linalg.solve(np.eye(n)-.6*w,rng.normal(size=n))
+        r=run(kind,rasters=[raster(y.reshape(x.shape)),raster(x)])
+        m=r['receipt']['metrics'];design=np.column_stack((np.ones(n),x.ravel()))
+        def reference(lam):
+            a=np.eye(n)-lam*w;coef=np.linalg.lstsq(a@design,a@y,rcond=None)[0];e=a@(y-design@coef)
+            return np.linalg.slogdet(a)[1]-n/2*(np.log(2*np.pi)+1+np.log(e@e/n))
+        candidates=np.linspace(-.95,.95,301)
+        assert m['log_likelihood']>=max(reference(lam) for lam in candidates)-1e-8
+        assert m['log_likelihood']==pytest.approx(reference(m['lambda']),abs=1e-9)
+        assert len(m['conditional_coefficient_se'])==1
+    elif kind=='difference_probability':
+        a=np.full((4,4),5.);b=np.full((4,4),3.);sa=np.full((4,4),3.);sb=np.full((4,4),4.)
+        r=run(kind,rasters=[raster(a),raster(b),raster(sa),raster(sb)],parameters={'threshold':2})
+        out,_=result_grid(r);np.testing.assert_allclose(out,.5)
+        r=run(kind,rasters=[raster(a),raster(b),raster(sa*0),raster(sb*0)],parameters={'threshold':2})
+        out,_=result_grid(r);np.testing.assert_allclose(out,0)
+    else:
+        r=run(kind,rasters=[raster()],parameters={'count':8,'seed':4})
+        values=np.array([row[4] for row in r['rows']]);m=r['receipt']['metrics']
+        assert m['mean_estimate']==pytest.approx(values.mean())
+        assert m['mean_standard_error']==pytest.approx(values.std(ddof=1)*np.sqrt(.5/8))
+        census=run(kind,rasters=[raster()],parameters={'count':16})
+        assert census['receipt']['metrics']['mean_standard_error']==0
+
+
+def test_kriging_exactness_mask_and_actual_figure():
+    from terrain.studio_routes import StudioInput
+    from terrain.studio_render import render
+    z=np.full((4,4),np.nan);z[0,0]=2;z[0,3]=5;z[3,0]=7;z[3,3]=11
+    mask=np.ones_like(z);mask[2,2]=np.nan
+    args={'rasters':[raster(mask),raster(z)],'parameters':{'range_m':20,'sill':3,'nugget_ratio':0}}
+    r=run('ordinary_kriging',**args);p,_=result_grid(r)
+    np.testing.assert_allclose(p[np.isfinite(z)],z[np.isfinite(z)],atol=1e-9)
+    assert np.isnan(p[2,2])
+    s,_=result_grid(run('kriging_uncertainty',**args))
+    assert np.max(s[np.isfinite(z)])<1e-6 and np.nanmax(s)>0
+    plot=next(p for p in r['figures'] if p['title']=='Kriging leave-one-out agreement')
+    image,_,_=render(StudioInput(recipe=plot['recipe'],csv=plot['csv'],**plot['bindings']))
+    assert image.startswith(b'\x89PNG')

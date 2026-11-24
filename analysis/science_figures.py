@@ -44,7 +44,14 @@ def figure_sources(result,grids):
     if kind=='empirical_variogram':
         table('Empirical semivariogram','basic_scatter',{'x':'mean_distance_m','y':'semivariance'})
         table('Lag pair support','basic_column',{'x':'bin','y':'pairs'})
-    if kind in {'spatial_lag_regression','geographically_weighted_regression'}:
+    if kind in {'ordinary_kriging','kriging_uncertainty'}:
+        table('Kriging leave-one-out agreement','basic_scatter',{'x':'observed','y':'prediction'})
+        table('Kriging standardized residual distribution','basic_rank',{'y':'standardized_residual'})
+        table('Kriging residual versus predictive SD','basic_scatter',{'x':'prediction_sd','y':'residual'})
+    if kind=='spatial_error_regression':
+        table('Spatial error innovation distribution','basic_rank',{'y':'innovation'})
+        table('Spatial error innovation versus fitted response','basic_scatter',{'x':'prediction','y':'innovation'})
+    if kind in {'spatial_lag_regression','geographically_weighted_regression','spatial_error_regression'}:
         table('Observed versus modeled response','basic_scatter',{'x':'observed','y':'prediction'})
         table('Residual versus fitted response','basic_scatter',{'x':'prediction','y':'residual'})
         table('Residual distribution','basic_rank',{'y':'residual'})

@@ -23,6 +23,7 @@ from .science_raster import require,raster_operation,sample_cells,permutation_st
 from .science_vector import load_layers,vector_operation,integrated
 from .science_advanced import euclidean_distance,focal_quantile,lag_scan,bivariate_moran,robust_overlay,blocked_raster_regression
 from .science_models import weighted_moran,multiscale,difference_uncertainty,empirical_variogram,fit_spatial_model
+from .science_geostatistics import ordinary_kriging,spatial_error_regression,difference_probability,srs_estimation
 
 router=APIRouter(prefix='/analysis/science',tags=['spatial science'])
 source_router=APIRouter(tags=['spatial science sources'])
@@ -135,6 +136,17 @@ def execute(body):
     elif kind in {'spatial_lag_regression','geographically_weighted_regression'}:
         out,headers,rows,meta=fit_spatial_model(grids,params,kind,body.regression_view)
         product=raster_product(kind,out,g.transform,g.crs,g.unit)
+    elif kind in {'ordinary_kriging','kriging_uncertainty'}:
+        out,headers,rows,meta,unit=ordinary_kriging(grids,params,kind)
+        product=raster_product(kind,out,g.transform,g.crs,unit)
+    elif kind=='spatial_error_regression':
+        out,headers,rows,meta=spatial_error_regression(grids,params,body.regression_view)
+        product=raster_product(kind,out,g.transform,g.crs,g.unit)
+    elif kind=='difference_probability':
+        out,meta=difference_probability(grids,params['correlation'],params['threshold'])
+        product=raster_product(kind,out,g.transform,g.crs,'probability')
+    elif kind=='sample_srs_estimation':
+        headers,rows,meta=srs_estimation(g,params)
     elif kind=='raster_distance':
         require(g.is_meter,'Exact proximity requires a projected metre raster.')
         out=euclidean_distance(g.values,g.transform.a,abs(g.transform.e));product=raster_product(kind,out,g.transform,g.crs,'m')

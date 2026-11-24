@@ -101,9 +101,14 @@ m('empirical_variogram','Statistics','Isotropic empirical semivariogram','raster
 m('difference_uncertainty','Integrated','Difference uncertainty propagation','raster',4,4,(('correlation','Same-cell error correlation',0,-1,1,False),),'raster','Input order: A, B, standard uncertainty of A, standard uncertainty of B; matching physical units.'),
 m('spatial_lag_regression','Integrated','Spatial lag regression (2SLS)','raster',2,8,(),'raster','Response first, predictors next; rook row-standardized spatial lag; WX and W²X instruments; conditional structural fit, not forecast.'),
 m('geographically_weighted_regression','Integrated','Geographically weighted leave-one-out regression','raster',2,8,(B,),'raster','Response first; fixed Gaussian bandwidth in metres; leave-one-out local prediction, not spatial-block validation.'),
+m('ordinary_kriging','Integrated','Ordinary kriging prediction','raster',2,2,(('range_m','Covariance e-folding range (m)',100,.01,100000,False),('sill','Partial sill (observation unit squared)',1,1e-12,1e100,False),('nugget_ratio','Nugget to partial sill ratio',.1,0,10,False)),'raster','First raster is target validity mask, second is sparse observations; exponential covariance with supplied parameters; latent prediction.'),
+m('kriging_uncertainty','Integrated','Ordinary kriging prediction SD','raster',2,2,(('range_m','Covariance e-folding range (m)',100,.01,100000,False),('sill','Partial sill (observation unit squared)',1,1e-12,1e100,False),('nugget_ratio','Nugget to partial sill ratio',.1,0,10,False)),'raster','Target mask first, sparse observations second; conditional latent-process SD with fixed exponential covariance parameters.'),
+m('spatial_error_regression','Integrated','Spatial error regression (Gaussian ML)','raster',2,8,(('lambda_bound','Absolute lambda search bound',.95,.1,.99,False),),'raster','Response first; rook standardized spatial-error process; concentrated Gaussian ML, conditional coefficient standard errors.'),
+m('difference_probability','Integrated','Gaussian difference exceedance probability','raster',4,4,(('correlation','Same-cell error correlation',0,-1,1,False),T),'raster','A, B, standard uncertainty A, standard uncertainty B; strict exceedance of threshold under specified marginal Gaussian errors.'),
+m('sample_srs_estimation','Sampling','Finite-population simple random estimation','raster',1,1,(N,S),'table','SRS without replacement; design-based mean/total standard errors with finite population correction.'),
 )
 BY_ID={method.id:method for method in METHODS}
-assert len(BY_ID)==len(METHODS)==67
+assert len(BY_ID)==len(METHODS)==72
 
 def catalog():
     return [{'id':m.id,'group':m.group,'title':m.title,'source':m.source,
@@ -116,5 +121,5 @@ def catalog():
              'requires_weights':m.id in {'weighted_overlay','topsis','robust_overlay'},
              'requires_pairwise':m.id=='ahp_overlay',
              'requires_directions':m.id in {'weighted_overlay','topsis','ahp_overlay','pareto_cells','robust_overlay'},
-             'requires_robust_view':m.id=='robust_overlay', 'requires_regression_view':m.id in {'blocked_regression','spatial_lag_regression','geographically_weighted_regression'}}
+             'requires_robust_view':m.id=='robust_overlay', 'requires_regression_view':m.id in {'blocked_regression','spatial_lag_regression','geographically_weighted_regression','spatial_error_regression'}}
             for m in METHODS]

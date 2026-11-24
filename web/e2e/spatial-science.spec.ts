@@ -8,7 +8,7 @@ test('spatial science workbench computes actual sample points, exports and previ
  const open=page.getByRole('button',{name:'Open Spatial Analysis'});
  await expect(open).toBeEnabled();await open.click();
  const dialog=page.getByRole('dialog',{name:'Spatial science workbench'});
- await expect(dialog).toContainText('67 scientific methods');
+ await expect(dialog).toContainText('72 scientific methods');
  await dialog.getByLabel('Spatial algorithm group').selectOption('Sampling');
  await dialog.getByLabel('Spatial algorithm',{exact:true}).selectOption('sample_polygon');
  const polygon={type:'Polygon',coordinates:[[[-81,40.6],[-80.999,40.6],[-80.999,40.601],[-81,40.601],[-81,40.6]]]};

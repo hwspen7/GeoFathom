@@ -19,6 +19,7 @@ def expected_tests():
         'test_integrated_operators_analytic_spatial_fixture':'zonal_statistics zonal_classes clip_raster rasterize extract_points point_kernel_density polygonize',
         'test_explicit_resampling_and_class_breaks':'resample_grid reclassify',
         'test_local_statistics_and_multiplicity':'local_moran getis_ord_gi_star',
+        'test_geostatistical_oracles':'ordinary_kriging kriging_uncertainty spatial_error_regression difference_probability sample_srs_estimation',
         'test_research_depth_oracles':'distance_moran knn_moran multiscale_moran empirical_variogram difference_uncertainty spatial_lag_regression geographically_weighted_regression',
         'test_advanced_spatial_oracles':'raster_distance focal_quantile directional_lag_scan bivariate_moran robust_overlay blocked_regression point_ellipse zonal_quantiles',
     }
@@ -27,7 +28,7 @@ def expected_tests():
     return out
 
 def required_tests():
-    return ['test_contract_count_and_invalid_input_rejections','test_spatial_gdal_cli_alignment_reference','test_spatial_medium_grid_mass_and_mask_conservation','test_overlay_shared_edges_preserve_area_and_valid_inverse_projection','test_queen_weights_and_permutation_table','test_dirichlet_analytic_uncertainty_opposed_criteria','test_independent_distance_reference_with_nodata','test_spatial_randomization_exact_reference','test_integrated_coverage_with_nodata','test_decision_extreme_weight_normalization','test_sampling_design_expected_totals','test_sparse_permutation_population_budget','test_full_grid_figure_and_output_provenance','test_large_separable_neighborhood_against_brute_force','test_research_depth_invalid_and_model_figure','test_large_stable_neighborhood_moments','test_geographically_weighted_multiple_coefficients',*[f'test_spatial_actual_result_figure_pipeline[{i}]' for i in ('null','lag','sample','prediction','coverage')]]
+    return ['test_contract_count_and_invalid_input_rejections','test_spatial_gdal_cli_alignment_reference','test_spatial_medium_grid_mass_and_mask_conservation','test_overlay_shared_edges_preserve_area_and_valid_inverse_projection','test_queen_weights_and_permutation_table','test_dirichlet_analytic_uncertainty_opposed_criteria','test_independent_distance_reference_with_nodata','test_spatial_randomization_exact_reference','test_integrated_coverage_with_nodata','test_decision_extreme_weight_normalization','test_sampling_design_expected_totals','test_sparse_permutation_population_budget','test_full_grid_figure_and_output_provenance','test_large_separable_neighborhood_against_brute_force','test_research_depth_invalid_and_model_figure','test_large_stable_neighborhood_moments','test_geographically_weighted_multiple_coefficients','test_kriging_exactness_mask_and_actual_figure',*[f'test_spatial_actual_result_figure_pipeline[{i}]' for i in ('null','lag','sample','prediction','coverage')]]
 
 def evaluate(path):
     root=ET.parse(path).getroot()
