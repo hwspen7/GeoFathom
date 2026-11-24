@@ -11,6 +11,7 @@ import {readTerrainRuns,writeTerrainRuns,insertTerrainRun,summarizeTerrainRun} f
 import {terrainParametersForOperation} from './terrainRunParameters';
 import {loadTerrainResults,cacheTerrainResult,deleteTerrainResult,markTerrainResultSaved,type PersistedTerrainResult} from './terrainResultStore';
 import WorkspaceToolShelf from './WorkspaceToolShelf';
+import TerrainResearchPanel from './TerrainResearchPanel';
 import {terrainFetchBounds,terrainGeometryBounds,terrainFetchBudget,terrainBoundsOverlap,terrainRasterMatchesTarget,describeTerrainBounds,preferredTerrainFetchScope,terrainSupportsUSGS,recommendDEMResolution,availableDEMResolutions,type FetchScope,type TerrainBBox} from './terrainSource';
 
 function MeshView({mesh}:{mesh:TerrainMesh}){
@@ -109,6 +110,8 @@ interface Props{
 }
 export default function TerrainWorkbench(p:Props){
  // Opening Terrain never preselects a calculation.
+ const [researchOpen,setResearchOpen]=useState(false);
+ const [researchLayer,setResearchLayer]=useState<TerrainRasterLayer|null>(null);
  const [operation,setOperation]=useState<Operation|null>(null);
  const [category,setCategory]=useState('Quick');
  // One non-scrolling page at a time; form values remain mounted in their panels.
@@ -353,7 +356,7 @@ export default function TerrainWorkbench(p:Props){
  useEffect(()=>()=>{fetchAbort.current?.abort();},[fetchKey]);
  useEffect(()=>()=>{latest.current.onFetchTarget?.(null);},[]);
  // Published result layers are independent from the currently selected input.
- useEffect(()=>{latest.current.onPreview(records.filter(r=>r.visible).flatMap(r=>r.advanced?.features??[]));latest.current.onRasterPreview?.(records.flatMap(r=>r.visible&&r.advanced?.raster?[{id:r.id,title:r.title,raster:r.advanced.raster,opacity:r.opacity,resampling:r.resampling}]:[]));},[records]);
+ useEffect(()=>{latest.current.onPreview(records.filter(r=>r.visible).flatMap(r=>r.advanced?.features??[]));latest.current.onRasterPreview?.([...records.flatMap(r=>r.visible&&r.advanced?.raster?[{id:r.id,title:r.title,raster:r.advanced.raster,opacity:r.opacity,resampling:r.resampling}]:[]),...(researchLayer?[researchLayer]:[])]);},[records,researchLayer]);
  useEffect(()=>{
    if(!p.active||!p.connected)return;
    let current=true;
@@ -401,7 +404,8 @@ export default function TerrainWorkbench(p:Props){
    try{
      if(operation==='profile')record.profile=await terrainProfile(dem.id,analysisGeometry,controller.signal);
      else if(operation==='slope')record.slope=await analyzeTerrain(dem.id,analysisGeometry,controller.signal,gradientMethod);
-     else record.advanced=await advancedTerrain({image_id:dem.id,geometry:analysisGeometry,operation,
+     else {
+       const requestBody:Parameters<typeof advancedTerrain>[0]={image_id:dem.id,geometry:analysisGeometry,operation,
        interval:Number(interval),reference:Number(reference),point:needsPoint?[Number(lon),Number(lat)]:null,
        observer_height:Number(height),target_height:Number(target),end_point:operation==='least_cost'?[Number(endLon),Number(endLat)]:null,
        max_slope:Number(maxSlope),min_elevation:Number(minElevation),max_elevation:Number(maxElevation),max_tri:Number(maxTri),stream_cells:Number(streamCells),azimuth:Number(azimuth),altitude:Number(altitude),section_spacing:Number(sectionSpacing),section_width:Number(sectionWidth),fill_sinks:fillSinks,consider_curvature:considerCurvature,refraction_coeff:Number(refractionCoeff),comparison_image_id:operation==='dem_difference'?comparisonId:null,
@@ -423,7 +427,10 @@ export default function TerrainWorkbench(p:Props){
          mesh_lod:operation==='mesh'&&meshLod,
          suitability_model:suitabilityModel,
          suitability_weights:[Number(suitabilitySlopeWeight),Number(suitabilityTriWeight),Number(suitabilityElevationWeight)],
-         external_inflow_image_id:operation==='flow_accumulation'&&flowRoutingMethod==='dinf'?externalInflowImageId||null:null},controller.signal);
+         external_inflow_image_id:operation==='flow_accumulation'&&flowRoutingMethod==='dinf'?externalInflowImageId||null:null};
+       record.researchInput=structuredClone(requestBody);
+       record.advanced=await advancedTerrain(requestBody,controller.signal);
+     }
      if(ticket!==sequence.current||controller.signal.aborted)return;
      // Commit scientific data before reporting a completed run. An immediate
      // reload or project switch must never race a pending cache write.
@@ -915,7 +922,10 @@ export default function TerrainWorkbench(p:Props){
 
  </div>;
  return <>
+ {researchOpen&&<TerrainResearchPanel projectId={p.projectId} record={selected??null} connected={p.connected}
+   onClose={()=>setResearchOpen(false)} onLayer={setResearchLayer}/>}
  <div className="terrain-workbench professional-panel">
+   {researchLayer&&<div className="survey-action-bar"><button type="button" onClick={()=>setResearchLayer(null)}>Clear research map</button></div>}
    <div className="terrain-linked-controls" aria-label="Terrain analysis inputs">
      <div className="terrain-linked-row">
        <label className="terrain-linked-select">DEM
@@ -933,6 +943,7 @@ export default function TerrainWorkbench(p:Props){
        </label>
        <button className={leftTab==='source'?'terrain-linked-active':''} type="button"
          aria-label="Get DEM" aria-pressed={leftTab==='source'} onClick={()=>setLeftTab('source')}>Get DEM</button>
+       <button type="button" aria-label="Research analysis" onClick={()=>setResearchOpen(true)}>Research</button>
      </div>
      <div className="terrain-linked-row">
        <label className="terrain-linked-select">Analysis

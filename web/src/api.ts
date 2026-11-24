@@ -1156,3 +1156,30 @@ export function restoreProjectPackage(project:string,file:File,token:string,sign
  const body=new FormData();body.append('file',file);
  return request(exchangePath(project)+'/package/import',{method:'POST',body,signal,headers:{'X-GeoFathom-Local-Import':'1','X-GeoFathom-Admin-Token':token}});
 }
+
+export interface ResearchExperiment {
+ title:string;baseline_name:string;mode:'comparison'|'sensitivity'|'uncertainty';
+ base:Record<string,unknown> & {image_id:string;geometry:GeoJSON.Geometry;operation:string};
+ scenarios:Array<{name:string;parameters:Record<string,unknown>}>;
+ parameter?:string;values?:number[];sigma_m?:number;samples?:number;seed?:number;
+ error_model?:'independent'|'common_offset';coverage?:number;expected_source_sha256?:string;
+}
+export interface ResearchProduct {name:string;role?:string;kind?:string;raster:TerrainRaster;
+ statistics?:Record<string,unknown>}
+export interface ResearchResult {
+ title:string;mode:ResearchExperiment['mode'];comparison_warning?:string;
+ runs:Array<{label:string;input:Record<string,unknown>;metrics:Record<string,number>;warning:string;quality?:unknown}>;
+ products:ResearchProduct[];differences:ResearchProduct[];
+ metric_table:Array<{metric:string;values:number[];deltas:Array<number|null>;relative_pct:Array<number|null>}>;
+ sensitivity:Array<{parameter:string;value:number;baseline_value:number;metrics:Record<string,number>;derivatives:Record<string,number>}>;
+ uncertainty:null|{model:string;sigma_m:number;seed:number;generator:string;samples:number;coverage:number;
+  warning:string;interval_type:string;common_cells?:number;
+  metrics:Record<string,{baseline:number;mean:number;std:number;low:number;high:number;mean_standard_error:number;split_half_endpoint_difference:number}>};
+ manifest:Record<string,unknown>;archive_base64:string;
+}
+export interface ResearchCatalog {sweep_parameters:Record<string,string[]>;uncertainty_operations:string[];
+ scenario_parameters:Record<string,string[]>;parameter_specs:Record<string,{choices:Array<string|number|boolean>;default:unknown}>}
+export function getResearchCatalog():Promise<ResearchCatalog>{return request('/terrain/research/catalog');}
+export function analyzeResearch(body:ResearchExperiment,signal?:AbortSignal):Promise<ResearchResult>{
+ return request('/terrain/research/analyze',{method:'POST',signal,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+}

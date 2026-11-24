@@ -1826,3 +1826,20 @@ button:disabled { opacity: .45; cursor: not-allowed; }
  .desktop-gis .gis-quick-basemap{gap:3px;padding:0 5px!important}
  .desktop-gis .gis-quick-basemap select{width:160px;min-width:130px;font-size:11px}
 }
+
+/* Dedicated research workspace leaves the Terrain docks compact. */
+.research-dialog-backdrop{position:fixed;inset:0;z-index:5000;background:#102a3a66;display:grid;place-items:center;padding:24px}
+.research-dialog{background:var(--panel-bg,#fafcfd);color:var(--text,#20343e);width:min(1000px,100%);height:min(850px,calc(100dvh - 48px));border:1px solid #bac9cf;border-radius:16px;box-shadow:0 20px 70px #102a3a44;display:flex;flex-direction:column;outline:none}
+.research-dialog header,.research-dialog footer{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 24px}
+.research-dialog header strong{font-size:19px}.research-dialog header small{display:block;margin-top:5px;color:#667c85}
+.research-dialog nav{display:flex;gap:8px;padding:0 24px 12px;border-bottom:1px solid #dbe3e7}
+.research-dialog button{background:#f2f6f7;border:1px solid #c5d2d8;border-radius:7px;padding:7px 12px;color:inherit;cursor:pointer}.research-dialog button[aria-pressed=true]{background:#205e6d;color:white;border-color:#205e6d}.research-dialog button:disabled{opacity:.45;cursor:default}
+.research-dialog footer{border-top:1px solid #dbe3e7;font-size:12px}.research-dialog footer>span:first-child{max-width:55%}.research-dialog>p{padding:0 24px;margin:6px 0;font-size:12px}
+.research-page{padding:18px 24px;flex:1;min-height:0;overflow:auto;scrollbar-width:thin}.research-page h3{margin:0 0 8px}.research-page p{font-size:13px;line-height:1.5;margin:8px 0 14px}
+.research-page label{display:flex;flex-direction:column;gap:5px;font-size:12px;margin-bottom:8px;min-width:0}.research-page input,.research-page select{box-sizing:border-box;min-width:0;max-width:100%;padding:8px;border:1px solid #bdccd2;border-radius:6px;background:white;color:#20343e}
+.research-form{border:0;padding:0;margin:12px 0;display:grid;grid-template-columns:1fr 1fr;gap:12px 20px}.research-form>p,.research-scenarios{grid-column:1/-1}.research-scenarios{display:grid;grid-template-columns:1fr 1fr;gap:10px 20px;padding-top:12px;border-top:1px solid #dbe3e7}
+.research-overrides{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:6px}.research-overrides>span{background:#e6eff2;padding:4px 8px;border-radius:5px;font-size:12px}.research-overrides button{padding:0 4px;border:0;background:transparent}.research-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.research-page table{width:100%;border-collapse:collapse;margin:16px 0;font-size:12px;table-layout:fixed}.research-page th,.research-page td{border-bottom:1px solid #dce5e9;padding:10px;text-align:left;overflow-wrap:anywhere}.research-page thead{background:#edf3f5}.research-page>label{max-width:420px}
+.research-response-plot{width:100%;max-height:330px}.research-response-plot text{font-size:11px;fill:currentColor}.research-map-figure{position:relative;height:clamp(180px,32vh,330px);width:100%;background:#edf2f4;border-radius:8px;overflow:hidden}.research-map-figure img{width:100%;height:100%;object-fit:contain;image-rendering:pixelated}.research-map-figure .research-swipe-baseline{position:absolute;inset:0}
+.research-map-legend{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0;font-size:11px}.research-map-legend span{display:flex;align-items:center;gap:4px}.research-map-legend i{display:inline-block;width:12px;height:12px;border-radius:2px}
+@media(max-width:650px){.research-dialog-backdrop{padding:8px}.research-dialog{height:calc(100dvh - 16px)}.research-form,.research-scenarios{grid-template-columns:1fr}.research-dialog header,.research-dialog footer,.research-page{padding:12px}.research-dialog nav{padding:0 12px 10px;gap:4px}.research-dialog nav button{padding:6px 8px}}

@@ -10,6 +10,7 @@ import type {TerrainRunParameters} from './terrainRunRegistry';
 export interface PersistedTerrainResult {
  id:string;title:string;operation:TerrainOperation|'slope'|'profile';
  source:RasterAsset;referenceSource?:RasterAsset;geometry:GeoJSON.Geometry;
+ researchInput?:Record<string,unknown>;
  inputKey:string;parameters?:TerrainRunParameters;visible:boolean;createdAt:number;saved?:boolean;opacity:number;
  resampling:'nearest'|'linear';
  advanced?:AdvancedTerrainResult;slope?:TerrainResult;

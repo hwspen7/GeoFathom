@@ -301,3 +301,7 @@ See [GeoAI data and model validation](docs/GEOAI.md).
 See [compute architecture and acceptance](docs/COMPUTE_ACCEPTANCE.md) for
 native scratch leases, optional CUDA, bounded model batching, persistent
 pyramids, version archiving, distributed workers, RBAC, and hardware tests.
+
+### Research result analysis
+
+Terrain now supports named scenarios, common-cell algorithm differences, one-at-a-time sensitivity, seeded DEM uncertainty propagation and portable PDF/GeoTIFF/CSV experiment packages. See [Research analysis](docs/research-analysis.md) for methods, operation coverage, limits and reproduction.
