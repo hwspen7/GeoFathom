@@ -1326,3 +1326,37 @@ def test_insar_shared_acquisition_gls_covariance():
     zero,_=invert(z,times,pairs,sigma,.056,1,epoch_sigma=[0,0,0])
     independent,_=invert(z,times,pairs,sigma,.056,1)
     np.testing.assert_allclose(zero,independent,atol=1e-12)
+
+
+def test_landsat_level1_metadata_calibration_and_quality(tmp_path):
+    import rasterio
+    from imagery.landsat_level1 import calibration,calibrate,process
+    contents={'COLLECTION_NUMBER':'02','PROCESSING_LEVEL':'L1TP','LANDSAT_PRODUCT_ID':'fixture',
+        'FILE_NAME_BAND_4':'B4.TIF','FILE_NAME_BAND_10':'B10.TIF',
+        'FILE_NAME_QUALITY_L1_PIXEL':'QA_PIXEL.TIF','FILE_NAME_QUALITY_L1_RADIOMETRIC_SATURATION':'QA_RADSAT.TIF'}
+    metadata={'LANDSAT_METADATA_FILE':{'PRODUCT_CONTENTS':contents,
+        'IMAGE_ATTRIBUTES':{'SPACECRAFT_ID':'LANDSAT_9','SUN_ELEVATION':30.},
+        'LEVEL1_RADIOMETRIC_RESCALING':{'REFLECTANCE_MULT_BAND_4':.00002,'REFLECTANCE_ADD_BAND_4':-.1,
+            'RADIANCE_MULT_BAND_10':.001,'RADIANCE_ADD_BAND_10':0.},
+        'LEVEL1_THERMAL_CONSTANTS':{'K1_CONSTANT_BAND_10':774.8853,'K2_CONSTANT_BAND_10':1321.0789}}}
+    dn=np.full((20,23),10000,dtype=np.uint16);q=np.zeros_like(dn);r=np.zeros_like(dn)
+    q[0,0]=8;q[0,1]=32;q[0,2]=128;r[0,3]=1;dn[0,4]=0
+    mtl=tmp_path/'MTL.json';mtl.write_text(json.dumps(metadata))
+    for name,values in [('B4.TIF',dn),('B10.TIF',dn),('QA_PIXEL.TIF',q),('QA_RADSAT.TIF',r)]:
+        with rasterio.open(tmp_path/name,'w',driver='GTiff',count=1,width=23,height=20,dtype='uint16',crs=CRS,transform=AFF) as ds:
+            ds.write(values,1)
+    for band,product,expected in [(4,'reflectance',.2),(10,'radiance',10.),(10,'brightness_temperature',1321.0789/np.log1p(774.8853/10))]:
+        out=tmp_path/f'{product}.tif';receipt=process(mtl,out,band,product,tile=16)
+        with rasterio.open(out) as ds:
+            z=ds.read(1)
+            assert ds.transform==AFF
+            assert np.isnan(z[0,[0,1,3,4]]).all()
+            np.testing.assert_allclose(z[np.isfinite(z)],expected,atol=1e-10)
+        assert receipt['valid_cells']==20*23-4
+        assert receipt['output_sha256']==hashlib.sha256(out.read_bytes()).hexdigest()
+    c=calibration(metadata,4,'reflectance')
+    z=calibrate(dn,q,r,c,np.full(dn.shape,90.))
+    assert z[1,1]==pytest.approx(.1)
+    contents['PROCESSING_LEVEL']='L2SP'
+    with pytest.raises(FigureInputError):
+        calibration(metadata,4,'reflectance')
