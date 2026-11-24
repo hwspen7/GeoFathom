@@ -10,6 +10,7 @@ from imagery.remote_catalog import BY_ID
 
 def expected_tests():
     groups={
+        'test_sar_complex_cloud_reference':'sar_calibrated_power insar_wrapped_phase insar_coherence cloud_candidates',
         'test_nested_spatial_reference':'spatial_nested_svm',
         'test_subpixel_registration_reference':'register_subpixel',
         'test_temporal_model_extension':'season_peak season_start season_end season_duration segmented_count segmented_first_break',

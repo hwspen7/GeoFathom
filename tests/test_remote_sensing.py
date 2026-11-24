@@ -189,7 +189,7 @@ def test_remote_invalid_inputs_and_recovery():
         response=client.post('/analysis/remote-sensing/run',json=bad);assert response.status_code==422,response.text
     response=client.post('/analysis/remote-sensing/run',json=good);assert response.status_code==200,response.text
     np.testing.assert_allclose(grid(response.json()),.5)
-    assert client.get('/analysis/remote-sensing/catalog').json()['operation_count']==len(BY_ID)==97
+    assert client.get('/analysis/remote-sensing/catalog').json()['operation_count']==len(BY_ID)==101
 
 def test_temporal_independent_quality_masks():
     # Cloud at one date does not erase the other valid acquisitions.
@@ -618,3 +618,27 @@ def test_nested_spatial_reference(kind):
     changed=run(kind,a,params)
     assert changed['rows'][0][3:5]==result['rows'][0][3:5]
     assert changed['rows'][0][5]==0
+
+
+@pytest.mark.parametrize('kind',['sar_calibrated_power','insar_wrapped_phase','insar_coherence','cloud_candidates'])
+def test_sar_complex_cloud_reference(kind):
+    if kind=='sar_calibrated_power':
+        a=constant(2);a[0,0]=0
+        z=grid(run(kind,{'amplitude':a,'gain':constant(.5),'noise':constant(.1)}))
+        assert np.isnan(z[0,0]);np.testing.assert_allclose(z[np.isfinite(z)],.9)
+    elif kind.startswith('insar_'):
+        rng=np.random.default_rng(54);master=rng.normal(size=(7,7))+1j*rng.normal(size=(7,7))
+        slave=master*np.exp(-.7j);master[0,0]=np.nan
+        a={'master_real':master.real,'master_imag':master.imag,'slave_real':slave.real,'slave_imag':slave.imag}
+        z=grid(run(kind,a));assert np.isnan(z[0,0]);np.testing.assert_allclose(z[np.isfinite(z)],.7 if kind=='insar_wrapped_phase' else 1,atol=1e-12)
+        if kind=='insar_coherence':
+            slave=rng.normal(size=(7,7))+1j*rng.normal(size=(7,7))
+            a.update(slave_real=slave.real,slave_imag=slave.imag)
+            z=grid(run(kind,a,{'radius':1,'min_samples':3}))
+            x=master[2:5,2:5].ravel();y=slave[2:5,2:5].ravel()
+            assert z[3,3]==pytest.approx(abs(x@np.conj(y))/np.sqrt((abs(x)**2).sum()*(abs(y)**2).sum()))
+    else:
+        a={r:constant(.5) for r in ('blue','green','red','nir','swir1')}
+        a['blue'][0,0]=.1;a['swir1'][0,1]=.05;a['nir'][0,2]=np.nan
+        z=grid(run(kind,a));assert z[0,0]==0 and z[0,1]==0 and np.isnan(z[0,2])
+        assert z[1,1]==1

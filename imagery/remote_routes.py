@@ -15,6 +15,7 @@ from analysis.science_raster import require
 from analysis.science_routes import raster_product,raster_preview,csv_output
 from analysis.science_figures import figure_sources,csv_text
 from .remote_catalog import BY_ID,catalog,SERIES_IDS,HYPER_IDS
+from .remote_sar_complex import complex_products,calibrated_power,cloud_candidates
 from .remote_temporal_models import seasonal_metrics,segmented_means
 from .remote_hyperspectral import continuum_features
 from .remote_physics import thermal_uncertainty,angular_sar,register_translation,register_subpixel
@@ -88,20 +89,21 @@ def read_band(source,binding,quantity,raw,sha):
         if quantity=='emissivity':require(np.all((v>0)&(v<=1)),'Emissivity must be in (0,1].')
         if quantity=='fraction':require(np.all((v>=0)&(v<=1)),'Fraction must be in [0,1].')
         if quantity=='transmittance':require(np.all((v>0)&(v<=1)),'Transmittance must be in (0,1].')
+        if quantity=='positive_gain':require(np.all(v>0),'Calibration gain must be positive.')
         if quantity=='radiance_sd':require(np.all(v>=0),'Radiance uncertainty must be nonnegative.')
         if quantity=='fraction_sd':require(np.all((v>=0)&(v<=1)),'Fraction uncertainty must be in [0,1].')
         if quantity=='nonnegative':require(np.all(v>=0),'Standard uncertainty must be nonnegative.')
         if quantity=='slope':require(np.all((v>=0)&(v<=90)),'Slope must be in [0,90] degrees.')
         if quantity=='aspect':require(np.all((v>=0)&(v<=360)),'Aspect must be in [0,360] degrees.')
         if quantity=='db':require(np.all((v>=-1000)&(v<=1000)),'Radar dB outside supported numeric range.')
-        expected={'reflectance':'reflectance','class':'class','power':'linear_power','db':'dB','radiance':'radiance','kelvin':'K','emissivity':'unitless','transmittance':'unitless','fraction':'unitless','radiance_sd':'radiance','fraction_sd':'unitless','nonnegative':'reflectance','slope':'degree','aspect':'degree'}.get(quantity)
+        expected={'reflectance':'reflectance','class':'class','power':'linear_power','db':'dB','radiance':'radiance','kelvin':'K','emissivity':'unitless','transmittance':'unitless','fraction':'unitless','positive_gain':'unitless','radiance_sd':'radiance','fraction_sd':'unitless','nonnegative':'reflectance','slope':'degree','aspect':'degree'}.get(quantity)
         unit=expected or binding.unit or tag
         if quantity=='numeric':require(bool(unit),'Declare the physical unit of each numeric band.')
         if binding.unit and expected:require(binding.unit==expected,'Declared unit conflicts with required physical quantity.')
         # Explicit role binding asserts semantics; known incompatible tagged units cannot be overridden.
         if tag and quantity!='class':
             allowed={unit}
-            if quantity in {'reflectance','emissivity','power','transmittance','fraction','fraction_sd','nonnegative'}:allowed|={'unitless','1','dimensionless'}
+            if quantity in {'reflectance','emissivity','power','transmittance','fraction','fraction_sd','positive_gain','nonnegative'}:allowed|={'unitless','1','dimensionless'}
             if quantity in {'slope','aspect'}:allowed|={'degrees','deg'}
             require(tag in allowed or encoding in {'landsat_sr','landsat_st','custom'},'GeoTIFF unit conflicts with selected band quantity.')
         g=Grid(source.name,z,a,ds.crs,unit,sha,b,ds.count,scale,offset)
@@ -220,6 +222,9 @@ def execute(body):
     elif kind=='sar_linear':out=np.power(10,v['backscatter']/10)
     elif kind=='sar_ratio':out=ratio(v['cross'],v['co'])
     elif kind=='dualpol_rvi':out=4*ratio(v['cross'],v['co']+v['cross'])
+    elif kind=='sar_calibrated_power':out,meta=calibrated_power(v)
+    elif kind in {'insar_wrapped_phase','insar_coherence'}:out,meta=complex_products(v,params,kind)
+    elif kind=='cloud_candidates':out,meta=cloud_candidates(v,params)
     elif kind=='sar_gamma_map':out,meta=gamma_map(v['power'],params['radius'],params['enl'])
     elif kind=='sar_log_change':
         a,b=v['before'],v['after'];out=10*(np.log10(np.where(b>0,b,np.nan))-np.log10(np.where(a>0,a,np.nan)))
