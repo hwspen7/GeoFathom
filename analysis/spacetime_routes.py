@@ -12,6 +12,7 @@ from imagery.remote_temporal_models import seasonal_metrics,segmented_means
 from imagery.remote_inference import series_break
 from .spacetime_state import kalman,permutation_lag
 from .spacetime_modes import eof,block_trend
+from .spacetime_kriging import kriging
 from analysis.science_raster import require
 from analysis.science_routes import raster_product,raster_preview
 from analysis.science_figures import csv_text
@@ -19,9 +20,15 @@ from .spacetime_models import trend,temporal,forecast,spatial_lag,variogram
 
 router=APIRouter(prefix='/analysis/spatiotemporal',tags=['spatiotemporal science'])
 # parameter = (default,minimum,maximum,integer)
-P={'minimum_observations':(6,3,64,True),'lag':(1,1,32,True),'threshold':(0,-1e50,1e50,False),'horizon':(30,.000001,1e7,False),'radius':(3,1,20,True),'period':(365,.000001,1e7,False),'fraction':(.5,.01,.99,False),'minimum_amplitude':(.01,0,1e50,False),'min_segment':(3,2,32,True),'penalty':(1,.000001,1e50,False),'process_variance':(.01,1e-20,1e50,False),'observation_variance':(.1,1e-20,1e50,False),'initial_velocity_variance':(1,1e-20,1e50,False),'permutations':(199,19,999,True),'seed':(42,0,2147483647,True),'mode':(1,1,64,True),'block_length':(3,2,21,True)}
+P={'minimum_observations':(6,3,64,True),'lag':(1,1,32,True),'threshold':(0,-1e50,1e50,False),'horizon':(30,.000001,1e7,False),'radius':(3,1,20,True),'period':(365,.000001,1e7,False),'fraction':(.5,.01,.99,False),'minimum_amplitude':(.01,0,1e50,False),'min_segment':(3,2,32,True),'penalty':(1,.000001,1e50,False),'process_variance':(.01,1e-20,1e50,False),'observation_variance':(.1,1e-20,1e50,False),'initial_velocity_variance':(1,1e-20,1e50,False),'permutations':(199,19,999,True),'seed':(42,0,2147483647,True),'mode':(1,1,64,True),'block_length':(3,2,21,True),'spatial_range':(100,1e-6,1e8,False),'temporal_range':(30,1e-6,1e8,False),'nugget_ratio':(.1,1e-6,10,False),'sample_limit':(128,12,256,True),'fit_covariance':(0,0,1,True),'holdout_dates':(2,2,32,True),'buffer_cells':(0,0,100,True)}
 KALMAN_P=('minimum_observations','horizon','process_variance','observation_variance','initial_velocity_variance')
+KRIGING_P=('spatial_range','temporal_range','nugget_ratio','sample_limit','fit_covariance','seed')
 METHODS={
+ 'st_kriging_mean':('Joint geostatistics','Space-time ordinary kriging forecast',KRIGING_P+('horizon',)),
+ 'st_kriging_sd':('Joint geostatistics','Space-time kriging observation SD',KRIGING_P+('horizon',)),
+ 'st_holdout_rmse':('Joint validation','Joint space and future-time holdout RMSE',KRIGING_P+('holdout_dates','buffer_cells')),
+ 'st_holdout_coverage':('Joint validation','Joint holdout empirical 95% coverage',KRIGING_P+('holdout_dates','buffer_cells')),
+ 'st_holdout_bias':('Joint validation','Joint holdout signed prediction bias',KRIGING_P+('holdout_dates','buffer_cells')),
  'eof_mode':('Space-time modes','Empirical orthogonal spatial mode',('mode',)),
  'eof_reconstruction_rmse':('Space-time modes','EOF truncated reconstruction RMSE',('mode',)),
  'eof_local_skill':('Space-time modes','Local EOF reconstruction skill',('mode',)),
@@ -121,6 +128,11 @@ def execute(body):
     elif kind.startswith(('forecast_','hindcast_')):
         out,cols,rows,meta=forecast(stack,t,kind,p);unit='index' if kind=='hindcast_skill' else unit
         if len(rows)>=2:plot('Expanding-window forecast versus persistence error','multi_line',cols,rows,x='time',columns=['trend_rmse','persistence_rmse'])
+    elif kind.startswith(('st_kriging_','st_holdout_')):
+        out,cols,rows,meta=kriging(stack,t,first,p,kind)
+        if kind=='st_holdout_coverage':unit='fraction'
+        if len(rows)>=2:plot('Joint holdout kriging versus training mean','multi_line',cols,rows,x='time',columns=['kriging_rmse','training_mean_rmse'])
+        if rows:plot('Joint holdout empirical prediction coverage','basic_column',cols,rows,x='time',y='coverage_95')
     elif kind.startswith('eof_'):
         require(first.is_meter,'EOF requires a projected metre grid and equal native cell weights.')
         out,cols,rows,meta=eof(stack,p,kind);unit='index' if kind in ('eof_mode','eof_local_skill') else unit

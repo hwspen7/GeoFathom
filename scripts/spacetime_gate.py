@@ -6,7 +6,7 @@ def main(path):
     tests=ET.parse(path).getroot().iter('testcase')
     passed={x.attrib['name'] for x in tests if not any(x.find(k) is not None for k in ('failure','error','skipped'))}
     expected={f'test_every_spacetime_method_reference[{k}]' for k in METHODS}
-    expected|={'test_irregular_time_qa_calibration_and_alignment','test_state_space_against_batch_gaussian_conditioning','test_actual_science_figures_render'}
+    expected|={'test_irregular_time_qa_calibration_and_alignment','test_state_space_against_batch_gaussian_conditioning','test_actual_science_figures_render','test_kriging_independent_dense_reference_and_holdout_isolation'}
     missing=sorted(expected-passed)
     if missing:raise SystemExit('Missing passing evidence: '+', '.join(missing))
     print(f'Spatiotemporal method references: {len(METHODS)}/{len(METHODS)}; all mandatory scientific workflow tests passed.')

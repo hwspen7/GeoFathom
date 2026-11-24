@@ -43,7 +43,7 @@ def forecast(stack,t,kind,p):
     """Fixed-design trend prediction evaluated on strictly future holdouts."""
     n,h,w=stack.shape
     require(n*n*h*w<=12_000_000,'Forecast work budget exceeded.')
-    horizon=p['horizon'];cut=p['minimum_observations'];require(cut+2<=n,'Need training observations and at least two future dates.')
+    horizon=p.get('horizon',0.);cut=p['minimum_observations'];require(cut+(2 if kind.startswith('hindcast_') else 0)<=n,'Insufficient dates for model or validation.')
     out=np.full((h,w),np.nan);rows=[];squared=np.zeros(n);baseline=np.zeros(n);counts=np.zeros(n,int)
     origin=t[0];scale=t[-1]-origin;u=(t-origin)/scale
     future=u[-1]+horizon/scale

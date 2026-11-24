@@ -49,6 +49,12 @@ def test_every_spacetime_method_reference(kind):
     elif kind.startswith('kalman_'):params={'horizon':2,'process_variance':.01,'observation_variance':.1,'initial_velocity_variance':1}
     elif kind.startswith('forecast_'):params={'horizon':2}
     elif kind=='exceedance':params={'threshold':10}
+    if kind.startswith(('st_kriging_','st_holdout_')):
+        r=run(kind,a,t,{'sample_limit':24});z=grid(r)
+        assert np.isfinite(z).any()
+        if kind.startswith('st_holdout_'):assert np.isnan(z[:,:3]).all() and r['receipt']['metrics']['validation_pairs']==6
+        if kind.endswith('_sd'):assert np.min(z)>0
+        return
     r=run(kind,a,t,params)
     if kind=='space_time_variogram':
         row=next(q for q in r['rows'] if q[:3]==['temporal',0.,1.])
@@ -121,3 +127,28 @@ def test_actual_science_figures_render():
             req=StudioInput(recipe=figure['recipe'],csv=figure['csv'] or '',rasters=rasters,**figure['bindings'])
             png,_,_=render(req);assert png.startswith(b'\x89PNG')
             svg,_,_=render(req.model_copy(update={'format':'svg'}));assert svg.startswith(b'<?xml')
+
+
+def test_kriging_independent_dense_reference_and_holdout_isolation():
+    from analysis.spacetime_kriging import fit,kriging
+    from types import SimpleNamespace
+    from scipy.spatial.distance import cdist
+    rng=np.random.default_rng(5);x=rng.uniform(0,10,(18,3));y=rng.normal(size=18);target=rng.uniform(0,10,(4,3))
+    p={'spatial_range':4.,'temporal_range':3.,'nugget_ratio':.2,'fit_covariance':0}
+    predict,meta=fit(x,y,p);mu,sd=predict(target)
+    K=np.exp(-cdist(x[:,:2],x[:,:2])/4-abs(x[:,2,None]-x[:,2])/3)+.2*np.eye(len(x))
+    cross=np.exp(-cdist(x[:,:2],target[:,:2])/4-abs(x[:,2,None]-target[:,2])/3)
+    A=np.block([[K,np.ones((len(x),1))],[np.ones((1,len(x))),np.zeros((1,1))]])
+    weights=np.linalg.solve(A,np.vstack([cross,np.ones(len(target))]))
+    np.testing.assert_allclose(mu,y@weights[:-1],atol=1e-10)
+    var=1.2-np.sum(weights[:-1]*cross,axis=0)-weights[-1]
+    np.testing.assert_allclose(sd,np.sqrt(meta['sill']*var),atol=1e-10)
+    a=rng.normal(size=(8,3,6));t=np.arange(8.)
+    cfg={**p,'sample_limit':24,'seed':7,'holdout_dates':2,'buffer_cells':1}
+    g=SimpleNamespace(is_meter=True,transform=AFF)
+    original=kriging(a,t,g,cfg,'st_holdout_rmse')[3]
+    b=a.copy();b[-2:]+=100;b[:,:,4:]+=100
+    changed=kriging(b,t,g,cfg,'st_holdout_rmse')[3]
+    for key in ('spatial_range','temporal_range','sill','training_indices','training_mean','reml_objective'):
+        assert original[key]==changed[key]
+    assert original['rmse']!=changed['rmse']
