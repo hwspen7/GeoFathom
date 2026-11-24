@@ -15,6 +15,7 @@ from analysis.science_raster import require
 from analysis.science_routes import raster_product,raster_preview,csv_output
 from analysis.science_figures import figure_sources,csv_text
 from .remote_catalog import BY_ID,catalog,SERIES_IDS
+from .remote_physics import thermal_uncertainty,angular_sar,register_translation
 from .remote_classifiers import blocked_classifier
 from .remote_inference import atmospheric_reflectance,robust_harmonization,irmad,cloud_buffer,series_break
 from .remote_research import surface_temperature,c_correction,ndvi_uncertainty,change_vectors,spatial_classifier,long_series,gamma_map,mad_distance
@@ -85,18 +86,20 @@ def read_band(source,binding,quantity,raw,sha):
         if quantity=='emissivity':require(np.all((v>0)&(v<=1)),'Emissivity must be in (0,1].')
         if quantity=='fraction':require(np.all((v>=0)&(v<=1)),'Fraction must be in [0,1].')
         if quantity=='transmittance':require(np.all((v>0)&(v<=1)),'Transmittance must be in (0,1].')
+        if quantity=='radiance_sd':require(np.all(v>=0),'Radiance uncertainty must be nonnegative.')
+        if quantity=='fraction_sd':require(np.all((v>=0)&(v<=1)),'Fraction uncertainty must be in [0,1].')
         if quantity=='nonnegative':require(np.all(v>=0),'Standard uncertainty must be nonnegative.')
         if quantity=='slope':require(np.all((v>=0)&(v<=90)),'Slope must be in [0,90] degrees.')
         if quantity=='aspect':require(np.all((v>=0)&(v<=360)),'Aspect must be in [0,360] degrees.')
         if quantity=='db':require(np.all((v>=-1000)&(v<=1000)),'Radar dB outside supported numeric range.')
-        expected={'reflectance':'reflectance','class':'class','power':'linear_power','db':'dB','radiance':'radiance','kelvin':'K','emissivity':'unitless','transmittance':'unitless','fraction':'unitless','nonnegative':'reflectance','slope':'degree','aspect':'degree'}.get(quantity)
+        expected={'reflectance':'reflectance','class':'class','power':'linear_power','db':'dB','radiance':'radiance','kelvin':'K','emissivity':'unitless','transmittance':'unitless','fraction':'unitless','radiance_sd':'radiance','fraction_sd':'unitless','nonnegative':'reflectance','slope':'degree','aspect':'degree'}.get(quantity)
         unit=expected or binding.unit or tag
         if quantity=='numeric':require(bool(unit),'Declare the physical unit of each numeric band.')
         if binding.unit and expected:require(binding.unit==expected,'Declared unit conflicts with required physical quantity.')
         # Explicit role binding asserts semantics; known incompatible tagged units cannot be overridden.
         if tag and quantity!='class':
             allowed={unit}
-            if quantity in {'reflectance','emissivity','power','transmittance','fraction','nonnegative'}:allowed|={'unitless','1','dimensionless'}
+            if quantity in {'reflectance','emissivity','power','transmittance','fraction','fraction_sd','nonnegative'}:allowed|={'unitless','1','dimensionless'}
             if quantity in {'slope','aspect'}:allowed|={'degrees','deg'}
             require(tag in allowed or encoding in {'landsat_sr','landsat_st','custom'},'GeoTIFF unit conflicts with selected band quantity.')
         g=Grid(source.name,z,a,ds.crs,unit,sha,b,ds.count,scale,offset)
@@ -170,6 +173,9 @@ def execute(body):
     elif kind=='robust_harmonization':out,meta=robust_harmonization(v,params)
     elif kind=='irmad':out,headers,rows,meta=irmad(v,params)
     elif kind=='cloud_buffer':out,meta=cloud_buffer(v['qa'],params['radius'])
+    elif kind=='lst_uncertainty':out,meta=thermal_uncertainty(v,params)
+    elif kind in {'sar_terrain_volume','sar_terrain_validity'}:out,meta=angular_sar(v,params,kind=='sar_terrain_validity')
+    elif kind=='register_translation':out,meta=register_translation(v,params)
     elif kind=='surface_temperature_rte':out,meta=surface_temperature(v,params)
     elif kind=='topographic_c':out,meta=c_correction(v,params)
     elif kind=='ndvi_uncertainty':out,meta=ndvi_uncertainty(v,params)

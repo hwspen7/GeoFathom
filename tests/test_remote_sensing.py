@@ -189,7 +189,7 @@ def test_remote_invalid_inputs_and_recovery():
         response=client.post('/analysis/remote-sensing/run',json=bad);assert response.status_code==422,response.text
     response=client.post('/analysis/remote-sensing/run',json=good);assert response.status_code==200,response.text
     np.testing.assert_allclose(grid(response.json()),.5)
-    assert client.get('/analysis/remote-sensing/catalog').json()['operation_count']==len(BY_ID)==80
+    assert client.get('/analysis/remote-sensing/catalog').json()['operation_count']==len(BY_ID)==84
 
 def test_temporal_independent_quality_masks():
     # Cloud at one date does not erase the other valid acquisitions.
@@ -505,3 +505,35 @@ def test_blocked_classifier_reference(kind):
     assert run(kind,a,params)['rows']==r['rows']
     with pytest.raises(FigureInputError,match='Each spatial fold'):
         run(kind,a,{**params,'block_m':10000})
+
+
+@pytest.mark.parametrize('kind',['lst_uncertainty','sar_terrain_volume','sar_terrain_validity','register_translation'])
+def test_physical_depth_reference(kind):
+    if kind=='lst_uncertainty':
+        names=('radiance','emissivity','transmittance','upwelling','downwelling');vals=np.array([10.,.95,.8,1.2,2.]);sd=np.array([.1,.01,.02,.05,.07])
+        a={r:constant(v) for r,v in zip(names,vals)};a.update({r+'_sd':constant(v) for r,v in zip(names,sd)})
+        def reference(q):
+            l,e,t,u,d=q;b=(l-u-t*(1-e)*d)/(t*e)
+            return 1321.0789/np.log1p(774.8853/b)
+        jac=[]
+        for j in range(5):
+            delta=np.zeros(5);delta[j]=1e-5;jac.append((reference(vals+delta)-reference(vals-delta))/2e-5)
+        np.testing.assert_allclose(grid(run(kind,a)),np.linalg.norm(np.array(jac)*sd),rtol=1e-8)
+    elif kind in {'sar_terrain_volume','sar_terrain_validity'}:
+        slope=np.array([[0,10,50],[0,10,60]],float);aspect=np.array([[90,90,90],[270,270,270]],float)
+        a={'sigma0':np.full(slope.shape,.2),'incidence':np.full(slope.shape,40.),'slope':slope,'aspect':aspect}
+        z=grid(run(kind,a,{'look_azimuth':90,'margin_deg':0}))
+        if kind=='sar_terrain_validity':np.testing.assert_array_equal(z,[[1,1,0],[1,1,0]])
+        else:
+            expected=np.array([[.2/np.cos(np.deg2rad(40)),.2/np.cos(np.deg2rad(40))*np.tan(np.deg2rad(50))/np.tan(np.deg2rad(60)),np.nan],
+                               [.2/np.cos(np.deg2rad(40)),.2/np.cos(np.deg2rad(40))*np.tan(np.deg2rad(50))/np.tan(np.deg2rad(40)),np.nan]])
+            np.testing.assert_allclose(z,expected,equal_nan=True)
+    else:
+        rng=np.random.default_rng(81);ref=rng.normal(size=(32,32));candidate=np.full_like(ref,np.nan)
+        candidate[2:,:-3]=ref[:-2,3:];mask=np.zeros_like(ref);mask[5:-5,5:-5]=1
+        r=run(kind,{'reference':ref,'candidate':candidate,'calibration':mask});m=r['receipt']['metrics']
+        assert (m['row_shift'],m['column_shift'])==(-2,3)
+        assert m['correlation']==pytest.approx(1)
+        z=grid(r);np.testing.assert_allclose(z[:-2,3:],ref[:-2,3:])
+        assert np.isnan(z[-2:]).all() and np.isnan(z[:,:3]).all()
+        with pytest.raises(FigureInputError):run(kind,{'reference':np.ones_like(ref),'candidate':np.ones_like(ref),'calibration':mask})

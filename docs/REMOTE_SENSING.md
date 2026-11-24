@@ -35,3 +35,6 @@ SAR now also provides Gamma MAP intensity filtering, paired log-ratio change, an
 
 ## Spatial classification cross-validation
 80 catalog methods now include scikit-learn random forest, RBF SVM and shrinkage LDA, with all spatial folds evaluated, training-only preprocessing, fixed hyperparameters, optional block buffer, OOF confusion matrix, macro F1 and balanced accuracy. The final deployable classification refits all labels; its reported accuracy is explicitly out-of-fold, not in-sample. Dependencies are pinned in platform constraints. No automatic hyperparameter tuning or external validation is implied.
+
+## Physical uncertainty, geometry and alignment
+84 catalog methods include independent-input first-order uncertainty for single-channel LST (finite-difference reference test), angular volume-scattering SAR slope correction and local active layover/shadow validity (Vollrath, Mullissa & Reiche, 2020, https://doi.org/10.3390/rs12111867), and stable-mask normalized cross-correlation integer translation with overlap and ambiguous-peak rejection. These do not implement area-based RTC, passive shadow modeling, subpixel control-point registration or complete thermal model uncertainty.
