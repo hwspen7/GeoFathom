@@ -1,5 +1,5 @@
 import {useState} from 'react';
-import {getTerrainComputeResources,setTerrainComputeResources,type TerrainComputePolicy,type TerrainComputeStatus} from './api';
+import {getTerrainComputeResources,setTerrainComputeResources,type TerrainComputePolicy,type TerrainComputeStatus,listTerrainProducts,deleteTerrainProduct,type TerrainProductList} from './api';
 
 const GiB=1024**3;
 const gb=(n:number)=>(n/GiB).toFixed(1)+' GiB';
@@ -18,6 +18,10 @@ export default function ComputingResources(){
  const [busy,setBusy]=useState(false);
  const [error,setError]=useState('');
  const [saved,setSaved]=useState(false);
+ const [products,setProducts]=useState<TerrainProductList|null>(null);
+ const [productError,setProductError]=useState('');
+ async function refreshProducts(){try{setProductError('');setProducts(await listTerrainProducts());}catch(e){setProductError(e instanceof Error?e.message:String(e));}}
+ async function removeProduct(id:string){if(!window.confirm('Delete the stored GeoTIFF? Saved analysis receipts referencing it will no longer download this raster.'))return;try{await deleteTerrainProduct(id);await refreshProducts();}catch(e){setProductError(e instanceof Error?e.message:String(e));}}
  async function refresh(){
   setBusy(true);setError('');setSaved(false);
   try{const s=await getTerrainComputeResources();setStatus(s);setDraft(s.policy);}
@@ -65,6 +69,10 @@ export default function ComputingResources(){
    <small>CUDA slope kernels where available · CPU fallback.</small>
    <button type="submit" disabled={busy}>Apply resources</button><button type="button" disabled={busy} onClick={()=>void refresh()}>Refresh hardware</button>
    {saved&&<small role="status">Resource settings saved.</small>}
+   <details onToggle={event=>{if(event.currentTarget.open)void refreshProducts();}}><summary>Stored raster products</summary>
+    {productError&&<small role="alert">{productError}</small>}
+    {products&&<><small>{gb(products.total_bytes)} / {gb(products.limit_bytes)} · {products.products.length} / {products.limit_files} files</small>{products.products.map(item=><div key={item.id}><small title={item.id}>{item.id.slice(0,12)} · {(item.bytes/1024**2).toFixed(1)} MiB</small> <button type="button" onClick={()=>void removeProduct(item.id)}>Delete</button></div>)}</>}
+   </details>
   </form>}
  </details>;
 }

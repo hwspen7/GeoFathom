@@ -1192,3 +1192,7 @@ export async function downloadTerrainRaster(raster:TerrainRaster,filename:string
  const link=document.createElement('a');link.href=url;link.download=filename;link.click();
  setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
+
+export interface TerrainProductList {products:{id:string;bytes:number;modified:number}[];total_bytes:number;limit_bytes:number;limit_files:number}
+export function listTerrainProducts():Promise<TerrainProductList>{return request('/terrain/products');}
+export function deleteTerrainProduct(id:string):Promise<{deleted:boolean}>{return request('/terrain/products/'+encodeURIComponent(id),{method:'DELETE'});}

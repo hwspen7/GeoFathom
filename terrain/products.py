@@ -61,3 +61,12 @@ def publish(path,cancel=None):
 
 def remove(identifier):
     with _lock:product_path(identifier).unlink()
+
+def list_products():
+    with _lock:
+        items=[]
+        for path in sorted(root().glob("*.tif")):
+            if re.fullmatch(r"[0-9a-f]{64}",path.stem) is None:continue
+            stat=path.stat()
+            items.append({"id":path.stem,"bytes":stat.st_size,"modified":stat.st_mtime})
+        return {"products":items,"total_bytes":sum(item["bytes"] for item in items),"limit_bytes":_MAX_BYTES,"limit_files":_MAX_FILES}

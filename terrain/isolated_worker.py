@@ -4,14 +4,12 @@ Only server-selected Python functions and local trusted arguments are passed
 to the spawned worker. The temporary result channel is private to the job.
 No hard-limit request silently falls back to an unbounded process.
 """
-from dataclasses import replace
 import multiprocessing as mp
 import os
 from pathlib import Path
 import pickle
 import sys
 import tempfile
-import time
 from uuid import uuid4
 
 from imagery.raster import RasterError

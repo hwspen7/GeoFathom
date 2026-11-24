@@ -13,7 +13,8 @@ def device_memory():
     fn.argtypes=[ctypes.c_int,ctypes.POINTER(ctypes.c_size_t)]
     fn.restype=ctypes.c_int
     out=(ctypes.c_size_t*2)()
-    device=int(os.getenv("GEOFATHOM_CUDA_DEVICE_ID","0"))
+    try:device=int(os.getenv("GEOFATHOM_CUDA_DEVICE_ID","0"))
+    except ValueError:return 0,0
     return tuple(map(int,out)) if fn(device,out)==0 else (0,0)
 
 
@@ -30,7 +31,9 @@ def gradients(z,valid,dx,dy,method,budget):
     fn=lib.gf_cuda_terrain_gradient
     fn.argtypes=[ctypes.c_int,f,u,ctypes.c_int,ctypes.c_int,ctypes.c_double,ctypes.c_double,ctypes.c_int,ctypes.c_size_t,f,f,u]
     fn.restype=ctypes.c_int
-    status=fn(int(os.getenv("GEOFATHOM_CUDA_DEVICE_ID","0")),z.ctypes.data_as(f),mask.ctypes.data_as(u),
+    try:device=int(os.getenv("GEOFATHOM_CUDA_DEVICE_ID","0"))
+    except ValueError:return None
+    status=fn(device,z.ctypes.data_as(f),mask.ctypes.data_as(u),
               z.shape[1],z.shape[0],dx,dy,0 if method=="horn" else 1,budget,
               east.ctypes.data_as(f),south.ctypes.data_as(f),out.ctypes.data_as(u))
     return (east,south,out.astype(bool)) if status==0 else None

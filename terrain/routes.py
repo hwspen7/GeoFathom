@@ -224,6 +224,12 @@ async def advanced(request:Request,body:AdvancedTerrainInput):
     except (GeometryError,RasterError,ValueError,OverflowError) as error:
         raise HTTPException(status_code=422,detail=str(error)) from error
 
+@router.get("/products")
+def list_terrain_products():
+    from .products import list_products
+    return list_products()
+
+
 @router.get("/products/{identifier}")
 def download_product(identifier: str):
     from fastapi.responses import FileResponse
