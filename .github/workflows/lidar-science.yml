@@ -1,0 +1,27 @@
+name: LiDAR scientific reference gate
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+jobs:
+  lidar-reference:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install locked scientific dependencies
+        run: python -m pip install -c requirements/${{ matrix.os == 'windows-latest' && 'windows' || 'linux' }}.lock -e ".[dev]"
+      - name: Execute independent metric point-cloud reference tests
+        run: python -m pytest tests/test_lidar_science.py tests/test_lidar_advanced.py -q --junitxml=lidar-reference.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lidar-reference-${{ matrix.os }}
+          path: lidar-reference.xml

@@ -45,10 +45,10 @@ def register(source,reference,max_distance,trim_fraction,max_iterations,toleranc
         raise ValueError("Registration requires at least three points in each cloud.")
     if not .5<=trim_fraction<=1 or not 1<=max_iterations<=100 or not 1e-9<=tolerance<=1.:
         raise ValueError("Invalid ICP parameters.")
-    tree=cKDTree(reference)
     # Work in a common centered frame to avoid translation-dependent precision loss.
     origin=reference.mean(axis=0)
-    tree=cKDTree(reference-origin)
+    centered_reference=reference-origin
+    tree=cKDTree(centered_reference)
     p=source-origin
     rot=np.eye(3)
     shift=np.zeros(3)
@@ -61,7 +61,7 @@ def register(source,reference,max_distance,trim_fraction,max_iterations,toleranc
         if len(valid)<3:
             raise ValueError("Insufficient correspondences within registration distance.")
         use=valid[np.argsort(d[valid],kind="stable")[:keep]]
-        target=(reference-origin)[idx[use]]
+        target=centered_reference[idx[use]]
         r,tv=_rigid_fit(p[use],target)
         updated=p@r.T+tv
         step=float(np.sqrt(np.mean(np.sum((updated[use]-p[use])**2,axis=1))))

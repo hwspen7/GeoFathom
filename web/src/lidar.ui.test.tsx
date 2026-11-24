@@ -1,0 +1,35 @@
+// @vitest-environment jsdom
+import {afterEach,expect,it,vi} from 'vitest';
+import {cleanup,fireEvent,render,screen,waitFor} from '@testing-library/react';
+import LidarPanel from './LidarPanel';
+const mock=vi.hoisted(()=>({catalog:vi.fn(),run:vi.fn(),save:vi.fn()}));
+vi.mock('./api',()=>({getLidarCatalog:mock.catalog,runLidar:mock.run}));
+vi.mock('./figureExport',()=>({saveFigureBlob:mock.save}));
+vi.mock('./ScientificFigureStudio',()=>({default:()=> <div>Figure studio connected</div>}));
+afterEach(()=>{cleanup();vi.clearAllMocks();});
+it('requires explicit metric CRS and exports the full result with an independent sampled preview',async()=>{
+ mock.catalog.mockResolvedValue({operations:[{id:'quality',title:'Cloud quality',assumption:'XYZ'}]});
+ mock.run.mockResolvedValue({operation:'quality',columns:['x_m','y_m','z_m'],rows:[[1,2,3]],row_count:1,csv:'x_m,y_m,z_m\n1,2,3\n',figure_csv:'x_m,y_m,z_m\n1,2,3\n',metrics:{input_points:1},assumption:'XYZ',receipt:{schema:'geofathom-lidar-1'}});
+ render(<LidarPanel active connected/>);
+ await screen.findByRole('option',{name:'Cloud quality'});
+ const run=screen.getByRole('button',{name:'Run 3D analysis'}) as HTMLButtonElement;
+ const file=new File(['x,y,z\n1,2,3'],'cloud.csv',{type:'text/csv'});
+ fireEvent.change(screen.getByLabelText('Point cloud (LAS or XYZ CSV)'),{target:{files:[file]}});
+ fireEvent.change(screen.getByLabelText('Projected EPSG (metres)'),{target:{value:'32617'}});
+ fireEvent.change(screen.getByLabelText('Vertical datum / height reference'),{target:{value:'local'}});
+ expect(run.disabled).toBe(true);
+ fireEvent.click(screen.getByRole('checkbox'));
+ expect(run.disabled).toBe(false);
+ fireEvent.click(run);
+ await screen.findByRole('region',{name:'3D and LiDAR results'});
+ expect(mock.run).toHaveBeenCalledWith(expect.objectContaining({operation:'quality',epsg:'32617',vertical_datum:'local'}),file,null,expect.any(AbortSignal));
+ expect(screen.getByRole('img',{name:'Equal-scale orthographic point cloud'})).toBeTruthy();
+ fireEvent.change(screen.getByLabelText('Azimuth (degrees)'),{target:{value:'90'}});
+ fireEvent.click(screen.getByRole('button',{name:'Export full CSV'}));
+ expect(mock.save).toHaveBeenCalledWith(expect.any(Blob),'lidar-quality.csv');
+ fireEvent.click(screen.getByRole('button',{name:'Scientific Figure Studio'}));
+ expect(screen.getByText('Figure studio connected')).toBeTruthy();
+ fireEvent.change(screen.getByLabelText('Vertical datum / height reference'),{target:{value:'other'}});
+ expect(screen.queryByRole('region',{name:'3D and LiDAR results'})).toBeNull();
+ await waitFor(()=>expect(run.disabled).toBe(true));
+});

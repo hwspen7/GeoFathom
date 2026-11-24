@@ -3,6 +3,7 @@ import {createPortal} from 'react-dom';
 import {getLidarCatalog,runLidar,type LidarMethod,type LidarResult} from './api';
 import {saveFigureBlob} from './figureExport';
 import ScientificFigureStudio from './ScientificFigureStudio';
+import LidarCloudView from './LidarCloudView';
 
 export default function LidarPanel({active,connected,resultsTarget}:{active:boolean;connected:boolean;resultsTarget?:HTMLElement|null}){
  const [methods,setMethods]=useState<LidarMethod[]>([]),[operation,setOperation]=useState('quality');
@@ -26,17 +27,19 @@ export default function LidarPanel({active,connected,resultsTarget}:{active:bool
    finally{if(!ac.signal.aborted)setBusy(false);}
  }
  const columns=result?.columns??[];
- const xyz=columns.includes('x_m')&&columns.includes('y_m')&&columns.includes('z_m');
+ const zField=columns.includes('z_m')?'z_m':columns.includes('current_z_m')?'current_z_m':columns.includes('p95_m')?'p95_m':'';
+ const xyz=columns.includes('x_m')&&columns.includes('y_m')&&Boolean(zField);
  const output=result&&<section className="panel-section" aria-label="3D and LiDAR results">
    <div className="section-heading"><span>{methods.find(m=>m.id===result.operation)?.title??result.operation}</span></div>
    <small>{result.assumption}</small>
    <dl>{Object.entries(result.metrics).map(([key,val])=><div key={key}><dt>{key.replaceAll('_',' ')}</dt><dd>{JSON.stringify(val)}</dd></div>)}</dl>
+   {xyz&&<LidarCloudView csv={result.figure_csv} columns={columns} zField={zField}/>}
    <small>{result.row_count.toLocaleString()} result rows · preview up to 10</small>
    <div style={{overflowX:'auto'}}><table><thead><tr>{columns.map(c=><th key={c}>{c}</th>)}</tr></thead><tbody>{result.rows.slice(0,10).map((r,i)=><tr key={i}>{r.map((v,j)=><td key={j}>{v===null?'—':Number(v.toPrecision(7))}</td>)}</tr>)}</tbody></table></div>
    <button onClick={()=>saveFigureBlob(new Blob([result.csv],{type:'text/csv'}),'lidar-'+result.operation+'.csv')}>Export full CSV</button>
    <button onClick={()=>saveFigureBlob(new Blob([JSON.stringify(result.receipt,null,2)],{type:'application/json'}),'lidar-receipt.json')}>Export provenance</button>
    <button onClick={()=>setStudio(true)}>Scientific Figure Studio</button>
-   {studio&&<ScientificFigureStudio initialTier="all" source={{name:'LiDAR '+result.operation,csv:result.figure_csv,provenance:result.receipt,initialRecipe:xyz?'scatter_3d':undefined,initialBindings:xyz?{x:'x_m',y:'y_m',z:'z_m'}:undefined}} onClose={()=>setStudio(false)}/>}
+   {studio&&<ScientificFigureStudio initialTier="all" source={{name:'LiDAR '+result.operation,csv:result.figure_csv,provenance:result.receipt,initialRecipe:xyz?'scatter_3d':undefined,initialBindings:xyz?{x:'x_m',y:'y_m',z:zField}:undefined}} onClose={()=>setStudio(false)}/>}
  </section>;
  return <>
    <label>Point cloud (LAS or XYZ CSV)<input type="file" accept=".las,.csv" onChange={e=>{setCloud(e.target.files?.[0]??null);setConfirmed(false);invalidate();}}/></label>
