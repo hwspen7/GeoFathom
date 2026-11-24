@@ -324,3 +324,19 @@ def test_overlay_shared_edges_preserve_area_and_valid_inverse_projection():
     areas={k:v['receipt']['metrics']['area_m2'] for k,v in results.items()}
     assert areas['difference']+areas['intersection']==pytest.approx(10000,abs=1e-6)
     assert areas['symmetric_difference']+areas['intersection']==pytest.approx(areas['union'],abs=1e-6)
+
+
+def test_queen_weights_and_permutation_table():
+    r=run('global_moran',rasters=[raster()],neighborhood='queen',parameters={'permutations':99,'seed':3})
+    m=r['receipt']['metrics'];assert m['undirected_edges']==42 and len(r['rows'])==99
+    u=Z-Z.mean();pairs=[(u[i,j],u[y,x]) for i,j in np.ndindex(u.shape) for y,x in [(i,j+1),(i+1,j-1),(i+1,j),(i+1,j+1)] if 0<=y<4 and 0<=x<4]
+    assert m['observed']==pytest.approx(16*sum(a*b for a,b in pairs)/(42*np.sum(u*u)))
+    assert all(row[2]==m['observed'] for row in r['rows'])
+
+def test_dirichlet_analytic_uncertainty_opposed_criteria():
+    z=np.array([[0.,1.],[0.,1.]])
+    args={'rasters':[raster(z),raster(1-z)],'weights':[1,1],'directions':['benefit','benefit'],'parameters':{'draws':40,'seed':7,'concentration':9,'threshold':.5}}
+    mean,_=result_grid(run('robust_overlay',**args));sd,_=result_grid(run('robust_overlay',robust_view='sd',**args))
+    np.testing.assert_allclose(mean,.5);np.testing.assert_allclose(sd,np.sqrt(.025))
+    prob,_=result_grid(run('robust_overlay',robust_view='probability',**args));se,_=result_grid(run('robust_overlay',robust_view='mc_se',**args))
+    np.testing.assert_allclose(se,np.sqrt(prob*(1-prob)/40))

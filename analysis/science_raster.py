@@ -47,15 +47,17 @@ def sample_cells(z,method,count,seed):
         pairs=partition(valid,count);idx,weight=map(np.asarray,zip(*pairs));idx=idx.astype(int)
     return idx,weight
 
-def adjacency(z):
+def adjacency(z,neighborhood='rook'):
     valid=np.isfinite(z);lookup=np.full(z.shape,-1,dtype=np.int64);lookup[valid]=np.arange(valid.sum())
     a=[];b=[]
-    for first,second in [(lookup[:,:-1],lookup[:,1:]),(lookup[:-1,:],lookup[1:,:])]:
+    pairs=[(lookup[:,:-1],lookup[:,1:]),(lookup[:-1,:],lookup[1:,:])]
+    if neighborhood=='queen':pairs.extend([(lookup[:-1,:-1],lookup[1:,1:]),(lookup[:-1,1:],lookup[1:,:-1])])
+    for first,second in pairs:
         mask=(first>=0)&(second>=0);a.append(first[mask]);b.append(second[mask])
     return z[valid],np.concatenate(a),np.concatenate(b)
 
-def permutation_stat(z,kind,permutations,seed):
-    values,a,b=adjacency(z);n=len(values);edges=len(a)
+def permutation_stat(z,kind,permutations,seed,neighborhood='rook',return_null=False):
+    values,a,b=adjacency(z,neighborhood);n=len(values);edges=len(a)
     require(n>=3 and edges>0,'Spatial statistics require at least three valid observations and neighboring pairs.')
     require(edges*(permutations+1)<=30_000_000,'Permutation edge budget exceeded.')
     if kind=='join_count':
@@ -73,8 +75,9 @@ def permutation_stat(z,kind,permutations,seed):
     observed=stat(values);rng=np.random.default_rng(seed)
     null=np.array([stat(rng.permutation(values)) for _ in range(permutations)])
     p=(1+np.count_nonzero(np.abs(null-expected)>=abs(observed-expected)-1e-14))/(permutations+1)
-    return {'observed':observed,'expected':float(expected),'p_two_sided':float(p),'null_mean':float(null.mean()),
-            'null_sd':float(null.std(ddof=1)),'valid_cells':n,'undirected_edges':edges,'permutations':permutations}
+    meta={'observed':observed,'expected':float(expected),'p_two_sided':float(p),'null_mean':float(null.mean()),
+            'null_sd':float(null.std(ddof=1)),'valid_cells':n,'undirected_edges':edges,'permutations':permutations,'neighborhood':neighborhood,'minimum_p':1/(permutations+1)}
+    return (meta,null) if return_null else meta
 
 def decision(stack,common,kind,weights,directions,pairwise):
     k=len(stack);x=stack[:,common].T;meta={}
@@ -174,4 +177,4 @@ def local_stat(z,kind,view,permutations,seed,alpha):
         else:
             out[significant&(statistic>0)]=1;out[significant&(statistic<0)]=2
     return to_grid(out),{'tested_cells':int(np.isfinite(qv).sum()),'significant_cells':int(significant.sum()),'minimum_p':1/(permutations+1),
-                        'correction':'Benjamini–Yekutieli','cluster_codes':{'0':'not significant','1':'high-high or hotspot','2':'low-low or coldspot',**({'3':'high-low','4':'low-high'} if kind=='local_moran' else {})}},unit
+                        'correction':'Benjamini–Yekutieli','best_case_minimum_q_bound':min(1.,float(np.sum(1/np.arange(1,int(np.isfinite(qv).sum())+1)))/(permutations+1)),'cluster_codes':{'0':'not significant','1':'high-high or hotspot','2':'low-low or coldspot',**({'3':'high-low','4':'low-high'} if kind=='local_moran' else {})}},unit

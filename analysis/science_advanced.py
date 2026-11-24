@@ -83,12 +83,15 @@ def robust_overlay(stack,common,weights,directions,draws,concentration,threshold
     x=stack[:,common].T;require(len(x)*k*draws<=80_000_000,'Weight-uncertainty work budget exceeded.')
     span=np.ptp(x,axis=0);v=np.divide(x-x.min(axis=0),span,out=np.full_like(x,.5),where=span>0)
     v[:,np.asarray(directions)=='cost']=1-v[:,np.asarray(directions)=='cost']
-    rng=np.random.default_rng(seed);mean=np.zeros(len(x));m2=np.zeros(len(x));hit=np.zeros(len(x),np.int32)
-    for i,draw in enumerate(rng.dirichlet(w*concentration,size=draws),1):
-        score=v@draw;delta=score-mean;mean+=delta/i;m2+=delta*(score-mean);hit+=score>=threshold
+    # Exact first two moments; simulation is needed only for threshold probability.
+    mean=v@w;variance=np.sum(w*(v-mean[:,None])**2,axis=1)/(concentration+1)
+    rng=np.random.default_rng(seed);hit=np.zeros(len(x),np.int32)
+    for draw in rng.dirichlet(w*concentration,size=draws):
+        score=v@draw;hit+=score>=threshold
+    probability=hit/draws
     def grid(q):
         out=np.full(common.shape,np.nan);out[common]=q;return out
-    return {'mean':grid(mean),'sd':grid(np.sqrt(m2/max(1,draws-1))),'probability':grid(hit/draws)}, {'draws':draws,'concentration':concentration,'threshold':threshold,'normalized_weights':w.tolist(),'model':'Dirichlet weight uncertainty conditional on fixed criterion rasters; not calibrated event probability.'}
+    return {'mean':grid(mean),'sd':grid(np.sqrt(variance)),'probability':grid(probability),'mc_se':grid(np.sqrt(probability*(1-probability)/draws))}, {'draws':draws,'concentration':concentration,'threshold':threshold,'normalized_weights':w.tolist(),'moment_method':'Exact Dirichlet first and second moments','probability_method':'Monte Carlo frequency; plug-in binomial standard error (zero at observed endpoints is not proof of zero error)','model':'Dirichlet weight uncertainty conditional on fixed criterion rasters; not calibrated event probability.'}
 
 def blocked_raster_regression(grids,params):
     """Out-of-fold prediction on the complete-case raster grid, no spatial leakage across buffers."""

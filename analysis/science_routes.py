@@ -39,7 +39,8 @@ class SpatialInput(BaseModel):
     breaks:list[float]=Field(default_factory=list,max_length=25)
     resampling:Literal['nearest','bilinear']='nearest'
     local_view:Literal['statistic','p','q','cluster']='statistic'
-    robust_view:Literal['mean','sd','probability']='mean'
+    robust_view:Literal['mean','sd','probability','mc_se']='mean'
+    neighborhood:Literal['rook','queen']='rook'
     regression_view:Literal['prediction','residual']='prediction'
 
 def raster_product(name,z,transform,crs,unit):
@@ -127,7 +128,7 @@ def execute(body):
     elif kind=='robust_overlay':
         stack,common=aligned_grids(grids,require_same_unit=False)
         products,meta=robust_overlay(stack,common,body.weights,body.directions,params['draws'],params['concentration'],params['threshold'],params['seed'])
-        product=raster_product(kind,products[body.robust_view],g.transform,g.crs,'probability' if body.robust_view=='probability' else 'unitless')
+        product=raster_product(kind,products[body.robust_view],g.transform,g.crs,'probability' if body.robust_view in {'probability','mc_se'} else 'unitless')
         meta['view']=body.robust_view
     elif kind=='blocked_regression':
         out,headers,rows,meta=blocked_raster_regression(grids,params)
@@ -144,7 +145,8 @@ def execute(body):
         rows=[[int(r),int(c),float(east[c]),float(north[r]),float(g.values[r,c]),float(w)] for r,c,w in zip(yy,xx,weights)]
         meta={'sample_count':len(rows),'valid_population':int(np.isfinite(g.values).sum()),'weight_sum':float(weights.sum())}
     elif kind in {'global_moran','global_geary','join_count'}:
-        meta=permutation_stat(g.values,kind,params['permutations'],params['seed']);headers=list(meta);rows=[list(meta.values())]
+        meta,null=permutation_stat(g.values,kind,params['permutations'],params['seed'],body.neighborhood,return_null=True)
+        headers=['permutation','null_statistic','observed_statistic'];rows=[[i+1,float(value),meta['observed']] for i,value in enumerate(null)]
     elif kind in {'local_moran','getis_ord_gi_star'}:
         out,meta,unit=local_stat(g.values,kind,body.local_view,params['permutations'],params['seed'],params['alpha'])
         product=raster_product(kind,out,g.transform,g.crs,unit);meta['view']=body.local_view
@@ -180,7 +182,7 @@ def execute(body):
     receipt={'schema':'geofathom-spatial-science-1','operation':kind,'assumption':method.assumption,'parameters':params,
              'crs':str(g.crs) if nr else 'EPSG:'+str(body.epsg),'raster_sources':[{'name':x.name,'sha256':x.sha256,'band':x.band,'unit':x.unit,'scale':x.scale,'offset':x.offset} for x in grids],
              'vector_sources':[hashlib.sha256(json.dumps(x,sort_keys=True,separators=(',',':'),allow_nan=False).encode()).hexdigest() for x in body.vectors],
-             'weights':body.weights,'directions':body.directions,'pairwise':body.pairwise,'breaks':body.breaks,'resampling':body.resampling,'local_view':body.local_view,'robust_view':body.robust_view,'regression_view':body.regression_view,'metrics':meta,
+             'weights':body.weights,'directions':body.directions,'pairwise':body.pairwise,'breaks':body.breaks,'resampling':body.resampling,'local_view':body.local_view,'neighborhood':body.neighborhood,'robust_view':body.robust_view,'regression_view':body.regression_view,'metrics':meta,
              'vector_count':len(features['features']) if features else 0,'table_rows':len(rows),'raster_sha256':product['sha256'] if product else None}
     result={'operation':kind,'receipt':receipt,'features':features,'raster':product,'preview':raster_preview(product) if product else None,'columns':headers,'rows':rows,'csv':csv_output(headers,rows)}
     json.dumps(result,allow_nan=False)
