@@ -71,6 +71,21 @@ elif kind in ("qq", "scatter"):
         slope = (summary["q3"]-summary["q1"])/(2*0.6744897501960817)
         ends = [rows[0][0], rows[-1][0]]
         ax.plot(ends, [(summary["q1"]+summary["q3"])/2+slope*x for x in ends], "--", color="0.5", linewidth=0.8)
+elif kind.startswith("experiment_"):
+    categorical = kind != "experiment_line"
+    positions = list(range(len(rows))) if categorical else [r[1] for r in rows]
+    values = [float("nan") if r[2] is None else r[2] for r in rows]
+    if kind == "experiment_interval":
+        for x, row in zip(positions, rows):
+            if row[3] is not None and row[4] is not None:
+                ax.vlines(x,row[3],row[4],color=color)
+                ax.hlines([row[3],row[4]],x-.12,x+.12,color=color)
+            if row[2] is not None: ax.scatter(x,row[2],color=color)
+            if row[5] is not None: ax.scatter(x,row[5],facecolors="white",edgecolors=color)
+    elif kind == "experiment_bar": ax.bar(positions,values,color=color,width=.65)
+    elif kind == "experiment_dot": ax.scatter(positions,values,color=color)
+    else: ax.plot(positions,values,color=color,marker="o")
+    if categorical: ax.set_xticks(positions,[r[0] for r in rows],rotation=35,ha="right")
 elif kind in ("class_bar", "class_dot", "metrics"):
     values = [r[1 if kind == "metrics" else measure] for r in rows]
     positions = list(range(len(rows)))
@@ -88,8 +103,8 @@ elif kind == "rose":
 else:
     ax.plot([r[0] for r in rows], [float("nan") if r[1] is None else r[1] for r in rows], color=color, marker="o" if kind in ("profile", "grade") else None, markersize=2)
 if kind != "rose":
-    if settings["x_log"] and kind not in ("box", "class_bar", "class_dot", "metrics"): ax.set_xscale("log")
-    if settings["y_log"]: ax.set_yscale("log")
+    if settings["x_log"] and kind not in ("box", "class_bar", "class_dot", "metrics", "experiment_bar", "experiment_dot", "experiment_interval"): ax.set_xscale("log")
+    if settings["y_log"] and kind != "experiment_interval": ax.set_yscale("log")
     ax.set_xlabel(settings["x_label"] or table["x_label"])
     ax.set_ylabel(settings["y_label"] or table["y_label"])
 ax.set_title(settings["title"])

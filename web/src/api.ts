@@ -1201,6 +1201,7 @@ export interface PlotData {
  thresholds?:Array<{threshold_deg:number;cells_le:number;percent_le:number}>;
  roses?:Record<string,Array<{bearing_deg:number;cells:number;area_m2:number;percent:number}>>;
  profiles?:Array<{name:string;points:Array<{x:number;y:number|null}>}>;
+ experiment_series?:{x_label:string;numeric:boolean;interval_label?:string;points:Array<{label:string;x:number;value:number|null;low?:number;high?:number;baseline?:number|null}>};
  joint?:{x_quantity:string;x_unit:string;y_quantity:string;y_unit:string;population_cells:number;sample_cells:number;sampling:string;pearson_r:number|null;identity_line?:boolean;samples:Array<{x:number;y:number}>;density_cells:Array<{x_lower:number;x_upper:number;y_lower:number;y_upper:number;cells:number;area_m2:number}>;notes:string[]}|null;
 }
 export function getTerrainPlotData(base:ResearchExperiment['base'],expectedSourceSha256?:string,signal?:AbortSignal):Promise<PlotData>{

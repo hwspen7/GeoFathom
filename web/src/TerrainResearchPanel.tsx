@@ -1,7 +1,8 @@
 import {useEffect,useRef,useState} from 'react';
 import {createPortal} from 'react-dom';
 import FigureGallery from './FigureGallery';
-import {analyzeResearch,getResearchCatalog,type ResearchCatalog,type ResearchExperiment,type ResearchResult,type TerrainRasterLayer} from './api';
+import {researchFigureData,type ResearchFigureSource} from './researchFigureData';
+import {analyzeResearch,getResearchCatalog,type ResearchCatalog,type ResearchExperiment,type ResearchResult,type TerrainRasterLayer,type PlotData} from './api';
 import type {PersistedTerrainResult} from './terrainResultStore';
 import {researchBase,parseParameter,parseSweep,downloadResearch,loadResearch,saveResearch} from './terrainResearch';
 const fmt=(n:number|null|undefined)=>n==null?'Undefined':n.toLocaleString('en-US',{maximumSignificantDigits:7});
@@ -32,8 +33,9 @@ export default function TerrainResearchPanel(p:{projectId:string|null;record:Per
  const [errorModel,setErrorModel]=useState<'independent'|'common_offset'>('independent');
  const [result,setResult]=useState<ResearchResult|null>(null),[error,setError]=useState(''),[cacheWarning,setCacheWarning]=useState(''),[busy,setBusy]=useState(false);
  const [metric,setMetric]=useState(''),[productIndex,setProductIndex]=useState(0),[wipe,setWipe]=useState(50);
- const [galleryOpen,setGalleryOpen]=useState(false);
- const [figureMode,setFigureMode]=useState<'difference'|'swipe'|'response'>('difference');
+ const [galleryData,setGalleryData]=useState<PlotData|null>(null);
+ const [metricFigureSource,setMetricFigureSource]=useState<ResearchFigureSource>('values');
+ const [figureMode,setFigureMode]=useState<'difference'|'swipe'|'response'|'metric'|'matrix'>('difference');
  const controller=useRef<AbortController|null>(null),dialog=useRef<HTMLDivElement>(null),interacted=useRef(false);
  const base=p.record?researchBase(p.record):null,supported=!!base&&!!catalog?.sweep_parameters[base.operation];
  const scenario=scenarios[scenarioIndex];
@@ -48,6 +50,9 @@ export default function TerrainResearchPanel(p:{projectId:string|null;record:Per
  const metrics=result?.metric_table.map(row=>row.metric)??[];
  const metricChoice=metrics.includes(metric)?metric:metrics.find(m=>['product_mean','cut_m3','net_cut_m3'].includes(m))??metrics[0]??'';
  const row=result?.metric_table.find(row=>row.metric===metricChoice),interval=result?.uncertainty?.metrics[metricChoice];
+ const metricSources:ResearchFigureSource[]=result?.mode==='uncertainty'?['interval','realizations']:result?.mode==='sensitivity'?['response','derivative','values','delta','relative']:['values','delta','relative'];
+ const sourceChoice=metricSources.includes(metricFigureSource)?metricFigureSource:metricSources[0];
+ const metricFigure=result&&metricChoice&&sourceChoice?researchFigureData(result,metricChoice,sourceChoice):null;
  useEffect(()=>{
   let current=true;
   getResearchCatalog().then(value=>{if(current)setCatalog(value);}).catch(e=>{if(current)setError(String(e.message??e));});
@@ -128,15 +133,15 @@ export default function TerrainResearchPanel(p:{projectId:string|null;record:Per
   <p>Units follow metric names and the manifest. Changes are undefined for unmatched populations; percentages are also undefined for a zero baseline. The package includes every metric.</p>
  </>}
  {page==='figures'&&result&&<>
-  <label>Figure<select aria-label="Figure" value={figureMode} onChange={e=>{setFigureMode(e.target.value as typeof figureMode);setProductIndex(0);}}><option value="difference">Output and difference maps</option><option value="swipe" disabled={!result.products.some(p=>p.role==='scenario')}>Baseline / scenario swipe</option><option value="response" disabled={!result.sensitivity.length}>Sensitivity response</option></select></label>
-  {figureMode==='response'?<>{metricSelect}<ResponsePlot parameter={result.sensitivity[0]?.parameter??''} metric={metricChoice} points={result.sensitivity.filter(r=>Number.isFinite(r.metrics[metricChoice])).map(r=>[r.value,r.metrics[metricChoice]])}/><p>Slopes from baseline: {result.sensitivity.map(r=>fmt(r.value)+' → '+fmt(r.derivatives[metricChoice])).join(' · ')}</p></>:<>
+  <label>Figure<select aria-label="Figure" value={figureMode} onChange={e=>{setFigureMode(e.target.value as typeof figureMode);setProductIndex(0);}}><option value="difference">Output and difference maps</option><option value="swipe" disabled={!result.products.some(p=>p.role==='scenario')}>Baseline / scenario swipe</option><option value="response" disabled={!result.sensitivity.length}>Sensitivity response</option><option value="metric">Scientific metric figures</option><option value="matrix" disabled={result.products.length<2}>Multi-map matrix</option></select></label>
+  {figureMode==='metric'?<>{metricSelect}<label>Data source<select aria-label="Research figure data" value={sourceChoice} onChange={e=>setMetricFigureSource(e.target.value as ResearchFigureSource)}>{metricSources.map(s=><option key={s} value={s}>{({values:'Scenario values',delta:'Absolute change',relative:'Relative change',response:'Parameter response',derivative:'Baseline secant',interval:'Model coverage interval',realizations:'Monte Carlo realizations'})[s]}</option>)}</select></label><button type="button" disabled={!metricFigure} onClick={()=>setGalleryData(metricFigure||null)}>Open metric figure library</button>{!metricFigure&&<p>No valid recorded values for this selection.</p>}</>:figureMode==='matrix'?<div className="research-map-matrix" style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(230px,1fr))',gap:12}}>{result.products.map((item,i)=><figure key={i} style={{margin:0}}><figcaption>{item.name}</figcaption><img style={{width:'100%',objectFit:'contain'}} src={item.raster.png} alt={item.name+' matrix map'}/><div className="research-map-legend">{item.raster.legend.map((entry,j)=><span key={j}><i style={{background:entry.color}}/>{entry.label}</span>)}</div><button type="button" disabled={!item.plot_data} onClick={()=>setGalleryData(item.plot_data??null)}>Plot {item.name}</button></figure>)}</div>:figureMode==='response'?<>{metricSelect}<ResponsePlot parameter={result.sensitivity[0]?.parameter??''} metric={metricChoice} points={result.sensitivity.filter(r=>Number.isFinite(r.metrics[metricChoice])).map(r=>[r.value,r.metrics[metricChoice]])}/><p>Slopes from baseline: {result.sensitivity.map(r=>fmt(r.value)+' → '+fmt(r.derivatives[metricChoice])).join(' · ')}</p></>:<>
    <label>Map output<select aria-label="Map output" value={activeProductIndex} onChange={e=>setProductIndex(Number(e.target.value))}>{availableProducts.map((item,i)=><option key={i} value={i}>{item.name} · {item.role??item.kind}</option>)}</select></label>
    {product?<>
     <div className="research-map-figure"><img src={product.raster.png} alt={product.name+' map'}/>{figureMode==='swipe'&&result.products[0]&&<img className="research-swipe-baseline" src={result.products[0].raster.png} alt="Baseline map" style={{clipPath:`inset(0 ${100-wipe}% 0 0)`}}/>}</div>
     {figureMode==='swipe'&&<label>Baseline reveal<input aria-label="Baseline reveal" type="range" min="0" max="100" value={wipe} onChange={e=>setWipe(Number(e.target.value))}/></label>}
     <small>{product.raster.unit} · {product.raster.valid_cells.toLocaleString()} valid cells · signed differences use candidate minus baseline</small>
     <div className="research-map-legend">{product.raster.legend.map((entry,i)=><span key={i}><i style={{background:entry.color}}/>{entry.label}</span>)}</div>
-    {product.plot_data&&<button type="button" onClick={()=>setGalleryOpen(true)}>Open scientific figure library</button>}
+    {product.plot_data&&<button type="button" onClick={()=>setGalleryData(product.plot_data??null)}>Open scientific figure library</button>}
    {product.statistics&&<p>Common cells: {String(product.statistics.common_cells)} · Coverage: {fmt(product.statistics.common_coverage_pct as number)}% · Changed: {fmt(product.statistics.changed_pct as number)}%</p>}
     <div className="research-actions"><button type="button" onClick={()=>{p.onLayer({id:'research-preview',title:product.name,raster:product.raster,opacity:.8,resampling:'nearest'});p.onClose();}}>Show on map</button><button type="button" onClick={()=>downloadResearch(product.raster.geotiff,'research-output.tif','image/tiff')}>Download GeoTIFF</button></div>
    </>:<p>This operation has metric outputs. Use the results table.</p>}
@@ -145,6 +150,6 @@ export default function TerrainResearchPanel(p:{projectId:string|null;record:Per
  {page==='report'&&result&&<><h3>Research report and reproducibility package</h3><p>{result.title}</p><ul><li>PDF report with maps, figures, methods, parameters and quality information</li><li>GeoTIFF products, differences and preview maps</li><li>Scenario metrics and sensitivity / uncertainty tables</li><li>Source checksum, exact study geometry, software versions and experiment input</li></ul><p>The report describes the completed experiment. Form edits do not change this result.</p><div className="research-actions"><button type="button" onClick={()=>downloadResearch(result.archive_base64,'terrain-research.zip','application/zip')}>Download research package</button><button type="button" onClick={exportJson}>Download experiment input</button></div><p>Source accuracy is not independently validated. Scenario spread is descriptive. Model intervals depend on the error model and finite sampling.</p></>}
  </main>
  <footer><span>{result?'Completed: '+result.title:'Inputs from the selected terrain result'}</span>{busy?<><span role="status">Computing experiment…</span><button type="button" onClick={cancel}>Cancel experiment</button></>:<button type="button" disabled={!supported||!p.connected||!title.trim()} onClick={()=>void run()}>Run experiment</button>}</footer>
- {galleryOpen&&product?.plot_data&&<FigureGallery projectId={p.projectId} research={{id:result!.title+'-'+product.name+'-'+(product.role??product.kind),title:product.name,data:product.plot_data,manifest:result!.manifest}} onClose={()=>setGalleryOpen(false)}/>}
+ {galleryData&&result&&<FigureGallery projectId={p.projectId} research={{id:result.title+'-'+galleryData.quantity,title:galleryData.quantity,data:galleryData,manifest:result.manifest}} onClose={()=>setGalleryData(null)}/>}
  </div></div>,document.body);
 }

@@ -1,7 +1,7 @@
 /** Plot recipes keep numerical tables, geometry and export styles in one model. */
 import type {PlotData} from './api';
 import type {PersistedTerrainResult} from './terrainResultStore';
-export type FigureKind='histogram'|'cdf'|'exceedance'|'density'|'box'|'quantile'|'qq'|'class_bar'|'class_dot'|'rose'|'profile'|'grade'|'metrics'|'scatter'|'joint_density';
+export type FigureKind='histogram'|'cdf'|'exceedance'|'density'|'box'|'quantile'|'qq'|'class_bar'|'class_dot'|'rose'|'profile'|'grade'|'metrics'|'scatter'|'joint_density'|'experiment_line'|'experiment_bar'|'experiment_dot'|'experiment_interval';
 export interface FigureRecipe {id:FigureKind;title:string;description:string;category:string}
 export const FIGURES:FigureRecipe[]=[
  {id:'histogram',title:'Histogram',description:'Exact counts or area within numerical bins',category:'Distribution'},
@@ -18,17 +18,24 @@ export const FIGURES:FigureRecipe[]=[
  {id:'rose',title:'Aspect rose',description:'Directional frequencies; flat cells excluded',category:'Direction'},
  {id:'profile',title:'Elevation profile',description:'Distance and elevation with NoData gaps',category:'Profiles'},
  {id:'grade',title:'Profile grade',description:'Signed segment grade from adjacent valid samples',category:'Profiles'},
+ {id:'experiment_line',title:'Parameter response',description:'Numeric response at actual parameter values; missing results remain gaps',category:'Experiments'},
+ {id:'experiment_bar',title:'Scenario bars',description:'One physical metric across named scenarios',category:'Experiments'},
+ {id:'experiment_dot',title:'Scenario dots',description:'Named values without misleading connecting lines',category:'Experiments'},
+ {id:'experiment_interval',title:'Model coverage interval',description:'Conditional empirical bounds, mean and deterministic baseline',category:'Experiments'},
  {id:'metrics',title:'Metric comparison',description:'Select quantities with the same physical unit',category:'Summary'},
 ];
 export interface FigureSettings {kind:FigureKind;title:string;x_label:string;y_label:string;bins:number;
  measure:'percent'|'cells'|'area';palette:'mono'|'blue'|'earth';font:'sans'|'serif';font_size:number;
  grid:boolean;x_log:boolean;y_log:boolean;width_mm:number;height_mm:number;dpi:number;series:number;sectors:number;metric_keys:string[];}
 export function defaultFigure(data:PlotData):FigureSettings{
- const kind:FigureKind=data.histograms?'histogram':data.kind==='directional'?'rose':data.kind==='profile'?'profile':data.classes.length?'class_bar':'metrics';
+ const kind:FigureKind=data.experiment_series?(data.experiment_series.interval_label?'experiment_interval':data.experiment_series.numeric?'experiment_line':'experiment_bar'):data.histograms?'histogram':data.kind==='directional'?'rose':data.kind==='profile'?'profile':data.classes.length?'class_bar':'metrics';
  return {kind,title:data.quantity.replaceAll('_',' ')+': '+(availableFigures(data).find(f=>f.id===kind)?.title??'Summary'),x_label:'',y_label:'',bins:data.histograms?.['40']?40:Number(Object.keys(data.histograms??{})[0]??40),measure:'percent',palette:'mono',font:'sans',font_size:16,grid:true,x_log:false,y_log:false,width_mm:160,height_mm:110,dpi:300,series:0,sectors:16,metric_keys:[]};
 }
 export function availableFigures(data:PlotData):FigureRecipe[]{
  return FIGURES.filter(f=>{
+  if(f.id==='experiment_line')return !!data.experiment_series?.numeric;
+  if(f.id==='experiment_bar'||f.id==='experiment_dot')return !!data.experiment_series&&!data.experiment_series.numeric&&!data.experiment_series.interval_label;
+  if(f.id==='experiment_interval')return !!data.experiment_series?.interval_label;
   if(['scatter','joint_density'].includes(f.id))return !!data.joint;
   if(f.id==='histogram')return !!data.histograms;
   if(f.id==='density')return !!data.histograms&&Object.values(data.histograms).some(bins=>bins.some(b=>b.density!==null&&Number.isFinite(b.density)));
@@ -74,12 +81,14 @@ export function figureTable(data:PlotData,s:FigureSettings):PlotTable{
  const key=unit==='degree'?'deg':unit.replace(/[^a-zA-Z0-9]+/g,'_').replace(/^_|_$/g,'')||'value';
  if(s.kind==='scatter'&&data.joint)return {columns:[data.joint.identity_line?'baseline_'+key:'elevation_m',data.joint.identity_line?'candidate_'+key:'result_'+key],rows:data.joint.samples.map(p=>[p.x,p.y]),x_label:data.joint.x_quantity+' ('+data.joint.x_unit+')',y_label:data.joint.y_quantity+' ('+data.joint.y_unit+')',unit:data.joint.y_unit,note:'Systematic sample; see metadata for full population statistics.'};
  if(s.kind==='joint_density'&&data.joint)return {columns:data.joint.identity_line?['baseline_lower_'+key,'baseline_upper_'+key,'candidate_lower_'+key,'candidate_upper_'+key,'cells','area_m2']:['elevation_lower_m','elevation_upper_m','result_lower_'+key,'result_upper_'+key,'cells','area_m2'],rows:data.joint.density_cells.map(b=>[b.x_lower,b.x_upper,b.y_lower,b.y_upper,b.cells,b.area_m2]),x_label:data.joint.x_quantity+' ('+data.joint.x_unit+')',y_label:data.joint.y_quantity+' ('+data.joint.y_unit+')',unit:data.joint.y_unit};
- const yTitle=s.measure==='area'?'Projected area (m2)':s.measure==='cells'?'Valid cells':'Area share (%)';
+ const sample=data.population==='monte_carlo_realizations';
+ if(s.kind.startsWith('experiment_')&&data.experiment_series){const series=data.experiment_series;return {columns:['label','x','value_'+key,'lower_'+key,'upper_'+key,'baseline_'+key],rows:series.points.map(p=>[p.label,p.x,p.value,p.low??null,p.high??null,p.baseline??null]),x_label:series.x_label,y_label:quantity+(unit?' ('+unit+')':''),unit,note:series.interval_label};}
+ const yTitle=sample?(s.measure==='cells'?'Realizations':'Realizations (%)'):s.measure==='area'?'Projected area (m2)':s.measure==='cells'?'Valid cells':'Area share (%)';
  if(s.kind==='histogram'||s.kind==='density'){
   const choices=data.histograms??{},bins=choices[String(s.bins)]??Object.values(choices)[0]??[];
-  return {columns:['lower_'+key,'upper_'+key,'midpoint_'+key,'cells','area_m2','percent','density_per_'+key,'cumulative_pct'],rows:bins.map(b=>[b.lower,b.upper,b.midpoint,b.cells,b.area_m2,b.percent,b.density,b.cumulative_pct]),x_label:quantity+' ('+unit+')',y_label:s.kind==='density'?'Probability density (1/'+unit+')':yTitle,unit};
+  return {columns:['lower_'+key,'upper_'+key,'midpoint_'+key,sample?'realizations':'cells',sample?'not_applicable':'area_m2','percent','density_per_'+key,'cumulative_pct'],rows:bins.map(b=>[b.lower,b.upper,b.midpoint,b.cells,sample?null:b.area_m2,b.percent,b.density,b.cumulative_pct]),x_label:quantity+' ('+unit+')',y_label:s.kind==='density'?'Probability density (1/'+unit+')':yTitle,unit};
  }
- if(s.kind==='cdf'||s.kind==='exceedance')return {columns:['value_'+key,'cells_le','percent_le','percent_gt'],rows:(data.cdf??[]).map(p=>[p.value,p.cells_le,p.percent_le,100-p.percent_le]),x_label:quantity+' ('+unit+')',y_label:s.kind==='cdf'?'Cumulative area (%)':'Exceedance area (%)',unit};
+ if(s.kind==='cdf'||s.kind==='exceedance')return {columns:['value_'+key,sample?'realizations_le':'cells_le','percent_le','percent_gt'],rows:(data.cdf??[]).map(p=>[p.value,p.cells_le,p.percent_le,100-p.percent_le]),x_label:quantity+' ('+unit+')',y_label:s.kind==='cdf'?(sample?'Cumulative realizations (%)':'Cumulative area (%)'):(sample?'Exceedance realizations (%)':'Exceedance area (%)'),unit};
  if(s.kind==='quantile')return {columns:['probability','value_'+key],rows:(data.quantiles??[]).map(p=>[p.probability,p.value]),x_label:'Cumulative probability',y_label:quantity+' ('+unit+')',unit};
  if(s.kind==='qq')return {columns:['normal_quantile','observed_quantile_'+key,'probability'],rows:(data.normal_qq??[]).map(p=>[p.normal_quantile,p.observed_quantile,p.probability]),x_label:'Theoretical normal quantile',y_label:'Observed '+quantity+' ('+unit+')',unit};
  if(s.kind==='box')return {columns:['quantity','whisker_low_'+key,'q1_'+key,'median_'+key,'q3_'+key,'whisker_high_'+key,'lower_outliers','upper_outliers'],rows:data.box?[[quantity,data.box.whisker_low,data.box.q1,data.box.median,data.box.q3,data.box.whisker_high,data.box.lower_outliers,data.box.upper_outliers]]:[],x_label:quantity,y_label:quantity+' ('+unit+')',unit};
@@ -120,8 +129,12 @@ export function makeFigure(data:PlotData,s:FigureSettings):FigureScene{
  const fmt=(n:number)=>{if(n===0)return '0';return Math.abs(n)>=1e5||Math.abs(n)<.001?n.toExponential(1):Number(n.toPrecision(4)).toString();};
  let xValues:number[]=[],yValues:number[]=[],categories:string[]=[],points:Array<[number,number|null]>=[];
  const col=s.measure==='cells'?1:s.measure==='area'?2:3;
- const categorical=['class_bar','class_dot','metrics'].includes(s.kind);
- if(s.kind==='histogram'||s.kind==='density'){
+ const categorical=['class_bar','class_dot','metrics','experiment_bar','experiment_dot','experiment_interval'].includes(s.kind);
+ if(s.kind.startsWith('experiment_')){
+  categories=table.rows.map(r=>String(r[0]));
+  points=table.rows.map((r,i)=>[categorical?i:Number(r[1]),finite(r[2])?r[2]:null]);
+  if(s.kind==='experiment_interval')yValues=table.rows.flatMap(r=>r.slice(2,6)).filter(finite);
+ }else if(s.kind==='histogram'||s.kind==='density'){
   xValues=table.rows.flatMap(r=>[r[0],r[1]]).filter(finite);
   const i=s.kind==='density'?6:s.measure==='cells'?3:s.measure==='area'?4:5;
   points=table.rows.map(r=>[r[2] as number,finite(r[i])?r[i] as number:null]);
@@ -133,11 +146,11 @@ export function makeFigure(data:PlotData,s:FigureSettings):FigureScene{
  else if(s.kind==='rose'){xValues=[0,360];yValues=table.rows.map(r=>Number(r[col]));}
  if(!xValues.length)xValues=points.map(p=>p[0]).filter(finite);
  if(!yValues.length)yValues=points.map(p=>p[1]).filter(finite);
- const logX=s.x_log&&!categorical&&s.kind!=='box'&&s.kind!=='rose',logY=s.y_log&&s.kind!=='rose';
+ const logX=s.x_log&&!categorical&&s.kind!=='box'&&s.kind!=='rose',logY=s.y_log&&s.kind!=='rose'&&s.kind!=='experiment_interval';
  const validX=xValues.filter(v=>!logX||v>0),validY=yValues.filter(v=>!logY||v>0);
  let xmin=categorical?-.5:Math.min(...validX),xmax=categorical?Math.max(.5,categories.length-.5):Math.max(...validX);
  let ymin=Math.min(...validY),ymax=Math.max(...validY);
- const bars=s.kind==='histogram'||s.kind==='class_bar'||s.kind==='metrics';
+ const bars=s.kind==='histogram'||s.kind==='class_bar'||s.kind==='metrics'||s.kind==='experiment_bar';
  if(bars&&!logY){ymin=Math.min(0,ymin);ymax=Math.max(0,ymax);}
  if(['cdf','exceedance'].includes(s.kind)&&!logY){ymin=0;ymax=100;}
  const invalidLogBox=s.kind==='box'&&logY&&!!data.box&&data.box.whisker_low<=0;
@@ -175,7 +188,11 @@ export function makeFigure(data:PlotData,s:FigureSettings):FigureScene{
   if(!okay(points[i]))return;const [lo,hi]=r as number[];if(logX&&(lo<=0||hi<=0))return;
   const yy=y(points[i][1]!);p.push({kind:'rect',x:x(lo),y:Math.min(yy,zero),width:Math.max(.5,x(hi)-x(lo)),height:Math.abs(zero-yy),fill,stroke:ink,line_width:.8});
  });
- else if(['class_bar','metrics'].includes(s.kind))points.forEach(pt=>{if(!okay(pt))return;const yy=y(pt[1]!);p.push({kind:'rect',x:x(pt[0])-.32*fw/Math.max(1,categories.length),y:Math.min(yy,zero),width:.64*fw/Math.max(1,categories.length),height:Math.abs(zero-yy),fill,stroke:ink,line_width:1});});
+ else if(['class_bar','metrics','experiment_bar'].includes(s.kind))points.forEach(pt=>{if(!okay(pt))return;const yy=y(pt[1]!);p.push({kind:'rect',x:x(pt[0])-.32*fw/Math.max(1,categories.length),y:Math.min(yy,zero),width:.64*fw/Math.max(1,categories.length),height:Math.abs(zero-yy),fill,stroke:ink,line_width:1});});
+ else if(s.kind==='experiment_interval'){
+  table.rows.forEach((r,i)=>{const xx=x(i);const [value,lo,hi,base]=r.slice(2,6);if(finite(lo)&&finite(hi)){line(xx,y(lo),xx,y(hi),ink);line(xx-24,y(lo),xx+24,y(lo),ink);line(xx-24,y(hi),xx+24,y(hi),ink);}if(finite(value))p.push({kind:'circle',x:xx,y:y(value),radius:6,fill:ink,stroke:ink});if(finite(base))p.push({kind:'circle',x:xx,y:y(base),radius:5,fill:'#ffffff',stroke:ink,line_width:1.5});});
+  text(right,60,(data.experiment_series?.interval_label??'Model interval')+' · filled: mean; open: baseline','end',12);
+ }
  else if(s.kind==='box'&&data.box){
   const b=data.box,xx=(left+right)/2;line(xx,y(b.whisker_low),xx,y(b.whisker_high));
   for(const value of [b.whisker_low,b.whisker_high])line(xx-55,y(value),xx+55,y(value));
@@ -199,12 +216,13 @@ export function makeFigure(data:PlotData,s:FigureSettings):FigureScene{
   points.forEach(pt=>{
    if(!okay(pt)){flush();return;}
    const xx=x(pt[0]),yy=y(pt[1]!);
-   if(['qq','class_dot','scatter'].includes(s.kind)){
+   if(['qq','class_dot','scatter','experiment_dot'].includes(s.kind)){
     if(s.kind==='class_dot')line(left,yy,xx,yy,'#dddddd');
     p.push({kind:'circle',x:xx,y:yy,radius:3,fill:ink,stroke:ink,line_width:0});
    }else{
     if(['cdf','exceedance'].includes(s.kind)&&segment.length)segment.push([xx,segment[segment.length-1][1]]);
     segment.push([xx,yy]);
+    if(s.kind==='experiment_line')p.push({kind:'circle',x:xx,y:yy,radius:4,fill:ink,stroke:ink,line_width:0});
    }
   });
   if(cumulative&&segment.length)segment.push([right,segment[segment.length-1][1]]);
@@ -221,7 +239,7 @@ export function makeFigure(data:PlotData,s:FigureSettings):FigureScene{
    if(end>=start&&intercept+slope*start>=ymin&&intercept+slope*end<=ymax)line(x(start),y(intercept+slope*start),x(end),y(intercept+slope*end),'#888888',true);
   }
  }
- const note=(s.kind==='scatter'&&data.joint?`Shown ${data.joint.sample_cells} / ${data.joint.population_cells} aligned pairs; r = ${data.joint.pearson_r?.toPrecision(4)??'undefined'}. `:'')+(logX||logY?'Log axes omit non-positive values. ':'')+`n = ${(s.kind==='rose'?(data.directional_cells??data.valid_cells):data.valid_cells).toLocaleString('en-US')} ${s.kind==='rose'?'directional cells':data.kind==='profile'?'valid profile samples':'valid raster cells'}`;
+ const note=(s.kind==='scatter'&&data.joint?`Shown ${data.joint.sample_cells} / ${data.joint.population_cells} aligned pairs; r = ${data.joint.pearson_r?.toPrecision(4)??'undefined'}. `:'')+(logX||logY?'Log axes omit non-positive values. ':'')+`n = ${(s.kind==='rose'?(data.directional_cells??data.valid_cells):data.valid_cells).toLocaleString('en-US')} ${s.kind==='rose'?'directional cells':data.kind==='profile'?'valid profile samples':data.population==='monte_carlo_realizations'?'realizations':data.experiment_series?'experiment observations':'valid raster cells'}`;
  text(115,585,note,'start',11);
  return {width,height,width_mm:s.width_mm,height_mm:s.height_mm,title,primitives:p,note};
 }
