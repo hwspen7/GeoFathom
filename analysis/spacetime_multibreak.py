@@ -7,7 +7,7 @@ def multi_break(stack,t,p,kind):
     require(minimum>=6 and n>=minimum*2 and n*n*h*w<=1_000_000,'Multi-break harmonic work budget or minimum support exceeded.')
     tt=(t-t[0])/(t[-1]-t[0]);phase=2*np.pi*(t-t[0])/period
     X=np.column_stack((np.ones(n),tt,np.cos(phase),np.sin(phase)))
-    out=np.full((h,w),np.nan);hist=np.zeros(K,int);breaks=[]
+    out=np.full((h,w),np.nan);hist=np.zeros(K,int)
     for i,j in np.ndindex(h,w):
         y=stack[:,i,j];ok=np.isfinite(y);v=y[ok];time=t[ok];a=X[ok];m=len(v)
         if m<minimum or time[-1]-time[0]<period:continue
@@ -31,7 +31,7 @@ def multi_break(stack,t,p,kind):
         cuts=[];e=m
         for q in range(best,1,-1):
             s=prev[q,e];cuts.append(float((time[s-1]+time[s])/2));e=s
-        cuts.reverse();breaks.extend(cuts)
+        cuts.reverse()
         if kind=='multi_harmonic_count':out[i,j]=best-1
         elif kind=='multi_harmonic_bic':out[i,j]=bic[0]-bic[best-1]
         elif cuts:out[i,j]=cuts[0] if kind=='multi_harmonic_first' else cuts[-1]

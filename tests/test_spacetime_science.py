@@ -361,3 +361,14 @@ def test_disk_cube_window_reference_and_global_fit(tmp_path):
     xyz=np.column_stack(((cc.ravel()+.5)*10,(rr.ravel()+.5)*10,np.full(rr.size,8.)))
     expected=predict(xyz)[0].reshape(rr.shape)
     with rasterio.open(out) as ds:np.testing.assert_allclose(ds.read(1),expected,atol=1e-10)
+
+
+def test_multibreak_no_change_and_extreme_shape_independence():
+    t=np.arange(48.);a=(2+2*np.cos(2*np.pi*t/6))[:,None,None]+np.zeros((48,3,4))
+    np.testing.assert_allclose(grid(run('multi_harmonic_count',a,t,{'period':6,'min_segment':8})),0)
+    from scipy.stats import genpareto
+    x=np.r_[np.full(30,-1),genpareto.ppf((np.arange(30)+.5)/30,c=.1,scale=2)]
+    a=np.broadcast_to(x[:,None,None],(60,3,4)).copy()
+    r1=run('gpd_shape',a,None,{'threshold':0,'return_period':1.1})
+    r2=run('gpd_shape',a,None,{'threshold':0,'return_period':20})
+    np.testing.assert_allclose(grid(r1),grid(r2),atol=1e-12)

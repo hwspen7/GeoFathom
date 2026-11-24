@@ -202,12 +202,17 @@ def execute(body):
         if kind.endswith('_shape'):unit='index'
     elif kind.startswith('tracked_'):
         out,cols,rows,meta=track(stack,t,first,p,kind);unit='class' if kind.endswith('_id') else 'm2' if kind.endswith('_area') else body.time_unit
-        if rows:plot('Observed event peak area','basic_column',cols,rows,x='event',y='peak_area_m2')
+        if rows:
+            # A bounded figure subset; full component inventory remains in CSV.
+            top=sorted(rows,key=lambda r:(-r[6],r[0]))[:50]
+            plot('Largest 50 observed event peak areas','basic_column',cols,top,x='event',y='peak_area_m2')
+            plot('Observed event span versus peak area','basic_scatter',cols,rows[:2000],x='span',y='peak_area_m2')
     elif kind.startswith(('rts_','fitted_state_')):
         out,cols,rows,meta=dynamic(stack,t,p,kind)
         if kind=='rts_velocity':unit=unit+'/'+body.time_unit
         if kind=='fitted_state_skill':unit='index'
         if len(rows)>=2:plot('Fixed-origin holdout versus persistence','multi_line',cols,rows,x='time',columns=['state_rmse','persistence_rmse'])
+        if kind.startswith('fitted_'):plot('Training conditional likelihood fit','basic_column',['stage','nll'],[['initial',meta['initial_nll_per_observation']],['fitted',meta['fitted_nll_per_observation']]],x='stage',y='nll')
     elif kind.startswith('multi_harmonic_'):
         out,cols,rows,meta=multi_break(stack,t,p,kind);unit='count' if kind.endswith('_count') else 'index' if kind.endswith('_bic') else body.time_unit
         plot('Selected seasonal breakpoint count','basic_column',cols,rows,x='break_count',y='cells')
@@ -221,6 +226,7 @@ def execute(body):
         if kind=='gtwr_support':unit='count'
         elif kind=='gtwr_coefficient':unit=unit+'/'+covariate_receipt[(p['coefficient_index']-1)*n]['unit']
         plot('GTWR effective local sample quantiles','basic_line',cols,rows,x='quantile',y='effective_samples')
+        if kind=='gtwr_holdout_rmse':plot('Joint holdout error against training mean','basic_column',['model','rmse'],[['GTWR',meta['rmse']],['training mean',meta['training_mean_rmse']]],x='model',y='rmse')
     elif kind.startswith('panel_'):
         out,cols,rows,meta=panel(stack,covariate[0],p,kind)
         plot('Time fixed effects','basic_line',cols,rows,x='acquisition',y='time_effect')

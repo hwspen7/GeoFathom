@@ -89,8 +89,13 @@ def execute(source,output,times,method,parameters,tile=64,time_unit='day'):
                         r,c=np.indices((int(win.height),int(win.width)))
                         xyz=np.column_stack(((c.ravel()+win.col_off+.5)*ds.transform.a,(r.ravel()+win.row_off+.5)*abs(ds.transform.e),np.full(r.size,t[-1]-t[0]+p['horizon'])))
                         mean,sd=predict(xyz);z=(mean if method.endswith('_mean') else sd).reshape(r.shape)
-                    elif method=='sen':z,_=trend(read(win),t,'sen')
+                    elif method=='sen':
+                        # Bound the pairwise work independently of requested tile size.
+                        a=read(win);z=np.full(a.shape[1:],np.nan)
+                        step=max(1,min(a.shape[1],30_000_000//(n*n*a.shape[2])))
+                        for y in range(0,a.shape[1],step):z[y:y+step],_=trend(a[:,y:y+step],t,'sen')
                     else:z,_=temporal(read(win),t,method,p)
+                    require(not np.isinf(z).any(),'Numerical overflow in disk output.')
                     mask=np.isfinite(z);valid_count+=int(mask.sum())
                     if mask.any():low=min(low,float(z[mask].min()));high=max(high,float(z[mask].max()))
                     out.write(z,1,window=win)

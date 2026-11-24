@@ -54,8 +54,8 @@ def extremes(stack,t,p,kind):
             xi,sigma,atbound=fit;rate=len(x)/len(v);a=R*rate
             # Return level is above threshold only if its target tail
             # probability is smaller than the empirical exceedance frequency.
-            if a<=1:continue
-            level=threshold+sigma*(np.log(a) if abs(xi)<1e-7 else np.expm1(xi*np.log(a))/xi)
+            if a<=1 and not kind.endswith('_shape'):continue
+            level=threshold+sigma*(np.log(a) if abs(xi)<1e-7 else np.expm1(xi*np.log(a))/xi) if a>1 else np.nan
         fits+=1;bound+=atbound
         out[i,j]=xi if kind.endswith('_shape') else level
     return out,{'fitted_cells':fits,'boundary_fits':bound,'return_period':R,'return_period_unit':'complete observation blocks' if gev else 'valid acquisition opportunities',
