@@ -177,7 +177,7 @@ def execute(body):
     elif kind=='robust_harmonization':out,meta=robust_harmonization(v,params)
     elif kind=='irmad':out,headers,rows,meta=irmad(v,params)
     elif kind=='cloud_buffer':out,meta=cloud_buffer(v['qa'],params['radius'])
-    elif kind=='lst_uncertainty':out,meta=thermal_uncertainty(v,params)
+    elif kind in {'lst_uncertainty','lst_correlated_uncertainty'}:out,meta=thermal_uncertainty(v,params)
     elif kind in {'sar_terrain_volume','sar_terrain_validity'}:out,meta=angular_sar(v,params,kind=='sar_terrain_validity')
     elif kind=='register_translation':out,meta=register_translation(v,params)
     elif kind=='surface_temperature_rte':out,meta=surface_temperature(v,params)

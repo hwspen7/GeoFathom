@@ -189,7 +189,7 @@ def test_remote_invalid_inputs_and_recovery():
         response=client.post('/analysis/remote-sensing/run',json=bad);assert response.status_code==422,response.text
     response=client.post('/analysis/remote-sensing/run',json=good);assert response.status_code==200,response.text
     np.testing.assert_allclose(grid(response.json()),.5)
-    assert client.get('/analysis/remote-sensing/catalog').json()['operation_count']==len(BY_ID)==88
+    assert client.get('/analysis/remote-sensing/catalog').json()['operation_count']==len(BY_ID)==89
 
 def test_temporal_independent_quality_masks():
     # Cloud at one date does not erase the other valid acquisitions.
@@ -556,3 +556,19 @@ def test_hyperspectral_reference(kind):
     else:
         z=grid(r);assert np.isnan(z[0,0]);expected={'spectral_absorption_depth':.5,'spectral_absorption_center':520,'spectral_absorption_area':np.trapezoid(1-y/.8,w)}[kind]
         np.testing.assert_allclose(z[np.isfinite(z)],expected,atol=1e-12)
+
+
+@pytest.mark.parametrize('kind',['lst_correlated_uncertainty'])
+def test_correlated_thermal_reference(kind):
+    names=('radiance','emissivity','transmittance','upwelling','downwelling');vals=np.array([10.,.95,.8,1.2,2.]);sd=np.array([.1,.01,.02,.05,.07])
+    a={r:constant(v) for r,v in zip(names,vals)};a.update({r+'_sd':constant(v) for r,v in zip(names,sd)})
+    def temperature(q):
+        l,e,t,u,d=q;return 1321.0789/np.log1p(774.8853/((l-u-t*(1-e)*d)/(t*e)))
+    jac=[]
+    for j in range(5):
+        delta=np.zeros(5);delta[j]=1e-5;jac.append((temperature(vals+delta)-temperature(vals-delta))/2e-5)
+    corr=np.eye(5);corr[0,3]=corr[3,0]=.5;corr[1,2]=corr[2,1]=-.3
+    g=np.array(jac)*sd
+    np.testing.assert_allclose(grid(run(kind,a,{'rho03':.5,'rho12':-.3})),np.sqrt(g@corr@g),rtol=1e-8)
+    with pytest.raises(FigureInputError,match='positive semidefinite'):
+        run(kind,a,{'rho01':1,'rho02':1,'rho12':-1})

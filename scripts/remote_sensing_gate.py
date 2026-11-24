@@ -10,6 +10,7 @@ from imagery.remote_catalog import BY_ID
 
 def expected_tests():
     groups={
+        'test_correlated_thermal_reference':'lst_correlated_uncertainty',
         'test_hyperspectral_reference':'spectral_absorption_depth spectral_absorption_center spectral_absorption_area spectral_endmembers',
         'test_physical_depth_reference':'lst_uncertainty sar_terrain_volume sar_terrain_validity register_translation',
         'test_blocked_classifier_reference':'spatial_rf_cv spatial_svm_cv spatial_lda_cv',

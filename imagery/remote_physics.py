@@ -10,10 +10,15 @@ def thermal_uncertainty(v,p):
     l,e,t,u,d,b=(q[good] for q in (l,e,t,u,d,b))
     jac=[1/(t*e),(d-(l-u)/t)/e**2,-(l-u)/(t*t*e),-1/(t*e),-(1-e)/e]
     names=('radiance','emissivity','transmittance','upwelling','downwelling')
-    bsd=np.sqrt(sum((j*v[k+'_sd'][good])**2 for j,k in zip(jac,names)))
+    sensitivity=np.stack([j*v[k+'_sd'][good] for j,k in zip(jac,names)])
+    correlation=np.eye(5)
+    for i in range(5):
+        for j in range(i+1,5):correlation[i,j]=correlation[j,i]=p.get('rho'+str(i)+str(j),0)
+    require(np.linalg.eigvalsh(correlation)[0]>=-1e-10,'Thermal correlation matrix must be positive semidefinite.')
+    bsd=np.sqrt(np.maximum(0,np.einsum('in,ij,jn->n',sensitivity,correlation,sensitivity)))
     k1,k2=p['k1'],p['k2'];grad=k2*k1/(b*(b+k1)*np.log1p(k1/b)**2)
     out[good]=grad*bsd
-    return out,{'model':'First-order independent-input uncertainty in single-channel LST. Covariances and model discrepancy omitted.'}
+    return out,{'correlation_matrix':correlation.tolist(),'input_order':list(names),'model':'First-order uncertainty conditional on supplied pixel standard deviations and constant correlation matrix; structural model discrepancy omitted.'}
 
 def angular_sar(v,p,mask_only=False):
     # Vollrath et al. (2020) angular volume-scattering correction.

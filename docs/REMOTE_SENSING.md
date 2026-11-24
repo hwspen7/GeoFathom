@@ -41,3 +41,5 @@ SAR now also provides Gamma MAP intensity filtering, paired log-ratio change, an
 
 ## Wavelength-aware hyperspectral analysis
 88 catalog methods include 6–64 wavelength-aligned reflectance bands, upper-envelope continuum removal, maximum absorption depth, sampled absorption center, integrated absorption area and deterministic successive-projection endmember candidates. Candidate spectra are not validated pure materials. The existing variable-axis API field `times` carries wavelengths in nm only for catalog methods declaring `axis: wavelength`; the workbench labels it accordingly.
+
+Correlated LST uncertainty accepts all ten off-diagonal terms of a constant five-input correlation matrix, checks positive semidefiniteness and propagates per-pixel marginal standard deviations. Order: radiance, emissivity, transmittance, upwelling, downwelling. This is first-order conditional uncertainty, not structural model error or field validation.

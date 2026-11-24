@@ -30,7 +30,9 @@ CV=(p('block_m','Block width (m)',100,1,100000),p('folds','Spatial fold count',5
 THERMAL_ROLES=(('radiance','radiance'),('emissivity','emissivity'),('transmittance','transmittance'),('upwelling','radiance'),('downwelling','radiance'))
 SAR_TERRAIN=(('sigma0','power'),('incidence','slope'),('slope','slope'),('aspect','aspect'))
 SAR_GEOM=(p('look_azimuth','Sensor-facing azimuth (grid degrees)',90,0,360),p('margin_deg','Layover/shadow margin (degrees)',1,0,10))
+CORRELATIONS=tuple(p('rho'+str(i)+str(j),'Correlation of thermal inputs '+str(i+1)+' and '+str(j+1),0,-1,1) for i in range(5) for j in range(i+1,5))
 METHODS=(
+m('lst_correlated_uncertainty','Thermal','Correlated physical LST uncertainty',THERMAL_ROLES+(('radiance_sd','radiance_sd'),('emissivity_sd','fraction_sd'),('transmittance_sd','fraction_sd'),('upwelling_sd','radiance_sd'),('downwelling_sd','radiance_sd')),'K','Constant 5x5 correlation matrix in order radiance, emissivity, transmittance, upwelling, downwelling; per-pixel SDs; first-order conditional.',(p('k1','K1 radiance constant',774.8853,.000001,1e7),p('k2','K2 temperature constant',1321.0789,.000001,1e7))+CORRELATIONS),
 m('spectral_absorption_depth','Spectral','Continuum-removed maximum absorption depth',refl('band1','band2','band3','band4','band5','band6'),'fraction','6–64 positive wavelength values in nm; complete spectra and upper convex continuum.'),
 m('spectral_absorption_center','Spectral','Continuum-removed absorption center',refl('band1','band2','band3','band4','band5','band6'),'nm','Deepest sampled absorption band; featureless spectra excluded.'),
 m('spectral_absorption_area','Spectral','Continuum-removed integrated absorption',refl('band1','band2','band3','band4','band5','band6'),'nm','Trapezoidal integration of continuum-removed absorption in physical wavelength units.'),
