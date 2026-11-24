@@ -47,13 +47,21 @@ def raster_product(name,z,transform,crs,unit):
     require(not np.isinf(z).any(),'Numerical overflow in derived raster; rescale the input quantities.')
     valid=np.isfinite(z);require(valid.any(),'Operation produced no valid cells.')
     require(np.max(np.abs(z[valid]))<=1e100,'Output exceeds numerical range.')
+    # Describe the full numerical product before display resampling or export.
+    values=z[valid];probs=np.linspace(0,1,21)
+    summary={'valid_cells':int(values.size),'nodata_cells':int(z.size-values.size),
+             'minimum':float(values.min()),'maximum':float(values.max()),
+             'quantiles':[[float(p),float(q)] for p,q in zip(probs,np.quantile(values,probs))]}
+    if unit=='class':
+        classes,counts=np.unique(values,return_counts=True)
+        if len(classes)<=50:summary['class_counts']=[[float(c),int(n)] for c,n in zip(classes,counts)]
     with MemoryFile() as mem:
         with mem.open(driver='GTiff',width=z.shape[1],height=z.shape[0],count=1,dtype='float64',crs=crs,
                       transform=transform,nodata=float('nan'),compress='deflate') as ds:
             ds.write(z,1);ds.update_tags(TERRAIN_UNIT=unit,SPATIAL_METHOD=name)
         raw=mem.read()
     require(len(raw)<=24_000_000,'Derived raster exceeds the inline export budget.')
-    return {'name':name,'data':base64.b64encode(raw).decode(),'unit':unit,'sha256':hashlib.sha256(raw).hexdigest(),'band':1}
+    return {'name':name,'data':base64.b64encode(raw).decode(),'unit':unit,'sha256':hashlib.sha256(raw).hexdigest(),'band':1,'summary':summary}
 
 
 def raster_preview(product):
@@ -184,7 +192,10 @@ def execute(body):
              'crs':str(g.crs) if nr else 'EPSG:'+str(body.epsg),'raster_sources':[{'name':x.name,'sha256':x.sha256,'band':x.band,'unit':x.unit,'scale':x.scale,'offset':x.offset} for x in grids],
              'vector_sources':[hashlib.sha256(json.dumps(x,sort_keys=True,separators=(',',':'),allow_nan=False).encode()).hexdigest() for x in body.vectors],
              'weights':body.weights,'directions':body.directions,'pairwise':body.pairwise,'breaks':body.breaks,'resampling':body.resampling,'local_view':body.local_view,'neighborhood':body.neighborhood,'robust_view':body.robust_view,'regression_view':body.regression_view,'metrics':meta,
-             'vector_count':len(features['features']) if features else 0,'table_rows':len(rows),'raster_sha256':product['sha256'] if product else None}
+             'vector_count':len(features['features']) if features else 0,'table_rows':len(rows),'raster_sha256':product['sha256'] if product else None,
+             'raster_summary':product['summary'] if product else None,
+             'table_sha256':hashlib.sha256(csv_output(headers,rows).encode('utf-8')).hexdigest(),
+             'vector_output_sha256':hashlib.sha256(json.dumps(features,sort_keys=True,separators=(',',':'),allow_nan=False).encode('utf-8')).hexdigest() if features else None}
     result={'operation':kind,'receipt':receipt,'features':features,'raster':product,'preview':raster_preview(product) if product else None,'columns':headers,'rows':rows,'csv':csv_output(headers,rows)}
     from .science_figures import figure_sources
     result['figures']=figure_sources(result,grids)

@@ -26,7 +26,7 @@ def expected_tests():
     return out
 
 def required_tests():
-    return ['test_contract_count_and_invalid_input_rejections','test_spatial_gdal_cli_alignment_reference','test_spatial_medium_grid_mass_and_mask_conservation','test_overlay_shared_edges_preserve_area_and_valid_inverse_projection','test_queen_weights_and_permutation_table','test_dirichlet_analytic_uncertainty_opposed_criteria','test_independent_distance_reference_with_nodata','test_spatial_randomization_exact_reference','test_integrated_coverage_with_nodata','test_decision_extreme_weight_normalization','test_sampling_design_expected_totals',*[f'test_spatial_actual_result_figure_pipeline[{i}]' for i in ('null','lag','sample','prediction','coverage')]]
+    return ['test_contract_count_and_invalid_input_rejections','test_spatial_gdal_cli_alignment_reference','test_spatial_medium_grid_mass_and_mask_conservation','test_overlay_shared_edges_preserve_area_and_valid_inverse_projection','test_queen_weights_and_permutation_table','test_dirichlet_analytic_uncertainty_opposed_criteria','test_independent_distance_reference_with_nodata','test_spatial_randomization_exact_reference','test_integrated_coverage_with_nodata','test_decision_extreme_weight_normalization','test_sampling_design_expected_totals','test_sparse_permutation_population_budget','test_full_grid_figure_and_output_provenance',*[f'test_spatial_actual_result_figure_pipeline[{i}]' for i in ('null','lag','sample','prediction','coverage')]]
 
 def evaluate(path):
     root=ET.parse(path).getroot()

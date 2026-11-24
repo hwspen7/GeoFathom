@@ -14,6 +14,12 @@ def figure_sources(result,grids):
     product=result['raster']
     if product:
         add('Scientific result map','raster_classes' if product['unit']=='class' else 'raster_continuous',raster=True)
+        summary=product['summary']
+        if product['unit']=='class':
+            if summary.get('class_counts'):
+                add('Class frequency (full valid grid)','basic_column',{'x':'class','y':'cell_count'},csv_text(['class','cell_count'],summary['class_counts']))
+        else:
+            add('Raster quantile profile (full valid grid)','basic_scatter',{'x':'quantile','y':'value'},csv_text(['quantile','value'],summary['quantiles']))
     if kind in {'global_moran','global_geary','join_count','bivariate_moran'}:
         table('Random-label permutation distribution','spatial_null_distribution',{'x':'null_statistic','y':'observed_statistic'})
     if kind=='directional_lag_scan':

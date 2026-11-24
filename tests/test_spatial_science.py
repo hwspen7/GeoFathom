@@ -408,3 +408,39 @@ def test_sampling_design_expected_totals():
             assert w.sum()==pytest.approx(n) and len(set(idx))==7
             estimates.append(np.sum(z.flat[idx]*w))
         assert np.mean(estimates)==pytest.approx(actual,rel=.06)
+
+
+def test_sparse_permutation_population_budget():
+    from analysis.science_raster import permutation_stat
+    from terrain.studio_data import FigureInputError
+    # Many isolated valid observations still incur full-population shuffles.
+    z=np.full((1000,1000),np.nan)
+    z[::2,::2]=1
+    z[0,1]=2
+    with pytest.raises(FigureInputError,match='population and edge work budget'):
+        permutation_stat(z,'global_moran',199,7)
+
+
+def test_full_grid_figure_and_output_provenance():
+    import csv,io
+    from terrain.studio_routes import StudioInput
+    from terrain.studio_render import render
+    z=np.arange(16,dtype=float).reshape(4,4);z[0,0]=np.nan
+    result=run('raster_sum',rasters=[raster(z),raster(z)])
+    summary=result['receipt']['raster_summary']
+    assert summary['valid_cells']==15 and summary['nodata_cells']==1
+    assert summary['quantiles'][0]==[0.,2.] and summary['quantiles'][10]==[.5,16.] and summary['quantiles'][-1]==[1.,30.]
+    plot=next(p for p in result['figures'] if p['recipe']=='basic_scatter')
+    assert len(list(csv.DictReader(io.StringIO(plot['csv']))))==21
+    image,_,_=render(StudioInput(recipe=plot['recipe'],csv=plot['csv'],**plot['bindings']))
+    assert image.startswith(b'\x89PNG')
+    classified=run('reclassify',rasters=[raster(z)],breaks=[0,5,16])
+    assert classified['receipt']['raster_summary']['class_counts']==[[0.,4],[1.,11]]
+    plot=next(p for p in classified['figures'] if p['title'].startswith('Class frequency'))
+    image,_,_=render(StudioInput(recipe=plot['recipe'],csv=plot['csv'],**plot['bindings']))
+    assert image.startswith(b'\x89PNG')
+    sample=run('sample_random',rasters=[raster(z)],parameters={'count':3})
+    assert sample['receipt']['table_sha256']==hashlib.sha256(sample['csv'].encode()).hexdigest()
+    vector=run('centroid',vectors=[vectors(box(X,Y-10,X+10,Y))])
+    canonical=json.dumps(vector['features'],sort_keys=True,separators=(',',':'),allow_nan=False).encode()
+    assert vector['receipt']['vector_output_sha256']==hashlib.sha256(canonical).hexdigest()

@@ -59,11 +59,11 @@ def adjacency(z,neighborhood='rook'):
 def permutation_stat(z,kind,permutations,seed,neighborhood='rook',return_null=False):
     values,a,b=adjacency(z,neighborhood);n=len(values);edges=len(a)
     require(n>=3 and edges>0,'Spatial statistics require at least three valid observations and neighboring pairs.')
-    require(edges*(permutations+1)<=30_000_000,'Permutation edge budget exceeded.')
+    require((n+edges)*(permutations+1)<=30_000_000,'Permutation population and edge work budget exceeded.')
     if kind=='join_count':
         require(np.isin(values,[0,1]).all(),'Join counts require binary 0/1 values.')
         def stat(v):return float(np.count_nonzero(v[a]!=v[b]))
-        expected=2*np.sum(values==0)*np.sum(values==1)/(n*(n-1))*edges
+        expected=2*int(np.count_nonzero(values==0))*int(np.count_nonzero(values==1))/(n*(n-1))*edges
     else:
         values=values-values.mean();ss=values@values;require(ss>0,'Spatial statistic undefined for constant population.')
         if kind=='global_moran':
