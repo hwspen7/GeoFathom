@@ -14,7 +14,7 @@ import {areaText,distanceText,mapPalette,type DisplaySettings} from './displaySe
 import {drawingPreview,measurementAnchor,approximateMeasurement,geodesicDrag as edgeDistance} from './editing';
 import { featureLabel } from './labels';
 import type { ExternalTile } from './DataServicesPanel';
-import type { Measurement,LayerStyle,TerrainRasterLayer } from './api';
+import type { Measurement,LayerStyle,TerrainRasterLayer,NetworkFace } from './api';
 import {
   addVertex, moveVertex, removeVertex, translateSpherical, geodesicDrag, pathsOf,
   verticesOf,moveEdge, type GeometryPath, type Position, type ShapeMode,
@@ -43,6 +43,8 @@ export interface MapLayerFeature {
 
 interface Props {
   selected: GeoJSON.Geometry | null;
+  networkFaces?:NetworkFace[];
+  onSelectNetworkFace?:(id:string)=>void;
   drawingMode: ShapeMode;
   vertices: Position[];
   focus: FocusPoint | null;
@@ -56,7 +58,7 @@ interface Props {
   rasterLayers:RasterLayerView[];
   onRasterError:(message:string)=>void;
   onMapClick: (position: Position) => void;
-  onFinishDrawing:()=>void;
+  onFinishDrawing:(closeLine?:boolean)=>void;
   terrainPicking:boolean;
   terrainMarker:Position|null;
   profileSamples?:ProfileSample[];
@@ -132,6 +134,7 @@ function featureCollection(
   selectedFeatureId:string|null=null,
   pinnedPlaces:Array<{id:string;geometry:GeoJSON.Geometry}>=[],
   selectedBoundaryNode:GeometryPath|null=null,
+  networkFaces:NetworkFace[]=[],
 ): GeoJSON.FeatureCollection {
   const features: GeoJSON.Feature[] = [];
   // Retained reference locations cannot be implicitly removed by tool switches.
@@ -194,18 +197,32 @@ function featureCollection(
       type: 'Feature', properties: { role: 'candidate', color: '#9d8b4a' }, geometry,
     });
   }
+  // Independent, measurable closed network faces are overlays, not source edits.
+  for(const face of networkFaces.slice(0,300)){
+    features.push({type:'Feature',geometry:face.geometry,
+      properties:{role:'network-face',id:face.id,color:'#238d89',
+        fillOpacity:.10,lineWidth:1.35}});
+  }
   if (selected) {
+    // A retained selection is contextual while sketching a new feature.
+    // It must not masquerade as part of the newly drawn connected polygon.
+    const context=!!drawingMode&&drawingMode!=='hole'&&drawingMode!=='split';
     features.push({
-      type: 'Feature', properties: { role: 'selected', color: '#168047',fillOpacity:.28,lineWidth:2.5 },
+      type: 'Feature', properties: {role:'selected',color:context?'#8da3b1':'#168047',
+        fillOpacity:context?.025:.28,lineWidth:context?1.2:2.5},
       geometry: selected,
     });
   }
 
   const draft=drawingPreview(drawingMode,vertices,cursor);
-  if(draft)features.push({type:'Feature',properties:{role:'drawing',color:'#168047',fillOpacity:.22,lineWidth:2},geometry:draft});
-  for (const position of vertices) {
+  if(draft)features.push({type:'Feature',properties:{
+    role:'drawing',color:'#167ab4',fillOpacity:.16,lineWidth:2.5},geometry:draft});
+  for (const [index,position] of vertices.entries()) {
     features.push({
-      type: 'Feature', properties: { role: 'draw-vertex' },
+      type: 'Feature',
+      properties: {role:index===0&&['polygon','hole'].includes(drawingMode??'')?'draw-start':'draw-vertex',
+        pointRadius:index===0&&['polygon','hole'].includes(drawingMode??'')?8:6,
+        strokeColor:index===0&&['polygon','hole'].includes(drawingMode??'')?'#11835c':'#2563eb'},
       geometry: { type: 'Point', coordinates: position },
     });
   }
@@ -274,7 +291,7 @@ type Drag = {
 };
 
 export default function MapCanvas({
-  selected,drawingMode,vertices,focus,basemap,customBasemap,onBasemapStatus,measurement,showMeasurements,display,selectedFeatureId,rasterLayers,onRasterError,onMapClick,onFinishDrawing,
+  selected,drawingMode,vertices,networkFaces=[],onSelectNetworkFace,focus,basemap,customBasemap,onBasemapStatus,measurement,showMeasurements,display,selectedFeatureId,rasterLayers,onRasterError,onMapClick,onFinishDrawing,
   terrainPicking,terrainMarker,profileSamples=[],onProfileCursor,terrainResults,terrainRasters,terrainFetchTarget,onTerrainPick,onContextMenu,onEditingError,
   onViewportChange, discovered, traceMode, onTraceClick,
   editing, moving,edgeMoving, snapping, selectedLocked, layerFeatures,
@@ -291,20 +308,20 @@ export default function MapCanvas({
   const cursorTick=useRef(0);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const eventRef = useRef({
-    selected,selectedFeatureId,drawingMode, traceMode, annotationMode,selectionBoxMode,labelMoveMode,editing, moving,edgeMoving, snapping, selectedLocked,
+    selected,selectedFeatureId,drawingMode,vertices, traceMode, annotationMode,selectionBoxMode,labelMoveMode,editing, moving,edgeMoving, snapping, selectedLocked,
     layerFeatures, onMapClick,onFinishDrawing,terrainPicking,onTerrainPick,onContextMenu,onEditingError, onTraceClick,onAnnotationClick,onSelectionBox,onLabelMove,onViewportChange,
-    onGeometryPreview, onGeometryCommit, onSelectSavedFeature,onDeselect,preservePlaceSelection,onSelectPinnedPlace,onSelectBoundaryNode,
+    onGeometryPreview, onGeometryCommit, onSelectSavedFeature,onSelectNetworkFace,onDeselect,preservePlaceSelection,onSelectPinnedPlace,onSelectBoundaryNode,
     profileSamples,onProfileCursor,
   });
   const renderRef = useRef({
     selected,vertices,drawingMode,discovered,layerFeatures,editing,
     promptPositive,promptNegative,promptBox,selectedIds,qualityIssues,cursor,selectedFeatureId,
-    pinnedPlaces,selectedBoundaryNode,
+    pinnedPlaces,selectedBoundaryNode,networkFaces,
   });
   renderRef.current={
     selected,vertices,drawingMode,discovered,layerFeatures,editing,
     promptPositive,promptNegative,promptBox,selectedIds,qualityIssues,cursor,selectedFeatureId,
-    pinnedPlaces,selectedBoundaryNode,
+    pinnedPlaces,selectedBoundaryNode,networkFaces,
   };
   const drag = useRef<Drag | null>(null);
   const selectionDrag=useRef<{start:Position;end:Position}|null>(null);
@@ -314,9 +331,9 @@ export default function MapCanvas({
   const spatialSnap = useRef<PixelSnapIndex|null>(null);
   const [ready, setReady] = useState(false);
   eventRef.current = {
-    selected,selectedFeatureId,drawingMode, traceMode, annotationMode,selectionBoxMode,labelMoveMode,editing, moving,edgeMoving, snapping, selectedLocked,
+    selected,selectedFeatureId,drawingMode,vertices, traceMode, annotationMode,selectionBoxMode,labelMoveMode,editing, moving,edgeMoving, snapping, selectedLocked,
     layerFeatures, onMapClick,onFinishDrawing,terrainPicking,onTerrainPick,onContextMenu,onEditingError, onTraceClick,onAnnotationClick,onSelectionBox,onLabelMove,onViewportChange,
-    onGeometryPreview, onGeometryCommit, onSelectSavedFeature,onDeselect,preservePlaceSelection,onSelectPinnedPlace,onSelectBoundaryNode,
+    onGeometryPreview, onGeometryCommit, onSelectSavedFeature,onSelectNetworkFace,onDeselect,preservePlaceSelection,onSelectPinnedPlace,onSelectBoundaryNode,
     profileSamples,onProfileCursor,
   };
 
@@ -341,7 +358,7 @@ export default function MapCanvas({
           const p=map.project(point as maplibregl.LngLatLike);
           const shifted=map.unproject([p.x+dx,p.y+dy]);
           return [shifted.lng,shifted.lat];
-        },view.cursor,view.selectedFeatureId,view.pinnedPlaces,view.selectedBoundaryNode,
+        },view.cursor,view.selectedFeatureId,view.pinnedPlaces,view.selectedBoundaryNode,view.networkFaces,
       ));
     };
     map.on('zoomend',refreshZoomLabels);
@@ -541,7 +558,16 @@ export default function MapCanvas({
       }
       const current = drag.current;
       if (!current) {
-        if(eventRef.current.drawingMode&&Date.now()-cursorTick.current>=33){cursorTick.current=Date.now();setCursor(snapAt(coordinates(event),null));}
+        if(eventRef.current.drawingMode&&Date.now()-cursorTick.current>=33){
+          cursorTick.current=Date.now();
+          const state=eventRef.current;
+          let point=snapAt(coordinates(event),null);
+          if((state.drawingMode==='polygon'||state.drawingMode==='hole')&&state.vertices.length>=3){
+            const first=state.vertices[0],projected=map.project(first as maplibregl.LngLatLike);
+            if(Math.hypot(event.point.x-projected.x,event.point.y-projected.y)<=14)point=first;
+          }
+          setCursor(point);
+        }
         return;
       }
       // Selecting a vertex is not a geometry edit. Ignore sub-4px pointer
@@ -629,7 +655,39 @@ export default function MapCanvas({
       if (state.selectionBoxMode||state.labelMoveMode) return;
       if (state.annotationMode) state.onAnnotationClick(coordinates(event));
       else if (state.traceMode) state.onTraceClick(coordinates(event));
-      else if (state.drawingMode) state.onMapClick(snapAt(coordinates(event), null));
+      else if (state.drawingMode) {
+        // A browser double-click fires two click events. The second must
+        // never add a phantom last vertex before the dblclick finish event.
+        if(event.originalEvent.detail>=2)return;
+        if(['polygon','hole','line'].includes(state.drawingMode)&&state.vertices.length>=3){
+          const first=state.vertices[0],pixel=map.project(first as maplibregl.LngLatLike);
+          if(Math.hypot(pixel.x-event.point.x,pixel.y-event.point.y)<=14){
+            // Topological closure: reusing the start is a FINISH action,
+            // not a repeated point that creates a bow-tie polygon.
+            // A closed line is a region; polygon/hole finish unchanged.
+            state.onFinishDrawing(state.drawingMode==='line');
+            return;
+          }
+        }
+        if(state.vertices.length){
+          const last=map.project(state.vertices[state.vertices.length-1] as maplibregl.LngLatLike);
+          // Ignore accidental duplicate taps at the currently active node.
+          if(Math.hypot(last.x-event.point.x,last.y-event.point.y)<=6)return;
+          if(state.drawingMode==='polygon'||state.drawingMode==='hole'){
+            // Existing non-start nodes may be shared with OTHER features via
+            // snapping, but not visited twice within one simple polygon ring.
+            const repeated=state.vertices.slice(1,-1).some(position=>{
+              const pixel=map.project(position as maplibregl.LngLatLike);
+              return Math.hypot(pixel.x-event.point.x,pixel.y-event.point.y)<=8;
+            });
+            if(repeated){
+              state.onEditingError('A polygon cannot reuse an intermediate vertex. Click the green start node to close.');
+              return;
+            }
+          }
+        }
+        state.onMapClick(snapAt(coordinates(event), null));
+      }
       else if (state.editing&&!state.moving&&!state.edgeMoving&&!state.selectedLocked&&state.selected){
         // A click inspects a node regardless of whether the MapLibre worker
         // supplied the expected point feature on the preceding mousedown.
@@ -646,8 +704,10 @@ export default function MapCanvas({
         const boundary=features.find(f=>f.properties?.role==='boundary-node'||f.properties?.role==='boundary-node-selected');
         if(boundary){state.onSelectBoundaryNode?.(nodePath(boundary.properties));return;}
         const saved=features.find(f=>f.properties?.role==='saved');
+        const region=features.find(f=>f.properties?.role==='network-face');
         const retained=features.find(f=>f.properties?.role==='pinned-place');
         if(saved?.properties?.id)state.onSelectSavedFeature(String(saved.properties.id));
+        else if(region?.properties?.id)state.onSelectNetworkFace?.(String(region.properties.id));
         else if(retained?.properties?.id)state.onSelectPinnedPlace?.(String(retained.properties.id));
         // Blank map clicks are navigation, never an implicit deletion or Deselect.
         // Deselect and Remove are explicit controls only.
@@ -673,8 +733,11 @@ export default function MapCanvas({
         }
       }
       if(!state.editing){
-        const feature=hits(event).find(f=>f.properties?.role==='saved');
+        const features=hits(event);
+        const feature=features.find(f=>f.properties?.role==='saved');
+        const region=features.find(f=>f.properties?.role==='network-face');
         if(feature?.properties?.id)state.onSelectSavedFeature(String(feature.properties.id));
+        else if(region?.properties?.id)state.onSelectNetworkFace?.(String(region.properties.id));
       }
       state.onContextMenu(event.originalEvent.clientX,event.originalEvent.clientY);
     }
@@ -914,6 +977,7 @@ export default function MapCanvas({
             'match',['get','role'],
             'prompt-positive','#39b779','prompt-negative','#ed4a4a',
             'prompt-box-corner','#f2a138','edit-midpoint','#c9e5ff',
+            'draw-start','#d8fff0',
             'boundary-node','#168047','boundary-node-selected','#ef7d23',
             'saved',['coalesce',['get','color'],'#2563eb'],'#ffffff',
           ],
@@ -1012,7 +1076,7 @@ export default function MapCanvas({
         const p=map.project(point as maplibregl.LngLatLike);
         const shifted=map.unproject([p.x+dx,p.y+dy]);
         return [shifted.lng,shifted.lat];
-      },cursor,selectedFeatureId,pinnedPlaces,selectedBoundaryNode);
+      },cursor,selectedFeatureId,pinnedPlaces,selectedBoundaryNode,networkFaces);
     // New geometry is not yet on screen. Invalidate the projection receipts
     // before sending setData to MapLibre's asynchronous GeoJSON worker.
     if(container.current&&import.meta.env.DEV){
@@ -1028,7 +1092,7 @@ export default function MapCanvas({
     }
     if (!drag.current) spatialSnap.current=null;
   }, [selected, vertices, drawingMode, discovered, layerFeatures, editing,
-      promptPositive,promptNegative,promptBox,selectedIds,qualityIssues,ready,cursor,selectedFeatureId,pinnedPlaces,selectedBoundaryNode]);
+      promptPositive,promptNegative,promptBox,selectedIds,qualityIssues,ready,cursor,selectedFeatureId,pinnedPlaces,selectedBoundaryNode,networkFaces]);
 
   useEffect(()=>{
     const map=mapRef.current;
@@ -1275,9 +1339,9 @@ export default function MapCanvas({
     overlay.replaceChildren();
     const draft=drawingPreview(drawingMode,vertices,cursor);
     const g=draft??selected;
-    if(!showMeasurements||!g)return;
-    const exact=!draft&&measurement?.method!==OFFLINE_METHOD?measurement:null;
-    const totals=exact??approximateMeasurement(g);
+    if(!showMeasurements||(!g&&!networkFaces.length))return;
+    const exact=g&&!draft&&measurement?.method!==OFFLINE_METHOD?measurement:null;
+    const totals=g?(exact??approximateMeasurement(g)):null;
     const prefix=exact?'':'~ ';
     const palette=mapPalette(basemap,display.contrast);
     overlay.style.setProperty('--dimension-text',palette.text);overlay.style.setProperty('--dimension-halo',palette.halo);
@@ -1287,20 +1351,39 @@ export default function MapCanvas({
       node.className=b?'map-edge-value':'map-dimension-total';
       node.textContent=text;overlay!.appendChild(node);labels.push({a,b,node});
     }
-    const anchor=measurementAnchor(g);
-    if(anchor){
-      if(totals.area_m2!==null)label(prefix+areaText(totals.area_m2,display.area)+'\n'+prefix+distanceText(totals.perimeter_m??0,display.distance)+' perimeter',anchor);
-      else if(totals.length_m!==null)label(prefix+distanceText(totals.length_m,display.distance)+' total',anchor);
-      else if(g.type==='Point')label(anchor[0].toFixed(6)+'°, '+anchor[1].toFixed(6)+'°',anchor);
+    // Region labels use a guaranteed interior point produced by GEOS;
+    // their values come from the server's ellipsoidal measurement, never
+    // from the map viewport or a bounding-box estimate.
+    // A live draft takes priority over the previously committed network.
+    for(const face of (draft?[]:networkFaces).slice(0,50)){
+      const m=face.measurement;
+      const before=labels.length;
+      // Keep a single area's numeric label stable when asynchronous network
+      // detection replaces its selection total. Names distinguish multiple faces.
+      label((networkFaces.length>1?face.name+' · ':'')+areaText(m.area_m2??0,display.area)+'\n'+
+        distanceText(m.perimeter_m??0,display.distance)+' perimeter',
+        face.label_anchor);
+      labels[before].node.classList.add('map-face-dimension');
     }
-    let index=0;
-    for(const path of pathsOf(g)){
-      for(let i=1;i<path.length&&index<48;i++,index++){
-        const a=path[i-1],b=path[i];
-        const value=exact?.edge_lengths_m?.[index];
-        label((value===undefined?'~ ':'')+distanceText(value??edgeDistance(a,b).distance_m,display.distance),a,b);
+    if(g&&totals){
+      const anchor=measurementAnchor(g);
+      if(anchor){
+        // Suppress the combined selection total once separate enclosed faces
+        // are available. Their independent labels take priority on the map.
+        if(totals.area_m2!==null&&(networkFaces.length===0||Boolean(draft)))
+          label(prefix+areaText(totals.area_m2,display.area)+'\n'+prefix+distanceText(totals.perimeter_m??0,display.distance)+' perimeter',anchor);
+        else if(totals.length_m!==null)label(prefix+distanceText(totals.length_m??0,display.distance)+' total',anchor);
+        else if(g.type==='Point')label(anchor[0].toFixed(6)+'°, '+anchor[1].toFixed(6)+'°',anchor);
       }
-      if(index>=48)break;
+      let index=0;
+      for(const path of pathsOf(g)){
+        for(let i=1;i<path.length&&index<48;i++,index++){
+          const a=path[i-1],b=path[i];
+          const value=exact?.edge_lengths_m?.[index];
+          label((value===undefined?'~ ':'')+distanceText(value??edgeDistance(a,b).distance_m,display.distance),a,b);
+        }
+        if(index>=48)break;
+      }
     }
     const layout=()=>{
       const placed:Array<{left:number;right:number;top:number;bottom:number}>=[];
@@ -1322,7 +1405,7 @@ export default function MapCanvas({
     };
     layout();map.on('render',layout);
     return ()=>{map.off('render',layout);overlay.replaceChildren();};
-  },[ready,selected,drawingMode,vertices,cursor,measurement,showMeasurements,display,basemap]);
+  },[ready,selected,drawingMode,vertices,cursor,measurement,showMeasurements,display,basemap,networkFaces]);
 
   return <>
     <div aria-label="Interactive geospatial map" data-label-layer-ready={ready ? "true" : "false"} className="map-canvas" ref={container}/>

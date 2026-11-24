@@ -79,7 +79,8 @@ function sessionHeaders(initial?: HeadersInit): Headers {
 }
 async function rawRequest(path: string, init?: RequestInit): Promise<Response> {
   // Local geometry and project requests must not strand the editor indefinitely.
-  const fast=/^\/(measure|edit\/|health|capabilities|projects(?:\/|$))/.test(path);
+  const exchange=/\/(vector|package)(?:\/|$)/.test(path);
+  const fast=!exchange&&/^\/(measure|edit\/|health|capabilities|projects(?:\/|$))/.test(path);
   try{
     return await fetch(API_URL+path,{...init,headers:sessionHeaders(init?.headers),
       signal:init?.signal?AbortSignal.any([init.signal,AbortSignal.timeout(fast?12000:120000)]):AbortSignal.timeout(fast?12000:120000)});
@@ -588,10 +589,11 @@ export interface TerrainResult {
   elevation_relief_m:number;mean_slope_deg:number;mean_aspect_deg:number|null;
   maximum_slope_deg:number;valid_pixels:number;engine:string;warning:string;
 }
-export function analyzeTerrain(imageId:string,geometry:GeoJSON.Geometry,signal?:AbortSignal):Promise<TerrainResult> {
+export function analyzeTerrain(imageId:string,geometry:GeoJSON.Geometry,signal?:AbortSignal,
+ gradientMethod:'horn'|'zevenbergen_thorne'='horn'):Promise<TerrainResult> {
   return request('/terrain/analyze',{
     signal,method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({image_id:imageId,geometry,vertical_unit:'meter'}),
+    body:JSON.stringify({image_id:imageId,geometry,vertical_unit:'meter',gradient_method:gradientMethod}),
   });
 }
 export function terrainProfile(imageId:string,geometry:GeoJSON.Geometry,signal?:AbortSignal):Promise<{
@@ -931,7 +933,7 @@ export function getVisionModels():Promise<VisionModels>{
 
 export type GISJobKind='topology_qa'|'spatial_select'|'export_geojson'|
   'postgis_sync'|'rebuild_index'|'spectral_index'|'spectral_change'|
-  'semantic_segmentation'|'stac_ndvi';
+  'semantic_segmentation'|'stac_ndvi'|'vector_import'|'vector_export';
 export interface GISJob {
   id:string;project_id:string;kind:GISJobKind;
   status:'queued'|'running'|'completed'|'failed'|'cancelled'|'interrupted';
@@ -977,14 +979,58 @@ export type TerrainOperation='dem_difference'|'contours'|'volume'|'visibility'|'
 export interface TerrainRaster {png:string;geotiff:string;corners:[[number,number],[number,number],[number,number],[number,number]];legend:{label:string;color:string;cells:number}[];width:number;height:number;valid_cells:number;unit?:string}
 export interface TerrainRasterLayer {id:string;title:string;raster:TerrainRaster;opacity:number;resampling:'nearest'|'linear'}
 export interface TerrainDistributionBin {lower_m:number;upper_m:number;cells:number;area_m2:number;cumulative_pct:number}
-export interface TerrainMesh {rows:number;cols:number;dx_m:number;dy_m:number;heights:Array<number|null>;origin_xy?:[number,number];source_crs?:string;texture?:{png:string;coverage_pct:number}}
+export interface TerrainLOD {tile_cells:number;levels:number[];transport:string;tiles:Array<{lod_step:number;row_start:number;col_start:number;rows:number;cols:number;bounds_cell:number[];row_indices:number[];col_indices:number[];heights:Array<number|null>}>}
+export interface TerrainMesh {rows:number;cols:number;dx_m:number;dy_m:number;heights:Array<number|null>;origin_xy?:[number,number];source_crs?:string;texture?:{png:string;coverage_pct:number};lod?:TerrainLOD;source_grid_rows?:number;source_grid_cols?:number;source_sampling_step?:number}
+export interface StreamedTerrainTile {
+  source_crs:string;grid_rows:number;grid_cols:number;grid_cell_width_m:number;grid_cell_height_m:number;
+  grid_origin_xy:[number,number];level:number;tile_row:number;tile_col:number;
+  row_indices:number[];col_indices:number[];rows:number;cols:number;
+  heights:Array<number|null>;valid_quads:boolean[];nodata_policy:string;source_elevation_unit:string;
+  geometric_error_max_m?:number|null;geometric_error_rmse_m?:number|null;
+  geometric_error_samples?:number;valid_quad_count?:number;
+}
+export function fetchTerrainMeshTile(body:{
+  image_id:string;geometry:GeoJSON.Geometry;level:1|2|4|8|16|32|64;
+  tile_row:number;tile_col:number;tile_cells?:32;
+},signal?:AbortSignal):Promise<StreamedTerrainTile>{
+  return request('/terrain/mesh/tile',{method:'POST',signal,
+    headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+}
 export interface AdvancedTerrainResult {
   operation:TerrainOperation;source_crs:string;source_vertical_datum?:string|null;valid_cells:number;missing_cells:number;
   cell_area_m2:number;metrics:Record<string,number>;warning:string;
+  algorithm_options?:{gradient_method:string;slope_classes:string;
+    neighborhood_radius_cells?:number|null;route_model?:string|null;
+    mesh_samples?:number|null;stream_order_scheme?:string|null;hillshade_mode?:string|null;maximum_distance_m?:number|null;
+    view_azimuth_deg?:number|null;view_width_deg?:number|null;
+    flow_routing_method?:string|null;depression_method?:string|null;external_inflow_supplied?:boolean|null;
+    curvature_method?:string|null;curvature_radius_cells?:number|null;
+    design_east_grade?:number|null;design_north_grade?:number|null;
+    design_curvature_east_per_m?:number|null;design_curvature_cross_per_m?:number|null;design_curvature_north_per_m?:number|null;
+    design_max_grade?:number|null;elevation_sigma_m?:number|null;
+    optimize_observers?:number|null;dsm_source?:boolean|null;mesh_lod?:boolean|null;
+    suitability_model?:string|null;suitability_weights?:number[]|null};
+  selection?:{selected_candidate_indices:number[];marginal_visible_cells:number[];total_candidate_sites:number;
+    optimizer?:{candidate_count:number;selected_site_count:number;combinations_checked:number;
+      combinations_possible:number;positively_visible_cells:number;
+      global_optimum_within_supplied_candidates:boolean;objective:string;tie_break:string}};
+  quality?:{status:string;reference_validation:string;uncertainty:string;
+    source_overlap_pct:number;valid_study_cell_pct:number;
+    derivative_coverage_pct:number|null;flags:string[];area_basis:string;
+    projection_max_scale_error_pct?:number};
   features:Array<GeoJSON.Feature<GeoJSON.Geometry,Record<string,unknown>>>;mesh?:TerrainMesh;distribution?:TerrainDistributionBin[];raster?:TerrainRaster;sections?:{station_m:number;length_m:number;samples:{distance_m:number;offset_m:number;elevation_m:number|null;coordinate:[number,number]}[]}[];
 }
 export function advancedTerrain(body:{image_id:string;geometry:GeoJSON.Geometry;operation:TerrainOperation;
-  interval:number;reference:number;point:[number,number]|null;observer_height:number;target_height:number;end_point?:[number,number]|null;max_slope?:number;min_elevation?:number;max_elevation?:number;max_tri?:number;stream_cells?:number;azimuth?:number;altitude?:number;section_spacing?:number;section_width?:number;texture_image_id?:string|null;fill_sinks?:boolean;consider_curvature?:boolean;refraction_coeff?:number;comparison_image_id?:string|null;observer_points?:[number,number][]|null},signal?:AbortSignal):Promise<AdvancedTerrainResult>{
+  interval:number;reference:number;point:[number,number]|null;observer_height:number;target_height:number;end_point?:[number,number]|null;max_slope?:number;min_elevation?:number;max_elevation?:number;max_tri?:number;stream_cells?:number;azimuth?:number;altitude?:number;section_spacing?:number;section_width?:number;texture_image_id?:string|null;fill_sinks?:boolean;consider_curvature?:boolean;refraction_coeff?:number;comparison_image_id?:string|null;observer_points?:[number,number][]|null;gradient_method?:'horn'|'zevenbergen_thorne';slope_classes?:'standard'|'detailed'|'broad';mfd_exponent?:number;neighborhood_radius?:number;max_distance_m?:number;
+  view_azimuth?:number;view_width?:number;route_model?:'surface'|'distance'|'gentle';
+  mesh_samples?:number;stream_order_scheme?:'strahler'|'shreve';hillshade_mode?:'single'|'four_direction';
+  flow_routing_method?:'d8'|'dinf';depression_method?:'fill'|'breach';
+  curvature_method?:'finite_difference'|'quadratic';curvature_radius?:number;
+  design_east_grade?:number;design_north_grade?:number;design_max_grade?:number;elevation_sigma_m?:number;
+  optimize_observers?:number;dsm_image_id?:string|null;mesh_lod?:boolean;
+  suitability_model?:'binary'|'weighted';suitability_weights?:[number,number,number];
+  external_inflow_image_id?:string|null;
+  design_curvature_east?:number;design_curvature_cross?:number;design_curvature_north?:number},signal?:AbortSignal):Promise<AdvancedTerrainResult>{
   return request('/terrain/advanced',{signal,method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
 }
 
@@ -1027,4 +1073,86 @@ export function getProjectTrash(id:string):Promise<{items:TrashedFeature[];total
 }
 export function restoreDeletedFeature(projectId:string,featureId:string):Promise<WorkspaceFeature>{
  return request('/projects/'+encodeURIComponent(projectId)+'/trash/'+encodeURIComponent(featureId)+'/restore',{method:'POST'});
+}
+
+
+/** Each detected face is a genuinely closed and independently measured polygon. */
+export interface NetworkFace{
+ id:string;name:string;geometry:GeoJSON.Polygon;measurement:Measurement;
+ label_anchor:[number,number];
+ properties:{source_type:'polygonized_network';area_m2:number;perimeter_m:number;snap_tolerance_m:number};
+}
+export interface NetworkPolygonization{
+ faces:NetworkFace[];count:number;area_m2:number;
+ dangles:number;cuts:number;invalid_rings:number;source_segments:number;
+ tolerance_m:number;method:string;warning:string;
+}
+export function polygonizeNetwork(
+ geometries:GeoJSON.Geometry[],tolerance_m=1,minimum_area_m2=.01,
+ signal?:AbortSignal,
+):Promise<NetworkPolygonization>{
+ return request('/edit/polygonize',{method:'POST',signal,
+  headers:{'Content-Type':'application/json'},
+  body:JSON.stringify({geometries,tolerance_m,minimum_area_m2,max_faces:300}),
+ });
+}
+
+export interface ExchangeField {name:string;type?:string;types?:string[];nullable?:boolean}
+export interface ExchangeLayer {name:string;source_crs:string|null;feature_count:number;geometry_type:string;fields:ExchangeField[]}
+export interface ExchangeFile {id:string;name:string;bytes:number;layers:ExchangeLayer[];error?:string;errors?:Array<{row:number;message:string}>}
+export interface ExchangeUpload {upload_id:string;files:ExchangeFile[]}
+export interface ImportDatasetOptions {
+ layers?:string[];source_crs?:string;encoding?:string;error_policy?:'strict'|'skip';
+ field_map?:Record<string,string>;field_types?:Record<string,string>;
+ longitude_field?:string;latitude_field?:string;geometry_field?:string;delimiter?:string;
+}
+export interface DatasetExportOptions {
+ format:'geojson'|'gpkg'|'shapefile'|'kml'|'gpx'|'csv'|'report';include_measurements?:boolean;target_crs?:string;
+ layer_ids?:string[];feature_ids?:string[];viewport?:[number,number,number,number];
+ fields?:string[];precision?:number;collection?:GeoJSON.FeatureCollection;
+}
+export interface ExportPreflight {count:number;schema:ExchangeField[];geometry_types:string[];warnings:string[];target_crs:string}
+const exchangePath=(project:string)=>'/projects/'+encodeURIComponent(project);
+const jsonPost=(value:unknown,signal?:AbortSignal):RequestInit=>({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(value),signal});
+export function inspectDatasetFiles(project:string,files:File[],signal?:AbortSignal):Promise<ExchangeUpload>{
+ const body=new FormData();files.forEach(file=>body.append('files',file));
+ return request(exchangePath(project)+'/vector/uploads',{method:'POST',body,signal});
+}
+export function inspectDatasetOptions(project:string,upload:string,file:string,options:ImportDatasetOptions,signal?:AbortSignal):Promise<{layers:ExchangeLayer[];errors?:ExchangeFile['errors']}>{
+ return request(exchangePath(project)+'/vector/uploads/'+encodeURIComponent(upload)+'/inspect',jsonPost({file_id:file,options},signal));
+}
+export async function discardDatasetUpload(project:string,id:string):Promise<void>{
+ const response=await rawRequest(exchangePath(project)+'/vector/uploads/'+encodeURIComponent(id),{method:'DELETE'});
+ if(!response.ok)throw await responseError(response);
+}
+export function startDatasetImport(project:string,upload:string,files:Array<{id:string;options:ImportDatasetOptions}>,layer?:string):Promise<GISJob>{
+ return request(exchangePath(project)+'/vector/import/jobs',jsonPost({upload_id:upload,files,layer_id:layer||null,separate_layers:!layer}));
+}
+export function preflightDatasetExport(project:string,options:DatasetExportOptions,signal?:AbortSignal):Promise<ExportPreflight>{
+ return request(exchangePath(project)+'/vector/export/preflight',jsonPost(options,signal));
+}
+export function startDatasetExport(project:string,options:DatasetExportOptions):Promise<GISJob>{
+ return request(exchangePath(project)+'/vector/export/jobs',jsonPost(options));
+}
+async function exchangeDownload(path:string,init?:RequestInit):Promise<void>{
+ const response=await rawRequest(path,init);
+ if(!response.ok)throw await responseError(response,'Dataset download failed.');
+ const blob=await response.blob();if(init?.signal?.aborted)return;
+ const filename=response.headers.get('Content-Disposition')?.match(/filename="([^"]+)"/)?.[1]??'geofathom-download';
+ const url=URL.createObjectURL(blob);const link=document.createElement('a');
+ link.href=url;link.download=filename;document.body.appendChild(link);link.click();link.remove();
+ window.setTimeout(()=>URL.revokeObjectURL(url),1500);
+}
+export function downloadDatasetExport(project:string,options:DatasetExportOptions,signal?:AbortSignal):Promise<void>{
+ return exchangeDownload(exchangePath(project)+'/vector/export',jsonPost(options,signal));
+}
+export function downloadExchangeJob(project:string,id:string):Promise<void>{
+ return exchangeDownload(exchangePath(project)+'/vector/jobs/'+encodeURIComponent(id)+'/download');
+}
+export function downloadProjectPackage(project:string,rasters:Array<{id:string;kind:'image'|'dem'}>,signal?:AbortSignal):Promise<void>{
+ return exchangeDownload(exchangePath(project)+'/package/export',jsonPost({rasters},signal));
+}
+export function restoreProjectPackage(project:string,file:File,token:string,signal?:AbortSignal):Promise<{created:number;layers:number;rasters:Array<{asset:RasterAsset;kind:'image'|'dem'}>}>{
+ const body=new FormData();body.append('file',file);
+ return request(exchangePath(project)+'/package/import',{method:'POST',body,signal,headers:{'X-GeoFathom-Local-Import':'1','X-GeoFathom-Admin-Token':token}});
 }

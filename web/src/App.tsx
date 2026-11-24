@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import {createPortal} from 'react-dom';
 import {
   ArrowRight, Compass, Globe2, Layers3, MapPin, Maximize2, Minimize2,
@@ -13,7 +13,7 @@ import {
 import MapCanvas, { type FocusPoint } from './MapCanvas';
 import BoundaryEditor from './BoundaryEditor';
 import {loadDisplay,saveDisplay,areaText,distanceText,type AreaUnit} from './displaySettings';
-import {BASEMAPS,customBasemap,defaultCustom,preferredSatellite,mapTilerImagery,type BasemapId,type CustomBasemap} from './basemaps';
+import {BASEMAPS,BASEMAP_GROUPS,basemapAvailable,customBasemap,defaultCustom,mapTilerImagery,type BasemapId,type CustomBasemap} from './basemaps';
 import {ScratchHistory} from './scratchHistory';
 import {addRaster,changeRaster,selectDEM,hideDEMs,type RasterLayerView} from './rasterLayers';
 import {terrainContainsCenter,terrainGeometryBounds,terrainRasterFitsStudyArea} from './terrainSource';
@@ -21,6 +21,7 @@ import {PIN_LIMIT,readPinnedPlaces,writePinnedPlaces,pinPlace,unpinPlace,visible
 import {studyParcels,suggestedParcel,parcelAt} from './studyArea';
 import {localMeasurement,localShape,readScratch,writeScratch,SCRATCH_LIMIT,OFFLINE_METHOD,type ScratchFeature} from './scratch';
 import SurveyTools from './SurveyTools';
+import {sketchAddError,sketchFinishError,closedLineAsPolygon} from './sketch';
 import ProfessionalPanel from './ProfessionalPanel';
 import TerrainWorkbench from './TerrainWorkbench';
 import {WorkspaceModuleBar,WorkspaceCommandPalette,WorkspaceDockHeading,
@@ -28,7 +29,9 @@ import {WorkspaceModuleBar,WorkspaceCommandPalette,WorkspaceDockHeading,
 import GeometryAnalysis from './GeometryAnalysis';
 import SpatialToolsPanel from './SpatialToolsPanel';
 import CartographyProPanel from './CartographyProPanel';
-import DataServicesPanel, {type ExternalTile} from './DataServicesPanel';
+import type {ExternalTile} from './DataServicesPanel';
+import DataWorkbench from './DataWorkbench';
+import ExportWorkbench from './ExportWorkbench';
 import { featureColor, legendEntries, DEFAULT_LAYER_STYLE } from './labels';
 import ImageCorrectionPanel, { type PromptMode } from './ImageCorrectionPanel';
 import {
@@ -41,12 +44,12 @@ import ProjectsPanel from './ProjectsPanel';
 import ModelControls from './ModelControls';
 import RasterPanel, { type TraceSettings } from './RasterPanel';
 import GeoAIAnalysisPanel from './GeoAIAnalysisPanel';
-import ApiAccessPanel from './ApiAccessPanel';
 import {
   addMapAnnotation, applyOverlay, applyTopology, constructGeometry, editPair, getWorkspace, moveMeasured,
   previewTopology, refineRaster, traceExisting, traceImagery,
   updateProjectFeature,
   type SharedTopologyPreview, type RasterAsset, type TerrainRasterLayer,
+  polygonizeNetwork,type NetworkPolygonization,type NetworkFace,
 } from './api';
 
 const number = (value: number, digits = 2) =>
@@ -96,6 +99,16 @@ export default function App() {
   const [measurement, setMeasurement] = useState<Measurement | null>(null);
   const [drawingMode, setDrawingMode] = useState<ShapeMode>(null);
   const [vertices, setVertices] = useState<Position[]>([]);
+  const [vertexRedo,setVertexRedo]=useState<Position[]>([]);
+  // MapLibre may dispatch click/dblclick before React paints the previous
+  // vertex. Keep an immediately updated authoritative sketch for Finish.
+  const drawingVerticesRef=useRef<Position[]>(vertices);
+  const drawingCommit=useRef<number|null>(null);
+  drawingVerticesRef.current=vertices;
+  function setSketchVertices(next:Position[]){
+    drawingVerticesRef.current=next;
+    setVertices(next);
+  }
   const [viewport, setViewport] = useState<[number, number, number, number] | null>(null);
   const [discovered, setDiscovered] = useState<Place[]>([]);
   const [focus, setFocus] = useState<FocusPoint | null>(null);
@@ -121,6 +134,7 @@ export default function App() {
   const [projectActionsTarget,setProjectActionsTarget]=useState<HTMLDivElement|null>(null);
   const [terrainExportTarget,setTerrainExportTarget]=useState<HTMLDivElement|null>(null);
   const [objectTreeTarget,setObjectTreeTarget]=useState<HTMLDivElement|null>(null);
+  const [objectsOpen,setObjectsOpen]=useState(true);
   const [shortcutHelp,setShortcutHelp]=useState(false);
   const [commandOpen,setCommandOpen]=useState(false);
   const [contextMenu,setContextMenu]=useState<{x:number;y:number}|null>(null);
@@ -145,7 +159,7 @@ export default function App() {
   // Fixed-size workbench docks: map takes all remaining viewport width.
   // No draggable splitters, scrolling side panels, or stored widths.
   // Exceptional long controls open as an expanded workspace, not as a scrolling sidebar.
-  const [expandedDock,setExpandedDock]=useState<'operations'|'results'|null>(null);
+  const [expandedDock,setExpandedDock]=useState<'operations'|'results'|'project'|null>(null);
   useEffect(()=>{
     if(!expandedDock)return;
     const onKey=(event:KeyboardEvent)=>{if(event.key==='Escape')setExpandedDock(null);};
@@ -206,6 +220,13 @@ export default function App() {
   const [labelMoveMode,setLabelMoveMode]=useState(false);
   const [externalTiles,setExternalTiles]=useState<ExternalTile[]>([]);
   const [externalFeatures,setExternalFeatures]=useState<GeoJSON.Geometry[]>([]);
+  const [networkAreas,setNetworkAreas]=useState<NetworkPolygonization|null>(null);
+  const [networkNotice,setNetworkNotice]=useState('');
+  const [networkPage,setNetworkPage]=useState(0);
+  useEffect(()=>setNetworkPage(0),[networkAreas?.count,networkAreas?.area_m2]);
+  const networkTicket=useRef(0);
+  const networkTolerance=useRef(1);
+  const networkMinimumArea=useRef(.01);
   const [pagedFeatures,setPagedFeatures]=useState<WorkspaceFeature[]>([]);
   const [linked,setLinked] = useState(false);
   const [pendingShared,setPendingShared] = useState<{
@@ -233,6 +254,106 @@ export default function App() {
     pagedFeatures.find(item => item.id === selectedFeatureId);
   const selectedLocked = Boolean(selectedSaved &&
     projectWorkspace?.layers.find(layer => layer.id === selectedSaved.layer_id)?.locked);
+
+  // Source geometries remain authoritative. A polygonized face is a derived
+  // overlay, never automatically inserted back into its source network.
+  const networkSources=useMemo(()=>{
+    const sources:GeoJSON.Geometry[]=[];
+    for(const item of scratch){
+      if(item.visible&&item.properties?.source_type!=='polygonized_network'&&
+         ['Polygon','MultiPolygon','LineString','MultiLineString'].includes(item.geometry.type))
+        sources.push(item.geometry);
+    }
+    for(const item of projectWorkspace?.features??[]){
+      if(item.properties?.source_type==='polygonized_network')continue;
+      if(!projectWorkspace?.layers.find(layer=>layer.id===item.layer_id)?.visible)continue;
+      if(['Polygon','MultiPolygon','LineString','MultiLineString'].includes(item.geometry.type))
+        sources.push(item.geometry);
+    }
+    if(geometry&&featureProperties.source_type!=='polygonized_network'&&
+      ['Polygon','MultiPolygon','LineString','MultiLineString'].includes(geometry.type)&&
+       !sources.some(item=>JSON.stringify(item)===JSON.stringify(geometry)))
+      sources.push(geometry);
+    return sources;
+  },[scratch,projectWorkspace,geometry,featureProperties.source_type]);
+
+  async function rebuildNetwork(tolerance=networkTolerance.current,
+                                minArea=networkMinimumArea.current){
+    networkTolerance.current=tolerance;networkMinimumArea.current=minArea;
+    const ticket=++networkTicket.current;
+    if(networkSources.length===0){setNetworkAreas(null);setNetworkNotice('Draw connected lines first.');return;}
+    if(networkSources.length>300){
+      setNetworkAreas(null);setNetworkNotice('Network exceeds the 300-source limit. Subdivide it.');
+      return;
+    }
+    try{
+      const result=await polygonizeNetwork(networkSources,tolerance,minArea);
+      if(ticket!==networkTicket.current)return;
+      setNetworkAreas(result);
+      setNetworkNotice(result.count?
+        result.count+' independently measured enclosed area'+(result.count===1?'':'s')+'.':
+        'No enclosed areas yet. Join line endpoints or increase the snap tolerance.');
+    }catch(error){
+      if(ticket!==networkTicket.current)return;
+      setNetworkAreas(null);
+      setNetworkNotice(error instanceof Error?error.message:String(error));
+      throw error;
+    }
+  }
+  useEffect(()=>{
+    // Rebuild on committed vector edits; never run while actively drawing,
+    // and cancel stale derived areas after project/source changes.
+    networkTicket.current++;
+    if(drawingMode||!capabilities||!networkSources.length){
+      setNetworkAreas(null);
+      return;
+    }
+    const timer=window.setTimeout(()=>{void rebuildNetwork().catch(()=>{});},300);
+    return()=>window.clearTimeout(timer);
+  },[networkSources,drawingMode,capabilities,activeProjectId]);
+
+  function keepNetworkAreas(faces:NetworkFace[]){
+    if(!faces.length)return;
+    const existing=scratchHistory.current!.current.filter(
+      item=>item.properties?.source_type==='polygonized_network');
+    const missing=faces.filter(face=>!existing.some(item=>
+      JSON.stringify(item.geometry)===JSON.stringify(face.geometry)));
+    if(!missing.length){setMessage('All these enclosed areas already exist locally.');return;}
+    if(scratchHistory.current!.current.length+missing.length>SCRATCH_LIMIT){
+      setError('Too many local drawings. Save or delete sources before keeping enclosed areas.');return;
+    }
+    const saved=missing.map(face=>({
+      id:'scratch-'+crypto.randomUUID(),name:face.name,
+      geometry:structuredClone(face.geometry),measurement:face.measurement,visible:true,
+      source:'GEOS line-network polygonization',properties:{...face.properties},
+    } satisfies ScratchFeature));
+    setScratch(old=>[...old,...saved]);
+    setMessage('Kept '+saved.length+' independent closed areas; the original lines are unchanged.');
+  }
+
+
+  function activateNetworkFace(id:string){
+    const face=networkAreas?.faces.find(item=>item.id===id);
+    if(!face||drawingMode||busy)return;
+    // Real GEOS polygon and ellipsoidal measurement, retained locally only
+    // when the user selects the face; never rewrite connected source lines.
+    const existing=scratchHistory.current!.current.find(item=>
+      item.properties?.source_type==='polygonized_network'&&
+      JSON.stringify(item.geometry)===JSON.stringify(face.geometry));
+    if(!existing&&scratchHistory.current!.current.length>=SCRATCH_LIMIT){
+      setError('Local feature limit reached. Save or remove unused drawings before selecting an enclosed area.');
+      return;
+    }
+    const selected=existing??({
+      id:'scratch-'+crypto.randomUUID(),name:face.name,
+      geometry:structuredClone(face.geometry),measurement:face.measurement,
+      visible:true,source:'GEOS line-network polygonization',
+      properties:{...face.properties},
+    } satisfies ScratchFeature);
+    if(!existing)setScratch(old=>[...old,selected]);
+    selectScratch(selected,false);
+    setMessage(face.name+' · closed polygon selected with area and perimeter. Original lines preserved.');
+  }
 
   useEffect(()=>{setScratchStorageError(!writeScratch(scratchDocument.features,scratchDocument.scope));},[scratchDocument]);
   useEffect(()=>{setPinStorageError(!writePinnedPlaces(pins.scope,pins.places));},[pins]);
@@ -389,6 +510,11 @@ export default function App() {
       return;
     }
     setShowTools(true);setActiveTool(id);if(id!=='tools-terrain'){setTerrainPicking(false);setTerrainHover(null);}
+    setObjectsOpen(id!=='tools-terrain');
+    // Tool activation, including keyboard shortcuts, dismisses the transient
+    // drawer so it cannot intercept input intended for the operations dock.
+    // Its project/search state stays mounted and the selected place is retained.
+    setShowLayers(false);setExpandedDock(null);
     // Only scroll the inspector's own pane. scrollIntoView also scrolls
     // the outer document and can move the central map off-screen when a
     // long Terrain chart is active.
@@ -564,6 +690,23 @@ export default function App() {
     }catch(err){if(ticket===geometrySequence.current)setError(err instanceof Error?err.message:String(err));}
   }
 
+  // Undo/Redo while sketching operate on the pending coordinates, not the
+  // previously selected geometry's history. A new click clears redo.
+  function undoSketchPoint(){
+    if(!drawingMode||!vertices.length||busy)return;
+    const current=drawingVerticesRef.current;
+    setVertexRedo(old=>[current[current.length-1],...old]);
+    setSketchVertices(current.slice(0,-1));setError('');
+  }
+  function redoSketchPoint(){
+    if(!drawingMode||!vertexRedo.length||busy)return;
+    const next=vertexRedo[0];
+    const current=drawingVerticesRef.current;
+    const reason=sketchAddError(drawingMode,current,next);
+    if(reason){setError(reason);return;}
+    setSketchVertices([...current,next]);setVertexRedo(old=>old.slice(1));setError('');
+  }
+
   function startTerrainLine(){
     if(busy)return;
     if(drawingMode&&vertices.length){setError('Finish or cancel the current sketch before starting a profile line.');return;}
@@ -571,7 +714,7 @@ export default function App() {
     // scratch selection and all existing map layers.
     geometrySequence.current++;
     setTerrainLineDrawing(true);
-    setDrawingMode('line');setVertices([]);
+    setDrawingMode('line');setVertices([]);setVertexRedo([]);
     setEditing(false);setMoving(false);setEdgeMoving(false);
     setTerrainPicking(false);setTerrainHover(null);setTraceMode(false);
     setPromptMode(null);setPendingAnnotation(null);setSelectionBoxMode(false);setLabelMoveMode(false);
@@ -581,6 +724,7 @@ export default function App() {
   }
 
   function startDrawing(next: Exclude<ShapeMode, null>) {
+    if(drawingMode===next){stopInteraction();return;}
     if(busy)return;
     if(drawingMode&&vertices.length){setError('Finish or cancel the existing sketch before starting another.');return;}
     if(!['hole','split'].includes(next)&&scratch.length>=SCRATCH_LIMIT){setError('Local drawing limit reached. Save or export drawings and remove unused ones.');return;}
@@ -601,33 +745,35 @@ export default function App() {
     setTraceMode(false);
     setPromptMode(null);setPendingAnnotation(null);setSelectionBoxMode(false);setLabelMoveMode(false);
     if (!operation) {
-      setScratchId(null);
-      timeline.current=new GeometryTimeline();lastValid.current=null;
-      setHistoryPulse(value=>value+1);
       setLinked(false);
       setPendingShared(null);
       // Do not overwrite the selected area's metadata while an independent
       // sketch is still being drawn. The new geometry takes focus at Finish.
-    } else {
-      setFeatureProperties(current => ({ ...current, last_operation: next }));
     }
-    setVertices([]);
+    setVertices([]);setVertexRedo([]);
     // Existing selection and search candidates are stable through drawing.
     // Only a successful Finish may select the new independent feature.
     setEditing(false);setEdgeMoving(false);
     setMoving(false);
     setError('');
-    setMessage(next==='point'?'Click a location, then Finish.':
-      ['polygon','hole'].includes(next)?'Click corners, then Finish.':'Click start and end, then Finish.');
+    setMessage(next==='point'?'Click a location to create a point.':
+      ['polygon','hole'].includes(next)?
+        'Click vertices, then click the green first vertex, double-click or press Enter to close. Esc cancels; Backspace undoes.':
+        next==='line'||next==='split'?'Click vertices, then double-click or press Enter to finish.':
+        'Click the required points to complete the shape.');
   }
 
-  async function finishDrawing(points:Position[]=vertices) {
-    if (!drawingMode||busy) return;
+  async function finishDrawing(points:Position[]=drawingVerticesRef.current) {
+    if (!drawingMode||busy||drawingCommit.current===geometrySequence.current) return;
     const mode = drawingMode;
+    // Reject self-crossings, degenerate rings and repeated non-closing nodes
+    // before calling GIS APIs or creating approximate offline geometry.
+    const sketchError=sketchFinishError(mode,points);
+    if(sketchError){setError(sketchError);return;}
     if(terrainLineDrawing){
       if(mode!=='line'||points.length<2){setError('Place at least two profile line points.');return;}
       const line:GeoJSON.LineString={type:'LineString',coordinates:points};
-      const ticket=++geometrySequence.current;setBusy(true);setError('');
+      const ticket=++geometrySequence.current;drawingCommit.current=ticket;setBusy(true);setError('');
       try{
         // This measurement validates the path without replacing the original selection.
         await measureGeometry(line);
@@ -641,7 +787,7 @@ export default function App() {
           setTerrainProfileLine(line);setTerrainLineDrawing(false);setDrawingMode(null);setVertices([]);
           setMessage('Profile line saved locally; connect the API before running terrain analysis.');
         }else setError(failure instanceof Error?failure.message:'Invalid profile line.');
-      }finally{if(ticket===geometrySequence.current)setBusy(false);}
+      }finally{if(drawingCommit.current===ticket)drawingCommit.current=null;if(ticket===geometrySequence.current)setBusy(false);}
       return;
     }
     const required = mode==='point'?1:['polygon','hole'].includes(mode) ? 3 : 2;
@@ -650,6 +796,7 @@ export default function App() {
       return;
     }
     const sequence=++geometrySequence.current;
+    drawingCommit.current=sequence;
     setBusy(true); setError('');
     try {
       let result: GeoJSON.Geometry;
@@ -683,7 +830,8 @@ export default function App() {
         }
         result = constructed.geometry; measured = constructed.measurement;
       } else if (mode === 'line' || mode === 'split') {
-        result = { type: 'LineString', coordinates: points };
+        result = (mode==='line'?closedLineAsPolygon(points):null) ??
+          {type:'LineString',coordinates:points};
         measured = await measureGeometry(result);
       } else {
         const constructed = await constructGeometry({ mode: 'polygon', vertices:points });
@@ -714,46 +862,56 @@ export default function App() {
       }
       if(sequence!==geometrySequence.current)return;
       if(mode!=='hole'&&mode!=='split'){
+        timeline.current=new GeometryTimeline();
         setSelectedFeatureId(null);featureIdentity.current=null;setSelectedPlace(null);
         setGeometrySource(mode==='trace-along'?'Vector network tracing':'User drawn');
-        setFeatureProperties(mode==='trace-along'?{source_type:'vector_trace',method:'shortest connected path'}:{source_type:'user_drawn'});
+        setFeatureProperties(mode==='trace-along'?{source_type:'vector_trace',method:'shortest connected path'}:
+          mode==='line'&&result.type==='Polygon'?{source_type:'user_drawn_region',method:'closed_line'}:{source_type:'user_drawn'});
       }
       if(mode!=='split'&&(!selectedFeatureId||mode!=='hole'))storeScratch(result,measured,mode==='hole'?scratchId:null,
         mode==='hole'?undefined:{source:mode==='trace-along'?'Vector network tracing':'User drawn',
-          properties:mode==='trace-along'?{source_type:'vector_trace',method:'shortest connected path'}:{source_type:'user_drawn'}});
+          properties:mode==='trace-along'?{source_type:'vector_trace',method:'shortest connected path'}:
+            mode==='line'&&result.type==='Polygon'?{source_type:'user_drawn_region',method:'closed_line'}:{source_type:'user_drawn'}});
       setGeometry(result);
       lastValid.current = structuredClone(result);
       timeline.current.push(result);
       setHistoryPulse(value => value + 1);
       setMeasurement(measured);
-      setDrawingMode(null); setVertices([]); setPreview(null);
+      setDrawingMode(null); setVertices([]);setVertexRedo([]); setPreview(null);
       setMessage(mode === 'split'
         ? 'Polygon divided into independent local features. Original saved features are unchanged.'
-        : 'Drawing completed and measured on the WGS84 ellipsoid.');
+        : mode==='line'&&result.type==='Polygon'?
+          'Closed line converted to a measured region. Area and perimeter are available.':
+          'Drawing completed and measured on the WGS84 ellipsoid.');
     } catch (failure) {
       if(sequence!==geometrySequence.current)return;
       if(backendUnavailable(failure)){
         try{
-          const local=localShape(mode,points);
+          const closed=mode==='line'?closedLineAsPolygon(points):null;
+          const local=closed?{geometry:closed,measurement:localMeasurement(closed)}:localShape(mode,points);
           if(local){
-            storeScratch(local.geometry,local.measurement,null,{source:'User drawn',properties:{source_type:'user_drawn'}});
+            const isRegion=mode==='line'&&local.geometry.type==='Polygon';
+            const properties=isRegion?{source_type:'user_drawn_region',method:'closed_line'}:{source_type:'user_drawn'};
+            storeScratch(local.geometry,local.measurement,null,{source:'User drawn',properties});
             setSelectedFeatureId(null);featureIdentity.current=null;setSelectedPlace(null);
-            setGeometrySource('User drawn');setFeatureProperties({source_type:'user_drawn'});
+            setGeometrySource('User drawn');setFeatureProperties(properties);
             setGeometry(local.geometry);setMeasurement(local.measurement);
             lastValid.current=structuredClone(local.geometry);timeline.current.push(local.geometry);
-            setHistoryPulse(v=>v+1);setDrawingMode(null);setVertices([]);setPreview(null);
-            setError('');setMessage('Drawing completed locally · approximate measurement. Connect API for exact validation.');
+            setHistoryPulse(v=>v+1);setDrawingMode(null);setVertices([]);setVertexRedo([]);setPreview(null);
+            setError('');setMessage(isRegion?'Closed line formed a locally measured region · approximate until API validation.':
+              'Drawing completed locally · approximate measurement. Connect API for exact validation.');
             return;
           }
         }catch(error){setError(error instanceof Error?error.message:String(error));return;}
       }
       setError(failure instanceof Error ? failure.message : 'Drawing failed.');
-    } finally { if(sequence===geometrySequence.current)setBusy(false); }
+    } finally { if(drawingCommit.current===sequence)drawingCommit.current=null;if(sequence===geometrySequence.current)setBusy(false); }
   }
 
   async function numericShape(mode: string, body: {
     vertices: Position[]; radius_m?: number; bearing_deg?: number; length_m?: number;
   }) {
+    if(drawingMode){setError('Finish or cancel the current sketch before constructing another shape.');return;}
     const sequence=++geometrySequence.current;
     setBusy(true); setError('');
     try {
@@ -771,6 +929,7 @@ export default function App() {
   }
 
   async function combineWith(mode: 'union' | 'difference' | 'intersection', featureId: string) {
+    if(drawingMode){setError('Finish or cancel the active sketch before combining features.');return;}
     const other = projectWorkspace?.features.find(item => item.id === featureId);
     if (!geometry || !other) return;
     const sequence=++geometrySequence.current;
@@ -846,11 +1005,11 @@ export default function App() {
   }
 
   function stopInteraction(){
-    geometrySequence.current++;setBusy(false);setTerrainLineDrawing(false);setDrawingMode(null);setVertices([]);setTerrainPicking(false);
+    geometrySequence.current++;setBusy(false);setTerrainLineDrawing(false);setDrawingMode(null);setSketchVertices([]);setVertexRedo([]);setTerrainPicking(false);
     setEditing(false);setEdgeMoving(false);setMoving(false);setTraceMode(false);setPromptMode(null);
     setSelectionBoxMode(false);setLabelMoveMode(false);setPendingAnnotation(null);setContextMenu(null);
     if(preview||pendingShared){setGeometry(lastValid.current);setPreview(null);setPendingShared(null);}
-    setError('');setMessage('Select / pan');
+    setError('');setMessage(drawingMode?'Drawing cancelled. Retained locations are unchanged.':'Select / pan');
   }
   function editMode(mode:'vertices'|'edge'|'move'){
     if(!geometry||selectedLocked||busy||drawingMode)return;
@@ -933,19 +1092,24 @@ export default function App() {
         if(event.key.toLowerCase()==='z'){
           event.preventDefault();
           if(busy)return;
-          if(drawingMode){if(!event.shiftKey)setVertices(value=>value.slice(0,-1));return;}
+          if(drawingMode){if(event.shiftKey)redoSketchPoint();else undoSketchPoint();return;}
           historyStep(event.shiftKey);
         }else if(event.key.toLowerCase()==='y'){
-          event.preventDefault();if(!busy&&!drawingMode)historyStep(true);
+          event.preventDefault();if(!busy){if(drawingMode)redoSketchPoint();else historyStep(true);}
         }
         return;
       }
       if(event.altKey||event.repeat)return;
-      if(drawingMode&&!busy&&event.key==='Enter'){
-        event.preventDefault();void finishDrawing();return;
+      if(drawingMode&&!busy&&(event.key==='Enter'||event.key==='F2')){
+        event.preventDefault();
+        if(!drawingVerticesRef.current.length)stopInteraction();else void finishDrawing();
+        return;
+      }
+      if(editing&&(event.key==='Enter'||event.key==='F2')){
+        event.preventDefault();stopInteraction();return;
       }
       if(drawingMode&&!busy&&event.key==='Backspace'){
-        event.preventDefault();setVertices(value=>value.slice(0,-1));return;
+        event.preventDefault();undoSketchPoint();return;
       }
       if(contextMenu&&event.key==='Tab'){setContextMenu(null);return;}
       if(shortcutHelp||busy)return;
@@ -1007,7 +1171,8 @@ export default function App() {
         <WorkspaceModuleBar active={activeTool} open={true}
           onActivate={id=>revealPanel(id)}/>
 
-        <details className="gis-settings">
+        {/* Native details grouping prevents header popovers from covering each other. */}
+        <details className="gis-settings" name="gis-header-menu">
           <summary>Settings</summary>
           <div className="gis-settings-panel">
             <div className="section-heading">Display</div>
@@ -1021,7 +1186,7 @@ export default function App() {
               <option value="auto">Automatic</option><option value="light">Light lines</option><option value="dark">Dark lines</option></select></label>
             <label>Selection fill <input aria-label="Selection fill opacity" type="range" min="0" max=".7" step=".02" value={display.fill} onChange={e=>setDisplay(old=>({...old,fill:Number(e.target.value)}))}/></label>
             <div className="section-heading">Imagery sources</div>
-            <form className="professional-form" onSubmit={event=>{event.preventDefault();try{setCustom(mapTilerImagery(mapTilerKey));setBasemap('custom');setTileError('');setMapTilerKey('');}catch(e){setTileError(String(e));}}}>
+            <form className="professional-form" onSubmit={event=>{event.preventDefault();try{setCustom(mapTilerImagery(mapTilerKey));setTileError('');setMapTilerKey('');setMessage('HD imagery connected. Choose Licensed HD under Map type.');}catch(e){setTileError(String(e));}}}>
               <input type="password" autoComplete="off" aria-label="MapTiler browser API key" placeholder="MapTiler key (licensed)" value={mapTilerKey} onChange={e=>setMapTilerKey(e.target.value)}/>
               <button disabled={!mapTilerKey.trim()}>Connect global HD imagery</button>
             </form>
@@ -1029,7 +1194,7 @@ export default function App() {
                 <summary>Connect high-resolution imagery</summary>
                 <form className="professional-form" onSubmit={event=>{
                   event.preventDefault();setTileError('');
-                  try{setCustom(customBasemap(tileURL,tileCredit,tileZoom));setBasemap('custom');}
+                  try{setCustom(customBasemap(tileURL,tileCredit,tileZoom));setMessage('Custom tiles connected. Select Licensed HD under Map type.');}
                   catch(failure){setTileError(failure instanceof Error?failure.message:'Invalid tile settings.');}
                 }}>
                   <input aria-label="Licensed XYZ tile URL" placeholder="https://…/{z}/{x}/{y}.jpg" value={tileURL} onChange={e=>setTileURL(e.target.value)} required/>
@@ -1050,7 +1215,7 @@ export default function App() {
           <Search size={14}/> <span>Commands</span><kbd>Ctrl K</kbd>
         </button>
         <div className="gis-active-project" ref={setProjectToolbarTarget} aria-label="Active workspace"/>
-        <details className="gis-header-menu gis-workspace-menu">
+        <details className="gis-header-menu gis-workspace-menu" name="gis-header-menu">
           <summary aria-label="Workspace menu">Workspace</summary>
           <div className="gis-header-popover">
             <button type="button" aria-expanded={showLayers} onClick={()=>{setDrawerTab('project');setShowLayers(v=>!v);}}>Project / Layers</button>
@@ -1058,22 +1223,11 @@ export default function App() {
             <button type="button" onClick={()=>setShortcutHelp(true)}>Shortcuts</button>
           </div>
         </details>
-        <details className="gis-header-menu gis-file-menu">
+        <details className="gis-header-menu gis-file-menu" name="gis-header-menu">
           <summary aria-label="File actions">File</summary>
           <div className="gis-header-popover" aria-label="Unified save and export actions">
             <div className="gis-project-actions" ref={setProjectActionsTarget}/>
-            <button type="button" disabled={!geometry} onClick={exportGeoJSON}>Selection GeoJSON</button>
-            <button type="button" disabled={!scratch.length} onClick={()=>{
-              const collection:GeoJSON.FeatureCollection={type:'FeatureCollection',
-                features:scratch.map(f=>({type:'Feature',geometry:f.geometry,
-                  properties:{name:f.name,measurement:f.measurement}}))};
-              const url=URL.createObjectURL(new Blob([JSON.stringify(collection)],
-                {type:'application/geo+json'}));
-              const link=document.createElement('a');link.href=url;
-              link.download='geofathom-local-drawings.geojson';link.click();
-              window.setTimeout(()=>URL.revokeObjectURL(url),1000);
-            }}>Local drawings GeoJSON</button>
-            <div className="gis-terrain-export-action" ref={setTerrainExportTarget}/>
+            <button type="button" onClick={()=>revealPanel('tools-export')}>Open Export module</button>
           </div>
         </details>
         <button className="gis-connection" title={connectionError||'Check backend connection'} onClick={()=>setConnectionRetry(v=>v+1)}>{capabilities?<Wifi size={14}/>:<WifiOff size={14}/>} {capabilities?'Connected':'Reconnect API'}</button>
@@ -1085,16 +1239,31 @@ export default function App() {
           <button disabled={!geometry} onClick={deselect} title="Clear selection without deleting saved features"><RotateCcw size={14}/> Deselect</button>
         </div>
         <div className="gis-survey-commands" ref={setToolbarTarget}/>
-        <div className="gis-quick-basemap" aria-label="Quick basemap tools">
-          <button aria-pressed={basemap==='street'} onClick={()=>setBasemap('street')}>Street</button>
-          <button aria-pressed={['sentinel','satellite','custom'].includes(basemap)} onClick={()=>setBasemap(preferredSatellite(viewport,Boolean(custom)))}>Satellite</button>
-          <button aria-pressed={basemap==='topo'||basemap==='relief'} onClick={()=>setBasemap('topo')}>Terrain (US)</button>
-        </div>
+        <label className="gis-quick-basemap" aria-label="Basemap picker">
+          <Globe2 size={15} aria-hidden="true"/>
+          <select aria-label="Map type" value={basemap}
+            title={BASEMAPS.find(item=>item.id===basemap)?.note??mapStatus}
+            onChange={event=>setBasemap(event.target.value as BasemapId)}>
+            {BASEMAP_GROUPS.map(group=><optgroup key={group.category} label={group.label}>
+              {BASEMAPS.filter(item=>item.category===group.category).map(item=>
+                <option key={item.id} value={item.id} disabled={!basemapAvailable(item,custom)}>
+                  {item.name}
+                </option>)}
+            </optgroup>)}
+          </select>
+          <span className="gis-basemap-health" title={mapStatus} aria-label="Basemap status">{mapStatus.startsWith('Imagery unavailable')?'!':'●'}</span>
+        </label>
       </div>
       <div className="gis-body">
         {expandedDock&&<div className="workspace-dock-backdrop" role="presentation" onClick={()=>setExpandedDock(null)}/>}
-        <aside className="sidebar gis-layers gis-project-drawer" hidden={!showLayers} aria-label="Project and layers" style={{width:340}}>
-          <WorkspaceDockHeading><Layers3 size={15}/> Workspace</WorkspaceDockHeading>
+        <aside className={'sidebar gis-layers gis-project-drawer'+(expandedDock==='project'?' workspace-dock-expanded':'')}
+          hidden={!showLayers} aria-label="Project and layers" style={{width:340}}>
+          <WorkspaceDockHeading actions={<button className="workspace-dock-expand-button"
+            aria-label={expandedDock==='project'?'Close full project view':'Open full project view'}
+            title={expandedDock==='project'?'Return to workspace':'Open larger workspace'}
+            onClick={()=>setExpandedDock(v=>v==='project'?null:'project')}>
+            {expandedDock==='project'?<Minimize2 size={14}/>:<Maximize2 size={14}/>}
+          </button>}><Layers3 size={15}/> Workspace</WorkspaceDockHeading>
           <nav className="gis-drawer-tabs" role="tablist" aria-label="Workspace pages">
             {([['project','Project'],['layers','Layers'],['search','Search']] as const).map(([key,label])=>
               <button key={key} type="button" role="tab" aria-selected={drawerTab===key}
@@ -1105,6 +1274,22 @@ export default function App() {
             <div className="section-heading"><Layers3 size={16} /><span>Projects</span></div>
             {!capabilities&&connectionError&&<div className="discovery-error" role="alert">{connectionError} <button onClick={()=>setConnectionRetry(v=>v+1)}>Reconnect</button></div>}
             <ProjectsPanel toolbarTarget={projectToolbarTarget} toolbarActionsTarget={projectActionsTarget} treeTarget={objectTreeTarget}
+              interactionBusy={busy||Boolean(drawingMode)} objectPageSize={3}
+              onObjectMutation={(id,feature)=>{
+                // Search/attribute results may lie outside the workspace's
+                // first page. Update their owner as well, avoiding ghost
+                // rows and stale map labels after rename/delete/restore.
+                setPagedFeatures(old=>feature?[feature,...old.filter(item=>item.id!==id)]:old.filter(item=>item.id!==id));
+                setProjectWorkspace(old=>old?{...old,features:feature?
+                  old.features.map(item=>item.id===id?feature:item):old.features.filter(item=>item.id!==id)}:old);
+              }}
+              objectGroups={[{id:'local-drawings',name:'Local drawings',items:scratch,
+                selectedId:scratchId,onOpen:id=>{const item=scratch.find(f=>f.id===id);if(item){
+                  setScratch(old=>old.map(f=>f.id===id?{...f,visible:true}:f));selectScratch({...item,visible:true});
+                  if(activeTool==='tools-terrain')setObjectsOpen(false);
+                }},
+                onRename:async(id,name)=>{setScratch(old=>old.map(item=>item.id===id?{...item,name}:item));setMessage('Local drawing renamed · Ctrl Z to undo.');},
+                onDelete:async id=>removeLocal(id)}]}
               geometry={busy || preview || pendingShared || drawingMode ? null : geometry}
               featureName={scratch.find(f=>f.id===scratchId)?.name||selectedPlace?.name||'Custom boundary'}
               featureSource={geometrySource || selectedPlace?.source || 'User drawn'}
@@ -1164,7 +1349,7 @@ export default function App() {
                 setProjectWorkspace(data);
                 setActiveProjectId(id);
               }}
-              onOpen={openStoredFeature}
+              onOpen={feature=>{openStoredFeature(feature);if(activeTool==='tools-terrain')setObjectsOpen(false);}}
               onSavedDraft={()=>{if(scratchId)setScratchState(scratchHistory.current!.checkpoint(scratchHistory.current!.current.filter(f=>f.id!==scratchId)));setScratchId(null);}}
               onFeatureDeleted={deselect}
               onPlaceAnnotation={(projectId,layerId,text)=>{
@@ -1204,11 +1389,7 @@ export default function App() {
 
             </section>
             <section className="panel-section gis-basemaps" hidden={drawerTab!=='layers'}>
-              <div className="section-heading"><Globe2 size={15}/><span>Basemap</span></div>
-              <select aria-label="Basemap" value={basemap} onChange={event=>setBasemap(event.target.value as BasemapId)}>
-                {BASEMAPS.map(item=><option key={item.id} value={item.id} disabled={item.id==='custom'&&!custom}>{item.name}</option>)}
-              </select>
-              <small role="status" className="basemap-status">{mapStatus}</small>
+              <div className="section-heading"><Layers3 size={15}/><span>Map overlays</span></div>
               {(terrainFeatures.length+terrainRasters.length)>0&&<label className="gis-check"><input aria-label="Terrain result layer" type="checkbox" checked={terrainVisible} onChange={e=>setTerrainVisible(e.target.checked)}/> Terrain result · {terrainFeatures.length+terrainRasters.length}</label>}
               {rasterLayers.map(layer=><div key={layer.asset.id} className="raster-layer-row">
                 <label className="gis-check"><input aria-label={'Show raster '+layer.asset.name} type="checkbox" checked={layer.visible}
@@ -1298,6 +1479,8 @@ export default function App() {
         <div className="map-wrap">
           <MapCanvas
             selected={geometry} drawingMode={drawingMode} vertices={vertices}
+            networkFaces={!drawingMode?(networkAreas?.faces??[]):[]}
+            onSelectNetworkFace={activateNetworkFace}
             terrainPicking={terrainPicking}
             terrainMarker={showTools&&activeTool==='tools-terrain'?
               (terrainHover??(terrainProfileMapIndex!==null?terrainProfileSamples[terrainProfileMapIndex]?.coordinate??null:null)??terrainOrigin):null}
@@ -1365,7 +1548,10 @@ export default function App() {
             focus={focus} basemap={basemap} customBasemap={custom} onBasemapStatus={setMapStatus}
             measurement={preview?null:measurement} showMeasurements={showMeasurements} display={display}
             selectedFeatureId={selectedFeatureId??scratchId}
-            onFinishDrawing={()=>{void finishDrawing();}}
+            onFinishDrawing={(closeLine=false)=>{
+              const points=drawingVerticesRef.current;
+              void finishDrawing(closeLine&&drawingMode==='line'&&points.length>=3?[...points,points[0]]:points);
+            }}
             rasterLayers={rasterLayers} onRasterError={setError}
             traceMode={traceMode||promptMode!==null}
             promptPositive={positivePoints} promptNegative={negativePoints}
@@ -1481,11 +1667,20 @@ export default function App() {
             }}
             onViewportChange={setViewport}
             onMapClick={position => {
-              if(busy)return;
-              const max=drawingMode==='point'?1:['rectangle','circle','trace-along'].includes(drawingMode??'')?2:4000;
-              if(vertices.length>=max||(vertices.length&&vertices.at(-1)![0]===position[0]&&vertices.at(-1)![1]===position[1]))return;
-              const next=[...vertices,position];setVertices(next);
-              if(max<4000&&next.length===max)void finishDrawing(next);
+              if(busy||!drawingMode)return;
+              // The MapCanvas handles start-node pixel snapping and closure.
+              // Every other newly committed vertex must preserve simple-ring topology.
+              const current=drawingVerticesRef.current;
+              const reason=sketchAddError(drawingMode,current,position);
+              if(reason){
+                if(reason!=='Duplicate of the last point.')setError(reason);
+                return;
+              }
+              const next=[...current,position];
+              setSketchVertices(next);setVertexRedo([]);setError('');
+              const complete=drawingMode==='point'?1:
+                ['rectangle','circle','trace-along'].includes(drawingMode)?2:4000;
+              if(complete<4000&&next.length===complete)void finishDrawing(next);
             }}
           />
           <div className="map-legend">
@@ -1507,6 +1702,7 @@ export default function App() {
                   {item.labels&&<small>Labels</small>}
                 </div>
               ))}
+              {!!networkAreas?.count&&<div className="map-legend-item"><span className="legend-swatch" style={{background:'#238d89'}}/><span>Enclosed areas · {networkAreas.count}</span></div>}
               {scratch.some(f=>f.visible)&&<div className="map-legend-item"><span className="legend-swatch" style={{background:'#168047'}}/><span>Local drawings · {scratch.filter(f=>f.visible).length}</span></div>}
               {rasterLayers.filter(l=>l.visible).map(l=><div key={l.asset.id} className="map-legend-item"><span className="legend-swatch" style={{background:'#a8adb0'}}/><span>{l.kind==='dem'?'DEM':'Raster'} · {l.asset.name}</span></div>)}
               {terrainVisible&&(terrainFeatures.length+terrainRasters.length)>0&&<div className="map-legend-item"><span className="legend-swatch" style={{background:'#d7b65e'}}/><span>Terrain results · {terrainFeatures.length+terrainRasters.length}</span></div>}
@@ -1525,6 +1721,7 @@ export default function App() {
 
         </main>
         <aside className={'gis-inspector gis-operations'+(expandedDock==='operations'?' workspace-dock-expanded':'')}
+          data-object-browser={activeTool==='tools-terrain'&&objectsOpen?'true':'false'}
           aria-label="Operations">
           <WorkspaceDockHeading actions={<button className="workspace-dock-expand-button"
             aria-label={expandedDock==='operations'?'Close full operations view':'Open full operations view'}
@@ -1532,9 +1729,15 @@ export default function App() {
             onClick={()=>setExpandedDock(v=>v==='operations'?null:'operations')}>
             {expandedDock==='operations'?<Minimize2 size={14}/>:<Maximize2 size={14}/>}
           </button>}><Compass size={15}/> Tools</WorkspaceDockHeading>
-          <div className="sidebar-scroll" tabIndex={0} aria-label="Operations scrolling region">
-          <details className="workspace-objects" open>
-            <summary>Objects</summary>
+          <div className={'sidebar-scroll'+(['tools-services','tools-export'].includes(activeTool)?' data-fixed-operations':'')}
+            tabIndex={0} aria-label="Operations scrolling region">
+          <details className="workspace-objects" hidden={['tools-services','tools-export'].includes(activeTool)}
+            open={objectsOpen} onToggle={event=>setObjectsOpen(event.currentTarget.open)}>
+            <summary>Objects{activeTool==='tools-terrain'&&!objectsOpen&&<small className="workspace-object-current">
+              {selectedSaved?.name??scratch.find(item=>item.id===scratchId)?.name??selectedPlace?.name??'Choose an object'}
+            </small>}</summary>
+            {activeTool==='tools-terrain'&&objectsOpen&&<button type="button" className="workspace-object-back"
+              onClick={()=>setObjectsOpen(false)}>Back to terrain tools</button>}
             <div ref={setObjectTreeTarget}/>
             {geometry&&<details className="geometry-edit-controls">
               <summary>Geometry / vertices</summary>
@@ -1556,7 +1759,27 @@ export default function App() {
             </details>}
 
           </details>
-          {resultsTarget&&activeTool!=='tools-terrain'&&(geometry||measurement||preview)&&createPortal(<section className="panel-section results-summary">
+          {resultsTarget&&['tools-survey','tools-services'].includes(activeTool)&&
+            (networkAreas?.count??0)>0&&createPortal(
+            <section className="panel-section data-network-results" aria-label="Independent enclosed areas">
+              <div className="data-metric-band">
+                <div><small>Enclosed areas</small><strong>{networkAreas!.count}</strong></div>
+                <div><small>Combined area</small><strong>{areaText(networkAreas!.area_m2,areaUnit)}</strong></div>
+              </div>
+              {networkAreas!.faces.slice(networkPage*4,(networkPage+1)*4).map(face=>
+                <div className="data-network-result-row" key={face.id}>
+                  <strong>{face.name}</strong>
+                  <span>{areaText(face.measurement.area_m2??0,areaUnit)}</span>
+                  <small>{distanceText(face.measurement.perimeter_m??0,display.distance)} perimeter</small>
+                </div>)}
+              {networkAreas!.count>4&&<div className="gis-record-pager">
+                <button disabled={networkPage===0} onClick={()=>setNetworkPage(v=>v-1)}>Previous</button>
+                <span>{networkPage+1}/{Math.ceil(networkAreas!.count/4)}</span>
+                <button disabled={(networkPage+1)*4>=networkAreas!.count}
+                  onClick={()=>setNetworkPage(v=>v+1)}>Next</button>
+              </div>}
+            </section>,resultsTarget)}
+          {resultsTarget&&activeTool!=='tools-terrain'&&!(['tools-survey','tools-services'].includes(activeTool)&&(networkAreas?.count??0)>1)&&(geometry||measurement||preview)&&createPortal(<section className="panel-section results-summary">
             <div className="section-heading"><Compass size={16} /><span>Selection</span></div>
             <div className="analysis-card">
               
@@ -1611,6 +1834,7 @@ export default function App() {
                 setPendingAnnotation(null);setSelectionBoxMode(false);setLabelMoveMode(false);
               }}
               mode={drawingMode}
+              sketchError={drawingMode?error:null}
               geometry={geometry}
               points={vertices}
               editing={editing}
@@ -1624,15 +1848,17 @@ export default function App() {
                 }
                 setLinked(enabled);if(enabled)setEdgeMoving(false);setPendingShared(null);
               }}
-              canUndo={(selectedFeatureId?timeline.current.canUndo:scratchHistory.current!.canUndo) && historyPulse >= 0}
-              canRedo={(selectedFeatureId?timeline.current.canRedo:scratchHistory.current!.canRedo) && historyPulse >= 0}
+              canUndo={drawingMode?vertices.length>0:
+                (selectedFeatureId?timeline.current.canUndo:scratchHistory.current!.canUndo) && historyPulse >= 0}
+              canRedo={drawingMode?vertexRedo.length>0:
+                (selectedFeatureId?timeline.current.canRedo:scratchHistory.current!.canRedo) && historyPulse >= 0}
               saved={activeProjectId ? projectWorkspace?.features ?? [] : []}
               onStart={startDrawing}
               onFinish={() => { if(!busy)void finishDrawing(); }}
-              onCancel={() => { geometrySequence.current++;setBusy(false);setError('');setTerrainLineDrawing(false);setDrawingMode(null);setVertices([]);setMessage('Drawing cancelled. Retained locations are unchanged.'); }}
-              onUndoPoint={() => setVertices(value => value.slice(0,-1))}
-              onUndo={()=>historyStep()}
-              onRedo={()=>historyStep(true)}
+              onCancel={stopInteraction}
+              onUndoPoint={undoSketchPoint}
+              onUndo={()=>drawingMode?undoSketchPoint():historyStep()}
+              onRedo={()=>drawingMode?redoSketchPoint():historyStep(true)}
               onEdit={(active, shouldMove) => {
                 if (selectedLocked) {
                   setError('Unlock the feature layer before editing.');
@@ -1643,8 +1869,19 @@ export default function App() {
               }}
               onSnapping={setSnapping}
               onAddPoint={point => {
-                if(drawingMode)setVertices(value=>value.length>=(drawingMode==='point'?1:['rectangle','circle','trace-along'].includes(drawingMode)?2:4000)?value:[...value,point]);
-                else void numericShape('point',{vertices:[point]});
+                if(drawingMode){
+                  const current=drawingVerticesRef.current;
+                  if(['polygon','hole'].includes(drawingMode)&&current.length>=3&&
+                    point[0]===current[0][0]&&point[1]===current[0][1]){
+                    void finishDrawing();return;
+                  }
+                  const problem=sketchAddError(drawingMode,current,point);
+                  if(problem){setError(problem);return;}
+                  const next=[...current,point];setSketchVertices(next);setVertexRedo([]);setError('');
+                  const complete=drawingMode==='point'?1:
+                    ['rectangle','circle','trace-along'].includes(drawingMode)?2:4000;
+                  if(complete<4000&&next.length===complete)void finishDrawing(next);
+                }else void numericShape('point',{vertices:[point]});
               }}
               onNumeric={(mode, body) => { void numericShape(mode, body); }}
               onOverlay={(mode, featureId) => { void combineWith(mode,featureId); }}
@@ -1908,17 +2145,46 @@ export default function App() {
           </section>
 
           <section id="tools-services" hidden={activeTool!=='tools-services'} className="panel-section">
-            <div className="section-heading"><Layers3 size={16}/><span>OGC, indexed stores & background jobs</span></div>
-            <DataServicesPanel
-              key={activeProjectId ?? 'no-project'}
-              projectId={activeProjectId}
-              viewport={viewport}
-              drawnGeometry={geometry}
+            <DataWorkbench
+              projectId={activeProjectId} workspace={projectWorkspace}
+              geometry={geometry} viewport={viewport} connected={Boolean(capabilities)}
+              network={networkAreas} networkNotice={networkNotice}
+              sourceCount={networkSources.length}
+              vectorSources={[
+                ...scratch.map(item=>({id:item.id,name:item.name,geometry:item.geometry})),
+                ...(projectWorkspace?.features??[]).map(item=>({id:item.id,name:item.name,geometry:item.geometry})),
+              ]}
+              onDerived={(next,_measured,name)=>{void commitGeometry(next,'Data · '+name,true);}}
+              onRebuild={rebuildNetwork} onStoreAreas={keepNetworkAreas}
+              onSelectArea={activateNetworkFace}
+              onOpenLayers={()=>{setDrawerTab('layers');setShowLayers(true);}}
               onTiles={value=>{if(projectCurrent())setExternalTiles(value);}}
               onPreview={value=>{if(projectCurrent())setExternalFeatures(value);}}
               onPage={value=>{if(projectCurrent())setPagedFeatures(value);}}
               onRefresh={()=>setRefreshToken(value=>value+1)}
+              onRasterAdded={(asset,kind)=>{
+                // Do not silently reinterpret imagery (RGB, satellite, masks)
+                // as an elevation model. DEM is selected only explicitly.
+                if(kind==='dem'){
+                  setDemLayer(asset);setRasterLayers(old=>selectDEM(old,asset));
+                }else{
+                  setImageLayer(asset);setRasterLayers(old=>addRaster(old,asset,'image'));
+                }
+                setMessage('Raster added to the active map.');
+              }}
             />
+          </section>
+
+          <section id="tools-export" hidden={activeTool!=='tools-export'} className="panel-section">
+            <ExportWorkbench
+              projectId={activeProjectId} workspace={projectWorkspace}
+              selected={geometry} measurement={measurement}
+              selectedProperties={selectedSaved?{...selectedSaved.properties,name:selectedSaved.name,source:selectedSaved.source}:scratch.find(f=>f.id===scratchId)?.properties}
+              scratch={scratch} faces={networkAreas?.faces??[]}
+              terrainRasters={terrainRasters} viewport={viewport}
+              rasterSources={rasterLayers.map(l=>({id:l.asset.id,kind:l.kind}))}/>
+            <div className="gis-terrain-export-action export-specialized-actions"
+              ref={setTerrainExportTarget}/>
           </section>
 
 
@@ -1940,7 +2206,6 @@ export default function App() {
           </section>
 
 
-            <div hidden={activeTool!=='tools-services'}><ApiAccessPanel/></div>
           </div>
           <div className="workspace-fixed-footer" ref={setOperationsFooterTarget}/>
         </aside>

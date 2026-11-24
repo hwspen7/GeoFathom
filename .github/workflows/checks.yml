@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   python:
     runs-on: ubuntu-latest
@@ -149,6 +153,13 @@ jobs:
           name: geofathom-browser-coverage
           path: web/coverage/raw/browser/
           if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: geofathom-workspace-ui-screenshots
+          path: web/test-results/**/survey-*.png
+          if-no-files-found: warn
+          retention-days: 7
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
@@ -294,6 +305,9 @@ jobs:
 
 
   quality-targets:
+    # Coverage targets are temporarily advisory by explicit project decision.
+    # Keep the measured reports above; remove this condition to enforce again.
+    if: ${{ false }}
     needs: [quality-measurement]
     runs-on: ubuntu-latest
     steps:

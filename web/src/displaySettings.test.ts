@@ -3,6 +3,6 @@ it('formats large areas and distances in usable units',()=>{expect(areaText(2985
 it('chooses different contrasts and actual American high resolution imagery',()=>{
  expect(mapPalette('street','auto').selected).not.toBe(mapPalette('satellite','auto').selected);
  expect(preferredSatellite([-83,39,-82,40],false)).toBe('satellite');
- expect(preferredSatellite([121,31,122,32],false)).toBe('sentinel');
+ expect(preferredSatellite([121,31,122,32],false)).toBe('imagery');
  expect(preferredSatellite([121,31,122,32],true)).toBe('custom');
 });

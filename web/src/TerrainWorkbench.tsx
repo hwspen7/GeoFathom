@@ -2,7 +2,7 @@ import {useEffect,useMemo,useRef,useState,type ChangeEvent} from 'react';
 import {createPortal} from 'react-dom';
 import {Mountain} from 'lucide-react';
 import {advancedTerrain,saveFeatureBatch,analyzeTerrain,terrainProfile,listImagery,uploadImagery,fetchPublicDEM,prepareDEM,type DEMProcessMode,type TerrainMesh,type TerrainOperation,type RasterAsset,type TerrainRasterLayer} from './api';
-import {ProfilePlot,MetricBars,ElevationDistribution,AspectRose,SectionPlot,ResultPane,HypsometricPlot,ProfileGradePlot,TerrainClassShare} from './TerrainCharts';
+import {ProfilePlot,MetricBars,ElevationDistribution,AspectRose,SectionPlot,ResultPane,HypsometricPlot,ProfileGradePlot,TerrainClassShare,TerrainCumulativeArea,TerrainClassTable,terrainClassesCsv} from './TerrainCharts';
 import {GPUView} from './TerrainMeshView';
 import type {Position} from './editing';
 import {measurementAnchor} from './editing';
@@ -51,7 +51,7 @@ function MeshView({mesh}:{mesh:TerrainMesh}){
     }
   },[mesh,angle,tilt,exaggeration]);
   return <div className="dem-mesh">
-    <canvas ref={canvas} width={320} height={220} aria-label="Interactive 3D terrain preview"
+    <canvas ref={canvas} width={320} height={220} aria-label="Interactive 3D terrain preview" data-renderer="canvas2d"
       onPointerDown={e=>{e.currentTarget.setPointerCapture(e.pointerId);drag.current={x:e.clientX,y:e.clientY};}}
       onPointerMove={e=>{if(!drag.current)return;const dx=e.clientX-drag.current.x,dy=e.clientY-drag.current.y;
         setAngle(a=>a+dx*.012);setTilt(t=>Math.max(.2,Math.min(1.45,t+dy*.008)));drag.current={x:e.clientX,y:e.clientY};}}
@@ -84,9 +84,9 @@ const categories:Record<string,Operation[]>={
  Engineering:['profile','cross_sections','volume','cutfill_map','suitability','least_cost'],
 };
 const units:Record<string,string>={cut_m3:'m³',fill_m3:'m³',net_cut_m3:'m³',covered_grid_area_m2:'m²',reference_elevation_m:'m',
- contour_lines:'',contour_levels:'',product_valid_cells:'',observer_count:'',visible_by_all_cells:'',channel_cells:'',max_stream_order:'',mfd_exponent:'',stream_threshold_cells:'',flat_cells:'',directional_cells:'',route_cells:'',dataset_overlap_pct:'%',valid_grid_pct:'%',comparison_coverage_pct:'%',interval_m:'m',visible_cells:'',visible_grid_area_m2:'m²',unknown_cells:'',upstream_cells:'',upstream_grid_area_m2:'m²',elevation_change_mean_m:'m',elevation_change_min_m:'m',elevation_change_max_m:'m',elevation_change_rmse_m:'m',elevation_change_mae_m:'m',raised_volume_m3:'m³',lowered_volume_m3:'m³',net_elevation_volume_m3:'m³',maximum_fill_depth_m:'m',total_fill_depth_m:'m',conditioning_fill_volume_m3:'m³',minimum_m:'m',maximum_m:'m',mean_m:'m',median_m:'m',stddev_m:'m',p10_m:'m',p90_m:'m',relief_m:'m',circular_mean_aspect_deg:'°'};
+ contour_lines:'',contour_levels:'',product_valid_cells:'',product_p10:'',product_p50:'',product_p90:'',product_std:'',observer_count:'',visible_by_all_cells:'',channel_cells:'',max_stream_order:'',mfd_exponent:'',stream_threshold_cells:'',flat_cells:'',directional_cells:'',route_cells:'',dataset_overlap_pct:'%',valid_grid_pct:'%',comparison_coverage_pct:'%',interval_m:'m',visible_cells:'',visible_grid_area_m2:'m²',unknown_cells:'',upstream_cells:'',upstream_grid_area_m2:'m²',elevation_change_mean_m:'m',elevation_change_min_m:'m',elevation_change_max_m:'m',elevation_change_rmse_m:'m',elevation_change_mae_m:'m',raised_volume_m3:'m³',lowered_volume_m3:'m³',net_elevation_volume_m3:'m³',maximum_fill_depth_m:'m',total_fill_depth_m:'m',conditioning_fill_volume_m3:'m³',minimum_m:'m',maximum_m:'m',mean_m:'m',median_m:'m',stddev_m:'m',p10_m:'m',p90_m:'m',relief_m:'m',circular_mean_aspect_deg:'°'};
 const names:Record<string,string>={cut_m3:'Cut',fill_m3:'Fill',net_cut_m3:'Net cut',covered_grid_area_m2:'Grid area',reference_elevation_m:'Reference',
- contour_lines:'Contour paths',contour_levels:'Elevation levels',dataset_overlap_pct:'DEM footprint coverage',valid_grid_pct:'Valid grid coverage',interval_m:'Interval',visible_cells:'Visible cells',visible_grid_area_m2:'Visible area',unknown_cells:'Unknown cells',
+ contour_lines:'Contour paths',contour_levels:'Elevation levels',product_p10:'10th percentile',product_p50:'Median',product_p90:'90th percentile',product_std:'Standard deviation',dataset_overlap_pct:'DEM footprint coverage',valid_grid_pct:'Valid grid coverage',interval_m:'Interval',visible_cells:'Visible cells',visible_grid_area_m2:'Visible area',unknown_cells:'Unknown cells',
  observer_count:'Observers',visible_by_all_cells:'Visible from all observers',
  visible_any_known_cells:'Visible from at least one confirmed observer',
  channel_cells:'Channel cells',max_stream_order:'Maximum Strahler order',mfd_exponent:'MFD slope exponent',stream_threshold_cells:'Stream threshold',
@@ -129,6 +129,33 @@ export default function TerrainWorkbench(p:Props){
  const [processResolution,setProcessResolution]=useState('30'),[processSampling,setProcessSampling]=useState<'nearest'|'bilinear'|'average'>('bilinear');
  const [maxSlope,setMaxSlope]=useState('30'),[minElevation,setMinElevation]=useState('-12000'),[maxElevation,setMaxElevation]=useState('12000'),[maxTri,setMaxTri]=useState('100');
  const [streamCells,setStreamCells]=useState('100'),[azimuth,setAzimuth]=useState('315'),[altitude,setAltitude]=useState('45');
+ const [gradientMethod,setGradientMethod]=useState<'horn'|'zevenbergen_thorne'>('horn');
+ const [slopeClasses,setSlopeClasses]=useState<'standard'|'detailed'|'broad'>('standard');
+ const [mfdExponent,setMfdExponent]=useState('1.1');
+ const [neighborhoodRadius,setNeighborhoodRadius]=useState('1');
+ const [viewshedDistance,setViewshedDistance]=useState('0');
+ const [viewshedAzimuth,setViewshedAzimuth]=useState('0');
+ const [viewshedWidth,setViewshedWidth]=useState('360');
+ const [routeModel,setRouteModel]=useState<'surface'|'distance'|'gentle'>('surface');
+ const [meshSamples,setMeshSamples]=useState('256');
+ const [streamOrderScheme,setStreamOrderScheme]=useState<'strahler'|'shreve'>('strahler');
+ const [hillshadeMode,setHillshadeMode]=useState<'single'|'four_direction'>('single');
+ const [flowRoutingMethod,setFlowRoutingMethod]=useState<'d8'|'dinf'>('d8');
+ const [depressionMethod,setDepressionMethod]=useState<'fill'|'breach'>('fill');
+ const [curvatureMethod,setCurvatureMethod]=useState<'finite_difference'|'quadratic'>('finite_difference');
+ const [curvatureRadius,setCurvatureRadius]=useState('2');
+ const [designEastGrade,setDesignEastGrade]=useState('0'),[designNorthGrade,setDesignNorthGrade]=useState('0');
+ const [designMaxGrade,setDesignMaxGrade]=useState('0.3'),[elevationSigma,setElevationSigma]=useState('0');
+ const [designCurvatureEast,setDesignCurvatureEast]=useState('0');
+ const [designCurvatureCross,setDesignCurvatureCross]=useState('0');
+ const [designCurvatureNorth,setDesignCurvatureNorth]=useState('0');
+ const [dsmImageId,setDsmImageId]=useState(''),[optimizeObservers,setOptimizeObservers]=useState('0');
+ const [externalInflowImageId,setExternalInflowImageId]=useState('');
+ const [meshLod,setMeshLod]=useState(false);
+ const [suitabilityModel,setSuitabilityModel]=useState<'binary'|'weighted'>('binary');
+ const [suitabilitySlopeWeight,setSuitabilitySlopeWeight]=useState('0.5');
+ const [suitabilityTriWeight,setSuitabilityTriWeight]=useState('0.25');
+ const [suitabilityElevationWeight,setSuitabilityElevationWeight]=useState('0.25');
  const [fillSinks,setFillSinks]=useState(true),[considerCurvature,setConsiderCurvature]=useState(true),[refractionCoeff,setRefractionCoeff]=useState('0.13');
  const [sectionSpacing,setSectionSpacing]=useState('50'),[sectionWidth,setSectionWidth]=useState('20'),[drape,setDrape]=useState(false),[expanded,setExpanded]=useState(false);
  const [pickEnd,setPickEnd]=useState(false);
@@ -156,6 +183,7 @@ export default function TerrainWorkbench(p:Props){
  const [selectedRecord,setSelectedRecord]=useState<string|null>(null);
  const [resultTab,setResultTab]=useState<'overview'|'visual'|'details'>('overview');
  const [figureView,setFigureView]=useState('analysis');
+ const [classMeasure,setClassMeasure]=useState<'cells'|'percent'|'area'>('cells');
  useEffect(()=>{setResultTab('overview');setFigureView('analysis');setExpanded(false);},[selectedRecord]);
  const [historyFocus,setHistoryFocus]=useState('');
  const [layerPage,setLayerPage]=useState(0);
@@ -171,14 +199,19 @@ export default function TerrainWorkbench(p:Props){
    ...(profile?.samples?.length?[{id:'gradient',label:'Gradient',
      plot:<ProfileGradePlot samples={profile.samples}/>}] : []),
    ...(result?.raster?.legend?.length?[{id:'composition',label:'Composition',
-     plot:<TerrainClassShare bins={result.raster.legend}/>}] : []),
+     plot:<TerrainClassShare bins={result.raster.legend}/>},
+     ...(['elevation','slope_map','hillshade','tri','tpi','curvature',
+          'plan_curvature','profile_curvature','flow_accumulation',
+          'flow_accumulation_mfd','stream_order','cutfill_map','dem_difference'].includes(result.operation)
+        ?[{id:'cumulative',label:'Cumulative',
+          plot:<TerrainCumulativeArea bins={result.raster.legend} cellAreaM2={result.cell_area_m2}/>}]:[])]:[]),
  ];
  const activeResearch=researchFigures.find(item=>item.id===figureView);
  // Show operation-critical metrics first; keep all scientific fields in More.
  const metricEntries=Object.entries(result?.metrics??{});
  const preferredMetricKeys:Record<string,string[]>={
-   elevation:['product_min','product_max','product_mean'],
-   slope_map:['product_min','product_max','product_mean'],
+   elevation:['product_min','product_max','product_p50','product_p90'],
+   slope_map:['product_mean','product_p50','product_p90','product_std'],
    aspect_map:['circular_mean_aspect_deg','flat_cells','directional_cells'],
    contours:['contour_levels','contour_lines','interval_m'],
    hillshade:['product_min','product_max','product_mean'],
@@ -260,29 +293,48 @@ export default function TerrainWorkbench(p:Props){
  const mapMismatch=!!dem&&!!p.viewport&&!terrainBoundsOverlap(dem.bbox,p.viewport);
  const verified=!!dem&&(/Copernicus DEM GLO-|USGS 3DEP Bare Earth DEM/.test(dem.provenance)||verticalConfirmed);
  const validNumber=(value:string,min:number,max:number)=>value.trim()!==''&&Number.isFinite(Number(value))&&Number(value)>=min&&Number(value)<=max;
- const multiObserversValid=observerPoints.length>=2&&observerPoints.length<=4&&
+ const multiObserversValid=observerPoints.length>=2&&observerPoints.length<=(Number(optimizeObservers)>0?12:4)&&
    observerPoints.every(([x,y])=>validNumber(x,-180,180)&&validNumber(y,-90,90))&&
    new Set(observerPoints.map(([x,y])=>Number(x)+','+Number(y))).size===observerPoints.length;
- const parametersValid=(operation!=='viewshed_multi'||multiObserversValid)&&
+ const parametersValid=(operation!=='viewshed_multi'||multiObserversValid&&validNumber(optimizeObservers,0,4)&&Number.isInteger(Number(optimizeObservers))&&Number(optimizeObservers)<=observerPoints.length)&&
+   (!['volume','cutfill_map'].includes(operation??'')||validNumber(designEastGrade,-1,1)&&validNumber(designNorthGrade,-1,1)&&
+     validNumber(designMaxGrade,.00001,1)&&Math.hypot(Number(designEastGrade),Number(designNorthGrade))<=Number(designMaxGrade)+1e-12&&
+     validNumber(elevationSigma,0,10000)&&[designCurvatureEast,designCurvatureCross,designCurvatureNorth].every(n=>validNumber(n,-1,1)))&&
+   (!['curvature','plan_curvature','profile_curvature'].includes(operation??'')||curvatureMethod!=='quadratic'||validNumber(curvatureRadius,1,4)&&Number.isInteger(Number(curvatureRadius)))&&
+   (!['visibility','viewshed_multi'].includes(operation??'')||!dsmImageId||assets.some(a=>a.id===dsmImageId&&a.bands===1&&a.id!==dem?.id))&&
+   (operation!=='flow_accumulation'||!externalInflowImageId||flowRoutingMethod==='dinf'&&assets.some(a=>a.id===externalInflowImageId&&a.bands===1&&a.id!==dem?.id))&&
    (operation!=='cross_sections'||validNumber(sectionSpacing,1,10000)&&validNumber(sectionWidth,1,2000))&&
    (operation!=='contours'||validNumber(interval,.01,1e6))&&
    (operation!=='dem_difference'||!!comparisonId&&comparisonId!==dem?.id&&assets.some(a=>a.id===comparisonId&&a.bands===1))&&
    ((operation!=='volume'&&operation!=='cutfill_map')||validNumber(reference,-12000,12000))&&
    (operation!=='least_cost'||validNumber(endLon,-180,180)&&validNumber(endLat,-90,90)&&validNumber(maxSlope,.01,90))&&
-   (operation!=='suitability'||validNumber(maxSlope,0,90)&&validNumber(minElevation,-12000,12000)&&validNumber(maxElevation,-12000,12000)&&Number(minElevation)<=Number(maxElevation)&&validNumber(maxTri,0,100000))&&
+   (operation!=='suitability'||validNumber(maxSlope,0,90)&&validNumber(minElevation,-12000,12000)&&validNumber(maxElevation,-12000,12000)&&Number(minElevation)<=Number(maxElevation)&&validNumber(maxTri,0,100000)&&
+      (suitabilityModel==='binary'||[suitabilitySlopeWeight,suitabilityTriWeight,suitabilityElevationWeight].every(n=>validNumber(n,0,100))&&
+        [suitabilitySlopeWeight,suitabilityTriWeight,suitabilityElevationWeight].reduce((sum,w)=>sum+Number(w),0)>0))&&
    (!['streams','stream_order'].includes(operation??'')||validNumber(streamCells,1,1000000)&&Number.isInteger(Number(streamCells)))&&
    (operation!=='hillshade'||validNumber(azimuth,0,360)&&validNumber(altitude,0,90))&&
    (!needsPoint||validNumber(lon,-180,180)&&validNumber(lat,-90,90))&&
+   (operation!=='flow_accumulation_mfd'||validNumber(mfdExponent,.5,8))&&
    (!['visibility','viewshed_multi'].includes(operation??'')||!considerCurvature||validNumber(refractionCoeff,0,.5))&&
-   (!['visibility','viewshed_multi'].includes(operation??'')||validNumber(height,0,1000)&&validNumber(target,0,1000));
+   (!['visibility','viewshed_multi'].includes(operation??'')||validNumber(height,0,1000)&&validNumber(target,0,1000)&&
+     validNumber(viewshedDistance,0,10000)&&validNumber(viewshedAzimuth,0,360)&&validNumber(viewshedWidth,.01,360))&&
+   (!['tri','tpi'].includes(operation??'')||validNumber(neighborhoodRadius,1,4)&&Number.isInteger(Number(neighborhoodRadius)))&&
+   (operation!=='mesh'||validNumber(meshSamples,64,512)&&Number.isInteger(Number(meshSamples)));
  const canRun=operation!==null&&p.connected&&resultCacheReady&&verified&&!!correctShape&&!sourceMismatch&&!mapMismatch&&parametersValid;
  useEffect(()=>{latest.current.onProfileSamples?.(activeProfileSamples??[]);},[activeProfileSamples]);
  const scientificParameters=terrainParametersForOperation(operation,{
    interval,reference,lon,lat,height,target,endLon,endLat,
    maxSlope,minElevation,maxElevation,maxTri,streamCells,
-   azimuth,altitude,sectionSpacing,sectionWidth,fillSinks,
+   azimuth,altitude,sectionSpacing,sectionWidth,fillSinks,mfdExponent,
    considerCurvature,refractionCoeff,comparisonId,observerPoints,drape,
-   textureImageId:p.imageRaster?.id??null,
+   textureImageId:p.imageRaster?.id??null,gradientMethod,slopeClasses,
+   neighborhoodRadius,viewshedDistance,viewshedAzimuth,viewshedWidth,
+   routeModel,meshSamples,streamOrderScheme,hillshadeMode,
+   flowRoutingMethod,depressionMethod,curvatureMethod,curvatureRadius,
+   designEastGrade,designNorthGrade,designMaxGrade,elevationSigma,
+   designCurvatureEast,designCurvatureCross,designCurvatureNorth,
+   dsmImageId,optimizeObservers,meshLod,externalInflowImageId,
+   suitabilityModel,suitabilitySlopeWeight,suitabilityTriWeight,suitabilityElevationWeight,
  });
  // Only edits to the actual operation inputs invalidate a scientific run.
  const inputKey=JSON.stringify([dem?.id,analysisGeometry,operation,scientificParameters]);
@@ -348,13 +400,30 @@ export default function TerrainWorkbench(p:Props){
      resampling:operation==='slope_map'||operation==='hillshade'?'linear':'nearest',createdAt:Date.now()};
    try{
      if(operation==='profile')record.profile=await terrainProfile(dem.id,analysisGeometry,controller.signal);
-     else if(operation==='slope')record.slope=await analyzeTerrain(dem.id,analysisGeometry,controller.signal);
+     else if(operation==='slope')record.slope=await analyzeTerrain(dem.id,analysisGeometry,controller.signal,gradientMethod);
      else record.advanced=await advancedTerrain({image_id:dem.id,geometry:analysisGeometry,operation,
        interval:Number(interval),reference:Number(reference),point:needsPoint?[Number(lon),Number(lat)]:null,
        observer_height:Number(height),target_height:Number(target),end_point:operation==='least_cost'?[Number(endLon),Number(endLat)]:null,
        max_slope:Number(maxSlope),min_elevation:Number(minElevation),max_elevation:Number(maxElevation),max_tri:Number(maxTri),stream_cells:Number(streamCells),azimuth:Number(azimuth),altitude:Number(altitude),section_spacing:Number(sectionSpacing),section_width:Number(sectionWidth),fill_sinks:fillSinks,consider_curvature:considerCurvature,refraction_coeff:Number(refractionCoeff),comparison_image_id:operation==='dem_difference'?comparisonId:null,
         observer_points:operation==='viewshed_multi'?observerPoints.map(([x,y])=>[Number(x),Number(y)] as [number,number]):null,
-        texture_image_id:operation==='mesh'&&drape&&p.imageRaster&&p.imageRaster.bands>=3?p.imageRaster.id:null},controller.signal);
+        texture_image_id:operation==='mesh'&&drape&&p.imageRaster&&p.imageRaster.bands>=3?p.imageRaster.id:null,
+         gradient_method:gradientMethod,slope_classes:slopeClasses,mfd_exponent:Number(mfdExponent),
+         neighborhood_radius:Number(neighborhoodRadius),
+         max_distance_m:Number(viewshedDistance),view_azimuth:Number(viewshedAzimuth),
+         view_width:Number(viewshedWidth),route_model:routeModel,
+         mesh_samples:Number(meshSamples),stream_order_scheme:streamOrderScheme,hillshade_mode:hillshadeMode,
+         flow_routing_method:flowRoutingMethod,depression_method:depressionMethod,
+         curvature_method:curvatureMethod,curvature_radius:Number(curvatureRadius),
+         design_east_grade:Number(designEastGrade),design_north_grade:Number(designNorthGrade),
+         design_max_grade:Number(designMaxGrade),elevation_sigma_m:Number(elevationSigma),
+         design_curvature_east:Number(designCurvatureEast),design_curvature_cross:Number(designCurvatureCross),
+         design_curvature_north:Number(designCurvatureNorth),
+         optimize_observers:operation==='viewshed_multi'?Number(optimizeObservers):0,
+         dsm_image_id:['visibility','viewshed_multi'].includes(operation)?dsmImageId||null:null,
+         mesh_lod:operation==='mesh'&&meshLod,
+         suitability_model:suitabilityModel,
+         suitability_weights:[Number(suitabilitySlopeWeight),Number(suitabilityTriWeight),Number(suitabilityElevationWeight)],
+         external_inflow_image_id:operation==='flow_accumulation'&&flowRoutingMethod==='dinf'?externalInflowImageId||null:null},controller.signal);
      if(ticket!==sequence.current||controller.signal.aborted)return;
      // Commit scientific data before reporting a completed run. An immediate
      // reload or project switch must never race a pending cache write.
@@ -642,6 +711,13 @@ export default function TerrainWorkbench(p:Props){
        <summary>Source · {selected.id.slice(0,8)}</summary>
        <div className="terrain-source-details">
          <div>Operation: {selected.title}</div>
+          {selected.parameters&&Object.keys(selected.parameters).length>0&&
+            <div className="terrain-parameter-grid" aria-label="Terrain algorithm parameters">
+              {Object.entries(selected.parameters).map(([key,value])=><div key={key}>
+                <span>{key.replaceAll('_',' ')}</span>
+                <strong>{Array.isArray(value)?JSON.stringify(value):String(value??'None')}</strong>
+              </div>)}
+            </div>}
          <div>Run: {new Date(selected.createdAt).toLocaleString()} · ID {selected.id}</div>
          <div>Input DEM: {selected.source.name}</div>
          <div>Source ID: {selected.source.id}</div>
@@ -707,14 +783,15 @@ export default function TerrainWorkbench(p:Props){
        <div><span>Samples</span><strong>{profile.samples.length}</strong></div>
      </div>}
      {result&&<>
-       {resultTab==='overview'&&<div className="terrain-metrics terrain-key-metrics">{featuredMetrics.map(([k,v])=><div key={k}><span>{names[k]??k.replaceAll('_',' ')}</span><strong>{fmt(v)} {units[k]??(['product_min','product_max','product_mean'].includes(k)?(
+       {resultTab==='overview'&&result.selection&&<small className="compact-notice">Selected candidate positions: {result.selection.selected_candidate_indices.map(i=>i+1).join(', ')} · marginal visible cells: {result.selection.marginal_visible_cells.join(', ')}{result.selection.optimizer&&` · exact optimum within candidates · ${result.selection.optimizer.combinations_checked} combinations checked` }</small>}
+       {resultTab==='overview'&&<div className="terrain-metrics terrain-key-metrics">{featuredMetrics.map(([k,v])=><div key={k}><span>{names[k]??k.replaceAll('_',' ')}</span><strong>{fmt(v)} {units[k]??(['product_min','product_max','product_mean','product_std','product_p10','product_p50','product_p90'].includes(k)?(
           ['elevation','tpi','tri','cutfill_map','dem_difference'].includes(result.operation)?'m':
           ['slope_map','aspect_map'].includes(result.operation)?'°':
           result.operation==='flow_accumulation'?'cells':
            ['curvature','plan_curvature','profile_curvature'].includes(result.operation)?'m⁻¹':''):'')}</strong></div>)}</div>}
        {resultTab==='details'&&!!additionalMetrics.length&&<details className="terrain-metric-details" aria-label="Additional terrain metrics">
          <summary>More metrics · {additionalMetrics.length}</summary>
-       <div className="terrain-metrics">{additionalMetrics.map(([k,v])=><div key={k}><span>{names[k]??k.replaceAll('_',' ')}</span><strong>{fmt(v)} {units[k]??(['product_min','product_max','product_mean'].includes(k)?(
+       <div className="terrain-metrics">{additionalMetrics.map(([k,v])=><div key={k}><span>{names[k]??k.replaceAll('_',' ')}</span><strong>{fmt(v)} {units[k]??(['product_min','product_max','product_mean','product_std','product_p10','product_p50','product_p90'].includes(k)?(
           ['elevation','tpi','tri','cutfill_map','dem_difference'].includes(result.operation)?'m':
           ['slope_map','aspect_map'].includes(result.operation)?'°':
           result.operation==='flow_accumulation'?'cells':
@@ -724,6 +801,11 @@ export default function TerrainWorkbench(p:Props){
        {resultTab==='visual'&&figureView==='analysis'&&(result.operation==='visibility'||result.operation==='viewshed_multi')&&<MetricBars label="Visibility (cells)" values={[{name:'Visible',value:result.metrics.visible_cells,color:'#34885c'},{name:'Unknown',value:result.metrics.unknown_cells,color:'#9099a2'},{name:'Hidden',value:Math.max(0,result.valid_cells-result.metrics.visible_cells-result.metrics.unknown_cells),color:'#c17d55'}]}/>}
        {resultTab==='visual'&&figureView==='analysis'&&result.operation==='watershed'&&<MetricBars label="Catchment (cells)" values={[{name:'Upstream',value:result.metrics.upstream_cells,color:'#3687b9'},{name:'Other',value:Math.max(0,result.valid_cells-result.metrics.upstream_cells),color:'#9ba7ad'}]}/>}
        {resultTab==='visual'&&figureView==='analysis'&&result.distribution&&<ElevationDistribution bins={result.distribution}/>}
+       {resultTab==='overview'&&result.raster&&<div className="terrain-quality-summary">
+          <span>Classified {result.raster.valid_cells.toLocaleString()} / {result.valid_cells.toLocaleString()} valid DEM cells</span>
+          <span>{(100*result.raster.valid_cells/Math.max(1,result.valid_cells)).toFixed(1)}% analysis coverage</span>
+          <span>{(result.raster.valid_cells*result.cell_area_m2/1e6).toFixed(3)} km² classified</span>
+        </div>}
        {resultTab==='overview'&&result.raster&&<img className="terrain-overview-preview" src={result.raster.png} alt="Terrain overview preview"/>}
        {resultTab==='visual'&&figureView==='analysis'&&result.raster&&<div className="terrain-profile-chart">
          <label className="terrain-opacity-control">Result opacity · {Math.round((selected?.opacity??.5)*100)}%
@@ -741,17 +823,54 @@ export default function TerrainWorkbench(p:Props){
          </label>
 
          <img src={result.raster.png} alt="Derived terrain raster" style={{width:'100%',maxHeight:180,objectFit:'contain'}}/>
-         <MetricBars label="Terrain class distribution (cells)" values={result.raster.legend.map(b=>({name:b.label,value:b.cells,color:b.color}))}/>
+         <label className="terrain-opacity-control">Class distribution measure
+           <select aria-label="Terrain chart measure" value={classMeasure}
+             onChange={e=>setClassMeasure(e.target.value as 'cells'|'percent'|'area')}>
+             <option value="cells">Valid pixel count</option>
+             <option value="percent">Share of classified area (%)</option>
+             <option value="area">Projected grid area (km²)</option>
+           </select>
+         </label>
+         <MetricBars label={classMeasure==='cells'?'Terrain class distribution (cells)':
+           classMeasure==='percent'?'Terrain class distribution (valid %)':
+           'Terrain class distribution (projected km²)'} values={result.raster.legend.map(b=>({
+             name:b.label,color:b.color,value:classMeasure==='cells'?b.cells:
+               classMeasure==='area'?b.cells*result.cell_area_m2/1e6:
+               100*b.cells/Math.max(1,result.raster!.valid_cells),
+           }))}/>
 </div>}
        {resultTab==='visual'&&figureView==='analysis'&&result.operation==='aspect_map'&&result.raster&&<AspectRose bins={result.raster.legend}/>}
        {resultTab==='visual'&&figureView==='analysis'&&result.sections&&<SectionPlot sections={result.sections} onHover={p.onHover}/>}
-       {resultTab==='visual'&&figureView==='analysis'&&result.mesh&&<GPUView mesh={result.mesh} fallback={<MeshView mesh={result.mesh}/>}/>}
+       {resultTab==='visual'&&figureView==='analysis'&&result.mesh&&<GPUView mesh={result.mesh} fallback={<MeshView mesh={result.mesh}/>}
+           tileSource={selected?{image_id:selected.source.id,geometry:selected.geometry}:undefined}/>}
+       {resultTab==='details'&&result.raster&&<details className="terrain-metric-details" aria-label="Terrain class statistics">
+         <summary>Class statistics · {result.raster.legend.length} classes</summary>
+         <TerrainClassTable bins={result.raster.legend} cellAreaM2={result.cell_area_m2}/>
+       </details>}
        {resultTab==='details'&&result.operation==='slope_map'&&result.raster&&result.valid_cells>result.raster.valid_cells&&
          <small className="compact-notice" aria-label="Slope edge cells explanation">
            {fmt(result.valid_cells-result.raster.valid_cells)} boundary cells excluded by the 3 × 3 slope calculation.
            Source DEM coverage and calculated-slope coverage are different measures.
          </small>}
-       {resultTab==='details'&&<details className="terrain-result-quality" aria-label="Terrain method and quality">
+       {resultTab==='details'&&result.quality&&
+          <details className="terrain-result-quality" aria-label="Scientific validation status">
+            <summary>Scientific validation · {result.quality.status.replaceAll('_',' ')}</summary>
+            <div className="terrain-validation-grid">
+              <div>Reference comparison: {result.quality.reference_validation.replaceAll('_',' ')}</div>
+              <div>Uncertainty: {result.quality.uncertainty.replaceAll('_',' ')}</div>
+              <div>Source overlap: {result.quality.source_overlap_pct.toFixed(2)}%</div>
+              <div>Valid study cells: {result.quality.valid_study_cell_pct.toFixed(2)}%</div>
+              {result.quality.derivative_coverage_pct!==null&&
+                <div>Derived product coverage: {result.quality.derivative_coverage_pct.toFixed(2)}%</div>}
+              <div>Area measurement: {result.quality.area_basis.replaceAll('_',' ')}</div>
+              {typeof result.quality.projection_max_scale_error_pct==='number'&&Number.isFinite(result.quality.projection_max_scale_error_pct)&&
+                <div>Max sampled map-distance distortion:
+                  {' '}{result.quality.projection_max_scale_error_pct!.toFixed(3)}%</div>}
+              {result.quality.flags.map(flag=><small key={flag} className="compact-notice">
+                {flag.replaceAll('_',' ')}</small>)}
+            </div>
+          </details>}
+        {resultTab==='details'&&<details className="terrain-result-quality" aria-label="Terrain method and quality">
          <summary>Quality · {result.valid_cells} DEM cells
            {Number.isFinite(result.metrics.dataset_overlap_pct)
              ?' · '+fmt(result.metrics.dataset_overlap_pct)+'% study-area overlap':''}
@@ -764,6 +883,12 @@ export default function TerrainWorkbench(p:Props){
        </details>}
        {resultTab==='details'&&<div className="terrain-output-downloads">
          {result.raster&&<button onClick={()=>{const a=document.createElement('a');const data=Uint8Array.from(atob(result.raster!.geotiff),c=>c.charCodeAt(0));const url=URL.createObjectURL(new Blob([data],{type:'image/tiff'}));a.href=url;a.download=result.operation+'.tif';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}}>GeoTIFF</button>}
+         {result.raster&&<button aria-label="Export terrain class CSV" onClick={()=>{
+           const csv=terrainClassesCsv(result.raster!.legend,result.cell_area_m2);
+           const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+           const a=document.createElement('a');a.href=url;a.download=result.operation+'-classes.csv';a.click();
+           setTimeout(()=>URL.revokeObjectURL(url),1000);
+         }}>Class CSV</button>}
          {result.features.length>0&&<small>{result.features.length} vector features</small>}
        </div>}
      </>}
@@ -853,7 +978,7 @@ export default function TerrainWorkbench(p:Props){
              ' m. This does not guarantee native source accuracy.');}}>
          Auto resolution{recommendedResolution?' · '+recommendedResolution+' m':''}
        </button>
-       <small className="compact-notice">
+       <small className="compact-notice" aria-label="DEM source coverage">
          Up to 8M cells, 4096 px/side · {supportsUSGS?'USGS 3DEP / Copernicus':'Copernicus global'}
        </small>
      </div>}
@@ -906,13 +1031,169 @@ export default function TerrainWorkbench(p:Props){
      {operation==='contours'&&<label>Interval (m)<input aria-label="Contour interval" type="number" min=".01" step="any" value={interval} onChange={e=>setInterval(e.target.value)}/></label>}
      {operation==='dem_difference'&&<label>Reference DEM<select aria-label="Reference comparison DEM" value={comparisonId} onChange={e=>setComparisonId(e.target.value)}><option value="">Select second DEM</option>{assets.filter(a=>a.bands===1&&a.id!==dem?.id).map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>}
      {(operation==='volume'||operation==='cutfill_map')&&<label>Reference elevation (m)<input aria-label="Reference elevation" type="number" step="any" value={reference} onChange={e=>setReference(e.target.value)}/></label>}
+     {['volume','cutfill_map'].includes(operation)&&<details className="terrain-method-settings">
+       <summary>Design surface and uncertainty</summary>
+       <div className="area-fields">
+         <label>East grade (m/m)<input aria-label="Design east grade" type="number" step="0.01" min="-1" max="1" value={designEastGrade} onChange={e=>setDesignEastGrade(e.target.value)}/></label>
+         <label>North grade (m/m)<input aria-label="Design north grade" type="number" step="0.01" min="-1" max="1" value={designNorthGrade} onChange={e=>setDesignNorthGrade(e.target.value)}/></label>
+       </div>
+       <div className="area-fields">
+         <label>Maximum grade (m/m)<input aria-label="Design maximum grade" type="number" step="0.01" min="0.001" max="1" value={designMaxGrade} onChange={e=>setDesignMaxGrade(e.target.value)}/></label>
+         <label>Assumed vertical error σ (m)<input aria-label="Assumed elevation sigma" type="number" step="0.1" min="0" max="10000" value={elevationSigma} onChange={e=>setElevationSigma(e.target.value)}/></label>
+       </div>
+       <div className="area-fields">
+         <label>East quadratic (1/m)<input aria-label="Design east quadratic curvature" type="number" step="0.00001" min="-1" max="1" value={designCurvatureEast} onChange={e=>setDesignCurvatureEast(e.target.value)}/></label>
+         <label>Cross quadratic (1/m)<input aria-label="Design cross quadratic curvature" type="number" step="0.00001" min="-1" max="1" value={designCurvatureCross} onChange={e=>setDesignCurvatureCross(e.target.value)}/></label>
+         <label>North quadratic (1/m)<input aria-label="Design north quadratic curvature" type="number" step="0.00001" min="-1" max="1" value={designCurvatureNorth} onChange={e=>setDesignCurvatureNorth(e.target.value)}/></label>
+       </div>
+       <small className="compact-notice">Design uses a quadratic surface with a conservative maximum-grade check across the grid rectangle. Vertical uncertainty is assumed, not measured.</small>
+     </details>}
      {operation==='cross_sections'&&<div className="area-fields"><label>Station spacing (m)<input type="number" value={sectionSpacing} onChange={e=>setSectionSpacing(e.target.value)}/></label><label>Half-width (m)<input type="number" value={sectionWidth} onChange={e=>setSectionWidth(e.target.value)}/></label></div>}
-     {operation==='mesh'&&p.imageRaster&&p.imageRaster.bands>=3&&<label className="gis-check"><input type="checkbox" checked={drape} onChange={e=>setDrape(e.target.checked)}/> Drape selected RGB imagery</label>}
-     {operation==='hillshade'&&<div className="area-fields"><label>Sun azimuth (°)<input type="number" value={azimuth} onChange={e=>setAzimuth(e.target.value)}/></label><label>Sun altitude (°)<input type="number" value={altitude} onChange={e=>setAltitude(e.target.value)}/></label></div>}
-     {(operation==='streams'||operation==='stream_order')&&<label>Minimum upstream cells<input type="number" min="1" step="1" value={streamCells} onChange={e=>setStreamCells(e.target.value)}/></label>}
+     {operation==='mesh'&&<label>3D mesh detail
+        <select aria-label="3D mesh sampling budget" value={meshSamples} onChange={e=>setMeshSamples(e.target.value)}>
+          <option value="64">Preview · 64 samples/axis</option>
+          <option value="128">Balanced · 128 samples/axis</option>
+          <option value="256">Detailed · 256 samples/axis</option>
+          <option value="512">High detail · 512 samples/axis</option>
+        </select>
+      </label>}
+      {operation==='mesh'&&<label className="gis-check"><input aria-label="Generate 3D LOD tiles" type="checkbox" checked={meshLod} onChange={e=>setMeshLod(e.target.checked)}/> Generate mesh LOD pyramid (transport-ready)</label>}
+      {operation==='mesh'&&meshLod&&<small className="compact-notice">Aligned tile levels are calculated for export; camera-triggered streaming is not implemented.</small>}
+      {operation==='mesh'&&p.imageRaster&&p.imageRaster.bands>=3&&<label className="gis-check"><input type="checkbox" checked={drape} onChange={e=>setDrape(e.target.checked)}/> Drape selected RGB imagery</label>}
+     {['slope','slope_map','aspect_map','hillshade','suitability','plan_curvature','profile_curvature'].includes(operation)&&
+        <label>Gradient algorithm
+          <select aria-label="Terrain gradient algorithm" value={gradientMethod}
+            onChange={e=>setGradientMethod(e.target.value as 'horn'|'zevenbergen_thorne')}>
+            <option value="horn">Horn · weighted 3×3</option>
+            <option value="zevenbergen_thorne">Zevenbergen–Thorne · cardinal neighbors</option>
+          </select>
+        </label>}
+      {['curvature','plan_curvature','profile_curvature'].includes(operation)&&<label>Curvature method
+        <select aria-label="Terrain curvature method" value={curvatureMethod} onChange={e=>setCurvatureMethod(e.target.value as 'finite_difference'|'quadratic')}>
+          <option value="finite_difference">Central 3 × 3 finite differences</option>
+          <option value="quadratic">Least-squares quadratic surface</option>
+        </select>
+      </label>}
+      {['curvature','plan_curvature','profile_curvature'].includes(operation)&&curvatureMethod==='quadratic'&&<label>Fitting window
+        <select aria-label="Curvature fitting radius" value={curvatureRadius} onChange={e=>setCurvatureRadius(e.target.value)}>
+          <option value="1">3 × 3</option><option value="2">5 × 5</option>
+          <option value="3">7 × 7</option><option value="4">9 × 9</option>
+        </select>
+      </label>}
+      {operation==='slope_map'&&<label>Slope classification
+        <select aria-label="Slope classification preset" value={slopeClasses}
+          onChange={e=>setSlopeClasses(e.target.value as 'standard'|'detailed'|'broad')}>
+          <option value="standard">Standard · 6 classes</option>
+          <option value="detailed">Detailed · 8 classes</option>
+          <option value="broad">Broad · 4 classes</option>
+        </select>
+      </label>}
+      {['tri','tpi'].includes(operation)&&<label>Terrain neighborhood
+        <select aria-label="Terrain neighborhood radius" value={neighborhoodRadius}
+          onChange={e=>setNeighborhoodRadius(e.target.value)}>
+          <option value="1">3 × 3 · local</option>
+          <option value="2">5 × 5 · intermediate</option>
+          <option value="3">7 × 7 · regional</option>
+          <option value="4">9 × 9 · broad</option>
+        </select>
+      </label>}
+      {operation==='hillshade'&&<label>Illumination model
+        <select aria-label="Hillshade illumination model" value={hillshadeMode}
+          onChange={e=>setHillshadeMode(e.target.value as 'single'|'four_direction')}>
+          <option value="single">Single solar direction</option>
+          <option value="four_direction">Four-direction averaged illumination</option>
+        </select>
+      </label>}
+      {operation==='hillshade'&&<div className="area-fields"><label>Sun azimuth (°)<input type="number" value={azimuth} onChange={e=>setAzimuth(e.target.value)}/></label><label>Sun altitude (°)<input type="number" value={altitude} onChange={e=>setAltitude(e.target.value)}/></label></div>}
+     {operation==='flow_accumulation'&&<label>Contributing area routing
+       <select aria-label="Flow routing method" value={flowRoutingMethod} onChange={e=>setFlowRoutingMethod(e.target.value as 'd8'|'dinf')}>
+         <option value="d8">D8 · one downslope receiver</option>
+         <option value="dinf">D∞ · triangular-facet split</option>
+       </select>
+     </label>}
+     {operation==='flow_accumulation'&&flowRoutingMethod==='dinf'&&<label>External upstream inflow (optional)
+       <select aria-label="External contributing area raster" value={externalInflowImageId} onChange={e=>setExternalInflowImageId(e.target.value)}>
+         <option value="">None · unknown off-grid catchments excluded</option>
+         {assets.filter(a=>a.bands===1&&a.id!==dem?.id).map(a=><option key={a.id} value={a.id}>{a.name}</option>)}
+       </select>
+       <small className="compact-notice">Requires a grid-aligned GeoTIFF explicitly tagged TERRAIN_UNIT=cells or cell_equivalents, with zeros outside known inlet cells.</small>
+     </label>}
+     {operation==='flow_accumulation_mfd'&&<label>MFD convergence exponent
+       <input aria-label="MFD routing exponent" type="number" min="0.5" max="8" step="0.1"
+         value={mfdExponent} onChange={e=>setMfdExponent(e.target.value)}/>
+       <small className="compact-notice">Larger values concentrate flow toward steeper downslope neighbors.</small>
+     </label>}
+     {operation==='stream_order'&&<label>Stream hierarchy model
+        <select aria-label="Stream hierarchy algorithm" value={streamOrderScheme}
+          onChange={e=>setStreamOrderScheme(e.target.value as 'strahler'|'shreve')}>
+          <option value="strahler">Strahler · confluence order</option>
+          <option value="shreve">Shreve · additive magnitude</option>
+        </select>
+      </label>}
+      {(operation==='streams'||operation==='stream_order')&&<label>Minimum upstream cells<input type="number" min="1" step="1" value={streamCells} onChange={e=>setStreamCells(e.target.value)}/></label>}
      {['flow_direction','flow_accumulation','flow_accumulation_mfd','streams','stream_order','watershed'].includes(operation)&&<label className="gis-check"><input aria-label="Condition drainage DEM" type="checkbox" checked={fillSinks} onChange={e=>setFillSinks(e.target.checked)}/> Fill depressions and route flat cells</label>}
-     {(operation==='visibility'||operation==='viewshed_multi')&&<><label className="gis-check"><input aria-label="Consider Earth curvature" type="checkbox" checked={considerCurvature} onChange={e=>setConsiderCurvature(e.target.checked)}/> Earth curvature and atmospheric refraction</label>{considerCurvature&&<label>Refraction coefficient<input aria-label="Terrain refraction coefficient" type="number" min="0" max="0.5" step="0.01" value={refractionCoeff} onChange={e=>setRefractionCoeff(e.target.value)}/></label>}</>}
-     {(operation==='suitability'||operation==='least_cost')&&<label>Maximum slope (°)<input type="number" value={maxSlope} onChange={e=>setMaxSlope(e.target.value)}/></label>}
+     {['flow_direction','flow_accumulation','flow_accumulation_mfd','streams','stream_order','watershed'].includes(operation)&&fillSinks&&<label>Depression conditioning
+       <select aria-label="Depression conditioning method" value={depressionMethod} onChange={e=>setDepressionMethod(e.target.value as 'fill'|'breach')}>
+         <option value="fill">Priority-flood fill and flat routing</option>
+         <option value="breach">Bounded least-cut drainage breach</option>
+       </select>
+     </label>}
+     {['visibility','viewshed_multi'].includes(operation)&&<label>Obstruction surface (optional DSM)
+       <select aria-label="Terrain obstruction DSM" value={dsmImageId} onChange={e=>setDsmImageId(e.target.value)}>
+         <option value="">Bare DEM · no building blockage</option>
+         {assets.filter(a=>a.bands===1&&a.id!==dem?.id).map(a=><option key={a.id} value={a.id}>{a.name}</option>)}
+       </select>
+       <small className="compact-notice">DSM must align with the DEM grid; unknown DSM cells remain unclassified.</small>
+     </label>}
+     {operation==='viewshed_multi'&&<label>Optimize observation sites
+       <select aria-label="Optimize observer count" value={optimizeObservers} onChange={e=>setOptimizeObservers(e.target.value)}>
+         <option value="0">Use all sites (up to 4)</option>
+         <option value="1">Best 1 of candidate sites</option><option value="2">Best 2</option>
+         <option value="3">Best 3</option><option value="4">Best 4</option>
+       </select>
+     </label>}
+     {['visibility','viewshed_multi'].includes(operation)&&<details className="terrain-method-settings">
+        <summary>Viewing sector and range</summary>
+        <label>Maximum distance (m, 0 = all)
+          <input aria-label="Viewshed maximum distance" type="number" min="0" max="10000"
+            value={viewshedDistance} onChange={e=>setViewshedDistance(e.target.value)}/>
+        </label>
+        <div className="area-fields">
+          <label>Facing azimuth (°)
+            <input aria-label="Viewshed facing azimuth" type="number" min="0" max="360"
+              value={viewshedAzimuth} onChange={e=>setViewshedAzimuth(e.target.value)}/>
+          </label>
+          <label>Field of view (°)
+            <input aria-label="Viewshed horizontal field of view" type="number" min="0.01" max="360"
+              value={viewshedWidth} onChange={e=>setViewshedWidth(e.target.value)}/>
+          </label>
+        </div>
+      </details>}
+      {(operation==='visibility'||operation==='viewshed_multi')&&<><label className="gis-check"><input aria-label="Consider Earth curvature" type="checkbox" checked={considerCurvature} onChange={e=>setConsiderCurvature(e.target.checked)}/> Earth curvature and atmospheric refraction</label>{considerCurvature&&<label>Refraction coefficient<input aria-label="Terrain refraction coefficient" type="number" min="0" max="0.5" step="0.01" value={refractionCoeff} onChange={e=>setRefractionCoeff(e.target.value)}/></label>}</>}
+     {operation==='least_cost'&&<label>Routing cost model
+        <select aria-label="Terrain routing cost model" value={routeModel}
+          onChange={e=>setRouteModel(e.target.value as 'surface'|'distance'|'gentle')}>
+          <option value="surface">3D surface length + slope penalty</option>
+          <option value="distance">Shortest planar distance</option>
+          <option value="gentle">Stronger gradient avoidance</option>
+        </select>
+      </label>}
+      {(operation==='suitability'||operation==='least_cost')&&<label>Maximum slope (°)<input type="number" value={maxSlope} onChange={e=>setMaxSlope(e.target.value)}/></label>}
+     {operation==='suitability'&&<label>Site suitability model
+       <select aria-label="Suitability scoring method" value={suitabilityModel} onChange={e=>setSuitabilityModel(e.target.value as 'binary'|'weighted')}>
+         <option value="binary">Hard constraints (pass/fail)</option>
+         <option value="weighted">Weighted multi-criteria score 0–1</option>
+       </select>
+     </label>}
+     {operation==='suitability'&&suitabilityModel==='weighted'&&<details open className="terrain-method-settings">
+       <summary>Criterion weights</summary>
+       <div className="area-fields">
+         <label>Slope<input aria-label="Slope criterion weight" type="number" min="0" max="100" step="0.05" value={suitabilitySlopeWeight} onChange={e=>setSuitabilitySlopeWeight(e.target.value)}/></label>
+         <label>Ruggedness<input aria-label="Ruggedness criterion weight" type="number" min="0" max="100" step="0.05" value={suitabilityTriWeight} onChange={e=>setSuitabilityTriWeight(e.target.value)}/></label>
+         <label>Elevation<input aria-label="Elevation criterion weight" type="number" min="0" max="100" step="0.05" value={suitabilityElevationWeight} onChange={e=>setSuitabilityElevationWeight(e.target.value)}/></label>
+       </div>
+       <small className="compact-notice">Weights are normalized to sum to one. Constraints remain mandatory; scores are not predicted probabilities.</small>
+     </details>}
      {operation==='suitability'&&<><div className="area-fields"><label>Min elevation (m)<input type="number" value={minElevation} onChange={e=>setMinElevation(e.target.value)}/></label><label>Max elevation (m)<input type="number" value={maxElevation} onChange={e=>setMaxElevation(e.target.value)}/></label></div><label>Maximum TRI (m)<input type="number" value={maxTri} onChange={e=>setMaxTri(e.target.value)}/></label></>}
      {needsPoint&&<>
        <div className="survey-action-bar"><button className={p.picking?'active':''} disabled={!area} onClick={()=>{setPickEnd(false);p.onPick();}}>{p.picking?'Click map…':operation==='visibility'?'Pick observer':operation==='least_cost'?'Pick route start':'Pick outlet'}</button>
@@ -926,7 +1207,7 @@ export default function TerrainWorkbench(p:Props){
      </>}
      {operation==='viewshed_multi'&&<div className="terrain-multi-observers">
       <div className="section-heading">Observers · {observerPoints.length}</div>
-      <small className="compact-notice">Specify 2–4 points in WGS84. Each must occupy a distinct valid DEM cell. The study area stays selected.</small>
+      <small className="compact-notice">Specify {Number(optimizeObservers)>0?'2–12 candidate':'2–4'} WGS84 positions in distinct valid DEM cells. Optimization exhaustively checks all candidate combinations (up to 12 choose 4) for maximum positively observed coverage.</small>
       <div className="terrain-observer-grid">
         {observerPoints.map(([x,y],index)=><div className="terrain-observer-row" key={index}>
           <label>Observer {index+1} longitude
@@ -941,8 +1222,8 @@ export default function TerrainWorkbench(p:Props){
       </div>
       <div className="survey-action-bar">
         <button disabled={!area||p.picking} onClick={()=>p.onPick()}>Pick next observer on map</button>
-        <button disabled={observerPoints.length>=4}
-          onClick={()=>setObserverPoints(old=>old.length<4?[...old,['','']]:old)}>Add observer</button>
+        <button disabled={observerPoints.length>=(Number(optimizeObservers)>0?12:4)}
+          onClick={()=>setObserverPoints(old=>old.length<(Number(optimizeObservers)>0?12:4)?[...old,['','']]:old)}>Add observer</button>
         <button disabled={observerPoints.length<=2}
           onClick={()=>setObserverPoints(old=>old.length>2?old.slice(0,-1):old)}>Remove last</button>
       </div>
@@ -953,7 +1234,7 @@ export default function TerrainWorkbench(p:Props){
           value={target} onChange={e=>setTarget(e.target.value)}/></label>
       </div>
       {!multiObserversValid&&<small className="discovery-error">
-        Enter 2–4 different valid longitude/latitude pairs.
+        Enter {Number(optimizeObservers)>0?'2–12':'2–4'} different valid longitude/latitude pairs.
       </small>}
     </div>}
     {!p.operationsFooterTarget&&runActions}
@@ -993,6 +1274,7 @@ export default function TerrainWorkbench(p:Props){
  {p.resultsTarget?(p.active?createPortal(monitor,p.resultsTarget):null):monitor}
  {p.operationsFooterTarget?(p.active&&runActions?createPortal(runActions,p.operationsFooterTarget):null):null}
  {p.resultsFooterTarget?(p.active&&resultActions?createPortal(resultActions,p.resultsFooterTarget):null):resultActions}
- {p.exportTarget?(p.active?createPortal(terrainFileActions,p.exportTarget):null):null}
+ {/* Export owns a separate module; its actions must survive leaving Terrain. */}
+ {p.exportTarget?createPortal(terrainFileActions,p.exportTarget):null}
  </>;
 }

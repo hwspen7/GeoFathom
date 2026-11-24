@@ -1,5 +1,7 @@
 /* Pure, testable browser geometry state. Server PyProj is authoritative. */
 
+import {sketchAddError,canPreviewClosedSketch} from './sketch';
+
 export type Position = [number, number];
 export type ShapeMode = 'point' | 'polygon' | 'line' | 'rectangle' | 'circle' | 'hole' | 'split' | 'trace-along' | null;
 export type GeometryPath = { polygon: number; ring: number; vertex: number };
@@ -335,7 +337,11 @@ export function translateSpherical(
 export function drawingPreview(mode:ShapeMode,points:Position[],cursor:Position|null=null):GeoJSON.Geometry|null{
   if(!mode||!points.length)return null;
   const last=points[points.length-1];
-  const p=cursor&&(last[0]!==cursor[0]||last[1]!==cursor[1])?[...points,cursor]:points;
+  // Invalid cursor segments are not drawn as plausible filled polygons.
+  // The rejected click will keep the last valid sketch in place.
+  const candidate=cursor&&(last[0]!==cursor[0]||last[1]!==cursor[1])&&
+    !sketchAddError(mode,points,cursor);
+  const p=candidate?[...points,cursor!]:points;
   if(mode==='point')return {type:'Point',coordinates:points[0]};
   if(mode==='rectangle'&&p.length>=2){
     const [a,b]=p;
@@ -350,7 +356,10 @@ export function drawingPreview(mode:ShapeMode,points:Position[],cursor:Position|
       return {type:'Polygon',coordinates:[ring]};
     }
   }
-  if((mode==='polygon'||mode==='hole')&&p.length>=3)return {type:'Polygon',coordinates:[[...p,p[0]]]};
+  if((mode==='polygon'||mode==='hole')&&p.length>=3&&canPreviewClosedSketch(mode,p))
+    return {type:'Polygon',coordinates:[[...p,p[0]]]};
+  if((mode==='polygon'||mode==='hole')&&p.length>=2)
+    return {type:'LineString',coordinates:p};
   return p.length>=2?{type:'LineString',coordinates:p}:null;
 }
 

@@ -1,6 +1,6 @@
 import {useEffect,useRef,useState} from 'react';
 import {Database,Globe2,Layers3,RefreshCcw} from 'lucide-react';
-import {cancelGISJob,downloadGISJob,getGISJobs,getOGCSources,getPostGISStatus,
+import {cancelGISJob,downloadGISJob,downloadExchangeJob,getGISJobs,getOGCSources,getPostGISStatus,
   inspectOGCSource,ogcTileTemplate,queueGISJob,registerOGCSource,
   remoteOGCFeatures,removeOGCSource,saveFeatureBatch,queryPostGIS,
   viewportFeatures,type GISJob,type GISJobKind,type OGCSource,
@@ -18,9 +18,13 @@ interface Props{
   onPreview:(geometry:GeoJSON.Geometry[])=>void;
   onPage:(features:WorkspaceFeature[])=>void;
   onRefresh:()=>void;
+  view?:'sources'|'database'|'jobs';
 }
 export default function DataServicesPanel(p:Props){
   const [sources,setSources]=useState<OGCSource[]>([]);
+  const [sourcePage,setSourcePage]=useState(0);
+  const [jobPage,setJobPage]=useState(0);
+  const [sourceView,setSourceView]=useState<'connect'|'browse'>('browse');
   const [visibleTiles,setVisibleTiles]=useState<string[]>([]);
   const [service,setService]=useState<OGCSource['service']>('wms');
   const [title,setTitle]=useState('New geospatial service');
@@ -58,8 +62,15 @@ export default function DataServicesPanel(p:Props){
   useEffect(()=>{
     setSources([]);setVisibleTiles([]);setRemote(null);
     setJobs([]);setInfo('');setError('');setPageOffset(0);
+    setSourcePage(0);setJobPage(0);
     void load();
   },[p.projectId]);
+  useEffect(()=>{
+    setSourcePage(page=>Math.min(page,Math.max(0,Math.ceil(sources.length/2)-1)));
+  },[sources.length]);
+  useEffect(()=>{
+    setJobPage(page=>Math.min(page,Math.max(0,Math.ceil(jobs.length/3)-1)));
+  },[jobs.length]);
   useEffect(()=>{
     const projectId=p.projectId;
     if(!projectId)return;
@@ -89,6 +100,8 @@ export default function DataServicesPanel(p:Props){
       service,title,base_url:url,layer_name:layer,attribution,tile_matrix_set:matrixSet,
     },adminToken);
     setSources(old=>[...old,saved]);
+    setSourceView('browse');
+    setSourcePage(Math.floor(sources.length/2));
     setInfo('OGC source registered. Add its hostname to the server allowlist first.');
   }
   async function inspect(source:OGCSource){
@@ -141,9 +154,16 @@ export default function DataServicesPanel(p:Props){
   }
 
   return <div className="professional-panel">
-    <details>
+    <details open={p.view==='sources'?true:undefined} hidden={Boolean(p.view&&p.view!=='sources')}>
       <summary><Globe2 size={14}/> OGC map & feature services</summary>
       <div className="professional-form">
+        <div className="data-choice-buttons">
+          <button type="button" aria-pressed={sourceView==='browse'}
+            onClick={()=>setSourceView('browse')}>Registered · {sources.length}</button>
+          <button type="button" aria-pressed={sourceView==='connect'}
+            onClick={()=>setSourceView('connect')}>Add source</button>
+        </div>
+        <div className="data-service-connect" hidden={sourceView!=='connect'}>
         <p className="project-hint">Connect WMS/WMTS imagery tiles and
           WFS/OGC API Features vectors. Remote HTTPS hostnames must be
           explicitly approved in the server environment.</p>
@@ -174,9 +194,11 @@ export default function DataServicesPanel(p:Props){
           onChange={event=>setAdminToken(event.target.value)}/>
         <button disabled={!p.projectId||!url||!layer||busy}
           onClick={()=>void run(add)}>Register OGC source</button>
+        </div>
+        <div className="data-service-browse" hidden={sourceView!=='browse'}>
         <div className="gis-result-list">
           <strong>{sources.length} configured services</strong>
-          {sources.map(source=><div key={source.id} className="service-entry">
+          {sources.slice(sourcePage*2,(sourcePage+1)*2).map(source=><div key={source.id} className="service-entry">
             <strong>{source.title} · {source.service.toUpperCase()}</strong>
             <small>{source.layer_name} · {source.base_url}</small>
             <div className="survey-action-bar">
@@ -201,13 +223,20 @@ export default function DataServicesPanel(p:Props){
             </div>
           </div>)}
         </div>
+        {sources.length>2&&<div className="gis-record-pager">
+          <button type="button" disabled={sourcePage===0} onClick={()=>setSourcePage(v=>v-1)}>Previous</button>
+          <span>{sourcePage+1}/{Math.ceil(sources.length/2)}</span>
+          <button type="button" disabled={(sourcePage+1)*2>=sources.length}
+            onClick={()=>setSourcePage(v=>v+1)}>Next</button>
+        </div>}
         {remote&&<button disabled={busy||!remote.features.length}
           onClick={()=>void run(importRemote)}>
           Import {remote.features.length} previewed objects into project
         </button>}
+        </div>
       </div>
     </details>
-    <details>
+    <details open={p.view==='database'?true:undefined} hidden={Boolean(p.view&&p.view!=='database')}>
       <summary><Database size={14}/> Spatial database & indexed viewport</summary>
       <div className="professional-form">
         <p className="project-hint">SQLite R-tree is available without extra
@@ -235,7 +264,7 @@ export default function DataServicesPanel(p:Props){
         </button>
       </div>
     </details>
-    <details>
+    <details open={p.view==='jobs'?true:undefined} hidden={Boolean(p.view&&p.view!=='jobs')}>
       <summary><Layers3 size={14}/> Persistent background GIS jobs</summary>
       <div className="professional-form">
         <select aria-label="Background GIS job type" value={jobKind}
@@ -250,11 +279,14 @@ export default function DataServicesPanel(p:Props){
           Queue background operation
         </button>
         <div className="gis-result-list" aria-label="GIS background tasks">
-          {jobs.map(job=><div key={job.id} className="service-entry">
+          {jobs.slice(jobPage*3,(jobPage+1)*3).map(job=><div key={job.id} className="service-entry">
             <strong>{job.kind} · {job.status}</strong>
             <small>{job.progress}% · {job.id.slice(0,8)}</small>
             {job.error&&<small>{job.error}</small>}
             <div className="survey-action-bar">
+              {['vector_import','vector_export'].includes(job.kind)&&job.status==='completed'&&
+                <button onClick={()=>void run(()=>downloadExchangeJob(p.projectId!,job.id))}>
+                 {job.kind==='vector_import'?'Download import report':'Download dataset'}</button>}
               {job.kind==='export_geojson'&&job.status==='completed'&&
                 <button onClick={()=>void run(()=>downloadGISJob(p.projectId!,job.id))}>
                   Download GeoJSON
@@ -268,6 +300,12 @@ export default function DataServicesPanel(p:Props){
             </div>
           </div>)}
           {!jobs.length&&<small>No background tasks.</small>}
+          {jobs.length>3&&<div className="gis-record-pager">
+            <button type="button" disabled={jobPage===0} onClick={()=>setJobPage(v=>v-1)}>Previous</button>
+            <span>{jobPage+1}/{Math.ceil(jobs.length/3)}</span>
+            <button type="button" disabled={(jobPage+1)*3>=jobs.length}
+              onClick={()=>setJobPage(v=>v+1)}>Next</button>
+          </div>}
         </div>
       </div>
     </details>

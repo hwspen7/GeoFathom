@@ -105,6 +105,7 @@ describe('external GIS services',()=>{
     expect(await screen.findByText('Imported 1 remote features to the active project.')).toBeTruthy();
     expect(p.onRefresh).toHaveBeenCalledOnce();
     expect(api.saveFeatureBatch).toHaveBeenCalledWith('p',[{name:'Parcel',source:'OGC service import',geometry:point,properties:{name:'Parcel'}}]);
+    click('Add source');
     change('New OGC service type','wmts');change('OGC layer or collection','tiles');
     change('OGC display title','Tiles');change('OGC HTTPS endpoint','https://example.test/wmts');
     change('WMTS tile matrix set','custom');change('OGC attribution','Source');change('GIS administrator token','admin');
@@ -113,7 +114,9 @@ describe('external GIS services',()=>{
     expect(api.registerOGCSource).toHaveBeenCalledWith('p',{service:'wmts',title:'Tiles',base_url:'https://example.test/wmts',
       layer_name:'tiles',attribution:'Source',tile_matrix_set:'custom'},'admin');
     api.removeOGCSource.mockResolvedValue(undefined);
-    fireEvent.click(within(row).getByRole('button',{name:'Remove'}));
+    click('Previous');
+    const previousRow=screen.getByText('Vector · WFS').closest('.service-entry') as HTMLElement;
+    fireEvent.click(within(previousRow).getByRole('button',{name:'Remove'}));
     await screen.findByText('2 configured services');
     expect(api.removeOGCSource).toHaveBeenCalledWith('p','wfs','admin');
   });

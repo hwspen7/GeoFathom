@@ -1,9 +1,13 @@
 import {useEffect,useRef,useState,type ReactNode} from 'react';
-import type {TerrainMesh} from './api';
+import {fetchTerrainMeshTile,type TerrainMesh,type StreamedTerrainTile} from './api';
+import {loadTerrainTileBatch,terrainAdaptiveTileLevel,terrainTileRequests,streamedTileMeshGeometry} from './terrainCameraTiles';
 
 export function meshData(mesh:TerrainMesh){
- const valid=mesh.heights.filter((h):h is number=>h!==null&&Number.isFinite(h));
- const lo=valid.length?Math.min(...valid):0,hi=valid.length?Math.max(...valid):0;
+ let lo=Infinity,hi=-Infinity;
+ for(const height of mesh.heights){
+  if(height!==null&&Number.isFinite(height)){lo=Math.min(lo,height);hi=Math.max(hi,height);}
+ }
+ if(!Number.isFinite(lo)){lo=0;hi=0;}
  const scale=Math.max((mesh.cols-1)*mesh.dx_m,(mesh.rows-1)*mesh.dy_m,hi-lo,1);
  const vertices:number[]=[],triangles:number[]=[],edges:number[]=[];
  for(let r=0;r<mesh.rows;r++)for(let c=0;c<mesh.cols;c++){
@@ -21,6 +25,31 @@ export function meshData(mesh:TerrainMesh){
    face(a,d,b);face(b,d,e);
  }
  return {vertices:new Float32Array(vertices),triangles:new Uint32Array(triangles),edges:new Uint32Array(edges),scale};
+}
+/** Coarse cells never bridge a NoData region, even if their four corners are valid. */
+export function meshLODIndices(mesh:TerrainMesh,step:number){
+ if(!Number.isInteger(step)||step<1||step>8||(step&(step-1))!==0)throw Error('Unsupported 3D LOD step');
+ const {rows,cols,heights}=mesh;
+ const invalid=new Uint32Array((rows+1)*(cols+1));
+ const stride=cols+1;
+ for(let r=0;r<rows;r++){
+  let sum=0;
+  for(let c=0;c<cols;c++){
+   const h=heights[r*cols+c];sum+=h===null||!Number.isFinite(h)?1:0;
+   invalid[(r+1)*stride+c+1]=invalid[r*stride+c+1]+sum;
+  }
+ }
+ const triangles:number[]=[],edges:number[]=[];
+ for(let r=0;r<rows-1;r+=step)for(let c=0;c<cols-1;c+=step){
+  const rr=Math.min(rows-1,r+step),cc=Math.min(cols-1,c+step);
+  const missing=invalid[(rr+1)*stride+cc+1]-invalid[r*stride+cc+1]-
+    invalid[(rr+1)*stride+c]+invalid[r*stride+c];
+  if(missing)continue;
+  const a=r*cols+c,b=r*cols+cc,d=rr*cols+c,e=rr*cols+cc;
+  triangles.push(a,d,b,b,d,e);
+  edges.push(a,d,d,b,b,a,b,d,d,e,e,b);
+ }
+ return {triangles:new Uint32Array(triangles),edges:new Uint32Array(edges)};
 }
 export function meshOBJ(mesh:TerrainMesh){
  const d=meshData(mesh),rows=['# GeoFathom local DEM mesh; coordinates in meters, local origin'];
@@ -72,10 +101,68 @@ function renderer(gl:WebGL2RenderingContext,mesh:TerrainMesh,redraw:()=>void){
  }
  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,index);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,data.triangles,gl.STATIC_DRAW);
  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,wireIndex);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,data.edges,gl.STATIC_DRAW);
+ // The viewer changes index resolution as the camera zooms; full geometry
+ // remains available in the vertex buffer, and no coarse face spans NoData.
+ const lodBuffers=new Map<number,{surface:WebGLBuffer;wire:WebGLBuffer;faceCount:number;wireCount:number}>();
+ for(const step of mesh.lod?.levels??[]){
+  if(step===1)continue;
+  const local=meshLODIndices(mesh,step);
+  const surface=gl.createBuffer(),wireBuffer=gl.createBuffer();
+  if(!surface||!wireBuffer)throw Error('LOD GPU buffer allocation failed');
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,surface);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,local.triangles,gl.STATIC_DRAW);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,wireBuffer);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,local.edges,gl.STATIC_DRAW);
+  lodBuffers.set(step,{surface,wire:wireBuffer,faceCount:local.triangles.length,wireCount:local.edges.length});
+ }
  gl.bindTexture(gl.TEXTURE_2D,texture);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,1,1,0,gl.RGBA,gl.UNSIGNED_BYTE,new Uint8Array([0,0,0,0]));
  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
  let disposed=false;
+ let low=Infinity,high=-Infinity;
+ for(const h of mesh.heights)if(h!==null&&Number.isFinite(h)){
+  low=Math.min(low,h);high=Math.max(high,h);
+ }
+ if(!Number.isFinite(low)){low=0;high=0;}
+ type StreamBuffers={vertex:WebGLBuffer;surface:WebGLBuffer;wire:WebGLBuffer;faces:number;edges:number;level:number};
+ const streamingTiles=new Map<string,StreamBuffers>();
+ const streamKey=(level:number,row:number,col:number)=>level+':'+row+':'+col;
+ function bindVertices(buffer:WebGLBuffer|null){
+  gl.bindBuffer(gl.ARRAY_BUFFER,buffer);
+  for(const [name,count,offset] of [['p',3,0],['uv',2,12],['h',1,20]] as const){
+   const loc=gl.getAttribLocation(program,name);
+   gl.enableVertexAttribArray(loc);
+   gl.vertexAttribPointer(loc,count,gl.FLOAT,false,24,offset);
+  }
+ }
+ function hasTile(level:number,row:number,col:number){
+  const key=streamKey(level,row,col),entry=streamingTiles.get(key);
+  if(!entry)return false;
+  // Access-ordered GPU LRU: navigating across regions must not evict the
+  // currently visible tiles while keeping long-abandoned tiles resident.
+  streamingTiles.delete(key);streamingTiles.set(key,entry);
+  return true;
+ }
+ function uploadTile(tile:StreamedTerrainTile){
+  if(disposed||gl.isContextLost())return;
+  const key=streamKey(tile.level,tile.tile_row,tile.tile_col);
+  if(streamingTiles.has(key))return;
+  const geometry=streamedTileMeshGeometry(mesh,tile,data.scale,low,high);
+  const vb=gl.createBuffer(),surface=gl.createBuffer(),wire=gl.createBuffer();
+  if(!vb||!surface||!wire)throw Error('3D streaming GPU allocation failed.');
+  gl.bindBuffer(gl.ARRAY_BUFFER,vb);gl.bufferData(gl.ARRAY_BUFFER,geometry.vertices,gl.STATIC_DRAW);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,surface);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,geometry.triangles,gl.STATIC_DRAW);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,wire);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,geometry.edges,gl.STATIC_DRAW);
+  streamingTiles.set(key,{vertex:vb,surface,wire,faces:geometry.triangles.length,
+                          edges:geometry.edges.length,level:tile.level});
+  // A hard GPU cache limit prevents unbounded buffers after extensive panning.
+  if(streamingTiles.size>96){
+   const oldest=streamingTiles.keys().next().value;
+   if(oldest!==undefined){
+    const entry=streamingTiles.get(oldest);
+    if(entry){gl.deleteBuffer(entry.vertex);gl.deleteBuffer(entry.surface);gl.deleteBuffer(entry.wire);}
+    streamingTiles.delete(oldest);
+   }
+  }
+ }
  if(mesh.texture){const img=new Image();img.onload=()=>{if(disposed)return;gl.bindTexture(gl.TEXTURE_2D,texture);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,img);redraw();};img.src=mesh.texture.png;}
  function draw(camera:Camera){
    if(disposed||gl.isContextLost())return;
@@ -87,15 +174,38 @@ function renderer(gl:WebGL2RenderingContext,mesh:TerrainMesh,redraw:()=>void){
    gl.uniform1i(gl.getUniformLocation(program,'drape'),Number(camera.drape));
    gl.uniform1i(gl.getUniformLocation(program,'wire'),Number(camera.wire));
    gl.uniform1i(gl.getUniformLocation(program,'imagery'),0);
-   gl.bindTexture(gl.TEXTURE_2D,texture);gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,camera.wire?wireIndex:index);
-   gl.drawElements(camera.wire?gl.LINES:gl.TRIANGLES,camera.wire?data.edges.length:data.triangles.length,gl.UNSIGNED_INT,0);
+   gl.bindTexture(gl.TEXTURE_2D,texture);
+   bindVertices(vertex);
+   const preferred=camera.zoom<1.2?4:camera.zoom<2.4?2:1;
+   const active=lodBuffers.get(preferred);
+   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,active?(camera.wire?active.wire:active.surface):(camera.wire?wireIndex:index));
+   gl.drawElements(camera.wire?gl.LINES:gl.TRIANGLES,
+    active?(camera.wire?active.wireCount:active.faceCount):(camera.wire?data.edges.length:data.triangles.length),gl.UNSIGNED_INT,0);
+   const sourceLevel=terrainAdaptiveTileLevel(mesh,camera,gl.drawingBufferHeight);
+   if((mesh.source_sampling_step??1)>sourceLevel){
+    gl.enable(gl.POLYGON_OFFSET_FILL);gl.polygonOffset(-1,-1);
+    for(const tile of streamingTiles.values()){
+     if(tile.level!==sourceLevel)continue;
+     bindVertices(tile.vertex);
+     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,camera.wire?tile.wire:tile.surface);
+     gl.drawElements(camera.wire?gl.LINES:gl.TRIANGLES,
+        camera.wire?tile.edges:tile.faces,gl.UNSIGNED_INT,0);
+    }
+    gl.disable(gl.POLYGON_OFFSET_FILL);
+   }
  }
- return {draw,dispose(){disposed=true;gl.deleteBuffer(vertex);gl.deleteBuffer(index);gl.deleteBuffer(wireIndex);gl.deleteTexture(texture);gl.deleteProgram(program);}};
+ return {draw,uploadTile,hasTile,dispose(){disposed=true;gl.deleteBuffer(vertex);gl.deleteBuffer(index);gl.deleteBuffer(wireIndex);
+  for(const buffers of lodBuffers.values()){gl.deleteBuffer(buffers.surface);gl.deleteBuffer(buffers.wire);}
+  for(const item of streamingTiles.values()){gl.deleteBuffer(item.vertex);gl.deleteBuffer(item.surface);gl.deleteBuffer(item.wire);}
+  streamingTiles.clear();
+  gl.deleteTexture(texture);gl.deleteProgram(program);}};
 }
 const initial:Camera={angle:-.6,tilt:.7,exaggeration:1,zoom:1.6,clip:1,wire:false,drape:true,panX:0,panY:0};
-export function GPUView({mesh,fallback}:{mesh:TerrainMesh;fallback:ReactNode}){
+export function GPUView({mesh,fallback,tileSource}:{mesh:TerrainMesh;fallback:ReactNode;
+ tileSource?:{image_id:string;geometry:GeoJSON.Geometry}}){
  const canvas=useRef<HTMLCanvasElement>(null),render=useRef<ReturnType<typeof renderer>|null>(null),drag=useRef<{x:number;y:number;pan:boolean}|null>(null);
  const [camera,setCamera]=useState(initial),[available,setAvailable]=useState(true);
+ const [tileStatus,setTileStatus]=useState('');
  const latest=useRef(camera);latest.current=camera;
  useEffect(()=>{
    const node=canvas.current;if(!node)return;
@@ -108,6 +218,38 @@ export function GPUView({mesh,fallback}:{mesh:TerrainMesh;fallback:ReactNode}){
    }catch{setAvailable(false);}
  },[mesh]);
  useEffect(()=>{render.current?.draw(camera);},[camera]);
+ useEffect(()=>{
+  const source=tileSource;
+  if(!available||!source||(mesh.source_sampling_step??1)<=1||!mesh.source_grid_rows)return;
+  // Stable aliases preserve TypeScript's non-null narrowing inside the
+  // delayed request workers, including under strictNullChecks.
+  const imageId=source.image_id,studyGeometry=source.geometry;
+  const targets=terrainTileRequests(mesh,camera,24,768/480);
+  const controller=new AbortController();
+  let mounted=true;
+  const timer=window.setTimeout(()=>{
+   void loadTerrainTileBatch(targets,
+     item=>render.current?.hasTile(item.level,item.tile_row,item.tile_col)??false,
+     (item,signal)=>fetchTerrainMeshTile({image_id:imageId,
+       geometry:studyGeometry,level:item.level,tile_row:item.tile_row,tile_col:item.tile_col},signal),
+     tile=>{
+      if(!mounted||controller.signal.aborted)return;
+      render.current?.uploadTile(tile);
+      render.current?.draw(latest.current);
+     },controller.signal,3).then(result=>{
+      if(!mounted||controller.signal.aborted)return;
+      if(result.loaded||result.failed)setTileStatus(
+       result.loaded+' terrain tiles loaded'+(result.failed?'; '+result.failed+' failed':'')+
+       (result.maximumErrorM!==null?'; measured LOD max residual '+
+        result.maximumErrorM.toFixed(3)+' m':''));
+     }).catch(error=>{
+      if(mounted&&!controller.signal.aborted)setTileStatus(
+       error instanceof Error?'Tile loading: '+error.message:'DEM tile request failed.');
+     });
+  },180);
+  return()=>{mounted=false;window.clearTimeout(timer);controller.abort();};
+ },[mesh,available,tileSource?.image_id,tileSource?.geometry,
+    camera.zoom,camera.angle,camera.tilt,camera.panX,camera.panY,camera.clip]);
  if(!available)return <><small>WebGL2 unavailable · CPU preview</small>{fallback}</>;
  const update=(values:Partial<Camera>)=>setCamera(old=>({...old,...values}));
  function save(){const a=document.createElement('a'),url=URL.createObjectURL(new Blob([meshOBJ(mesh)],{type:'text/plain'}));a.href=url;a.download='terrain.obj';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
@@ -121,7 +263,10 @@ export function GPUView({mesh,fallback}:{mesh:TerrainMesh;fallback:ReactNode}){
    <label>Clip surface <input type="range" min=".05" max="1" step=".01" value={camera.clip} onChange={e=>update({clip:Number(e.target.value)})}/></label>
    <div className="survey-action-bar"><label><input type="checkbox" checked={camera.wire} onChange={e=>update({wire:e.target.checked})}/>Wireframe</label>
     {mesh.texture&&<label><input type="checkbox" checked={camera.drape} onChange={e=>update({drape:e.target.checked})}/>Imagery</label>}
-    <button onClick={()=>setCamera(initial)}>Reset view</button><button onClick={save}>OBJ</button></div>
+    <button onClick={()=>setCamera(initial)}>Reset view</button><button onClick={save}>OBJ (preview)</button></div>
+   {tileSource&&(mesh.source_sampling_step??1)>1?<small role="status">
+     Camera-driven streaming enabled · 32-cell source DEM tiles, bounded GPU cache. {tileStatus}
+   </small>:mesh.lod&&<small>Camera-adaptive preloaded mesh LOD · {mesh.lod.levels.join(' / ')} cell steps.</small>}
    {mesh.texture&&<small>RGB image coverage {mesh.texture.coverage_pct.toFixed(1)}%</small>}
  </div>;
 }

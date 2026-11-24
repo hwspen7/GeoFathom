@@ -99,3 +99,19 @@ class TraceBody(BaseModel):
 @router.post("/trace")
 def trace_existing_network(body:TraceBody)->dict:
     return checked(lambda: trace_along(body.start,body.end,body.paths,body.tolerance_m))
+
+
+class PolygonizeBody(BaseModel):
+    """Each source is a GeoJSON line, polygon boundary or point reference."""
+    geometries: list[dict[str, Any]] = Field(min_length=1,max_length=300)
+    tolerance_m: float = Field(default=1.0,ge=0,le=20)
+    minimum_area_m2: float = Field(default=0.01,ge=0,le=1e10)
+    max_faces: int = Field(default=300,ge=1,le=500)
+
+
+@router.post("/polygonize")
+def polygonize_line_network(body:PolygonizeBody)->dict:
+    """Node intersections, derive closed faces and measure each on WGS84."""
+    from .polygonize import polygonize_network
+    return checked(lambda: polygonize_network(
+        body.geometries,body.tolerance_m,body.minimum_area_m2,body.max_faces))

@@ -54,15 +54,22 @@ def _check_dem(src):
         raise RasterError("Unsupported DEM orientation.")
     if src.width>20000 or src.height>20000:
         raise RasterError("DEM image dimensions are too large.")
+    # Meters printed on a map's grid are not guaranteed to be ground meters.
+    # At middle latitudes, Web Mercator overstates horizontal distances by
+    # tens of percent and silently corrupts slope/area/volume statistics.
+    from .projection import grid_scale_error_percent
+    grid_scale_error_percent(src)
     # The actual vertical unit cannot be inferred for an arbitrary GeoTIFF.
     # The caller explicitly asserts that the first band contains meter heights.
 
 
-def _native_slope(array,valid,dx,dy):
+def _native_slope(array,valid,dx,dy,gradient_method="horn"):
+    if gradient_method not in {"horn","zevenbergen_thorne"}:
+        raise RasterError("Unsupported terrain gradient method.")
     z=np.ascontiguousarray(array.astype(np.float32))
     mask=np.ascontiguousarray(valid.astype(np.uint8))
     lib=_native()
-    if lib is not None and hasattr(lib,"gf_dem_gradient"):
+    if gradient_method=="horn" and lib is not None and hasattr(lib,"gf_dem_gradient"):
         fn=lib.gf_dem_gradient
         fn.argtypes=[ctypes.POINTER(ctypes.c_float),ctypes.POINTER(ctypes.c_uint8),
                      ctypes.c_int,ctypes.c_int,ctypes.c_double,ctypes.c_double,
@@ -80,8 +87,12 @@ def _native_slope(array,valid,dx,dy):
     p=np.lib.stride_tricks.sliding_window_view(z,(3,3))
     v=np.lib.stride_tricks.sliding_window_view(mask,(3,3))
     good=np.all(v.astype(bool),axis=(-1,-2))&np.all(np.isfinite(p),axis=(-1,-2))
-    e=(p[:,:,0,2]+2*p[:,:,1,2]+p[:,:,2,2]-p[:,:,0,0]-2*p[:,:,1,0]-p[:,:,2,0])/(8*dx)
-    s=(p[:,:,2,0]+2*p[:,:,2,1]+p[:,:,2,2]-p[:,:,0,0]-2*p[:,:,0,1]-p[:,:,0,2])/(8*dy)
+    if gradient_method=="horn":
+        e=(p[:,:,0,2]+2*p[:,:,1,2]+p[:,:,2,2]-p[:,:,0,0]-2*p[:,:,1,0]-p[:,:,2,0])/(8*dx)
+        s=(p[:,:,2,0]+2*p[:,:,2,1]+p[:,:,2,2]-p[:,:,0,0]-2*p[:,:,0,1]-p[:,:,0,2])/(8*dy)
+    else:
+        e=(p[:,:,1,2]-p[:,:,1,0])/(2*dx)
+        s=(p[:,:,2,1]-p[:,:,0,1])/(2*dy)
     gradients=np.hypot(e,s)
     angle=np.degrees(np.arctan(gradients))[good]
     if not angle.size:raise RasterError("DEM contains no valid 3×3 slope neighborhoods.")
@@ -91,10 +102,12 @@ def _native_slope(array,valid,dx,dy):
             if downhill.size else None)
     return {"mean_slope_deg":float(angle.mean()),"mean_aspect_deg":aspect,
             "gradient_pixels":int(angle.size),"maximum_slope_deg":float(angle.max()),
-            "engine":"numpy-horn"}
+            "engine":"numpy-"+gradient_method}
 
 
-def analyze_area(path,geometry,vertical_unit="meter",cancel=None):
+def analyze_area(path,geometry,vertical_unit="meter",gradient_method="horn",cancel=None):
+    if gradient_method not in {"horn","zevenbergen_thorne"}:
+        raise RasterError("Unsupported terrain gradient method.")
     checkpoint(cancel)
     if vertical_unit!="meter":
         raise RasterError("Terrain model currently supports vertical elevations in meters only.")
@@ -120,13 +133,13 @@ def analyze_area(path,geometry,vertical_unit="meter",cancel=None):
         # allocate an 8+ million-cell elevation/mask array in one piece.
         if w.width>4096 or w.height>4096 or w.width*w.height>8_000_000:
             from .tiled import analyze_area_tiled
-            result=analyze_area_tiled(src,polygon,w,cancel)
+            result=analyze_area_tiled(src,polygon,w,cancel,gradient_method=gradient_method)
             return {
                 "source":"User-provided projected GeoTIFF DEM",
                 "source_crs":str(src.crs),"vertical_unit":"meter",
                 "cell_resolution_m":[abs(src.transform.a),abs(src.transform.e)],
                 **result,
-                "warning":"Slope and aspect use complete 3x3 Horn neighborhoods "
+                "warning":f"Slope and aspect use complete 3x3 {gradient_method} neighborhoods "
                           "with one-pixel halos across processing tiles; "
                           "DEM vertical units and datum must be verified. Not survey-grade.",
             }
@@ -138,7 +151,7 @@ def analyze_area(path,geometry,vertical_unit="meter",cancel=None):
         valid_values=heights[usable]
         if len(valid_values)<9:raise RasterError("Not enough valid DEM elevation cells.")
         checkpoint(cancel)
-        slope=_native_slope(heights,usable,abs(src.transform.a),abs(src.transform.e))
+        slope=_native_slope(heights,usable,abs(src.transform.a),abs(src.transform.e),gradient_method)
         checkpoint(cancel)
         return {
             "source":"User-provided projected GeoTIFF DEM",
@@ -150,7 +163,7 @@ def analyze_area(path,geometry,vertical_unit="meter",cancel=None):
             "elevation_relief_m":float(valid_values.max()-valid_values.min()),
             "valid_pixels":int(len(valid_values)),
             **slope,
-            "warning":"Slope and aspect use 3×3 Horn cells, and require a verified meter-based DEM. "
+            "warning":f"Slope and aspect use 3×3 {gradient_method} cells, and require a verified meter-based DEM. "
                       "Not a survey-grade terrain model.",
         }
 

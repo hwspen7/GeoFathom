@@ -9,7 +9,7 @@ from shapely.errors import GEOSException
 from shapely.validation import explain_validity
 
 _GEOD = Geod(ellps="WGS84")
-_ALLOWED = {"Polygon", "MultiPolygon", "LineString", "MultiLineString", "Point"}
+_ALLOWED = {"Polygon", "MultiPolygon", "LineString", "MultiLineString", "Point", "MultiPoint"}
 _MAX_POINTS = 20_000
 
 
@@ -64,6 +64,8 @@ def _check_coordinates(value: Any, kind: str) -> int:
 
     if kind == "Point":
         position(value)
+    elif kind == "MultiPoint":
+        for point in array(value, 1):position(point)
     elif kind == "LineString":
         line(value)
     elif kind == "MultiLineString":
@@ -83,7 +85,7 @@ def measure_geometry(geometry: dict[str, Any]) -> dict[str, Any]:
         raise GeometryError("A GeoJSON geometry object is required.")
     kind = geometry.get("type")
     if not isinstance(kind, str) or kind not in _ALLOWED:
-        raise GeometryError("Supported types: Polygon, MultiPolygon, LineString, MultiLineString, Point.")
+        raise GeometryError("Supported types: Polygon, MultiPolygon, LineString, MultiLineString, Point, MultiPoint.")
     points = _check_coordinates(geometry.get("coordinates"), kind)
     if points == 0 or points > _MAX_POINTS:
         raise GeometryError("Geometry must contain between 1 and 20,000 coordinates.")

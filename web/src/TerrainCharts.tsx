@@ -217,6 +217,89 @@ export function ProfileGradePlot({samples}:{samples:ProfileSample[]}){
    <div className="profile-readout">Steepest climb {fmt(Math.max(0,hi))}% · descent {fmt(Math.min(0,lo))}%</div>
  </div>;
 }
+/** Exact per-class spatial shares: computed from valid classified source cells. */
+export interface TerrainClassRow{
+ label:string;color:string;cells:number;sharePct:number;cumulativePct:number;
+ areaM2:number;cumulativeAreaM2:number;
+}
+export function terrainClassStatistics(
+ bins:readonly {label:string;color:string;cells:number}[],cellAreaM2:number,
+):TerrainClassRow[]{
+ const total=bins.reduce((sum,b)=>sum+(Number.isFinite(b.cells)&&b.cells>0?b.cells:0),0);
+ const area=Number.isFinite(cellAreaM2)&&cellAreaM2>0?cellAreaM2:0;
+ let cumulative=0;
+ return bins.map(bin=>{
+  const cells=Number.isFinite(bin.cells)&&bin.cells>0?bin.cells:0;
+  cumulative+=cells;
+  return {label:bin.label,color:bin.color,cells,
+   sharePct:total?cells*100/total:0,
+   cumulativePct:total?cumulative*100/total:0,
+   areaM2:cells*area,cumulativeAreaM2:cumulative*area};
+ });
+}
+export function terrainClassesCsv(bins:readonly {label:string;color:string;cells:number}[],cellAreaM2:number){
+ const rows=terrainClassStatistics(bins,cellAreaM2);
+ return ['class,cells,percent_valid,area_m2,cumulative_percent,cumulative_area_m2',
+  ...rows.map(row=>[
+   '"'+row.label.replaceAll('"','""')+'"',row.cells,
+   row.sharePct.toFixed(8),row.areaM2.toFixed(4),
+   row.cumulativePct.toFixed(8),row.cumulativeAreaM2.toFixed(4),
+  ].join(','))].join('\n')+'\n';
+}
+/** Dual-axis class-share bars and cumulative share line. Class order comes from
+ * the analytical legend, never from ranked or sorted display categories. */
+export function TerrainCumulativeArea({bins,cellAreaM2}:{
+ bins:{label:string;color:string;cells:number}[];cellAreaM2:number;
+}){
+ const rows=terrainClassStatistics(bins,cellAreaM2);
+ if(!rows.length)return null;
+ const step=274/rows.length;
+ const barWidth=Math.min(26,step*.64);
+ const x=(i:number)=>46+step*(i+.5);
+ const y=(pct:number)=>158-pct*1.10;
+ const points=rows.map((r,i)=>x(i).toFixed(2)+','+y(r.cumulativePct).toFixed(2)).join(' ');
+ return <svg className="terrain-chart terrain-cumulative-chart"
+   viewBox="0 0 345 225" role="img" aria-label="Class share and cumulative area">
+   {[0,25,50,75,100].map(pct=><g key={pct}>
+     <line x1="37" y1={y(pct)} x2="330" y2={y(pct)}
+       stroke="#e5edf1" strokeWidth="1"/>
+     <text x="32" y={y(pct)+3} textAnchor="end" fill="#6b8190" fontSize="9">{pct}%</text>
+   </g>)}
+   {rows.map((r,i)=><g key={i}>
+     <rect x={x(i)-barWidth/2} y={y(r.sharePct)}
+       width={barWidth} height={Math.max(0,y(0)-y(r.sharePct))}
+       fill={r.color} opacity=".85">
+       <title>{r.label}: {r.sharePct.toFixed(2)}% · {r.areaM2.toFixed(1)} m²</title>
+     </rect>
+     <text x={x(i)} y="172" textAnchor="middle" fontSize="8" fill="#506b7d">{i+1}</text>
+   </g>)}
+   <polyline points={points} fill="none" stroke="#164f76" strokeWidth="2.4"/>
+   {rows.map((r,i)=><circle key={i} cx={x(i)} cy={y(r.cumulativePct)} r="3"
+     fill="#164f76"><title>{r.label}: {r.cumulativePct.toFixed(2)}% cumulative</title></circle>)}
+   <text x="172" y="192" textAnchor="middle" fill="#405e72" fontSize="10">
+     Classes ordered as listed in the source raster legend (1–{rows.length})
+   </text>
+   <text x="172" y="207" textAnchor="middle" fill="#70889a" fontSize="9">
+     Bars: class % · Line: cumulative valid-area %
+   </text>
+  </svg>;
+}
+export function TerrainClassTable({bins,cellAreaM2}:{
+ bins:{label:string;color:string;cells:number}[];cellAreaM2:number;
+}){
+ const rows=terrainClassStatistics(bins,cellAreaM2);
+ if(!rows.length)return null;
+ return <table className="terrain-class-data-table" aria-label="Terrain class area statistics">
+   <thead><tr><th scope="col">Class</th><th scope="col">Cells</th>
+     <th scope="col">Valid %</th><th scope="col">Area (km²)</th><th scope="col">Cum. %</th></tr></thead>
+   <tbody>{rows.map((r,i)=><tr key={i}>
+     <th scope="row"><span className="terrain-class-swatch" style={{background:r.color}}/>{r.label}</th>
+     <td>{r.cells.toLocaleString()}</td><td>{r.sharePct.toFixed(2)}</td>
+     <td>{(r.areaM2/1e6).toFixed(4)}</td><td>{r.cumulativePct.toFixed(2)}</td>
+   </tr>)}</tbody>
+  </table>;
+}
+
 export function TerrainClassShare({bins}:{bins:{label:string;color:string;cells:number}[]}){
  const positive=bins.filter(b=>Number.isFinite(b.cells)&&b.cells>0);
  const total=positive.reduce((sum,b)=>sum+b.cells,0);

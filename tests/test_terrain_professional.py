@@ -207,3 +207,51 @@ def test_d8_flow_and_watershed_never_cross_nodata_diagonal_corners():
     receivers,_,accum=d8_flow(heights,valid,10,10)
     assert receivers[0,0]==2
     assert accum[1,1]==3
+
+
+def test_selectable_gradient_algorithms_preserve_planar_slope_and_nodata():
+    z=np.tile(np.arange(9,dtype=float)*10,(9,1))
+    valid=np.ones_like(z,dtype=bool)
+    for method in ("horn","zevenbergen_thorne"):
+        derived=derivatives(z,valid,10,10,gradient_method=method)
+        assert derived["slope_map"][4,4]==pytest.approx(45)
+        assert derived["aspect_map"][4,4]==pytest.approx(270)
+        assert np.isnan(derived["slope_map"][0]).all()
+    # An isolated diagonal neighbor changes a Horn weighted derivative but
+    # does not enter Zevenbergen-Thorne's cardinal-neighbor gradient.
+    local=np.zeros((5,5),dtype=float)
+    local[1,3]=80.
+    horn=derivatives(local,np.ones_like(local,bool),10,10,"horn")
+    zt=derivatives(local,np.ones_like(local,bool),10,10,"zevenbergen_thorne")
+    assert horn["slope_map"][2,2]>0
+    assert zt["slope_map"][2,2]==pytest.approx(0)
+    with pytest.raises(RasterError,match="gradient method"):
+        derivatives(local,np.ones_like(local,bool),10,10,"not_a_method")
+
+
+def test_slope_classification_presets_leave_physical_geotiff_untouched():
+    values=np.array([[1.,4.,11.,20.,31.,48.,80.,np.nan]])
+    transform=from_origin(500000,4500000,10,10)
+    for scheme,length in (("broad",4),("standard",6),("detailed",8)):
+        product=raster_product(values,"slope_map",transform,"EPSG:32617",
+                               slope_classes=scheme)
+        assert len(product["legend"])==length
+        assert sum(x["cells"] for x in product["legend"])==7
+        with MemoryFile(base64.b64decode(product["geotiff"])) as mem:
+            with mem.open() as src:
+                np.testing.assert_allclose(src.read(1),values,equal_nan=True)
+    with pytest.raises(RasterError,match="classification preset"):
+        classification(values,"slope_map","invalid")
+
+
+def test_hillshade_four_direction_differs_from_single_and_is_bounded():
+    from terrain.professional import hillshade_illumination
+    east=np.array([[0.,.4],[-.2,1.2]])
+    south=np.array([[0.,.1],[.4,-.6]])
+    one=hillshade_illumination(east,south,315,45,"single")
+    four=hillshade_illumination(east,south,315,45,"four_direction")
+    assert one.shape==four.shape
+    assert np.max(np.abs(one-four))>1
+    assert np.all((four>=0)&(four<=255))
+    with pytest.raises(RasterError,match="illumination"):
+        hillshade_illumination(east,south,315,45,"unknown")

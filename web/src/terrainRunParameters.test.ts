@@ -3,11 +3,13 @@ import {terrainParametersForOperation,type TerrainParameterForm} from './terrain
 const base:TerrainParameterForm={
  interval:'10',reference:'0',lon:'',lat:'',height:'1.7',target:'0',
  endLon:'',endLat:'',maxSlope:'30',minElevation:'-12000',
- maxElevation:'12000',maxTri:'100',streamCells:'100',
+ maxElevation:'12000',maxTri:'100',streamCells:'100',mfdExponent:'1.1',
  azimuth:'315',altitude:'45',sectionSpacing:'50',sectionWidth:'20',
  fillSinks:true,considerCurvature:true,refractionCoeff:'0.13',
  comparisonId:'',observerPoints:[['',''],['','']],drape:false,
- textureImageId:null,
+ textureImageId:null,gradientMethod:'horn',slopeClasses:'standard',
+ neighborhoodRadius:'1',viewshedDistance:'0',viewshedAzimuth:'0',
+ viewshedWidth:'360',routeModel:'surface',meshSamples:'256',streamOrderScheme:'strahler',hillshadeMode:'single',
 };
 describe('scientific operation-specific input manifests',()=>{
  it('does not invent a zero-degree observer for a contour experiment',()=>{
@@ -28,9 +30,13 @@ describe('scientific operation-specific input manifests',()=>{
     ['-83.001','40.01'],['-83.02','40.015']] as [string,string][]};
   const route=terrainParametersForOperation('least_cost',filled);
   expect(route).toEqual({observer_longitude:-83.001,observer_latitude:40.01,
-   end_longitude:-83.02,end_latitude:40.015,max_slope_deg:30});
-  expect(terrainParametersForOperation('stream_order',filled))
-   .toEqual({fill_sinks:true,min_stream_cells:25});
+   end_longitude:-83.02,end_latitude:40.015,max_slope_deg:30,route_model:'surface'});
+  expect(terrainParametersForOperation('flow_accumulation_mfd',{...filled,mfdExponent:'2.5'}))
+    .toEqual({fill_sinks:true,mfd_exponent:2.5});
+   expect(terrainParametersForOperation('stream_order',filled))
+   .toEqual({stream_order_scheme:'strahler',fill_sinks:true,min_stream_cells:25});
+  expect(terrainParametersForOperation('stream_order',{...filled,streamOrderScheme:'shreve'}))
+   .toMatchObject({stream_order_scheme:'shreve'});
   const viewshed=terrainParametersForOperation('viewshed_multi',filled);
   expect(viewshed.observer_points).toEqual([
    [-83.001,40.01],[-83.02,40.015]]);
@@ -38,6 +44,27 @@ describe('scientific operation-specific input manifests',()=>{
   filled.observerPoints[0][0]='-83.1';
   expect(viewshed.observer_points).toEqual([
    [-83.001,40.01],[-83.02,40.015]]);
+ });
+ it('model and classification choices affect only relevant scientific run IDs',()=>{
+  const standard=terrainParametersForOperation('slope_map',base);
+  expect(standard).toEqual({gradient_method:'horn',slope_classes:'standard'});
+  const changed={...base,gradientMethod:'zevenbergen_thorne' as const,
+   slopeClasses:'detailed' as const};
+  expect(terrainParametersForOperation('slope_map',changed)).toEqual({
+   gradient_method:'zevenbergen_thorne',slope_classes:'detailed'});
+  expect(terrainParametersForOperation('aspect_map',changed)).toEqual({
+   gradient_method:'zevenbergen_thorne'});
+  expect(terrainParametersForOperation('slope',changed))
+    .toEqual({gradient_method:'zevenbergen_thorne'});
+  expect(terrainParametersForOperation('curvature',changed)).toEqual({});
+  expect(terrainParametersForOperation('tpi',changed)).toEqual({neighborhood_radius_cells:1});
+  expect(terrainParametersForOperation('mesh',changed)).toEqual({mesh_samples:256,drape:false});
+  expect(terrainParametersForOperation('least_cost',{...changed,routeModel:'gentle'}))
+   .toMatchObject({route_model:'gentle'});
+  expect(terrainParametersForOperation('visibility',{...changed,lon:'-83',lat:'40',viewshedWidth:'120'}))
+   .toMatchObject({maximum_distance_m:0,view_width_deg:120,view_azimuth_deg:0});
+  expect(terrainParametersForOperation('contours',changed))
+   .toEqual(terrainParametersForOperation('contours',base));
  });
  it('records curvature refraction only when curvature is enabled',()=>{
   expect(terrainParametersForOperation('visibility',{

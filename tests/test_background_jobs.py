@@ -1,4 +1,4 @@
-"""P2 persistent GIS background job lifecycle, result and permission tests."""
+"""Research persistent GIS background job lifecycle, result and permission tests."""
 import time
 
 import pytest

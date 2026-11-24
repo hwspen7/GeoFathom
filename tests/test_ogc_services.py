@@ -1,4 +1,4 @@
-"""P2 trusted OGC service integration, tile proxy security and validation."""
+"""Research trusted OGC service integration, tile proxy security and validation."""
 import base64
 import json
 

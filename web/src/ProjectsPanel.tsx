@@ -1,19 +1,19 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import {createPortal} from 'react-dom';
 import {
-  Copy, Download, Eye, EyeOff, History, Layers3, Lock,
+  Copy, Eye, EyeOff, History, Layers3, Lock,
   LockOpen, MapPin, Plus, RotateCcw, Save,
 } from 'lucide-react';
 
 import {
-  copyProjectFeature, createLayer, deleteProjectFeature, exportProject, getFeatureHistory, getProjects,getProjectTrash,restoreDeletedFeature,type TrashedFeature,
+  copyProjectFeature, createLayer, deleteProjectFeature, getFeatureHistory, getProjects,getProjectTrash,restoreDeletedFeature,type TrashedFeature,
   getWorkspace, newProject, patchLayer, restoreFeature, saveProjectFeature,
   saveFeatureBatch, patchLayerStyle, updateProjectFeature, type GeoLayer, type GeoWorkspace, type Project,
   type WorkspaceFeature, type FeatureHistory,
 } from './api';
 
 import {rememberProject,restoreProject,storedProject} from './projectSelection';
-import {WorkspaceFeatureTree} from './WorkspaceChrome';
+import {WorkspaceFeatureTree,type WorkspaceObjectGroup} from './WorkspaceChrome';
 
 interface Props {
   geometry: GeoJSON.Geometry | null;
@@ -33,12 +33,16 @@ interface Props {
   toolbarTarget?:HTMLElement|null;
   toolbarActionsTarget?:HTMLElement|null;
   treeTarget?:HTMLElement|null;
+  objectGroups?:WorkspaceObjectGroup[];
+  interactionBusy?:boolean;
+  objectPageSize?:number;
+  onObjectMutation?:(id:string,feature:WorkspaceFeature|null)=>void;
 }
 
 export default function ProjectsPanel({
   geometry, featureName, featureSource, featureProperties, selectedFeatureId,
   splitParts, refreshToken, onOpen, onWorkspace, onPlaceAnnotation, onFeatureDeleted,
-  extraFeatures,onSavedDraft,onProjectSwitch,toolbarTarget,toolbarActionsTarget,treeTarget,
+  extraFeatures,onSavedDraft,onProjectSwitch,toolbarTarget,toolbarActionsTarget,treeTarget,objectGroups,interactionBusy=false,objectPageSize=5,onObjectMutation,
 }: Props) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [listRetry,setListRetry]=useState(0);
@@ -57,6 +61,8 @@ export default function ProjectsPanel({
   const [trashOpen,setTrashOpen]=useState(false);
   const [trashTotal,setTrashTotal]=useState(0);
   const [trashPulse,setTrashPulse]=useState(0);
+  const [recentDeleted,setRecentDeleted]=useState<{id:string;name:string}|null>(null);
+  const [objectError,setObjectError]=useState('');
   const notify = useRef(onWorkspace);
   notify.current = onWorkspace;
   const notifySwitch=useRef(onProjectSwitch);notifySwitch.current=onProjectSwitch;
@@ -64,6 +70,7 @@ export default function ProjectsPanel({
   const initializedSelection=useRef(false);
   const requestSequence = useRef(0);
   const styleWriting=useRef(false);
+  const objectWriting=useRef(false);
   type LayerStyleUpdate={labels?:Partial<GeoLayer['style']['labels']>;symbol?:Partial<GeoLayer['style']['symbol']>};
   const queuedStyleWrites=useRef<Array<{projectId:string;layerId:string;changes:LayerStyleUpdate}>>([]);
   const historySequence = useRef(0);
@@ -83,6 +90,7 @@ export default function ProjectsPanel({
     setWorkspace(null);
     setLayerId('');
     setHistory(null);setTrash([]);setTrashTotal(0);setTrashOpen(false);
+    setRecentDeleted(null);setObjectError('');
     setError('');
     setInfo('');
   }, []);
@@ -235,21 +243,6 @@ export default function ProjectsPanel({
     });
   }
 
-  async function exportJson() {
-    if (!selected) return;
-    try {
-      const collection = await exportProject(selected);
-      const blob = new Blob([JSON.stringify(collection, null, 2)], {
-        type: 'application/geo+json',
-      });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url; link.download = 'geofathom-project.geojson';
-      document.body.append(link); link.click(); link.remove();
-      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-    } catch (cause) { setError(String(cause)); }
-  }
-
   async function addNewLayer(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selected || !layerName.trim()) return;
@@ -370,6 +363,52 @@ export default function ProjectsPanel({
     });
   }
 
+  async function changeObject(feature:WorkspaceFeature,name?:string){
+    if(!selected||busy||interactionBusy||objectWriting.current)return;
+    if(workspace?.layers.find(layer=>layer.id===feature.layer_id)?.locked)
+      throw Error('Unlock this layer before changing its objects.');
+    const projectId=selected;
+    objectWriting.current=true;setBusy(true);setError('');
+    try{
+      if(name!==undefined){
+        const updated=await updateProjectFeature(projectId,feature.id,{name,expected_revision:feature.revision});
+        if(selection.current===projectId)onObjectMutation?.(feature.id,updated);
+      }else{
+        await deleteProjectFeature(projectId,feature.id,feature.revision);
+        if(selection.current===projectId){
+          onObjectMutation?.(feature.id,null);
+          if(featureIdentity.current===feature.id)onFeatureDeleted();
+          setRecentDeleted({id:feature.id,name:feature.name});
+          setTrashPulse(value=>value+1);
+        }
+      }
+      if(selection.current===projectId){
+        await reload(projectId);
+        setInfo(name!==undefined?'Object renamed.':'Object moved to project trash.');
+      }
+    }catch(cause){
+      // Refresh a stale revision without ever publishing into another project.
+      if(selection.current===projectId)await reload(projectId).catch(()=>{});
+      throw cause;
+    }finally{objectWriting.current=false;setBusy(false);}
+  }
+
+  async function undoObjectDelete(){
+    if(!selected||!recentDeleted||busy||interactionBusy||objectWriting.current)return;
+    const projectId=selected,item=recentDeleted;
+    objectWriting.current=true;setBusy(true);setObjectError('');
+    try{
+      const restored=await restoreDeletedFeature(projectId,item.id);
+      if(selection.current===projectId){
+        onObjectMutation?.(item.id,restored);
+        await reload(projectId);
+        setRecentDeleted(null);setTrashPulse(value=>value+1);
+      }
+    }catch(cause){
+      if(selection.current===projectId)setObjectError(cause instanceof Error?cause.message:'Could not restore object.');
+    }finally{objectWriting.current=false;setBusy(false);}
+  }
+
   async function duplicate() {
     if (!selected || !current || locked) return;
     await run(async () => {
@@ -396,9 +435,7 @@ export default function ProjectsPanel({
         disabled={busy || !workspace || !geometry || locked || Boolean(!current && activeLayer?.locked)}>
         <Save size={14}/> {current ? 'Update feature' : 'Save selected'}
       </button>
-      <button onClick={() => void exportJson()} disabled={busy}>
-        <Download size={14}/> Export project
-      </button>
+
     </div>
   );
   const projectSelector=(
@@ -409,8 +446,22 @@ export default function ProjectsPanel({
             {projects.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}
     </select>
   );
+  const featureTree=<><WorkspaceFeatureTree
+    layers={workspace?.layers??[]}
+    features={[...(workspace?.features??[]),
+      ...extraFeatures.filter(f=>!(workspace?.features??[]).some(x=>x.id===f.id)).slice(0,60)]}
+    selectedId={selectedFeatureId} onOpen={onOpen} busy={busy||interactionBusy}
+    additionalGroups={objectGroups} pageSize={objectPageSize} onRename={(feature,name)=>changeObject(feature,name)}
+    onDelete={feature=>changeObject(feature)}/>
+    {recentDeleted&&<div className="workspace-object-notice" role="status">
+      <span>{recentDeleted.name} moved to project trash.</span>
+      <button type="button" disabled={busy||interactionBusy} onClick={()=>void undoObjectDelete()}>Undo delete</button>
+    </div>}
+    {objectError&&<p className="workspace-object-error" role="alert">{objectError}</p>}
+  </>;
   return (
     <div className="project-panel">
+      {treeTarget?createPortal(featureTree,treeTarget):featureTree}
       {toolbarTarget&&createPortal(projectSelector,toolbarTarget)}
       <form onSubmit={create} className="project-create">
         <input aria-label="New project name" placeholder="New project name" maxLength={150}
@@ -630,19 +681,7 @@ export default function ProjectsPanel({
               onClick={() => void saveSplit()}>Save all {splitParts.length} split pieces</button>
           )}
 
-          {treeTarget?createPortal(<> 
-          <WorkspaceFeatureTree
-            layers={workspace?.layers??[]}
-            features={[...(workspace?.features??[]),
-              ...extraFeatures.filter(f=>!(workspace?.features??[]).some(x=>x.id===f.id)).slice(0,60)]}
-            selectedId={selectedFeatureId} onOpen={onOpen}/>
-          </>,treeTarget):<>
-          <WorkspaceFeatureTree
-            layers={workspace?.layers??[]}
-            features={[...(workspace?.features??[]),
-              ...extraFeatures.filter(f=>!(workspace?.features??[]).some(x=>x.id===f.id)).slice(0,60)]}
-            selectedId={selectedFeatureId} onOpen={onOpen}/>
-          </>}
+
 
           {current&&<details className="feature-inspector">
             <summary>Identify feature · properties & measurement</summary>

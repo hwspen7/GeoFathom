@@ -1,5 +1,5 @@
 import {expect,test} from './coverage-fixture';
-import {openProjectDrawer,openFileMenu} from './workspace-ui';
+import {openProjectDrawer,openFileMenu,activateWorkspaceModule} from './workspace-ui';
 
 const tile='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/ZecAAAAASUVORK5CYII=';
 
@@ -34,14 +34,16 @@ test('survey editor draws, repositions vertices, supports undo and saves project
       changes.push(payload.geometry);
     }
   });
+  let screen:number[][]=[];
   await expect.poll(async()=>{
     const raw=await map.getAttribute('data-rendered-handle-pixels');
-    const positions=raw?JSON.parse(raw) as number[][]:[];
-    return positions.length;
+    screen=raw?JSON.parse(raw) as number[][]:[];
+    return screen.length;
   },{timeout:20000}).toBeGreaterThan(0);
   // Query the actual rendered edit handle reported after MapLibre's
   // asynchronous GeoJSON source worker reaches the idle state.
-  const screen=JSON.parse((await map.getAttribute('data-rendered-handle-pixels'))||'[]') as number[][];
+  // Use the frame that satisfied the assertion; a second read can observe
+  // the next source refresh and clear the transient diagnostic attribute.
   expect(screen.length).toBeGreaterThan(0);
   const current=await map.boundingBox();
   expect(current).not.toBeNull();
@@ -73,7 +75,7 @@ test('survey editor draws, repositions vertices, supports undo and saves project
 
 test('professional GIS panel exposes attributes, vector formats and DEM analysis',async({page})=>{
   await page.goto('/');
-  await page.getByRole('navigation',{name:'Workspace tools'}).getByRole('button',{name:'GIS',exact:true}).click();
+  await activateWorkspaceModule(page,'GIS');
   await expect(page.getByText('Professional GIS tools')).toBeVisible();
   await page.getByText(/Attribute table/).click();
   await expect(page.getByLabel('Attribute search field')).toBeVisible();
@@ -88,7 +90,7 @@ test('import KML, query the attribute table and persist a bulk property update',
   await page.goto('/');
   await openProjectDrawer(page);  await page.getByLabel('New project name').fill('Vector browser test');
   await page.getByRole('button',{name:'Create project'}).click();
-  await page.getByRole('navigation',{name:'Workspace tools'}).getByRole('button',{name:'GIS',exact:true}).click();
+  await activateWorkspaceModule(page,'GIS');
   await page.getByText('GIS file import / export').click();
   const xml='<?xml version="1.0" encoding="UTF-8"?>'+
     '<kml xmlns="http://www.opengis.net/kml/2.2"><Document><Placemark>'+
@@ -103,8 +105,9 @@ test('import KML, query the attribute table and persist a bulk property update',
   await page.getByLabel('Attribute search field').selectOption('name');
   await page.getByLabel('Attribute search value').fill('Facility');
   await page.getByRole('button',{name:'Filter rows'}).click();
-  await expect(page.getByRole('button',{name:'Facility A',exact:true})).toBeVisible();
-  await page.getByLabel('Select Facility A').check();
+  const attributes=page.getByRole('region',{name:'Attribute results',exact:true});
+  await expect(attributes.getByRole('button',{name:'Facility A',exact:true})).toBeVisible();
+  await attributes.getByLabel('Select Facility A',{exact:true}).check();
   await page.getByLabel('Attribute property name').fill('category');
   await page.getByLabel('New attribute value').fill('warehouse');
   await page.getByRole('button',{name:'Save properties & revisions'}).click();

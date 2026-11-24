@@ -21,7 +21,14 @@ def cross_sections(path,geometry,spacing,width,cancel=None):
         line=LineString(zip(xs,ys))
         if line.length<1:raise RasterError("Centerline must exceed one meter.")
         if math.ceil(line.length/spacing)+1>100:raise RasterError("Increase station spacing; limit is 100 sections.")
-        stations=list(np.arange(0,line.length,spacing))+[line.length]
+        # Decimal coordinates and inverse CRS transforms can make a nominal
+        # 100 m line slightly longer than 100 m. Do not create both a 100 m
+        # interior station and an effectively identical end station.
+        endpoint_tolerance=max(1e-3,1e-8*line.length)
+        count=math.ceil(line.length/spacing)
+        stations=[k*spacing for k in range(count)
+                  if k*spacing<line.length-endpoint_tolerance]
+        stations.append(float(line.length))
         offsets=np.linspace(-width,width,41)
         sections=[];features=[];valid=missing=0
         for station in stations:

@@ -1,3 +1,4 @@
+import {activateWorkspaceModule} from './workspace-ui';
 /** Real-browser acceptance for previously unexercised Terrain analysis modes.
  *
  * Uses a small georeferenced DEM in the same file store as the API. No result,
@@ -64,9 +65,10 @@ with tempfile.TemporaryDirectory() as directory:
   route.fulfill({contentType:'image/png',body:png}));
  await page.goto('/');
  await page.getByLabel('Active project').selectOption(id);
- await page.getByRole('navigation',{name:'Workspace tools'}).getByRole('button',{name:'Terrain',exact:true}).click();
+ await activateWorkspaceModule(page,'Terrain');
  await page.getByLabel('DEM elevation layer').selectOption(fixture.ids[0]);
  await page.getByLabel('Confirm DEM meter elevations').check();
+ await page.locator('.workspace-objects > summary').click();
  await page.getByRole('button',{name:/Advanced terrain study area/}).click();
  await expect(page.getByLabel('DEM fetch area')).toHaveValue('selection');
  return fixture;
@@ -75,7 +77,7 @@ with tempfile.TemporaryDirectory() as directory:
 test('advanced surface families retain distinct real results and scientific exports',async({page})=>{
  test.setTimeout(180000);
  const fixture=await setup(page);
- const tools=page.getByLabel('Terrain tools');
+ const tools=page.getByLabel('Terrain tools',{exact:true});
  const run=page.getByRole('button',{name:'Run terrain operation'});
  const select=async(group:string,title:string,expectEnabled=true)=>{
   await page.getByRole('button',{name:'Browse terrain tools',exact:true}).click();
@@ -99,8 +101,8 @@ test('advanced surface families retain distinct real results and scientific expo
   await page.getByRole('tab',{name:'Data',exact:true}).click();
   const manager=page.getByLabel('Terrain output layers').locator('.terrain-layer-manager');
   if(await manager.getAttribute('open')===null)await manager.locator('summary').click();
-  await expect(page.getByLabel('Analysis result layers')
-    .locator('.scratch-row > button[title]').filter({hasText:title})).toBeVisible();
+  await expect(manager.locator('.scratch-row > button[title]').filter({hasText:title})).toBeVisible();
+  await expect(page.getByLabel('Choose terrain result',{exact:true}).locator('option:checked')).toContainText(title);
  };
  for(const name of [
   'Elevation map','Aspect map','Ruggedness (TRI)','Position (TPI)',
@@ -158,9 +160,8 @@ test('advanced surface families retain distinct real results and scientific expo
  await page.getByRole('tab',{name:'Overview',exact:true}).click();
  await expect(page.getByLabel('Terrain results')).toContainText(/route length/i);
  const exportEvent=page.waitForEvent('download');
- await page.locator('.gis-file-menu > summary').click();
+ await activateWorkspaceModule(page,'Export');
  await page.getByRole('button',{name:'Terrain result JSON'}).click();
- await page.locator('.gis-file-menu > summary').click();
  const exported=await exportEvent;
  expect(exported.suggestedFilename()).toMatch(/terrain-least_cost.*geojson/);
  const exportedJson=JSON.parse(await readFile(await exported.path(),'utf8'));
@@ -176,7 +177,7 @@ test('advanced surface families retain distinct real results and scientific expo
 test('invalid terrain inputs are blocked and DEM resampling uses real configured options',async({page})=>{
  test.setTimeout(120000);
  const fixture=await setup(page);
- const tool=page.getByLabel('Terrain tools');
+ const tool=page.getByLabel('Terrain tools',{exact:true});
  const run=page.getByRole('button',{name:'Run terrain operation'});
  await page.getByRole('button',{name:'Browse terrain tools',exact:true}).click();
  await tool.getByRole('button',{name:'Contours',exact:true}).click();
@@ -245,12 +246,22 @@ test('3D DEM remains inspectable using the CPU preview if WebGL2 is unavailable'
  });
  await setup(page);
  await page.getByRole('button',{name:'Browse terrain tools',exact:true}).click();
- await page.getByLabel('Terrain tools').getByRole('button',{name:'3D terrain',exact:true}).click();
+ await page.getByLabel('Terrain tools',{exact:true}).getByRole('button',{name:'3D terrain',exact:true}).click();
  await page.getByRole('button',{name:'Run terrain operation'}).click();
+ await page.getByRole('tab',{name:'Figures',exact:true}).click();
  await expect(page.getByText('WebGL2 unavailable · CPU preview')).toBeVisible();
  const canvas=page.getByLabel('Interactive 3D terrain preview');
  await expect(canvas).toBeVisible();
- await expect(canvas).not.toHaveAttribute('data-renderer','webgl2');
+ await expect(canvas).toHaveAttribute('data-renderer','canvas2d');
+ // Require real CPU-drawn terrain pixels, not only the fallback notice.
+ await expect.poll(()=>canvas.evaluate(node=>{
+  const element=node as HTMLCanvasElement,context=element.getContext('2d');
+  if(!context)return false;
+  const data=context.getImageData(0,0,element.width,element.height).data;
+  for(let i=0;i<data.length;i+=4)
+   if(data[i+3]>0&&(data[i]!==237||data[i+1]!==242||data[i+2]!==245))return true;
+  return false;
+ })).toBe(true);
  const exaggeration=page.getByLabel('Terrain vertical exaggeration');
  await expect(exaggeration).toHaveValue('1');
  await exaggeration.focus();
@@ -269,6 +280,7 @@ test('3D DEM remains inspectable using the CPU preview if WebGL2 is unavailable'
 test('shared Onshape-style command search and newly exposed Terrain tools',async({page})=>{
  test.setTimeout(120000);
  const fixture=await setup(page);
+ await page.locator('.workspace-objects > summary').click();
  const filter=page.getByRole('searchbox',{name:'Filter project features'});
  await filter.fill('not-the-fixture');
  await expect(page.getByLabel('Project feature tree')
@@ -283,7 +295,8 @@ test('shared Onshape-style command search and newly exposed Terrain tools',async
  await expect(dialog.getByRole('button',{name:/Fit selected area/})).toBeVisible();
  await page.keyboard.press('Escape');
  await expect(dialog).toHaveCount(0);
- const shelf=page.getByLabel('Terrain tools');
+ await page.getByRole('button',{name:'Back to terrain tools',exact:true}).click();
+ const shelf=page.getByLabel('Terrain tools',{exact:true});
  const run=page.getByRole('button',{name:'Run terrain operation'});
  await page.getByRole('button',{name:'Browse terrain tools',exact:true}).click();
  await page.getByLabel('Find terrain tool').fill('MFD');

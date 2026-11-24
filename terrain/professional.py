@@ -44,8 +44,10 @@ RASTER_UNITS = {
     "viewshed_multi":"observer_count",
 }
 
-def derivatives(z, valid, dx, dy):
-    """Horn gradients, Riley TRI, mean-neighbor TPI and Laplacian on complete windows."""
+def derivatives(z, valid, dx, dy, gradient_method="horn"):
+    """Horn or Zevenbergen-Thorne gradients, with identical NoData masking."""
+    if gradient_method not in {"horn","zevenbergen_thorne"}:
+        raise RasterError("Unsupported terrain gradient method.")
     if min(z.shape)<3:
         raise RasterError("Terrain derivatives require a 3 × 3 grid.")
     p=np.lib.stride_tricks.sliding_window_view(z,(3,3))
@@ -54,8 +56,14 @@ def derivatives(z, valid, dx, dy):
     if not good.any():
         raise RasterError("No complete valid 3 × 3 terrain neighborhoods.")
     c=p[:,:,1,1]
-    e=(p[:,:,0,2]+2*p[:,:,1,2]+p[:,:,2,2]-p[:,:,0,0]-2*p[:,:,1,0]-p[:,:,2,0])/(8*dx)
-    s=(p[:,:,2,0]+2*p[:,:,2,1]+p[:,:,2,2]-p[:,:,0,0]-2*p[:,:,0,1]-p[:,:,0,2])/(8*dy)
+    if gradient_method=="horn":
+        # Weighted differences from the full 3x3 neighborhood.
+        e=(p[:,:,0,2]+2*p[:,:,1,2]+p[:,:,2,2]-p[:,:,0,0]-2*p[:,:,1,0]-p[:,:,2,0])/(8*dx)
+        s=(p[:,:,2,0]+2*p[:,:,2,1]+p[:,:,2,2]-p[:,:,0,0]-2*p[:,:,0,1]-p[:,:,0,2])/(8*dy)
+    else:
+        # Zevenbergen-Thorne: cardinal-neighbor central differences.
+        e=(p[:,:,1,2]-p[:,:,1,0])/(2*dx)
+        s=(p[:,:,2,1]-p[:,:,0,1])/(2*dy)
     gradient=np.hypot(e,s)
     slope=np.degrees(np.arctan(gradient))
     aspect=np.degrees(np.arctan2(-e,s))%360
@@ -117,7 +125,9 @@ def d8_flow(z, valid, dx, dy, cancel=None):
         if target>=0:accum[target]+=accum[index]
     return dst,direction,np.where(valid,accum.reshape(z.shape),np.nan)
 
-def least_cost(z,valid,start,end,dx,dy,max_grade,cancel=None):
+def least_cost(z,valid,start,end,dx,dy,max_grade,cancel=None,route_model="surface"):
+    if route_model not in {"surface","distance","gentle"}:
+        raise RasterError("Unsupported route cost model.")
     """Dijkstra on raster cell centres; no diagonal corner cutting through nodata."""
     if valid.size>262144:raise RasterError("Route grid exceeds 262,144 cells.")
     if not math.isfinite(max_grade) or not 0<max_grade<=90:
@@ -143,7 +153,12 @@ def least_cost(z,valid,start,end,dx,dy,max_grade,cancel=None):
             rise=float(z[rr,cc]-z[r,c]);grade=math.degrees(math.atan(abs(rise)/horizontal))
             if grade>max_grade:continue
             # Cost is surface length with a symmetric grade penalty.
-            candidate=cost+math.hypot(horizontal,rise)*(1+(rise/horizontal)**2)
+            # Exact 2-D distance, physical surface-length cost, or an explicitly
+            # grade-averse engineering screening model; all weights >= 0.
+            step=(horizontal if route_model=="distance" else
+                  math.hypot(horizontal,rise)*(1+(4 if route_model=="gentle" else 1)
+                                                  *(rise/horizontal)**2))
+            candidate=cost+step
             if candidate<dist[rr,cc]:
                 dist[rr,cc]=candidate;prev[rr,cc]=r*w+c
                 heapq.heappush(queue,(candidate,rr,cc))
@@ -167,13 +182,18 @@ def circular_mean_degrees(angles):
 def _hex(value):
     return tuple(int(value[i:i+2],16) for i in (1,3,5))
 
-def classification(values,operation):
+def classification(values,operation,slope_classes="standard",stream_order_scheme="strahler",suitability_model="binary"):
     """Stable engineering classes for angles and categorical products."""
     finite=np.isfinite(values)
     if not finite.any():raise RasterError("No valid cells for this terrain product.")
     lo,hi=float(values[finite].min()),float(values[finite].max())
     if operation=="slope_map":
-        edges=[0,5,15,25,35,45,90];labels=["0–5°","5–15°","15–25°","25–35°","35–45°","45–90°"]
+        presets={"standard":[0,5,15,25,35,45,90],
+                 "detailed":[0,2,5,10,15,25,35,45,90],
+                 "broad":[0,10,25,45,90]}
+        if slope_classes not in presets:raise RasterError("Unsupported slope classification preset.")
+        edges=presets[slope_classes]
+        labels=[f"{a}–{b}°" for a,b in zip(edges,edges[1:])]
     elif operation=="aspect_map":
         labels=["N","NE","E","SE","S","SW","W","NW","Flat"]
         return np.where(finite,np.where(values<0,8,np.floor(((values+22.5)%360)/45)),-1).astype(np.int16),labels,(*COLORS,"#743a9b","#278577","#a6adb4")
@@ -195,6 +215,21 @@ def classification(values,operation):
         palette=("#a6adb4","#80c6bb","#4496b7","#316caa","#183c85")
         return classes,[f"{int(level)} observers" for level in levels],tuple(palette[int(level)] for level in levels)
     elif operation=="stream_order":
+        if stream_order_scheme=="shreve":
+            levels=np.unique(values[finite].astype(np.int64))
+            if np.any(levels<1):raise RasterError("Invalid Shreve magnitude.")
+            classes=np.full(values.shape,-1,dtype=np.int16)
+            if len(levels)<=len(STREAM_ORDER_COLORS):
+                for i,level in enumerate(levels):classes[finite&(values==level)]=i
+                return classes,[f"Magnitude {int(level)}" for level in levels],STREAM_ORDER_COLORS[:len(levels)]
+            # Logarithmic display bins retain exact Shreve values in the TIFF.
+            magnitudes=values[finite].astype(np.int64)
+            group=np.minimum(np.floor(np.log2(magnitudes)).astype(np.int16),len(STREAM_ORDER_COLORS)-1)
+            classes[finite]=group
+            labels=[("1" if i==0 else f"{2**i}–{2**(i+1)-1}"
+                    if i<len(STREAM_ORDER_COLORS)-1 else f"{2**i}+")
+                    for i in range(len(STREAM_ORDER_COLORS))]
+            return classes,labels,STREAM_ORDER_COLORS
         # Exact integer Strahler levels remain categorical instead of
         # being grouped into arbitrary continuous elevation bins.
         orders=np.unique(values[finite].astype(np.int32))
@@ -204,6 +239,12 @@ def classification(values,operation):
         for i,level in enumerate(orders):
             classes[finite&(values==level)]=i
         return classes,[f"Order {int(level)}" for level in orders],STREAM_ORDER_COLORS[:len(orders)]
+    elif operation=="suitability" and suitability_model=="weighted":
+        if lo<0 or hi>1:
+            raise RasterError("Weighted suitability scores must lie within [0,1].")
+        classes=np.full(values.shape,-1,dtype=np.int16)
+        classes[finite]=np.minimum(4,np.floor(values[finite]*5).astype(np.int16))
+        return classes,["0–20%","20–40%","40–60%","60–80%","80–100%"],COLORS[:5]
     elif operation in {"streams","suitability","least_cost"}:
         return np.where(finite,values,-1).astype(np.int16),["Other","Selected"],("#a6adb4","#16856f")
     elif operation=="cutfill_map":
@@ -236,13 +277,18 @@ def classification(values,operation):
         labels=[f"{a:.3g}–{b:.3g}" for a,b in zip(edges,edges[1:])]
     classes=np.full(values.shape,-1,dtype=np.int16)
     classes[finite]=np.digitize(values[finite],edges[1:-1])
-    return classes,labels,(("#222222","#555555","#888888","#aaaaaa","#dddddd","#ffffff") if operation=="hillshade" else SLOPE_COLORS if operation=="slope_map" else COLORS)[:len(labels)]
+    palette=(("#222222","#555555","#888888","#aaaaaa","#dddddd","#ffffff")
+             if operation=="hillshade" else
+             ("#eff8f5","#cde9dc","#a2d3c4","#75b9b1","#4f9f9a","#338987","#24706e","#18585c")
+             if operation=="slope_map" and slope_classes=="detailed" else
+             SLOPE_COLORS if operation=="slope_map" else COLORS)
+    return classes,labels,palette[:len(labels)]
 
 def raster_product(values,operation,affine,crs,cancel=None,
-                   source_datum=None,reference_datum=None):
+                   source_datum=None,reference_datum=None,slope_classes="standard",stream_order_scheme="strahler",suitability_model="binary"):
     """Export exact source-grid GeoTIFF and a Web Mercator map preview with alpha nodata."""
     checkpoint(cancel)
-    classes,labels,colors=classification(values,operation)
+    classes,labels,colors=classification(values,operation,slope_classes,stream_order_scheme,suitability_model)
     finite=np.isfinite(values)
     legend=[{"label":label,"color":color,"cells":int((classes==i).sum())}
             for i,(label,color) in enumerate(zip(labels,colors))]
@@ -260,7 +306,7 @@ def raster_product(values,operation,affine,crs,cancel=None,
                 datum_tags["TERRAIN_REFERENCE_VERTICAL_DATUM"]=(
                     reference_datum or "not_declared")
             dst.update_tags(TERRAIN_OPERATION=operation,
-                            TERRAIN_UNIT=RASTER_UNITS[operation],
+                            TERRAIN_UNIT=("score_0_to_1" if operation=="suitability" and suitability_model=="weighted" else "Shreve_magnitude" if operation=="stream_order" and stream_order_scheme=="shreve" else RASTER_UNITS[operation]),
                             TERRAIN_NODATA_POLICY="NaN",
                             TERRAIN_GRID_BASIS="projected_cell_centers",
                             **datum_tags)
@@ -291,11 +337,33 @@ def raster_product(values,operation,affine,crs,cancel=None,
     return {"png":"data:image/png;base64,"+base64.b64encode(sink.getvalue()).decode("ascii"),
             "geotiff":tif,"corners":[[x,y] for x,y in zip(xs,ys)],"legend":legend,
             "width":width,"height":height,"valid_cells":int(finite.sum()),
-            "unit":RASTER_UNITS[operation]}
+            "unit":("score_0_to_1" if operation=="suitability" and suitability_model=="weighted" else "Shreve_magnitude" if operation=="stream_order" and stream_order_scheme=="shreve" else RASTER_UNITS[operation])}
+
+
+def hillshade_illumination(east,south,azimuth,altitude,mode="single"):
+    """Compute physical 0-255 illumination, averaging four real sun vectors if requested.
+
+    Multidirectional mode averages azimuths at -45, 0, +45, +90 degrees
+    relative to the user's azimuth, all at the stated solar elevation.
+    No shadow ray casting is implied; this is local Lambertian hillshade.
+    """
+    if mode not in {"single","four_direction"}:
+        raise RasterError("Unsupported hillshade illumination model.")
+    if not (0<=azimuth<=360 and 0<=altitude<=90):
+        raise RasterError("Invalid sun angles.")
+    beta=math.radians(altitude)
+    magnitude=np.sqrt(1+east**2+south**2)
+    def illum(angle):
+        az=math.radians(angle)
+        return np.clip((math.sin(beta)-east*math.cos(beta)*math.sin(az)+
+                        south*math.cos(beta)*math.cos(az))/magnitude,0,1)
+    angles=[azimuth] if mode=="single" else [azimuth-45,azimuth,azimuth+45,azimuth+90]
+    return 255*sum(illum(angle) for angle in angles)/len(angles)
 
 def _derived_surface_tiled(z,valid,dx,dy,operation,max_slope=30.,
                            min_elevation=-12000.,max_elevation=12000.,max_tri=100.,
-                           azimuth=315.,altitude=45.,cancel=None,block=384):
+                           azimuth=315.,altitude=45.,cancel=None,block=384,gradient_method="horn",hillshade_mode="single",
+                           suitability_model="binary",suitability_weights=(.5,.25,.25),elevation_sigma_m=0.):
     """One selected product from 3x3 halo tiles; no nine full-size rasters.
 
     The existing Horn/curvature derivative is reused unchanged per tile.
@@ -312,8 +380,6 @@ def _derived_surface_tiled(z,valid,dx,dy,operation,max_slope=30.,
     output=np.full(z.shape,np.nan,dtype=np.float64)
     qualified=0
     suitable=0
-    if operation=="hillshade":
-        a,b=math.radians(azimuth),math.radians(altitude)
     for r0 in range(1,z.shape[0]-1,block):
         r1=min(z.shape[0]-1,r0+block)
         for c0 in range(1,z.shape[1]-1,block):
@@ -323,7 +389,7 @@ def _derived_surface_tiled(z,valid,dx,dy,operation,max_slope=30.,
             local_z=z[r0-1:r1+1,c0-1:c1+1]
             local_valid=valid[r0-1:r1+1,c0-1:c1+1]
             try:
-                derived=derivatives(local_z,local_valid,dx,dy)
+                derived=derivatives(local_z,local_valid,dx,dy,gradient_method)
             except RasterError as error:
                 if str(error)=="No complete valid 3 × 3 terrain neighborhoods.":
                     continue
@@ -331,10 +397,20 @@ def _derived_surface_tiled(z,valid,dx,dy,operation,max_slope=30.,
             crop=(slice(1,-1),slice(1,-1))
             if operation=="hillshade":
                 east,south=derived["east"][crop],derived["south"][crop]
-                product=255*np.clip(
-                    (math.sin(b)-east*math.cos(b)*math.sin(a)
-                     +south*math.cos(b)*math.cos(a))/
-                    np.sqrt(1+east**2+south**2),0,1)
+                product=hillshade_illumination(east,south,azimuth,altitude,hillshade_mode)
+            elif operation=="suitability" and suitability_model=="weighted":
+                from .scientific_kernels import weighted_suitability
+                product,tile_metrics=weighted_suitability(z[r0:r1,c0:c1],valid[r0:r1,c0:c1],
+                    derived["slope_map"][crop],derived["tri"][crop],max_slope,
+                    min_elevation,max_elevation,max_tri,suitability_weights,elevation_sigma_m)
+                known=np.isfinite(product)
+                permitted=(known&(derived["slope_map"][crop]<=max_slope)&
+                    (derived["tri"][crop]<=max_tri)&
+                    (z[r0:r1,c0:c1]>=min_elevation)&(z[r0:r1,c0:c1]<=max_elevation))
+                qualified+=int(known.sum())
+                # A permitted cell can legitimately have zero weighted score;
+                # eligibility must not depend on the utility value.
+                suitable+=int(permitted.sum())
             elif operation=="suitability":
                 good=np.isfinite(derived["slope_map"][crop])
                 passed=(derived["slope_map"][crop]<=max_slope)
@@ -356,38 +432,66 @@ def _derived_surface_tiled(z,valid,dx,dy,operation,max_slope=30.,
     if operation=="suitability" and qualified:
         metrics={"suitable_area_m2":float(suitable*dx*dy),
                  "suitable_pct":float(100*suitable/qualified)}
+        if suitability_model=="weighted":
+            scores=output[np.isfinite(output)]
+            metrics.update({"suitability_model_weighted":1,
+                            "mean_weighted_score":float(scores.mean()),
+                            "score_weight_slope":float(suitability_weights[0]/sum(suitability_weights)),
+                            "score_weight_tri":float(suitability_weights[1]/sum(suitability_weights)),
+                            "score_weight_elevation":float(suitability_weights[2]/sum(suitability_weights)),
+                            "weighted_score_uncertainty_bound":min(1,elevation_sigma_m*suitability_weights[2]/sum(suitability_weights)/max((max_elevation-min_elevation)/2,1e-12))})
     return output,metrics
 
 
 def surface(z,valid,affine,crs,operation,reference,point,end_point,max_slope,
             min_elevation,max_elevation,max_tri,stream_cells,azimuth,altitude,feature,origin,cancel=None,
-            source_datum=None):
+            source_datum=None,gradient_method="horn",slope_classes="standard",mfd_exponent=1.1,neighborhood_radius=1,route_model="surface",stream_order_scheme="strahler",hillshade_mode="single",
+            flow_routing_method="d8",curvature_method="finite_difference",curvature_radius=2,
+            design_east_grade=0.,design_north_grade=0.,design_max_grade=.3,elevation_sigma_m=0.,
+            suitability_model="binary",suitability_weights=(.5,.25,.25),external_inflow=None,
+            design_curvature_east=0.,design_curvature_cross=0.,design_curvature_north=0.):
     """Return the exact source-grid derivative and product-specific statistics."""
     dx,dy=abs(affine.a),abs(affine.e);cell=dx*dy
     features=[];metrics={}
+    if suitability_model not in ("binary","weighted") or len(suitability_weights)!=3 or any(not math.isfinite(w) or w<0 for w in suitability_weights) or sum(suitability_weights)<=0:
+        raise RasterError("Invalid weighted suitability model or weights.")
+    if flow_routing_method!="d8" and operation!="flow_accumulation":
+        raise RasterError("D-infinity routing currently applies only to the flow accumulation raster.")
     if operation=="elevation":
         values=np.where(valid,z,np.nan)
     elif operation=="cutfill_map":
-        if not math.isfinite(reference):raise RasterError("Reference elevation must be finite.")
-        values=np.where(valid,z-reference,np.nan)
-        metrics={"cut_m3":float(np.nansum(np.maximum(values,0))*cell),
-                 "fill_m3":float(np.nansum(np.maximum(-values,0))*cell)}
+        from .scientific_kernels import design_surface
+        values,metrics=design_surface(z,valid,dx,dy,reference,
+            design_east_grade,design_north_grade,elevation_sigma_m,design_max_grade,
+            design_curvature_east,design_curvature_cross,design_curvature_north,cancel=cancel)
+    elif operation=="suitability" and suitability_model=="weighted" and z.size<=1_000_000:
+        from .scientific_kernels import weighted_suitability
+        d=derivatives(z,valid,dx,dy,gradient_method)
+        values,metrics=weighted_suitability(z,valid,d["slope_map"],d["tri"],
+            max_slope,min_elevation,max_elevation,max_tri,suitability_weights,elevation_sigma_m)
+        metrics["suitable_area_m2"]*=cell
+    elif operation=="flow_accumulation" and flow_routing_method=="dinf":
+        from .scientific_kernels import dinfinity_accumulation
+        values,angles=dinfinity_accumulation(z,valid,dx,dy,external_inflow=external_inflow,cancel=cancel)
+        metrics={"dinf_direction_valid_cells":int(np.isfinite(angles).sum()),
+                 "external_inflow_total_cell_equivalents":float(np.sum(external_inflow)) if external_inflow is not None else 0.}
     elif operation=="flow_accumulation_mfd":
         from .multiflow import mfd_accumulation
-        values=mfd_accumulation(z,valid,dx,dy,cancel=cancel)
-        metrics={"mfd_exponent":1.1}
+        values=mfd_accumulation(z,valid,dx,dy,exponent=mfd_exponent,cancel=cancel)
+        metrics={"mfd_exponent":float(mfd_exponent)}
     elif operation in {"flow_direction","flow_accumulation","streams","stream_order"}:
         dst,direction,accum=d8_flow(z,valid,dx,dy,cancel)
         if operation=="flow_direction":values=direction
         elif operation=="flow_accumulation":values=accum
         elif operation=="stream_order":
-            from .multiflow import strahler_orders
+            from .multiflow import strahler_orders,shreve_magnitudes
             if not 1<=stream_cells<=1_000_000:
                 raise RasterError("Invalid stream accumulation threshold.")
-            values=strahler_orders(dst,valid&(accum>=stream_cells),cancel)
+            values=(strahler_orders if stream_order_scheme=="strahler" else shreve_magnitudes)(
+                dst,valid&(accum>=stream_cells),cancel)
             metrics={"stream_threshold_cells":stream_cells,
                      "channel_cells":int(np.isfinite(values).sum()),
-                     "max_stream_order":int(np.nanmax(values))}
+                     ("max_stream_order" if stream_order_scheme=="strahler" else "max_stream_magnitude"):int(np.nanmax(values))}
         else:
             if not 1<=stream_cells<=1_000_000:raise RasterError("Invalid stream accumulation threshold.")
             values=np.where(valid,(accum>=stream_cells).astype(float),np.nan)
@@ -409,26 +513,35 @@ def surface(z,valid,affine,crs,operation,reference,point,end_point,max_slope,
     elif operation=="least_cost":
         start=origin(point,crs,affine,valid);end=origin(end_point,crs,affine,valid)
         if start==end:raise RasterError("Route endpoints must occupy different cells.")
-        route,cost=least_cost(z,valid,start,end,dx,dy,max_slope,cancel)
+        route,cost=least_cost(z,valid,start,end,dx,dy,max_slope,cancel,route_model=route_model)
         coordinates=[affine*(c+.5,r+.5) for r,c in route]
         line=LineString(coordinates)
         values=np.where(valid,0.,np.nan)
         for r,c in route:values[r,c]=1
         features=[feature(line,crs,{"name":"Least-cost route","color":"#b74127"})]
-        metrics={"route_length_m":float(line.length),"route_cost":cost,"route_cells":len(route)}
+        metrics={"route_length_m":float(line.length),"route_cost":cost,"route_cells":len(route),
+                 "route_surface_length_m":float(sum(math.hypot(math.hypot((b[0]-a[0]),(b[1]-a[1])),float(z[r2,c2]-z[r1,c1]))
+                     for (r1,c1),(r2,c2),a,b in zip(route,route[1:],coordinates,coordinates[1:])))}
     else:
         # Large-area surfaces avoid keeping nine full-sized derived arrays.
-        if z.size>1_000_000:
+        if operation in {"curvature","plan_curvature","profile_curvature"} and curvature_method=="quadratic":
+            from .scientific_kernels import quadratic_curvature
+            values=quadratic_curvature(z,valid,dx,dy,curvature_radius,operation,cancel)
+            metrics={"curvature_fit_radius_cells":curvature_radius}
+        elif operation in {"tri","tpi"} and neighborhood_radius>1:
+            from .multiscale import multiscale_terrain
+            values=multiscale_terrain(z,valid,neighborhood_radius,operation,cancel)
+        elif z.size>1_000_000:
             values,metrics=_derived_surface_tiled(
                 z,valid,dx,dy,operation,max_slope,min_elevation,
-                max_elevation,max_tri,azimuth,altitude,cancel)
+                max_elevation,max_tri,azimuth,altitude,cancel,gradient_method=gradient_method,hillshade_mode=hillshade_mode,
+                suitability_model=suitability_model,suitability_weights=suitability_weights,elevation_sigma_m=elevation_sigma_m)
         else:
-            d=derivatives(z,valid,dx,dy);checkpoint(cancel)
+            d=derivatives(z,valid,dx,dy,gradient_method);checkpoint(cancel)
             if operation=="hillshade":
                 if not (0<=azimuth<=360 and 0<=altitude<=90):raise RasterError("Invalid sun angles.")
-                a,b=math.radians(azimuth),math.radians(altitude)
                 east,south=d["east"],d["south"]
-                values=255*np.clip((math.sin(b)-east*math.cos(b)*math.sin(a)+south*math.cos(b)*math.cos(a))/np.sqrt(1+east**2+south**2),0,1)
+                values=hillshade_illumination(east,south,azimuth,altitude,hillshade_mode)
             elif operation=="suitability":
                 if not (0<=max_slope<=90 and min_elevation<=max_elevation and max_tri>=0):
                     raise RasterError("Invalid suitability limits.")
@@ -441,7 +554,10 @@ def surface(z,valid,affine,crs,operation,reference,point,end_point,max_slope,
                 values=np.where(np.isfinite(d["slope_map"])&~np.isfinite(d["aspect_map"]),-1,d["aspect_map"])
             else:values=d[operation]
     if not np.isfinite(values).any():raise RasterError("No valid cells for this terrain product.")
-    product=raster_product(values,operation,affine,crs,cancel,source_datum=source_datum)
+    product=raster_product(values,operation,affine,crs,cancel,source_datum=source_datum,slope_classes=slope_classes,stream_order_scheme=stream_order_scheme,
+        suitability_model=suitability_model)
+    if operation in {"tri","tpi"}:
+        metrics["neighborhood_radius_cells"]=neighborhood_radius
     if operation in {"flow_direction","streams","suitability","least_cost"}:
         metrics["product_valid_cells"]=product["valid_cells"]
     elif operation=="aspect_map":
@@ -452,7 +568,14 @@ def surface(z,valid,affine,crs,operation,reference,point,end_point,max_slope,
             bearing=circular_mean_degrees(angles)
             if bearing is not None:metrics["circular_mean_aspect_deg"]=bearing
     else:
+        finite_values=values[np.isfinite(values)]
+        percentiles=np.percentile(finite_values,[10,50,90])
         metrics.update({"product_valid_cells":product["valid_cells"],
-                        "product_min":float(np.nanmin(values)),"product_max":float(np.nanmax(values)),
-                        "product_mean":float(np.nanmean(values))})
+                        "product_min":float(finite_values.min()),
+                        "product_max":float(finite_values.max()),
+                        "product_mean":float(finite_values.mean()),
+                        "product_std":float(finite_values.std()),
+                        "product_p10":float(percentiles[0]),
+                        "product_p50":float(percentiles[1]),
+                        "product_p90":float(percentiles[2])})
     return product,metrics,features

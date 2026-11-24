@@ -12,7 +12,8 @@ export const WORKSPACE_MODULES:readonly WorkspaceModule[]=[
   {id:'tools-terrain',label:'Terrain',description:'Elevation and hydrology'},
   {id:'tools-raster',label:'Raster / AI',description:'Imagery and raster analysis'},
   {id:'tools-style',label:'Cartography',description:'Map layout and labels'},
-  {id:'tools-services',label:'Data',description:'Data sources and APIs'},
+  {id:'tools-services',label:'Data',description:'Import, manage, polygonize and connect GIS datasets'},
+  {id:'tools-export',label:'Export',description:'Vector files, map PDFs, GeoTIFFs and research reports'},
   {id:'tools-ai',label:'Assistant',description:'Local assistant'},
 ];
 
@@ -100,62 +101,150 @@ export function WorkspaceCommandPalette({open,commands,onClose}:{
   </div>;
 }
 
-interface FeatureItem {id:string;name:string;revision?:number;layer_id?:string}
-interface FeatureLayer {id:string;name:string;visible:boolean|number}
-function FeatureGroup({name,features,visible,selectedId,onOpen,search}:{
+interface FeatureItem {id:string;name:string;revision?:number;layer_id?:string;geometry?:GeoJSON.Geometry}
+interface FeatureLayer {id:string;name:string;visible:boolean|number;locked?:boolean|number}
+export interface WorkspaceObjectGroup {
+  id:string;name:string;items:FeatureItem[];selectedId:string|null;
+  onOpen:(id:string)=>void;
+  onRename?:(id:string,name:string)=>Promise<void>;
+  onDelete?:(id:string)=>Promise<void>;
+}
+function ObjectRow({item,selected,disabled,locked,busy,onOpen,onRename,onDelete}:{
+  item:FeatureItem;selected:boolean;disabled:boolean;locked:boolean;busy:boolean;
+  onOpen:()=>void;onRename?:(name:string)=>Promise<void>;onDelete?:()=>Promise<void>;
+}){
+  const [renaming,setRenaming]=useState(false),[name,setName]=useState(item.name);
+  const [working,setWorking]=useState(false),[error,setError]=useState('');
+  async function mutate(action:()=>Promise<void>){
+    if(working||busy)return;
+    setWorking(true);setError('');
+    try{await action();setRenaming(false);}
+    catch(cause){setError(cause instanceof Error?cause.message:'Object action failed.');}
+    finally{setWorking(false);}
+  }
+  return <div className={'workspace-object-row'+(selected?' is-selected':'')}
+    role="group" aria-label={'Object '+item.name} data-object-id={item.id}>
+    {renaming?<form className="workspace-object-rename" onSubmit={event=>{
+      event.preventDefault();if(name.trim()&&onRename)void mutate(()=>onRename(name.trim()));
+    }} onKeyDown={event=>{
+      if(event.key==='Escape'){event.preventDefault();event.stopPropagation();setRenaming(false);setError('');}
+    }}>
+      <input autoFocus aria-label="Object name" value={name} maxLength={200} disabled={working||busy}
+        onFocus={event=>event.currentTarget.select()} onChange={event=>setName(event.target.value)}/>
+      <button type="submit" disabled={!name.trim()||working||busy}>Save name</button>
+      <button type="button" disabled={working} onClick={()=>{setRenaming(false);setError('');}}>Cancel rename</button>
+    </form>:<>
+      <button type="button" className="workspace-object-select" disabled={disabled||busy||working}
+        aria-label={item.name} aria-pressed={selected} onClick={onOpen}
+        title={disabled?'Layer hidden':item.name}>
+        <span>{item.name}{item.geometry&&<small className="workspace-object-type">{item.geometry.type}</small>}</span>
+        {item.revision!==undefined&&<small title="Revision">r{item.revision}</small>}
+      </button>
+      {(onRename||onDelete)&&<div className="workspace-object-actions">
+        {onRename&&<button type="button" aria-label="Rename object" title={locked?'Unlock layer to rename':'Rename '+item.name}
+          disabled={locked||busy||working} onClick={()=>{setName(item.name);setError('');setRenaming(true);}}>Rename</button>}
+        {onDelete&&<button type="button" aria-label="Delete object" title={locked?'Unlock layer to delete':'Delete '+item.name}
+          disabled={locked||busy||working} onClick={()=>void mutate(onDelete)}>Delete</button>}
+      </div>}
+    </>}
+    {error&&<small role="alert" className="workspace-object-error">{error}</small>}
+  </div>;
+}
+function FeatureGroup({name,features,visible,selectedId,onOpen,search,locked=false,busy=false,onRename,onDelete,total=features.length}:{
   name:string;features:FeatureItem[];visible:boolean;selectedId:string|null;
   onOpen:(id:string)=>void;search:boolean;
+  locked?:boolean;busy?:boolean;
+  onRename?:(id:string,name:string)=>Promise<void>;onDelete?:(id:string)=>Promise<void>;
+  total?:number;
 }){
   const [expanded,setExpanded]=useState(true);
   return <details className="workspace-feature-group" open={search||expanded}
     onToggle={event=>{if(!search)setExpanded(event.currentTarget.open);}}>
-    <summary><Layers3 size={13}/>{name}<small>{features.length}</small></summary>
+    <summary><Layers3 size={13}/>{name}<small>{total}</small></summary>
     <div className="project-features">
-      {features.map(item=><button key={item.id} type="button"
-        disabled={!visible} onClick={()=>onOpen(item.id)}
-        aria-pressed={selectedId===item.id}
-        className={selectedId===item.id?'active':''}
-        title={visible?item.name:'Layer hidden: '+name}>
-        <span>{item.name}</span>
-        {item.revision!==undefined&&<small>r{item.revision}</small>}
-      </button>)}
+      {features.map(item=><ObjectRow key={item.id} item={item}
+        selected={selectedId===item.id} disabled={!visible} locked={locked} busy={busy}
+        onOpen={()=>onOpen(item.id)}
+        onRename={onRename?value=>onRename(item.id,value):undefined}
+        onDelete={onDelete?()=>onDelete(item.id):undefined}/>)}
     </div>
   </details>;
 }
 
-/** The shared document/object tree only selects objects: mutations continue
- * through the owning project's revisioned API, avoiding duplicate state.
+/** Object actions use their owner's revisioned API or local undo history.
+ * Renaming never needs to load or replace the object's geometry selection.
  */
 export function WorkspaceFeatureTree<T extends FeatureItem>({
-  layers,features,selectedId,onOpen,
+  layers,features,selectedId,onOpen,onRename,onDelete,busy=false,additionalGroups=[],pageSize=5,
 }:{
   layers:readonly FeatureLayer[];features:readonly T[];
   selectedId:string|null;onOpen:(feature:T)=>void;
+  onRename?:(feature:T,name:string)=>Promise<void>;onDelete?:(feature:T)=>Promise<void>;
+  busy?:boolean;additionalGroups?:WorkspaceObjectGroup[];
+  pageSize?:number;
 }){
   const [filter,setFilter]=useState('');
+  const [page,setPage]=useState(0);
   const lowered=filter.trim().toLocaleLowerCase();
   const visibleFeatures=features.filter(f=>!lowered||
     [f.name, f.id,layers.find(l=>l.id===f.layer_id)?.name??'']
       .some(s=>s.toLocaleLowerCase().includes(lowered)));
   const groups=[
-    ...layers.map(l=>({id:l.id,name:l.name,visible:Boolean(l.visible),
+    ...layers.map(l=>({id:l.id,name:l.name,visible:Boolean(l.visible),locked:Boolean(l.locked),
       items:visibleFeatures.filter(f=>f.layer_id===l.id)})),
-    {id:'unassigned',name:'Unassigned / linked',visible:true,
+    {id:'unassigned',name:'Unassigned / linked',visible:true,locked:false,
       items:visibleFeatures.filter(f=>!layers.some(l=>l.id===f.layer_id))},
   ].filter(g=>g.items.length>0);
+  const extras=additionalGroups.map(group=>({...group,items:group.items.filter(item=>
+    !lowered||[item.name,item.id,group.name].some(value=>value.toLocaleLowerCase().includes(lowered)))}))
+    .filter(group=>group.items.length>0);
   const lookup=new Map(features.map(f=>[f.id,f]));
+  // Page the whole object browser, rather than allocating a full page to
+  // every layer. Many layers must not push selected objects below the dock.
+  const rows=[...groups.flatMap(g=>g.items.map(item=>({key:g.id+':'+item.id,selected:item.id===selectedId}))),
+    ...extras.flatMap(g=>g.items.map(item=>({key:g.id+':'+item.id,selected:item.id===g.selectedId})))];
+  const selectedKey=rows.find(row=>row.selected)?.key??null;
+  const pages:string[][]=[[]];
+  for(const group of [...groups,...extras]){
+    for(let start=0;start<group.items.length;start+=pageSize){
+      const chunk=group.items.slice(start,start+pageSize).map(item=>group.id+':'+item.id);
+      // Keep a small layer together: freshly split siblings must be visible
+      // side by side, rather than stranded on opposite page boundaries.
+      if(pages[pages.length-1].length+chunk.length>pageSize)pages.push(chunk);
+      else pages[pages.length-1].push(...chunk);
+    }
+  }
+  const lastPage=pages.length-1,currentPage=Math.min(page,lastPage);
+  const offset=pages.slice(0,currentPage).reduce((sum,items)=>sum+items.length,0);
+  const paged=new Set(pages[currentPage]);
+  const selectedPage=pages.findIndex(items=>selectedKey!==null&&items.includes(selectedKey));
+  useEffect(()=>{
+    setPage(selectedPage>=0?selectedPage:0);
+  },[selectedKey,selectedPage,filter,pageSize]);
   return <div className="workspace-feature-tree" role="region" aria-label="Project feature tree">
-    <div className="workspace-tree-header"><strong>Features</strong><span>{features.length}</span></div>
+    <div className="workspace-tree-header"><strong>Features</strong><span>{features.length+additionalGroups.reduce((sum,g)=>sum+g.items.length,0)}</span></div>
     <label className="workspace-tree-filter"><Search size={13}/>
       <input aria-label="Filter project features" type="search"
         value={filter} placeholder="Filter name or layer"
-        onChange={e=>setFilter(e.target.value)}/>
+        onChange={e=>{setFilter(e.target.value);setPage(0);}}/>
     </label>
-    {groups.map(g=><FeatureGroup key={g.id} name={g.name} features={g.items}
+    {groups.filter(g=>g.items.some(item=>paged.has(g.id+':'+item.id))).map(g=><FeatureGroup key={g.id} name={g.name}
+      features={g.items.filter(item=>paged.has(g.id+':'+item.id))} total={g.items.length}
       visible={g.visible} search={Boolean(lowered)}
-      selectedId={selectedId}
+      selectedId={selectedId} locked={g.locked} busy={busy}
+      onRename={onRename?async(id,name)=>{const f=lookup.get(id);if(f)await onRename(f,name);}:undefined}
+      onDelete={onDelete?async id=>{const f=lookup.get(id);if(f)await onDelete(f);}:undefined}
       onOpen={id=>{const f=lookup.get(id);if(f)onOpen(f);}}/>)}
-    {!groups.length&&<small className="workspace-tree-empty">
+    {extras.filter(g=>g.items.some(item=>paged.has(g.id+':'+item.id))).map(g=><FeatureGroup key={g.id} name={g.name}
+      features={g.items.filter(item=>paged.has(g.id+':'+item.id))} total={g.items.length} visible
+      selectedId={g.selectedId} search={Boolean(lowered)} busy={busy}
+      onOpen={g.onOpen} onRename={g.onRename} onDelete={g.onDelete}/>)}
+    {pages.length>1&&<div className="workspace-object-pager">
+      <button type="button" aria-label="Previous objects" disabled={currentPage===0} onClick={()=>setPage(currentPage-1)}>Previous</button>
+      <span>{offset+1}–{offset+paged.size} / {rows.length}</span>
+      <button type="button" aria-label="Next objects" disabled={currentPage===lastPage} onClick={()=>setPage(currentPage+1)}>Next</button>
+    </div>}
+    {!groups.length&&!extras.length&&<small className="workspace-tree-empty">
       {lowered?'No matching features':'No saved features yet.'}</small>}
   </div>;
 }

@@ -1,5 +1,5 @@
 import {test,expect} from './coverage-fixture';
-import {openProjectDrawer,closeProjectDrawer} from './workspace-ui';
+import {openProjectDrawer,closeProjectDrawer,activateWorkspaceModule} from './workspace-ui';
 
 const tile=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/ZecAAAAASUVORK5CYII=','base64');
 const cmh={id:'cmh-acceptance',name:'CMH Acceptance Airport',display_name:'John Glenn Columbus Airport, Ohio',
@@ -29,7 +29,7 @@ test('CMH Find a place remains selected across map clicks and Terrain activation
  const bounds=(await map.boundingBox())!;
  await page.mouse.click(bounds.x+bounds.width*.08,bounds.y+bounds.height*.12);
  await expect(page.locator('.results .result.active')).toHaveCount(1);
- await page.getByRole('navigation',{name:'Workspace tools'}).getByRole('button',{name:'Terrain',exact:true}).click();
+ await activateWorkspaceModule(page,'Terrain');
  await expect(page.getByLabel('DEM fetch area')).toHaveValue('selection');
  await expect(page.getByLabel('DEM download target')).toContainText('Selected geometry');
  await page.getByLabel('DEM fetch area').selectOption('viewport');
@@ -55,7 +55,7 @@ test('point-only airport search result stays selected and cannot masquerade as a
  const bounds=(await map.boundingBox())!;
  await page.mouse.click(bounds.x+bounds.width*.15,bounds.y+bounds.height*.15);
  await expect(page.locator('.results .result.active')).toHaveCount(1);
- await page.getByRole('navigation',{name:'Workspace tools'}).getByRole('button',{name:'Terrain',exact:true}).click();
+ await activateWorkspaceModule(page,'Terrain');
  await expect(page.getByLabel('DEM fetch area')).toHaveValue('viewport');
  await expect(page.getByLabel('DEM fetch area').locator('option[value="selection"]')).toBeDisabled();
 });
@@ -66,9 +66,9 @@ test('Draw profile line keeps CMH selected before and after Finish, until explic
  await expect(map).toHaveAttribute('data-label-layer-ready','true',{timeout:25000});
  await search(page,cmh);
  const toolbar=page.getByLabel('Survey toolbar');
- await page.getByRole('navigation',{name:'Workspace tools'}).getByRole('button',{name:'Terrain',exact:true}).click();
+ await activateWorkspaceModule(page,'Terrain');
  await page.getByRole('button',{name:'Browse terrain tools',exact:true}).click();
- await page.getByLabel('Terrain tools').getByRole('button',{name:'Elevation profile',exact:true}).click();
+ await page.getByLabel('Terrain tools',{exact:true}).getByRole('button',{name:'Elevation profile',exact:true}).click();
  await page.getByRole('button',{name:'Draw profile line',exact:true}).click();
  await expect(page.locator('.results .result.active')).toHaveCount(1);
  await openProjectDrawer(page,'search');
@@ -120,9 +120,9 @@ test('Cancel stops an independent profile drawing without discarding CMH',async(
  const map=page.getByLabel('Interactive geospatial map');
  await expect(map).toHaveAttribute('data-label-layer-ready','true',{timeout:25000});
  await search(page,cmh);
- await page.getByRole('navigation',{name:'Workspace tools'}).getByRole('button',{name:'Terrain',exact:true}).click();
+ await activateWorkspaceModule(page,'Terrain');
  await page.getByRole('button',{name:'Browse terrain tools',exact:true}).click();
- await page.getByLabel('Terrain tools').getByRole('button',{name:'Elevation profile',exact:true}).click();
+ await page.getByLabel('Terrain tools',{exact:true}).getByRole('button',{name:'Elevation profile',exact:true}).click();
  await page.getByRole('button',{name:'Draw profile line',exact:true}).click();
  await page.getByLabel('Survey toolbar').getByRole('button',{name:'Cancel drawing',exact:true}).click();
  await expect(page.getByText('Drawing cancelled. Retained locations are unchanged.')).toBeVisible();
@@ -142,7 +142,7 @@ test('search centers on true selected campus outline, not unrelated broad search
    const center=raw?JSON.parse(raw) as number[]:[];
    return center.length===2&&Math.abs(center[0]+82.8925)<.02&&Math.abs(center[1]-39.9965)<.02;
  },{timeout:20000}).toBe(true);
- await page.getByRole('navigation',{name:'Workspace tools'}).getByRole('button',{name:'Terrain',exact:true}).click();
+ await activateWorkspaceModule(page,'Terrain');
  await expect(page.getByLabel('DEM fetch area')).toHaveValue('selection');
  await expect(page.getByLabel('DEM download target')).toContainText('W -82.91540°');
 });
@@ -168,9 +168,10 @@ test('OSU disconnected mapped properties default to campus, with inspectable edi
  await openProjectDrawer(page,'search');
  await expect(page.getByLabel('Pinned places').getByRole('button',{name:'Select pinned The Ohio State University'})).toBeVisible();
  await closeProjectDrawer(page);
- await page.getByRole('navigation',{name:'Workspace tools'}).getByRole('button',{name:'Terrain',exact:true}).click();
+ await activateWorkspaceModule(page,'Terrain');
  await expect(page.getByLabel('DEM fetch area')).toHaveValue('selection');
  await expect(page.getByLabel('DEM download target')).toContainText('N 40.01240°');
+ await page.locator('.workspace-objects > summary').click();
  await page.getByText('Geometry / vertices',{exact:true}).click();
  await page.getByLabel('Study area parcel').selectOption('all');
  await expect(page.getByLabel('DEM download target')).toContainText('N 40.07640°');
@@ -235,6 +236,8 @@ test('OSU disconnected mapped properties default to campus, with inspectable edi
  await page.getByRole('button',{name:'Edit boundary nodes'}).click();
  await expect(page.getByRole('button',{name:'Toggle map legend'})).toBeEnabled();
  await expect(page.locator('.map-legend-items')).toBeVisible();
+ await page.getByRole('button',{name:'Back to terrain tools',exact:true}).click();
+ await expect(page.getByLabel('DEM download target')).toBeVisible();
 });
 
 test('Hong Kong airport area uses global DEM provider and stays within enlarged budget',async({page})=>{
@@ -248,7 +251,7 @@ test('Hong Kong airport area uses global DEM provider and stays within enlarged 
      [113.885,22.345],[113.885,22.275],
    ]]}};
  await search(page,hkg);
- await page.getByRole('navigation',{name:'Workspace tools'}).getByRole('button',{name:'Terrain',exact:true}).click();
+ await activateWorkspaceModule(page,'Terrain');
  await expect(page.getByLabel('DEM fetch area')).toHaveValue('selection');
  await expect(page.getByLabel('Public DEM resolution')).toHaveValue('30');
  await expect(page.getByLabel('Public DEM resolution').locator('option[value="1"]')).toBeDisabled();
@@ -256,7 +259,7 @@ test('Hong Kong airport area uses global DEM provider and stays within enlarged 
  await expect(page.getByLabel('Public DEM resolution').locator('option[value="10"]')).toBeDisabled();
  await expect(page.getByLabel('DEM download target')).toContainText('Selected geometry');
  await expect(page.getByRole('button',{name:'Auto-fit DEM resolution'})).toContainText('30 m');
- await expect(page.getByText('USGS 3DEP is not a global data source.',{exact:false})).toBeVisible();
+ await expect(page.getByLabel('DEM source coverage',{exact:true})).toContainText('Copernicus global');
  await expect(page.getByText(/8-million-cell.*budget/)).toHaveCount(0);
  await openProjectDrawer(page,'search');
  await expect(page.getByLabel('Pinned places').getByRole('button',{name:'Select pinned Hong Kong airport study area'})).toBeVisible();
@@ -274,7 +277,7 @@ test('large US university footprint automatically finds usable 3 m grid without 
      [-83.05,40.036],[-83.05,39.98],
    ]]}};
  await search(page,large);
- await page.getByRole('navigation',{name:'Workspace tools'}).getByRole('button',{name:'Terrain',exact:true}).click();
+ await activateWorkspaceModule(page,'Terrain');
  await page.getByLabel('Public DEM resolution').selectOption('1');
  await expect(page.getByRole('alert')).toContainText('8-million-cell');
  await expect(page.getByRole('button',{name:'Fetch DEM'})).toBeDisabled();

@@ -8,9 +8,11 @@ const commands:WorkspaceCommand[]=[
 ];
 describe('shared Onshape-style workspace command registry',()=>{
  it('has unique stable module IDs, with Terrain and all current modules represented',()=>{
-  expect(WORKSPACE_MODULES).toHaveLength(8);
-  expect(new Set(WORKSPACE_MODULES.map(m=>m.id)).size).toBe(8);
+  expect(WORKSPACE_MODULES).toHaveLength(9);
+  expect(new Set(WORKSPACE_MODULES.map(m=>m.id)).size).toBe(9);
   expect(WORKSPACE_MODULES.some(m=>m.id==='tools-terrain')).toBe(true);
+  expect(WORKSPACE_MODULES.some(m=>m.id==='tools-services')).toBe(true);
+  expect(WORKSPACE_MODULES.some(m=>m.id==='tools-export')).toBe(true);
  });
  it('filters command titles, groups, keywords and shortcuts without removing disabled actions',()=>{
   expect(searchWorkspaceCommands(commands,'terrain').map(c=>c.id)).toEqual(['terrain','slope']);

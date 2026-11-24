@@ -1,7 +1,7 @@
 # GeoFathom · local scientific acceptance (Windows)
 
-This is the **research-use** validation protocol for P0 surveying, P1 terrain science,
-P2 bounded compute and the reusable workspace. It is not a legal cadastral survey,
+This is the **research-use** validation protocol for surveying surveying, terrain analysis terrain science,
+bounded compute bounded compute and the reusable workspace. It is not a legal cadastral survey,
 independent terrain truth dataset or enterprise load certification.
 
 ## One-click entry points
@@ -34,7 +34,7 @@ failure screenshots and traces: `web/test-results/`. Any failed stage makes
 the launcher exit unsuccessfully; none of these reports is a substitute for
 inspecting numeric geospatial outputs.
 
-## Interactive P0 and P1 verification
+## Interactive surveying and terrain analysis verification
 
 1. Start GeoFathom and create a distinct research test project (e.g.,
    `OSU terrain acceptance`). Do not overwrite an existing research workspace.
@@ -85,13 +85,13 @@ inspecting numeric geospatial outputs.
 
 ## Acceptance decisions
 
-- **P0 target 95–100%:** editable source geometry, persistence, exact units,
+- **surveying target 95–100%:** editable source geometry, persistence, exact units,
   credible DEM coverage/provenance and reliable basic analysis/export are
   demonstrated on actual sites plus known synthetic standards.
-- **P1 target 90–95%:** operations can run from the UI, with explicit
+- **terrain analysis target 90–95%:** operations can run from the UI, with explicit
   parameters, meaningful scientific warnings, representative independent
   numerical oracles and portable reproducible outputs.
-- **P2 target 65–70%:** local machine loads are bounded, cancellation and
+- **bounded compute target 65–70%:** local machine loads are bounded, cancellation and
   cleanup work, native fallback is honest, and serial plus concurrent
   regression runs pass. Multi-tenant/distributed commercial scaling is
   not required.

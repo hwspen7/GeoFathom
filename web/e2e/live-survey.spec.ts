@@ -5,6 +5,7 @@ test('toolbar offers live area, exact dimensions and basemap switching',async({p
  await page.route('**/tile.openstreetmap.org/**',r=>r.fulfill({contentType:'image/png',body:tile}));
  await page.route('**/basemap.nationalmap.gov/**',r=>r.fulfill({contentType:'image/png',body:tile}));
  await page.route('**/gibs.earthdata.nasa.gov/**',r=>r.fulfill({contentType:'image/png',body:tile}));
+ await page.route('**/services.arcgisonline.com/**',r=>r.fulfill({contentType:'image/png',body:tile}));
  await page.goto('/');
  const map=page.getByLabel('Interactive geospatial map');
  await expect(map).toHaveAttribute('data-label-layer-ready','true',{timeout:25000});
@@ -18,12 +19,14 @@ test('toolbar offers live area, exact dimensions and basemap switching',async({p
  await toolbar.getByRole('button',{name:'Finish',exact:true}).click();
  await expect(page.getByText(/Drawing completed and measured/)).toBeVisible();
  const label=page.getByLabel('Live map dimensions').locator('.map-dimension-total');
+ await expect(label).toHaveCount(1);
  await expect(label).not.toContainText('~ ');
  const exact=await label.textContent();
  await openProjectDrawer(page,'layers');
- await page.getByLabel('Basemap',{exact:true}).selectOption('satellite');
+ await page.getByLabel('Map type',{exact:true}).selectOption('imagery');
  await expect(label).toHaveText(exact!);
- await page.getByLabel('Basemap',{exact:true}).selectOption('blank');
+ await expect(label).toHaveCSS('background-color','rgba(0, 0, 0, 0)');
+ await page.getByLabel('Map type',{exact:true}).selectOption('blank');
  await expect(label).toHaveText(exact!);
  await expect(label).toHaveCSS('background-color','rgba(0, 0, 0, 0)');
  await page.getByText('Settings',{exact:true}).click();

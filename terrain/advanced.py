@@ -14,14 +14,30 @@ from .engine import _check_dem
 from .cancellation import checkpoint
 from .vertical import vertical_datum
 from .professional import SURFACES, surface, d8_directions, D8, raster_product
+from .catalog import ADVANCED_OPERATIONS
 from .hydrology import condition_dem
 
-def _window(path, geometry, maximum, max_cells=1_000_000):
+def _window(path, geometry, maximum, max_cells=1_000_000, source_kind="dem"):
     measure_geometry(geometry)
     if geometry["type"] not in {"Polygon","MultiPolygon"}:
         raise RasterError("Draw or select a polygon study area.")
     with rasterio.open(path) as source:
-        _check_dem(source)
+        if source_kind=="dem":
+            _check_dem(source)
+        elif source_kind=="external_cells":
+            # Flow-equivalent rasters are *not* elevations. Validate their
+            # geometry/scaling without invoking the DEM-only vertical-unit rule.
+            if source.count!=1 or not source.crs or not source.crs.is_projected or (
+                source.crs.linear_units.lower() not in {"metre","meter","metres","meters"}):
+                raise RasterError("External upstream inflow must be a projected single-band metric raster.")
+            if abs(source.transform.b)>1e-9 or abs(source.transform.d)>1e-9 or source.transform.a<=0 or source.transform.e>=0:
+                raise RasterError("External inflow GeoTIFF must be north-up.")
+            if not (math.isclose(float(source.scales[0]),1.,abs_tol=1e-12) and math.isclose(float(source.offsets[0]),0.,abs_tol=1e-12)):
+                raise RasterError("External inflow must have a physical cell-equivalent scale of 1.")
+            from .projection import grid_scale_error_percent
+            grid_scale_error_percent(source)
+        else:
+            raise RasterError("Unsupported raster source kind.")
         projected=transform_geom("EPSG:4326",source.crs,geometry)
         boundary=shape(projected)
         try:
@@ -158,8 +174,30 @@ def _origin(point,crs,affine,valid):
         raise RasterError("Observer/outlet must fall in a valid selected DEM cell.")
     return r,c
 
+def _visibility_scope(valid,origin,affine,max_distance_m=0.,view_azimuth=0.,view_width=360.):
+    """A boolean study population, distinct from true/false visibility.
+
+    Outside-sector cells must not enter visibility denominators. An observer
+    cell always belongs to its own study population.
+    """
+    rows,cols=np.indices(valid.shape)
+    r0,c0=origin
+    dx,dy=abs(affine.a),abs(affine.e)
+    scope=valid.copy()
+    if max_distance_m>0:
+        scope &= np.hypot((rows-r0)*dy,(cols-c0)*dx)<=max_distance_m+1e-9
+    if view_width<360:
+        bearing=(np.degrees(np.arctan2((cols-c0)*dx,(r0-rows)*dy))+360)%360
+        delta=(bearing-view_azimuth+180)%360-180
+        scope &= np.abs(delta)<=view_width/2+1e-10
+    scope[r0,c0]=True
+    return scope
+
+
 def _visibility(z,valid,origin,affine,observer_height,target_height,cancel=None,
-                consider_curvature=False,refraction_coeff=0.13):
+                consider_curvature=False,refraction_coeff=0.13,
+                max_distance_m=0.,view_azimuth=0.,view_width=360.,
+                blocking_surface=None,blocking_valid=None):
     if any(not math.isfinite(v) or not 0<=v<=1000 for v in (observer_height,target_height)):
         raise RasterError("Observer and target heights must be 0–1000 meters.")
     if consider_curvature and not (math.isfinite(refraction_coeff) and 0 <= refraction_coeff <= .5):
@@ -176,7 +214,14 @@ def _visibility(z,valid,origin,affine,observer_height,target_height,cancel=None,
     eye=z[r0,c0]+observer_height
     # Batch rays by integer step count. This preserves the exact nearest-cell
     # ray sampling / nodata semantics while bounding temporary arrays.
-    rows,cols=np.nonzero(valid)
+    # Preserve the low-level known-ray contract while exposing the actual
+    # eligible population separately to callers. Outside-scope is neither
+    # a failed line of sight nor an unknown/missing DEM pixel.
+    scope=_visibility_scope(valid,origin,affine,max_distance_m,view_azimuth,view_width)
+    blocking_surface=z if blocking_surface is None else blocking_surface
+    blocking_valid=valid if blocking_valid is None else blocking_valid
+    known[valid&~scope]=True
+    rows,cols=np.nonzero(scope)
     distances=np.maximum(np.abs(rows-r0),np.abs(cols-c0))
     if int(distances.sum())>100_000_000:
         raise RasterError("Visibility exceeds 100 million ray samples; reduce the area or use a coarser DEM.")
@@ -194,11 +239,11 @@ def _visibility(z,valid,origin,affine,observer_height,target_height,cancel=None,
             cc_end=cols[start:min(last,start+chunk)]
             rr=np.rint(r0+(rr_end[:,None]-r0)*fractions).astype(np.intp)
             cc=np.rint(c0+(cc_end[:,None]-c0)*fractions).astype(np.intp)
-            complete=valid[rr,cc].all(axis=1)
+            complete=blocking_valid[rr,cc].all(axis=1)
             distance_sq=((rr_end-r0)*dy_m)**2+((cc_end-c0)*dx_m)**2
             target_z=z[rr_end,cc_end]-curvature*distance_sq+target_height
             line=eye+(target_z[:,None]-eye)*fractions
-            blockers=z[rr,cc]-curvature*distance_sq[:,None]*fractions[None,:]**2
+            blockers=blocking_surface[rr,cc]-curvature*distance_sq[:,None]*fractions[None,:]**2
             known[rr_end,cc_end]=complete
             seen[rr_end,cc_end]=complete&np.all(blockers<=line+1e-8,axis=1)
     return seen,known
@@ -255,12 +300,51 @@ def _mask_features(mask,affine,crs,name,cancel=None):
 def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,observer_height=1.7,target_height=0.,
                 end_point=None,max_slope=30.,min_elevation=-12000.,max_elevation=12000.,max_tri=100.,
                 stream_cells=100,azimuth=315.,altitude=45.,section_spacing=50.,section_width=20.,texture_path=None,
-                fill_sinks=False,consider_curvature=False,refraction_coeff=0.13,comparison_path=None,observer_points=None,cancel=None):
+                fill_sinks=False,consider_curvature=False,refraction_coeff=0.13,comparison_path=None,observer_points=None,gradient_method="horn",slope_classes="standard",mfd_exponent=1.1,neighborhood_radius=1,
+                max_distance_m=0.,view_azimuth=0.,view_width=360.,
+                route_model="surface",mesh_samples=256,stream_order_scheme="strahler",hillshade_mode="single",
+                flow_routing_method="d8",depression_method="fill",curvature_method="finite_difference",curvature_radius=2,
+                design_east_grade=0.,design_north_grade=0.,design_max_grade=.3,elevation_sigma_m=0.,
+                optimize_observers=0,dsm_path=None,mesh_lod=False,
+                suitability_model="binary",suitability_weights=(.5,.25,.25),external_inflow_path=None,
+                design_curvature_east=0.,design_curvature_cross=0.,design_curvature_north=0.,cancel=None):
     checkpoint(cancel)
+    if gradient_method not in {"horn","zevenbergen_thorne"}:
+        raise RasterError("Unsupported terrain gradient method.")
+    if slope_classes not in {"standard","detailed","broad"}:
+        raise RasterError("Unsupported slope classification preset.")
+    if not math.isfinite(mfd_exponent) or not .5<=mfd_exponent<=8:
+        raise RasterError("MFD exponent must be between 0.5 and 8.")
+    if neighborhood_radius not in (1,2,3,4):
+        raise RasterError("Neighborhood radius must be 1–4 cells.")
+    if not math.isfinite(max_distance_m) or not 0<=max_distance_m<=10000:
+        raise RasterError("Viewshed range must be 0–10,000 meters.")
+    if not math.isfinite(view_azimuth) or not 0<=view_azimuth<=360:
+        raise RasterError("Viewshed azimuth must be 0–360 degrees.")
+    if not math.isfinite(view_width) or not 0<view_width<=360:
+        raise RasterError("Viewshed width must be in (0, 360] degrees.")
+    if route_model not in {"surface","distance","gentle"}:
+        raise RasterError("Unsupported route cost model.")
+    if not isinstance(mesh_samples,int) or not 64<=mesh_samples<=512:
+        raise RasterError("3D mesh budget must be 64–512 samples per axis.")
+    if stream_order_scheme not in {"strahler","shreve"}:
+        raise RasterError("Unsupported stream hierarchy algorithm.")
+    if hillshade_mode not in {"single","four_direction"}:
+        raise RasterError("Unsupported hillshade illumination model.")
+    if flow_routing_method not in {"d8","dinf"} or depression_method not in {"fill","breach"}:
+        raise RasterError("Unsupported hydrological routing or depression handling method.")
+    if curvature_method not in {"finite_difference","quadratic"} or curvature_radius not in (1,2,3,4):
+        raise RasterError("Unsupported curvature fitting method or radius.")
+    if not isinstance(optimize_observers,int) or not 0<=optimize_observers<=4:
+        raise RasterError("Coverage optimisation count must be 0–4.")
+    if suitability_model not in {"binary","weighted"} or len(suitability_weights)!=3 or not all(math.isfinite(w) and w>=0 for w in suitability_weights) or sum(suitability_weights)<=0:
+        raise RasterError("Invalid suitability weighting model or weights.")
+    if external_inflow_path is not None and not (operation=="flow_accumulation" and flow_routing_method=="dinf"):
+        raise RasterError("External contributing area is accepted only for D-infinity accumulation.")
     if operation=="cross_sections":
         from .corridor import cross_sections
         return cross_sections(path,geometry,section_spacing,section_width,cancel)
-    if operation not in {"contours","volume","visibility","viewshed_multi","watershed","mesh","distribution","dem_difference"}|SURFACES:
+    if operation not in ADVANCED_OPERATIONS:
         raise RasterError("Unknown terrain operation.")
     # Independent analysis budgets. Local surface derivatives can use large
     # grids; visibility ray tracing and catchment/path traversals remain bounded.
@@ -274,31 +358,102 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
     # heights. Missing metadata remains unknown; never invent NAVD88/EGM96.
     with rasterio.open(path) as source:
         source_datum=vertical_datum(source)
+        from .projection import grid_scale_error_percent
+        grid_scale_error_pct=grid_scale_error_percent(source)
     checkpoint(cancel)
+    blocking_surface=z
+    blocking_valid=valid
+    if dsm_path is not None and operation in {"visibility","viewshed_multi"}:
+        dsm,dsm_valid,_,dsm_affine,dsm_crs,_,_=_window(dsm_path,geometry,maximum,max_cells)
+        if dsm.shape!=z.shape or dsm_crs!=crs or not np.allclose(tuple(dsm_affine),tuple(affine),rtol=0,atol=1e-8):
+            raise RasterError("DSM and DEM must have the same projected grid; explicitly resample first.")
+        blocking_valid=valid&dsm_valid
+        blocking_surface=np.where(blocking_valid,np.maximum(z,dsm),np.nan)
+    external_inflow=None
+    if external_inflow_path is not None:
+        with rasterio.open(external_inflow_path) as source:
+            if source.tags().get("TERRAIN_UNIT") not in {"cells","cell_equivalents"}:
+                raise RasterError("External inflow raster needs TERRAIN_UNIT=cells or cell_equivalents.")
+        flow,flow_valid,_,flow_affine,flow_crs,_,_=_window(external_inflow_path,geometry,maximum,max_cells,source_kind="external_cells")
+        if flow.shape!=z.shape or flow_crs!=crs or not np.allclose(tuple(flow_affine),tuple(affine),atol=1e-8,rtol=0):
+            raise RasterError("External contributing area raster must match the DEM grid exactly.")
+        if not flow_valid[valid].all():
+            raise RasterError("External contributing area is missing values on valid DEM cells; fill explicit zeros first.")
+        if np.any(flow[valid]<0):
+            raise RasterError("External contributing area cannot be negative.")
+        external_inflow=np.where(valid,flow,0.)
     hydro_ops={"flow_direction","flow_accumulation","flow_accumulation_mfd",
                "streams","stream_order","watershed"}
     # Drainage may use a conditioned working grid; other surface products
     # always operate on the original elevations.
-    flow_z,conditioned=(condition_dem(z,valid,cancel) if fill_sinks and operation in hydro_ops
-                        else (z,None))
+    if fill_sinks and operation in hydro_ops:
+        if depression_method=="breach":
+            from .scientific_kernels import breach_depressions
+            flow_z,conditioned=breach_depressions(z,valid,abs(affine.a),abs(affine.e),cancel=cancel)
+        else:
+            flow_z,conditioned=condition_dem(z,valid,cancel)
+    else:
+        flow_z,conditioned=z,None
     cell=abs(affine.a*affine.e)
-    result={"operation":operation,"source_crs":str(crs),"valid_cells":int(valid.sum()),
+    result={"operation":operation,"source_crs":str(crs),
+        "algorithm_options":{"gradient_method":gradient_method,"slope_classes":slope_classes,
+                             "mfd_exponent":mfd_exponent if operation=="flow_accumulation_mfd" else None,
+                             "neighborhood_radius_cells":neighborhood_radius if operation in {"tri","tpi"} else None,
+                             "route_model":route_model if operation=="least_cost" else None,
+                             "stream_order_scheme":stream_order_scheme if operation=="stream_order" else None,
+                             "hillshade_mode":hillshade_mode if operation=="hillshade" else None,
+                             "mesh_samples":mesh_samples if operation=="mesh" else None,
+                             "flow_routing_method":flow_routing_method if operation in hydro_ops else None,
+                             "external_inflow_supplied":external_inflow is not None if operation=="flow_accumulation" else None,
+                             "depression_method":depression_method if fill_sinks and operation in hydro_ops else None,
+                             "curvature_method":curvature_method if operation in {"curvature","plan_curvature","profile_curvature"} else None,
+                             "curvature_radius_cells":curvature_radius if operation in {"curvature","plan_curvature","profile_curvature"} else None,
+                             "design_east_grade":design_east_grade if operation in {"volume","cutfill_map"} else None,
+                             "design_curvature_east_per_m":design_curvature_east if operation in {"volume","cutfill_map"} else None,
+                             "design_curvature_cross_per_m":design_curvature_cross if operation in {"volume","cutfill_map"} else None,
+                             "design_curvature_north_per_m":design_curvature_north if operation in {"volume","cutfill_map"} else None,
+                             "design_north_grade":design_north_grade if operation in {"volume","cutfill_map"} else None,
+                             "design_max_grade":design_max_grade if operation in {"volume","cutfill_map"} else None,
+                             "elevation_sigma_m":elevation_sigma_m if operation in {"volume","cutfill_map"} else None,
+                             "optimize_observers":optimize_observers if operation=="viewshed_multi" else None,
+                             "dsm_source":bool(dsm_path) if operation in {"visibility","viewshed_multi"} else None,
+                             "mesh_lod":mesh_lod if operation=="mesh" else None,
+                             "suitability_model":suitability_model if operation=="suitability" else None,
+                             "suitability_weights":list(suitability_weights) if operation=="suitability" and suitability_model=="weighted" else None,
+                             "maximum_distance_m":max_distance_m if operation in {"visibility","viewshed_multi"} else None,
+                             "view_azimuth_deg":view_azimuth if operation in {"visibility","viewshed_multi"} else None,
+                             "view_width_deg":view_width if operation in {"visibility","viewshed_multi"} else None},"valid_cells":int(valid.sum()),
         "missing_cells":int((covered&~valid).sum()),"cell_area_m2":cell,
         "source_vertical_datum":source_datum,"metrics":{},"features":[]}
     if operation in SURFACES:
         result["raster"],result["metrics"],result["features"]=surface(flow_z,valid,affine,crs,operation,reference,point,end_point,
             max_slope,min_elevation,max_elevation,max_tri,stream_cells,azimuth,altitude,
-            _feature,_origin,cancel,source_datum=source_datum)
+            _feature,_origin,cancel,source_datum=source_datum,
+            gradient_method=gradient_method,slope_classes=slope_classes,mfd_exponent=mfd_exponent,
+            neighborhood_radius=neighborhood_radius,route_model=route_model,stream_order_scheme=stream_order_scheme,hillshade_mode=hillshade_mode,
+            flow_routing_method=flow_routing_method,curvature_method=curvature_method,curvature_radius=curvature_radius,
+            design_east_grade=design_east_grade,design_north_grade=design_north_grade,
+            design_max_grade=design_max_grade,elevation_sigma_m=elevation_sigma_m,
+            suitability_model=suitability_model,suitability_weights=suitability_weights,external_inflow=external_inflow,
+            design_curvature_east=design_curvature_east,design_curvature_cross=design_curvature_cross,
+            design_curvature_north=design_curvature_north)
         result["warning"]="Projected source-grid product; nodata and incomplete neighborhoods excluded. Unconditioned D8 terminates at sinks/flats; suitability and path costs are screening estimates, not engineering certification."
+        if operation=="flow_accumulation" and external_inflow is not None:
+            result["warning"]=("D-infinity routing includes explicitly supplied external contributing-area cell equivalents on matching valid DEM cells. "
+                "The provided external inflow is not independently verified; no additional off-grid catchment is inferred.")
+        if operation=="suitability" and suitability_model=="weighted":
+            result["warning"]=("Weighted linear criteria (slope, terrain ruggedness and midpoint elevation) with hard constraints; "
+                "normalized scores 0–1 are utilities, not probabilities. The full source GeoTIFF preserves physical float scores. "
+                "Assumed elevation uncertainty only bounds the elevation utility component; external validation is outstanding.")
         if operation=="flow_accumulation_mfd":
             result["warning"]=(
-                "Freeman-style MFD slope-power routing (exponent 1.1) "
+                f"Freeman-style MFD slope-power routing (exponent {mfd_exponent:g}) "
                 "in fractional cell equivalents on a projected grid; "
                 "flats and sinks terminate unless conditioning is enabled. "
                 "NoData cannot be a flow receiver; this is screening hydrology.")
         elif operation=="stream_order":
             result["warning"]=(
-                "Strahler stream orders on the thresholded D8 channel network. "
+                f"{stream_order_scheme.title()} channel hierarchy on the thresholded D8 network. "
                 "Unknown upstream regions outside the selected DEM are excluded; "
                 "orders are screening estimates, not a surveyed stream inventory.")
         if operation=="streams" and result["metrics"]["drainage_edges"]>result["metrics"]["vector_edges"]:
@@ -350,27 +505,43 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
         result["warning"]="Cell-center elevation distribution on the valid projected DEM grid; nodata excluded. Cumulative area includes elevations through each bin."
     elif operation=="volume":
         if not math.isfinite(reference):raise RasterError("Reference elevation must be finite.")
-        delta=z[valid]-reference
-        cut=float(np.maximum(delta,0).sum()*cell)
-        fill=float(np.maximum(-delta,0).sum()*cell)
-        result["metrics"]={"cut_m3":cut,"fill_m3":fill,"net_cut_m3":cut-fill,
-            "covered_grid_area_m2":int(valid.sum())*cell,"reference_elevation_m":reference}
-        result["warning"]="Projected cell-center cut/fill estimate versus a horizontal reference plane; nodata excluded, not a certified earthworks survey."
+        from .scientific_kernels import design_surface
+        _,design_metrics=design_surface(z,valid,abs(affine.a),abs(affine.e),reference,
+            design_east_grade,design_north_grade,elevation_sigma_m,design_max_grade,
+            design_curvature_east,design_curvature_cross,design_curvature_north,cancel=cancel)
+        result["metrics"]={**design_metrics,"reference_elevation_m":reference}
+        result["warning"]="Projected cell-center cut/fill against the declared grade-constrained quadratic design surface; the maximum grade is conservatively checked across the full grid rectangle. NoData excluded. Uncertainty bounds assume the supplied one-sigma vertical error and independent versus fully correlated cell errors; not survey-certified."
     elif operation=="visibility":
         origin=_origin(point,crs,affine,valid)
         seen,known=_visibility(z,valid,origin,affine,observer_height,target_height,cancel,
-                               consider_curvature,refraction_coeff)
+                               consider_curvature,refraction_coeff,max_distance_m,view_azimuth,view_width,
+                               blocking_surface,blocking_valid)
+        scope=_visibility_scope(valid,origin,affine,max_distance_m,view_azimuth,view_width)
         result["features"]=_mask_features(seen,affine,crs,"Visible terrain",cancel)
-        result["metrics"]={"visible_cells":int(seen.sum()),"visible_grid_area_m2":int(seen.sum())*cell,"unknown_cells":int((valid&~known).sum())}
-        result["warning"]=("Local cell-center visibility with Earth curvature and configurable atmospheric refraction. "
-                           if consider_curvature else "Local planar cell-center visibility; curvature and refraction disabled. ")+"Buildings/vegetation depend on the input DEM/DSM; NoData along rays is unknown."
+        eligible=int(scope.sum());known_eligible=int((scope&known).sum())
+        result["metrics"]={"visible_cells":int(seen.sum()),"visible_grid_area_m2":int(seen.sum())*cell,
+            "eligible_cells":eligible,"out_of_scope_cells":int((valid&~scope).sum()),
+            "known_eligible_cells":known_eligible,
+            "visibility_pct_of_known_eligible":100*int(seen.sum())/max(1,known_eligible),
+            "unknown_cells":int((scope&~known).sum()),
+            "maximum_distance_m":max_distance_m,"view_azimuth_deg":view_azimuth,
+            "view_width_deg":view_width}
+        result["warning"]=(
+            ("Local cell-center visibility with Earth curvature and configurable atmospheric refraction. "
+             if consider_curvature else "Local planar cell-center visibility; curvature and refraction disabled. ")
+            + ("DSM obstruction elevations were provided; any DSM NoData on a ray is unknown. " if dsm_path is not None else
+               "No independent DSM was supplied, so buildings and vegetation are not modeled. ")
+            + "Cells outside the chosen viewing sector or range are not part of visibility statistics."
+        )
     elif operation=="viewshed_multi":
         # A count raster preserves observer overlap, not merely the union
         # polygon. Unknown rays stay NoData rather than becoming invisible.
         if point is not None:
             raise RasterError("Use observer_points, not point, for multi-observer visibility.")
-        if not isinstance(observer_points,(list,tuple)) or not 2<=len(observer_points)<=4:
-            raise RasterError("Multi-observer visibility requires 2–4 observer points.")
+        if not isinstance(observer_points,(list,tuple)) or not 2<=len(observer_points)<=(12 if optimize_observers else 4):
+            raise RasterError("Multi-observer visibility requires 2–4 sites, or 2–12 optimisation candidates.")
+        if optimize_observers>len(observer_points):
+            raise RasterError("Optimal observer count cannot exceed the available candidates.")
         origins=[_origin(observer,crs,affine,valid) for observer in observer_points]
         if len(set(origins))!=len(origins):
             raise RasterError("Multi-observer points must occupy distinct DEM cells.")
@@ -381,13 +552,32 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
             for r,c in origins)
         if total_steps>100_000_000:
             raise RasterError("Multi-observer visibility exceeds 100 million ray samples; reduce the area.")
+        cached=None
+        if optimize_observers:
+            from .coverage_exact import exact_maximum_coverage
+            cached=[_visibility(z,valid,origin,affine,observer_height,target_height,cancel,
+                consider_curvature,refraction_coeff,max_distance_m,view_azimuth,view_width,
+                blocking_surface,blocking_valid) for origin in origins]
+            indices,gains,_,optimizer_audit=exact_maximum_coverage(
+                [pair[0] for pair in cached],
+                [pair[1] for pair in cached],optimize_observers,cancel)
+            result["selection"]={"selected_candidate_indices":indices,
+                                 "marginal_visible_cells":gains,
+                                 "total_candidate_sites":len(origins),
+                                 "optimizer":optimizer_audit}
+            origins=[origins[i] for i in indices]
+            cached=[cached[i] for i in indices]
         count=np.zeros(z.shape,dtype=np.uint8)
         fully_known=valid.copy()
-        for origin in origins:
+        population=np.zeros(z.shape,dtype=bool)
+        for index,origin in enumerate(origins):
             checkpoint(cancel)
-            visible,available=_visibility(z,valid,origin,affine,
-                observer_height,target_height,cancel,consider_curvature,
-                refraction_coeff)
+            population |= _visibility_scope(valid,origin,affine,max_distance_m,view_azimuth,view_width)
+            visible,available=(cached[index] if cached is not None else
+                _visibility(z,valid,origin,affine,
+                    observer_height,target_height,cancel,consider_curvature,
+                    refraction_coeff,max_distance_m,view_azimuth,view_width,
+                    blocking_surface,blocking_valid))
             count+=visible.astype(np.uint8)
             # A count of zero or one is not exact if ANY observer's ray
             # crosses NoData. Mark such pixels unknown rather than
@@ -397,27 +587,41 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
         # Chart categories must be mutually exclusive. Partial but positive
         # sightings remain available as vector geometry, while the strict
         # raster/count metrics refer only to pixels known for ALL observers.
-        fully_visible=union&fully_known
+        fully_visible=union&fully_known&population
+        # Pixels outside every observer's configured sector/range are NoData
+        # in the count raster, not a misleading "zero observers" result.
+        scoped_known=fully_known&population
         result["raster"]=raster_product(
-            np.where(fully_known,count.astype(float),np.nan),
+            np.where(scoped_known,count.astype(float),np.nan),
             "viewshed_multi",affine,crs,cancel,source_datum=source_datum)
         result["features"]=_mask_features(union,affine,crs,
                                           "Visible from any observer",cancel)
         result["metrics"]={
             "observer_count":len(origins),
+            "candidate_site_count":len(observer_points),
+            "optimized_site_count":optimize_observers,
             "visible_cells":int(fully_visible.sum()),
             "visible_any_known_cells":int(union.sum()),
             "visible_by_all_cells":int((count==len(origins)).sum()),
             "visible_grid_area_m2":int(fully_visible.sum())*cell,
-            "unknown_cells":int((valid&~fully_known).sum()),
+            "unknown_cells":int((population&~fully_known).sum()),
+            "eligible_cells":int(population.sum()),
+            "out_of_scope_cells":int((valid&~population).sum()),
+            "known_eligible_cells":int(scoped_known.sum()),
+            "visibility_pct_of_known_eligible":100*int(fully_visible.sum())/max(1,int(scoped_known.sum())),
+            "maximum_distance_m":max_distance_m,"view_azimuth_deg":view_azimuth,
+            "view_width_deg":view_width,
         }
         result["warning"]=(
             "Multi-observer cell-center viewshed: raster values count the "
             "observers with unobstructed sightlines only when all observer "
             "rays are known; NoData means one or more rays are unknown. "
             "The vector union includes any positively observed cells even "
-            "when other observer rays are unknown. "
-            "Terrain/DSM only, without independently verified buildings.")
+            "when other observer rays are unknown. "+
+            ("Supplied co-registered DSM obstructs rays; missing DSM cells remain unknown. " if dsm_path else
+             "Bare DEM only; buildings and vegetation are not evaluated. ")+
+            ("Exhaustive site selection attains the maximum positively observed cells among the supplied candidate sites; this does not certify optimal locations outside the candidate set. " if optimize_observers else "")+
+            "Outside-sector/range cells are excluded from raster counts and coverage denominators.")
     elif operation=="watershed":
         origin=_origin(point,crs,affine,valid)
         mask=_watershed(flow_z,valid,origin,affine,cancel)
@@ -430,7 +634,7 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
     else:
         # Interactive WebGL2 preview: preserve up to 256 samples per axis.
         # Original source DEM and raster exports are never downsampled here.
-        step=max(1,math.ceil(max(z.shape)/256))
+        step=max(1,math.ceil(max(z.shape)/mesh_samples))
         heights=z[::step,::step];mask=valid[::step,::step]
         first=mask[:-1,:-1]&mask[1:,:-1]&mask[:-1,1:]
         second=mask[:-1,1:]&mask[1:,:-1]&mask[1:,1:]
@@ -438,21 +642,68 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
         result["mesh"]={"rows":heights.shape[0],"cols":heights.shape[1],
             "origin_xy":list(affine*(.5,.5)),"source_crs":str(crs),
             "dx_m":abs(affine.a)*step,"dy_m":abs(affine.e)*step,
-            "heights":[float(v) if ok else None for v,ok in zip(heights.flat,mask.flat)]}
+            "heights":[float(v) if ok else None for v,ok in zip(heights.flat,mask.flat)],
+            "source_grid_rows":int(z.shape[0]),"source_grid_cols":int(z.shape[1]),
+            "source_sampling_step":int(step)}
+        if mesh_lod:
+            from .scientific_kernels import mesh_lod_tiles
+            tiles=mesh_lod_tiles(heights,mask,abs(affine.a)*step,abs(affine.e)*step,
+                                 tile_cells=32,levels=(1,2,4),cancel=cancel)
+            result["mesh"]["lod"]={"tile_cells":32,"levels":[1,2,4],"tiles":tiles,
+                                   "transport":"in_response_not_streamed"}
         if texture_path is not None:
             from .texture import mesh_texture
             result["mesh"]["texture"]=mesh_texture(texture_path,affine,crs,heights.shape[0],heights.shape[1],step,cancel)
-        result["metrics"]={"minimum_m":float(z[valid].min()),"maximum_m":float(z[valid].max())}
-        result["warning"]="Interactive 3D elevation preview sampled from the DEM; gaps represent nodata."
+        result["metrics"]={"minimum_m":float(z[valid].min()),"maximum_m":float(z[valid].max()),
+            "mesh_vertices":int(mask.sum()),"mesh_sampling_step":int(step),
+            "mesh_grid_coverage_pct":100*float(mask.sum())/max(1,mask.size)}
+        if mesh_lod:
+            result["metrics"]["mesh_lod_tile_count"]=len(tiles)
+        result["warning"]="Interactive 3D elevation preview sampled from the DEM; gaps represent nodata. LOD pyramid is transport-ready but not camera-streamed."
     if conditioned is not None:
         result["metrics"].update(conditioned)
-        result["metrics"]["conditioning_fill_volume_m3"]=conditioned["total_fill_depth_m"]*cell
-        result["warning"]+=" Priority-flood depression filling and flat routing applied to a working surface; NoData boundaries are outlets."
+        if "total_fill_depth_m" in conditioned:
+            result["metrics"]["conditioning_fill_volume_m3"]=conditioned["total_fill_depth_m"]*cell
+            result["warning"]+=" Priority-flood depression filling and flat routing applied to a working surface; NoData boundaries are outlets."
+        else:
+            result["metrics"]["conditioning_excavation_volume_m3"]=conditioned["breach_total_excavation_depth_m"]*cell
+            result["warning"]+=" Bounded least-cut depression breaching applied to a working surface. Unresolved pits are reported and must not be treated as connected."
     result["metrics"].update({"dataset_overlap_pct":coverage,
         "valid_grid_pct":100*int(valid.sum())/int(covered.sum())})
     if coverage<99.99:
         result["warning"]+=" Study area extends beyond the DEM footprint; results cover the intersection only."
     if int((covered&~valid).sum()):
         result["warning"]+=" Some covered cells are nodata."
+    # Explicit, machine-readable scientific boundaries for each result.
+    # Passing a test fixture is not equivalent to independent field accuracy.
+    flags=[]
+    if coverage < 99.99:flags.append("partial_source_overlap")
+    if result["missing_cells"]:flags.append("nodata_within_study")
+    if not source_datum:flags.append("vertical_datum_unreported")
+    if grid_scale_error_pct>0.5:
+        flags.append("projected_grid_distance_bias_gt_half_percent")
+    if operation in {"watershed","flow_accumulation","flow_accumulation_mfd","streams","stream_order"}:
+        flags.append("upstream_outside_grid_not_evaluated")
+    if dsm_path is not None and operation in {"visibility","viewshed_multi"}:
+        flags.append("dsm_source_unverified")
+    if external_inflow is not None:
+        flags.append("external_upstream_contribution_input_unverified")
+    if optimize_observers and operation=="viewshed_multi":
+        flags.append("optimal_only_within_supplied_candidate_sites")
+    if operation in {"volume","cutfill_map"} and elevation_sigma_m>0:
+        flags.append("vertical_uncertainty_input_assumed_not_measured")
+    if operation=="mesh" and mesh_lod:
+        flags.append("lod_tiles_not_streamed")
+    result["quality"]={
+        "status":"provisional_not_independently_verified",
+        "reference_validation":"not_performed",
+        "uncertainty":("assumption_based_elevation_sigma" if operation in {"volume","cutfill_map"} and elevation_sigma_m>0 else "not_quantified"),
+        "source_overlap_pct":float(coverage),
+        "valid_study_cell_pct":float(result["metrics"]["valid_grid_pct"]),
+        "derivative_coverage_pct":float(100*result["raster"]["valid_cells"]/max(1,result["valid_cells"])) if "raster" in result else None,
+        "flags":flags,
+        "area_basis":"planar_projected_grid_cells",
+        "projection_max_scale_error_pct":grid_scale_error_pct
+    }
     checkpoint(cancel)
     return result
