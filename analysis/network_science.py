@@ -26,6 +26,10 @@ METHODS={
  "circuity":("Geodesic network circuity","Distance-weighted network path divided by geodesic separation; unreachable pairs remain null."),
  "edge_criticality":("Single-edge disruption criticality","Exact one-at-a-time removal on selected edges and directed OD pairs; not simultaneous failures."),
  "stochastic_reliability":("Stochastic network reliability","Seeded independent edge-failure Monte Carlo; Wilson intervals quantify simulation error, not hazard-model uncertainty."),
+ "pareto_path":("Exact bicriteria Pareto paths","Positive additive objectives, exact nondominated label search with explicit work bounds."),
+ "raster_impedance":("Raster-adjusted network impedance","Exponential nonnegative exposure penalty with explicit reference, scale and sensitivity; conditional scenario model."),
+ "raster_least_cost":("Raster-adjusted least-cost path","Directed least-cost path with exposure-weighted native edge costs; model-dependent."),
+ "correlated_reliability":("Spatially correlated network reliability","Gaussian copula edge failures, exponential spatial covariance and explicit marginal probabilities."),
  "hazard_exposure":("Raster edge exposure","Native raster sample mean, maximum and valid coverage along each edge.")
 }
 
@@ -207,10 +211,10 @@ def execute(body):
     for e,m in body.multipliers.items():require(e in g.ids and 1<=m<=1000,"Invalid edge multiplier.")
     require(set(body.closed_edges)<=g.ids,"Unknown closed edge ID.")
     require(not (body.closed_edges or body.multipliers) or kind=="scenario_impact","Closures and multipliers are scenario-only parameters.")
-    require(not body.failure_probability or kind=="stochastic_reliability","Failure probabilities are reliability-only parameters.")
+    require(not body.failure_probability or kind in ("stochastic_reliability","correlated_reliability"),"Failure probabilities are reliability-only parameters.")
     require(not body.test_edges or kind=="edge_criticality","Selected test edges are criticality-only parameters.")
     require(set(body.failure_probability)<=g.ids and set(body.test_edges)<=g.ids and len(set(body.test_edges))==len(body.test_edges),"Unknown or duplicated scenario edge.")
-    require(body.raster is None or kind in ("hazard_exposure","scenario_impact"),"Raster is accepted only for exposure and scenario analysis.")
+    require(body.raster is None or kind in ("hazard_exposure","scenario_impact","raster_impedance","raster_least_cost"),"Raster is accepted only for exposure and scenario analysis.")
     n=len(g.nodes);arcs=sum(map(len,a.values()));features=[];rows=[];metrics={};cols=[];figures=[]
     def plot(title,recipe,x,y,columns=None,values=None):
         csv_data=table_csv(cols,rows) if values is None else table_csv(*values)
@@ -218,7 +222,50 @@ def execute(body):
         if columns:bindings["columns"]=columns
         figures.append({"title":title,"recipe":recipe,"bindings":bindings,"csv":csv_data,"raster":False})
     def budget(count):require(count*(n+arcs)<=10_000_000,"Network search work budget exceeded.")
-    if kind=="topology":
+    if kind in ("raster_impedance","raster_least_cost","pareto_path"):
+        from .network_advanced import pareto_routes,raster_costs
+        by_id={e.id:e for e in g.edges}
+        if kind=="pareto_path":
+            require(len(origins)==len(destinations)==1,"Choose one origin and one destination.")
+            require(body.secondary_cost_field!=body.cost_field,"Select distinct objective properties.")
+            other=Graph(body.network,body.secondary_cost_field)
+            secondary={e.id:e.cost for e in other.edges}
+            paths,meta=pareto_routes(g,a,secondary,origins[0],destinations[0]);metrics.update(meta)
+            cols=["route","primary_cost","secondary_cost","edge_count"]
+            palette=["#206a9a","#b65c37","#37876c","#7850a2","#9c7a25"]
+            count=0
+            for i,(x,y,path) in enumerate(paths,1):
+                rows.append([i,x,y,len(path)]);count+=len(path)
+                require(count<=20000,"Pareto route geometry output exceeds 20,000 segments.")
+                for j,(u,v,eid) in enumerate(path,1):
+                    e=by_id[eid];features.append(edge_feature(e,e.coords if u==e.source else e.coords[::-1],route=i,sequence=j,primary_cost=x,secondary_cost=y,color=palette[(i-1)%len(palette)]))
+            metrics.update(nondominated_routes=len(paths),secondary_cost_unit="m" if body.secondary_cost_field=="length_m" else body.secondary_cost_unit)
+            if rows:plot("Exact route objective frontier","basic_scatter","primary_cost","secondary_cost")
+        else:
+            require(body.raster is not None,"Provide a calibrated exposure raster.")
+            exposure,meta=raster_exposure(g,body.raster,body.spacing_m);metrics.update(meta)
+            weights=raster_costs(g,exposure,body.exposure_reference,body.exposure_scale,body.exposure_alpha,body.minimum_coverage)
+            metrics.update(maximum_multiplier=max(weights.values()),model="cost * exp(alpha * max(0,(mean exposure-reference)/scale)); conditional scenario, not calibrated travel time.")
+            if kind=="raster_impedance":
+                cols=["edge","baseline_cost","mean_exposure","coverage","multiplier","adjusted_cost"]
+                for e in g.edges:
+                    m,_,c,_=exposure[e.id];z=e.cost*weights[e.id]
+                    rows.append([e.id,e.cost,m,c,weights[e.id],z]);features.append(edge_feature(e,baseline_cost=e.cost,adjusted_cost=z,multiplier=weights[e.id],direction=e.direction))
+                plot("Exposure impedance response","basic_scatter","mean_exposure","multiplier")
+            else:
+                require(len(origins)==len(destinations)==1,"Choose one origin and one destination.")
+                s,t=origins[0],destinations[0];d,prev=dijkstra(g.adjacency(multipliers=weights),s);baseline,_=dijkstra(a,s)
+                cols=["sequence","edge","baseline_cost","adjusted_cost","cumulative_adjusted_cost"]
+                path=[];u=t
+                if t in d:
+                    while u!=s:
+                        v,e=prev[u];path.append((v,u,e));u=v
+                    for i,(u,v,eid) in enumerate(reversed(path),1):
+                        e=by_id[eid];rows.append([i,eid,e.cost,e.cost*weights[eid],d[v]])
+                        features.append(edge_feature(e,e.coords if u==e.source else e.coords[::-1],sequence=i,multiplier=weights[eid],adjusted_cost=e.cost*weights[eid]))
+                metrics.update(reachable=t in d,baseline_optimal_cost=baseline.get(t),adjusted_optimal_cost=d.get(t))
+                if rows:plot("Cumulative exposure-adjusted route cost","basic_line" if len(rows)>1 else "basic_column","sequence","cumulative_adjusted_cost")
+    elif kind=="topology":
         group=components(a);r=reverse(a);cols=["node","longitude","latitude","out_degree","in_degree","component"]
         rows=[[u,*g.nodes[u],len(a[u]),len(r[u]),group[u]] for u in sorted(g.nodes)]
         features=[edge_feature(e,cost=e.cost,length_m=e.length) for e in g.edges]
@@ -260,7 +307,7 @@ def execute(body):
         cols=["node","score"];rows=[[u,scores[u]] for u in sorted(a)]
         features=[node_feature(g,u,score=scores[u]) for u in sorted(a)]
         ordered=sorted(scores.values(),reverse=True);plot("Centrality rank distribution","basic_line","rank","score",values=(["rank","score"],[[i+1,z] for i,z in enumerate(ordered)]))
-    elif kind in ("edge_criticality","stochastic_reliability","circuity"):
+    elif kind in ("edge_criticality","stochastic_reliability","correlated_reliability","circuity"):
         require(origins and destinations and len(origins)*len(destinations)<=10000,"Choose up to 10,000 OD pairs.")
         if kind=="circuity":require(body.cost_field=="length_m","Circuity requires geodesic edge length costs.")
         budget(len(origins))
@@ -295,8 +342,12 @@ def execute(body):
             budget(len(origins)*(body.trials+1));require(len(pairs)*body.trials<=5_000_000,"Reliability simulation exceeds OD trial budget.")
             rng=np.random.default_rng(body.seed);selected=sorted(body.failure_probability);prob=np.array([body.failure_probability[e] for e in selected])
             success=np.zeros(len(pairs),dtype=np.int64);cost_sum=np.zeros(len(pairs))
-            for _ in range(body.trials):
-                closed={e for e,q in zip(selected,rng.random(len(selected))<prob) if q}
+            if kind=="correlated_reliability":
+                from .network_advanced import spatial_failure_draws
+                draws,meta=spatial_failure_draws(g,selected,prob,rng,body.trials,body.spatial_range_m);metrics.update(meta)
+            else:draws=None
+            for trial in range(body.trials):
+                closed={e for e,q in zip(selected,draws[trial] if draws is not None else rng.random(len(selected))<prob) if q}
                 modified=g.adjacency(closed);dist={s:dijkstra(modified,s)[0] for s in origins}
                 for i,(s,t,d) in enumerate(pairs):
                     if t in dist[s]:success[i]+=1;cost_sum[i]+=dist[s][t]
@@ -305,7 +356,9 @@ def execute(body):
             for i,(s,t,d) in enumerate(pairs):
                 p=float(success[i]/T);den=1+z*z/T;center=(p+z*z/(2*T))/den;half=z*math.sqrt(p*(1-p)/T+z*z/(4*T*T))/den
                 rows.append([s,t,d,p,0. if p==0 else max(0,center-half),1. if p==1 else min(1,center+half),float(cost_sum[i]/success[i]) if success[i] else None])
-            metrics={"trials":T,"seed":body.seed,"mean_pair_reliability":float(success.mean()/T),"failure_model":"Independent Bernoulli closures; Wilson intervals are Monte Carlo sampling intervals conditional on supplied probabilities."}
+            metrics.update(trials=T,seed=body.seed,mean_pair_reliability=float(success.mean()/T))
+            metrics.setdefault("failure_model","Independent Bernoulli closures.")
+            metrics["interval_interpretation"]="Wilson intervals quantify Monte Carlo sampling error conditional on the chosen failure model."
             plot("OD reliability and simulation intervals","errorbar","pair","reachable_probability",values=(["pair","reachable_probability","low","high"],[[i+1,r[3],r[4],r[5]] for i,r in enumerate(rows)]))
             figures[-1]["bindings"].update(low="low",high="high")
     elif kind=="hazard_exposure":
@@ -363,7 +416,7 @@ def execute(body):
             cols=["origin","accessibility"];rows=[[s,score[s]] for s in origins];features=[node_feature(g,s,accessibility=score[s]) for s in origins]
             plot("Origin accessibility","basic_column","origin","accessibility")
     # Display styling is separate from raw values and never changes numerical products.
-    field={'harmonic_centrality':'score','betweenness':'score','gravity_access':'accessibility','two_step_fca':'accessibility','edge_criticality':'lost_fraction','hazard_exposure':'mean'}.get(kind)
+    field={'harmonic_centrality':'score','betweenness':'score','gravity_access':'accessibility','two_step_fca':'accessibility','edge_criticality':'lost_fraction','hazard_exposure':'mean','raster_impedance':'multiplier','raster_least_cost':'multiplier'}.get(kind)
     if field:
         values=[f['properties'][field] for f in features if f['properties'].get(field) is not None]
         if values:
