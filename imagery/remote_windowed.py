@@ -105,13 +105,6 @@ def process(operation,bindings,output,parameters=None,quality=(),tile=512,progre
                     z=compute(operation,v,params);z[~common]=np.nan
                     dr=int(window.row_off)-r0;dc=int(window.col_off)-c0
                     z=z[dr:dr+int(window.height),dc:dc+int(window.width)]
-                    require(not np.isinf(z).any() and np.all((z[valid]>=-.2-1e-9)&(z[valid]<=1.6+1e-9)),'Invalid calibrated reflectance.')
-                        v[role]=z
-                    common=np.logical_and.reduce([np.isfinite(z) for z in v.values()])
-                    for (ds,b,_,_,_,_),scheme in mask_inputs:
-                        q=ds.read(b,window=window,masked=True).astype(float).filled(np.nan)
-                        common&=quality_mask(q,scheme)==1
-                    z=optical(operation,v,params);z[~common]=np.nan
                     require(not np.isinf(z).any(),'Numerical overflow.')
                     good=z[np.isfinite(z)];count+=len(good);tiles+=1
                     if len(good):total+=float(good.sum());minimum=min(minimum,float(good.min()));maximum=max(maximum,float(good.max()))
