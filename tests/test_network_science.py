@@ -24,7 +24,7 @@ def run(kind,network=NETWORK,**kw):
 def metrics(r):return r['receipt']['metrics']
 
 def test_catalog_and_topology():
-    r=run('topology');assert len(METHODS)==14
+    r=run('topology');assert len(METHODS)==18
     assert r['receipt']['nodes']==6 and r['receipt']['directed_arcs']==6
     assert metrics(r)['weak_components']==2
     assert {row[0]:row[3] for row in r['rows']}=={'A':2,'B':1,'C':0,'D':1,'E':1,'F':1}
@@ -132,3 +132,53 @@ def test_result_figures_render():
         for figure in result['figures']:
             req=StudioInput(recipe=figure['recipe'],csv=figure['csv'],**figure['bindings'])
             png,_,_=render(req);assert png.startswith(b'\x89PNG')
+
+
+def test_osm_snapshot_build_and_grade_separation():
+    from analysis.network_import import build_osm
+    snapshot={'elements':[
+        {'type':'node','id':1,'lon':0.,'lat':0.},{'type':'node','id':2,'lon':.001,'lat':0.},
+        {'type':'node','id':3,'lon':.002,'lat':0.},{'type':'node','id':4,'lon':.001,'lat':0.},
+        {'type':'node','id':5,'lon':.001,'lat':.001},
+        {'type':'way','id':100,'nodes':[1,2,3],'tags':{'highway':'residential','oneway':'-1'}},
+        {'type':'way','id':101,'nodes':[4,5],'tags':{'highway':'residential','bridge':'yes'}},
+        {'type':'way','id':102,'nodes':[2,5],'tags':{'highway':'residential','access':'private'}}]}
+    out=build_osm(snapshot,{'residential':36});n=out['network'];assert len(n['features'])==3
+    assert out['receipt']['excluded_ways']==1
+    assert n['features'][0]['properties']['direction']=='reverse'
+    assert n['features'][0]['properties']['travel_time_s']==pytest.approx(11.1319490793)
+    assert metrics(run('topology',n,cost_field='travel_time_s'))['weak_components']==2
+    assert metrics(run('shortest_path',n,cost_field='travel_time_s',origins=['osm:3'],destinations=['osm:1']))['reachable']
+    assert not metrics(run('shortest_path',n,cost_field='travel_time_s',origins=['osm:1'],destinations=['osm:3']))['reachable']
+    assert TestClient(app).post('/analysis/network-science/build-osm',json={'snapshot':snapshot,'speed_kmh_by_class':{'residential':36}}).status_code==200
+
+def test_pareto_exact_nondominated_paths():
+    n=collection(edge('ab','A','B',1),edge('bc','B','C',1),edge('ad','A','D',3),edge('dc','D','C',3),edge('ac','A','C',8))
+    for f,c in zip(n['features'],[5,5,1,1,11]):f['properties']['risk']=c
+    r=run('pareto_path',n,origins=['A'],destinations=['C'],secondary_cost_field='risk')
+    assert r['rows']==[[1,2.,10.,2],[2,6.,2.,2]]
+    assert len(r['features']['features'])==4 and metrics(r)['nondominated_routes']==2
+    assert run('pareto_path',n,origins=['C'],destinations=['A'],secondary_cost_field='risk')['rows']==[]
+
+def test_raster_impedance_and_adjusted_path():
+    n=collection(edge('ab','A','B',1),edge('bc','B','C',1))
+    kw={'raster':raster([1,3,5]),'spacing_m':60,'exposure_reference':5,'exposure_scale':4,'exposure_alpha':math.log(2)}
+    r=run('raster_impedance',n,**kw)
+    assert [x[-1] for x in r['rows']]==pytest.approx([1,2])
+    derived=r['features'];assert metrics(run('shortest_path',derived,cost_field='adjusted_cost',origins=['A'],destinations=['C']))['total_cost']==pytest.approx(3)
+    assert not metrics(run('shortest_path',derived,cost_field='adjusted_cost',origins=['C'],destinations=['A']))['reachable']
+    r=run('raster_least_cost',n,origins=['A'],destinations=['C'],**kw)
+    assert metrics(r)['baseline_optimal_cost']==2 and metrics(r)['adjusted_optimal_cost']==pytest.approx(3)
+    with pytest.raises(NetworkError,match='coverage'):
+        run('raster_impedance',n,**{**kw,'raster':raster([1,3,np.nan])})
+
+def test_correlated_failure_limit_and_seed():
+    # Two nearly co-located parallel routes have near-perfect latent
+    # correlation at long range; independent reliability is 0.75.
+    n=collection(edge('ab','A','B',1),edge('ab2','A','B',1))
+    kw={'origins':['A'],'destinations':['B'],'failure_probability':{'ab':.5,'ab2':.5},'trials':2000,'seed':17}
+    corr=run('correlated_reliability',n,**kw);ind=run('stochastic_reliability',n,**kw)
+    assert corr['rows']==run('correlated_reliability',n,**kw)['rows']
+    assert abs(corr['rows'][0][3]-.5)<.05
+    assert abs(ind['rows'][0][3]-.75)<.05
+    assert metrics(corr)['maximum_off_diagonal_latent_correlation']==pytest.approx(1)
