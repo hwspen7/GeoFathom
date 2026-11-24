@@ -12,10 +12,14 @@ This independent module starts from the integrated scientific figure baseline. I
 
 Quality and exact duplicates; globally anchored voxel centroids and count conservation; local covariance eigenanalysis with degeneracy masking; spherical count density (no edge correction); observed vertical frequency; directed unsigned nearest-neighbor distance; paired-cell median elevation changes with common-support signed volume; TIN barycentric ground height with no extrapolation and a maximum triangle-edge constraint.
 
+## Advanced methods
+
+Trimmed rigid point-to-point ICP uses centered SVD, proper rotations, maximum correspondence distance and reports convergence and residuals. It is a local optimizer, not global registration. Robust statistical outliers use mean kNN distances, a median/MAD scale and an explicit zero-scale rule. M3C2-inspired normal projection uses baseline core voxels, local PCA normals and common cylinders, with conditional pointwise Welch intervals including operator-supplied registration standard uncertainty. These intervals are not corrected for spatial autocorrelation, normal uncertainty, or multiple testing. Canopy structure uses independently supplied ground TIN elevations and per-cell height percentiles; return fractions must not be interpreted as area cover or LAI.
+
 ## Verification
 
-Run python -m pytest tests/test_lidar_science.py -q. Tests cover analytical planes, degenerate neighborhoods, exact voxel counts, scaled LAS coordinates, partial overlap, directed distance, TIN interpolation, malformed input and HTTP contracts. These are synthetic reference tests, not real-flight validation.
+Run python -m pytest tests/test_lidar_science.py tests/test_lidar_advanced.py -q. Tests cover analytical planes, degenerate neighborhoods, exact voxel counts, scaled LAS coordinates, partial overlap, directed distance, TIN interpolation, malformed input and HTTP contracts. These are synthetic reference tests, not real-flight validation.
 
 ## Remaining research work
 
-LAZ/COPC/EPT and tiled streaming; embedded CRS and vertical-datum verification; classification and adaptive ground filtering; return/intensity metadata; robust registration and independent checkpoints; M3C2 with spatially varying uncertainty; occlusion-aware density; canopy structure and segmentation; georeferenced raster and point-cloud exports; interactive large-cloud LOD and real-scene benchmark datasets. No publication-grade maturity score is asserted before numerical, performance, real-scene and end-to-end acceptance.
+LAZ/COPC/EPT and tiled streaming; embedded CRS and vertical-datum verification; classification and adaptive ground filtering; return/intensity metadata; global registration and independent checkpoints; full M3C2 with spatially varying and spatially correlated uncertainty; occlusion-aware density; canopy structure and segmentation; georeferenced raster and point-cloud exports; interactive large-cloud LOD and real-scene benchmark datasets. No publication-grade maturity score is asserted before numerical, performance, real-scene and end-to-end acceptance.

@@ -8,6 +8,8 @@ import numpy as np
 from pyproj import CRS
 from scipy.spatial import cKDTree, Delaunay, QhullError
 
+from .lidar_advanced import robust_outlier, register, normal_change, canopy_structure
+
 MAX_POINTS = 100_000
 MAX_BYTES = 16 * 1024 * 1024
 METHODS = {
@@ -18,6 +20,10 @@ METHODS = {
     "vertical_profile": ("Vertical height distribution", "Observed elevation histogram, not a canopy-height distribution."),
     "cloud_distance": ("Directed cloud-to-cloud distance", "Nearest 3D distance, unsigned; not evidence of statistically significant change."),
     "surface_change": ("Paired cell surface change", "Median Z per shared XY cell; unmatched cells excluded from volume."),
+    "robust_outlier": ("Robust statistical outliers", "Median/MAD of mean kNN distance; flags are diagnostic, not automatic deletion."),
+    "rigid_registration": ("Trimmed rigid ICP", "Point-to-point SVD rigid fit with correspondence radius; requires initial approximate alignment."),
+    "normal_change": ("Local normal-projection change", "M3C2-inspired cylindrical projections; conditional pointwise uncertainty, not spatially adjusted."),
+    "canopy_structure": ("Canopy height distribution", "Ground-normalized return percentiles and threshold fraction; not areal vegetation cover."),
     "ground_height": ("Ground-normalized height", "Barycentric interpolation of independently supplied ground points; no extrapolation."),
 }
 
@@ -158,14 +164,17 @@ def _serialize(columns, table):
         fw.writerow(row(table[i]))
     return out.getvalue(), figure.getvalue(), [row(r) for r in table[:100]]
 
-def analyze(operation, p, reference=None, *, k=16, size=1., radius=2., max_edge=10.):
+def analyze(operation, p, reference=None, *, k=16, size=1., radius=2., max_edge=10., trim_fraction=.8, max_iterations=60, tolerance=1e-5,
+            registration_sigma=.05, min_neighbors=5, threshold=3.5):
     if operation not in METHODS:
         raise ValueError("Unknown point-cloud operation.")
     if not 3 <= k <= 64 or not all(np.isfinite(v) and .001 <= v <= 1e6 for v in (size,radius,max_edge)):
         raise ValueError("Invalid metric analysis parameters.")
     columns = ["x_m","y_m","z_m"]
     metrics = {"input_points":len(p)}
-    if operation in ("cloud_distance","surface_change","ground_height") and reference is None:
+    if not (np.isfinite(threshold) and 0 <= threshold <= 1e6 and np.isfinite(registration_sigma) and 0 <= registration_sigma <= 1e6 and 3 <= min_neighbors <= 1000):
+        raise ValueError("Invalid diagnostic or uncertainty parameters.")
+    if operation in ("cloud_distance","surface_change","ground_height","rigid_registration","normal_change","canopy_structure") and reference is None:
         raise ValueError("This method needs a reference cloud in the same CRS and vertical datum.")
     if operation == "quality":
         table = p
@@ -209,6 +218,26 @@ def analyze(operation, p, reference=None, *, k=16, size=1., radius=2., max_edge=
         metrics.update(shared_cells=len(keys),current_only_cells=len(a)-len(keys),reference_only_cells=len(b)-len(keys),
                        common_area_m2=len(keys)*size**2,net_volume_m3=float(dz.sum()*size**2),
                        gain_volume_m3=float(np.maximum(dz,0).sum()*size**2),loss_volume_m3=float(-np.minimum(dz,0).sum()*size**2))
+    elif operation == "robust_outlier":
+        values, info = robust_outlier(p,k,threshold)
+        table = np.column_stack((p,values))
+        columns += ["mean_knn_distance_m","robust_z","outlier_flag"]
+        metrics.update(info)
+    elif operation == "rigid_registration":
+        table, info = register(p,reference,radius,trim_fraction,max_iterations,tolerance)
+        columns += ["residual_m","inlier_flag"]
+        metrics.update(info)
+    elif operation == "normal_change":
+        _, inverse, counts = _groups(reference,size,3)
+        cores = np.column_stack([np.bincount(inverse,weights=reference[:,i])/counts for i in range(3)])
+        table, info = normal_change(p,reference,cores,k,radius,max_edge,registration_sigma,min_neighbors)
+        columns += ["normal_x","normal_y","normal_z","current_count","reference_count","signed_change_m","lod95_m","lower95_m","upper95_m","above_lod"]
+        metrics.update(info)
+    elif operation == "canopy_structure":
+        ground = _ground(p,reference,max_edge)
+        table, info = canopy_structure(p,ground,size,threshold)
+        columns = ["x_m","y_m","count","p05_m","p25_m","p50_m","p75_m","p95_m","mean_height_m","sd_height_m","return_fraction_above_threshold"]
+        metrics.update(info)
     else:
         ground = _ground(p,reference,max_edge)
         height = p[:,2]-ground
