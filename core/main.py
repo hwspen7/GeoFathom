@@ -8,7 +8,7 @@ from .config import get_settings
 from .security import APIBoundaryMiddleware
 from .health import router as health_router
 from analysis.routes import router as analysis_router
-from analysis.science_routes import router as spatial_science_router
+from analysis.science_routes import router as spatial_science_router, source_router as spatial_source_router
 from analysis.pro_routes import router as spatial_workflow_router
 from analysis.classification_routes import router as classification_router, project_router as graduated_project_router
 from storage.crs_routes import router as crs_router
@@ -55,6 +55,7 @@ app.include_router(places_router)
 app.include_router(intelligence_router)
 app.include_router(analysis_router)
 app.include_router(spatial_science_router)
+app.include_router(spatial_source_router)
 app.include_router(spatial_workflow_router)
 app.include_router(classification_router)
 app.include_router(graduated_project_router)

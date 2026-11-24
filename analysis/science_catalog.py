@@ -58,6 +58,8 @@ m('focal_min','Raster','Focal minimum','raster',1,1,(R,),'raster','Finite neighb
 m('focal_max','Raster','Focal maximum','raster',1,1,(R,),'raster','Finite neighbors in a square window.'),
 m('focal_range','Raster','Focal range','raster',1,1,(R,),'raster','Maximum minus minimum, finite neighbors.'),
 m('aggregate_mean','Raster','Block aggregation mean','raster',1,1,(F,),'raster','Exact complete blocks; missing source values excluded, no incomplete edge blocks.'),
+m('resample_grid','Raster','Align source to reference grid','raster',2,2,(),'raster','Explicit nearest or bilinear resampling of second grid onto first; reference NoData retained.'),
+m('reclassify','Raster','Classify using numerical breaks','raster',1,1,(),'raster','Half-open intervals [lower, upper), final upper included; out-of-range cells become NoData.'),
 m('aggregate_sum','Raster','Block aggregation sum','raster',1,1,(F,),'raster','Additive cell quantities only; exact complete blocks.'),
 m('sample_random','Sampling','Uniform random cell sample','raster',1,1,(N,S),'table','Without replacement among valid cells.'),
 m('sample_systematic','Sampling','Systematic cell sample','raster',1,1,(N,S),'table','Random start with systematic spacing in row-major valid-cell order.'),
@@ -84,13 +86,14 @@ m('extract_points','Integrated','Extract raster at points','integrated',1,1,(),'
 m('polygonize','Integrated','Polygonize categorical raster','raster',1,1,(),'vector','Four-connected integer classes, original grid boundaries.'),
 )
 BY_ID={method.id:method for method in METHODS}
-assert len(BY_ID)==len(METHODS)==48
+assert len(BY_ID)==len(METHODS)==50
 
 def catalog():
     return [{'id':m.id,'group':m.group,'title':m.title,'source':m.source,
              'minimum':m.minimum,'maximum':m.maximum,
              'parameters':[dict(zip(('name','label','default','minimum','maximum','integer'),p)) for p in m.parameters],
              'result':m.result,'assumption':m.assumption,
+             'requires_breaks':m.id=='reclassify','requires_resampling':m.id=='resample_grid',
              'requires_weights':m.id in {'weighted_overlay','topsis'},
              'requires_pairwise':m.id=='ahp_overlay',
              'requires_directions':m.id in {'weighted_overlay','topsis','ahp_overlay','pareto_cells'}}

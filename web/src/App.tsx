@@ -2090,7 +2090,7 @@ export default function App() {
 
           <section id="tools-spatial" hidden={activeTool!=='tools-spatial'} className="panel-section">
             <div className="section-heading"><Layers3 size={16}/><span>Spatial science</span></div>
-            <SpatialSciencePanel key={activeProjectId??'no-project'} geometry={preview||drawingMode?null:geometry} connected={Boolean(capabilities)} onPreview={features=>{if(projectCurrent()){setSpatialResults(features);setSpatialVisible(true);}}}/>
+            <SpatialSciencePanel key={activeProjectId??'no-project'} geometry={preview||drawingMode?null:geometry} connected={Boolean(capabilities)} projectId={activeProjectId} layers={projectWorkspace?.layers??[]} assets={rasterLayers.map(l=>l.asset)} terrainProducts={terrainRasters.map(l=>({name:l.title,data:l.raster.geotiff,unit:l.raster.unit??'',band:1}))} onPreview={features=>{if(projectCurrent()){setSpatialResults(features);setSpatialVisible(true);}}}/>
             <div className="section-heading"><Layers3 size={16}/><span>Geometry processing</span></div>
             <GeometryAnalysis geometry={preview||drawingMode?null:geometry} selectedId={selectedFeatureId??scratchId}
               features={[...scratch,...(projectWorkspace?.features??[])]} connected={Boolean(capabilities)}

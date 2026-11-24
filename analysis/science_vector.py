@@ -121,8 +121,10 @@ def zonal(grid,groups,classes=False):
             for c in range(c0,c1):
                 x,y=a*(c,r);cell=box(x,y+a.e,x+a.a,y)
                 overlap=g.intersection(cell).area
+                # Remove only sub-numerical slivers introduced by round-trip projection.
+                if overlap<=abs(a.a*a.e)*1e-8:continue
                 covered+=overlap
-                if overlap>0 and np.isfinite(z[r,c]):values.append(z[r,c]);weights.append(overlap)
+                if np.isfinite(z[r,c]):values.append(z[r,c]);weights.append(overlap)
         v=np.asarray(values);weight=np.asarray(weights);valid_area=float(weight.sum())
         if classes:
             require(np.all(v==np.floor(v)),'Class coverage requires integer class values.')

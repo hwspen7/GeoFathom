@@ -180,7 +180,7 @@ def test_integrated_operators_analytic_spatial_fixture(kind):
 
 def test_contract_count_and_invalid_input_rejections():
     client=TestClient(app);response=client.get('/analysis/science/catalog')
-    assert response.status_code==200 and response.json()['operation_count']==len(BY_ID)==48
+    assert response.status_code==200 and response.json()['operation_count']==len(BY_ID)==50
     assert set(m['group'] for m in response.json()['operations'])=={'Vector','Raster','Sampling','Statistics','Decision','Integrated'}
     assert response.json()['ai_tool']['input_schema']['properties']['operation']
     bad=[
@@ -197,3 +197,13 @@ def test_contract_count_and_invalid_input_rejections():
         assert client.post('/analysis/science/run',json=body).status_code==422,body['operation']
     r=client.post('/analysis/science/run',json={'operation':'raster_difference','rasters':[raster(),raster()]})
     assert r.status_code==200 and r.json()['receipt']['metrics']['mean']==0
+
+
+def test_explicit_resampling_and_class_breaks():
+    z,aff=result_grid(run('resample_grid',rasters=[raster(),raster(Z,x=X+10)]))
+    assert np.isnan(z[:,0]).all()
+    np.testing.assert_allclose(z[:,1:],Z[:,:3]);assert aff==from_origin(X,Y,10,10)
+    z,_=result_grid(run('reclassify',rasters=[raster()],breaks=[1,5,9,16]))
+    np.testing.assert_array_equal(z,np.array([[0]*4,[1]*4,[2]*4,[2]*4]))
+    response=TestClient(app).post('/analysis/science/run',json={'operation':'reclassify','rasters':[raster()],'breaks':[1,1,2]})
+    assert response.status_code==422

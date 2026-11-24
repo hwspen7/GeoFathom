@@ -1,0 +1,25 @@
+import {expect,test} from './coverage-fixture';
+import {activateWorkspaceModule} from './workspace-ui';
+
+test('spatial science workbench computes actual sample points, exports and previews independently',async({page})=>{
+ await page.route('**/tile.openstreetmap.org/**',route=>route.fulfill({status:200,contentType:'image/png',body:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/ZecAAAAASUVORK5CYII=','base64')}));
+ await page.goto('/');
+ await activateWorkspaceModule(page,'Analysis');
+ const open=page.getByRole('button',{name:'Open Spatial Analysis'});
+ await expect(open).toBeEnabled();await open.click();
+ const dialog=page.getByRole('dialog',{name:'Spatial science workbench'});
+ await expect(dialog).toContainText('50 scientific methods');
+ await dialog.getByLabel('Spatial algorithm group').selectOption('Sampling');
+ await dialog.getByLabel('Spatial algorithm',{exact:true}).selectOption('sample_polygon');
+ const polygon={type:'Polygon',coordinates:[[[-81,40.6],[-80.999,40.6],[-80.999,40.601],[-81,40.601],[-81,40.6]]]};
+ await dialog.getByLabel('WGS84 vector layer').setInputFiles({name:'study.geojson',mimeType:'application/geo+json',buffer:Buffer.from(JSON.stringify(polygon))});
+ await dialog.getByLabel('Sample count').fill('5');
+ await dialog.getByRole('button',{name:'Run analysis',exact:true}).click();
+ await expect(dialog).toContainText('5 features');
+ const download=page.waitForEvent('download');
+ await dialog.getByRole('button',{name:'GeoJSON',exact:true}).click();
+ expect((await download).suggestedFilename()).toBe('spatial-result.geojson');
+ await dialog.getByRole('button',{name:'Show vectors on map'}).click();
+ await expect(dialog).not.toBeVisible();
+ await expect(page.getByLabel('Interactive geospatial map')).toHaveAttribute('data-spatial-feature-count','5');
+});

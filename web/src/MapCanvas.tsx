@@ -1132,7 +1132,7 @@ export default function MapCanvas({
     source?.setData({type:'FeatureCollection',features:terrainResults});
     container.current?.setAttribute('data-terrain-feature-count',String(terrainResults.length));
   },[terrainResults,ready]);
-  useEffect(()=>{const map=mapRef.current;if(!ready||!map)return;(map.getSource('spatial-science-result') as GeoJSONSource|undefined)?.setData({type:'FeatureCollection',features:spatialResults??[]});},[spatialResults,ready]);
+  useEffect(()=>{const map=mapRef.current;if(!ready||!map)return;(map.getSource('spatial-science-result') as GeoJSONSource|undefined)?.setData({type:'FeatureCollection',features:spatialResults??[]});container.current?.setAttribute('data-spatial-feature-count',String(spatialResults?.length??0));},[spatialResults,ready]);
   useEffect(()=>{
     const map=mapRef.current;if(!ready||!map)return;
     const source=map.getSource('terrain-fetch-target') as GeoJSONSource|undefined;
