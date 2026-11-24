@@ -36,7 +36,12 @@ if kind == "histogram":
     ax.stairs([r[column] for r in rows], edges, fill=True, color=color, alpha=0.7)
 elif kind in ("cdf", "exceedance"):
     column = 2 if kind == "cdf" else 3
-    ax.step([r[0] for r in rows], [r[column] for r in rows], where="post", color=color)
+    xs = [r[0] for r in rows]; ys = [r[column] for r in rows]
+    span = (xs[-1]-xs[0]) if xs[-1] > xs[0] else max(abs(xs[0])*0.01, 1)
+    initial = 0 if kind == "cdf" else 100
+    left = xs[0]-0.03*span
+    if settings["x_log"] and left <= 0: left = xs[0]
+    ax.step([left]+xs+[xs[-1]+0.03*span], [initial]+ys+[ys[-1]], where="post", color=color)
 elif kind == "density":
     ax.plot([r[2] for r in rows], [r[6] for r in rows], color=color)
 elif kind == "box":

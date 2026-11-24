@@ -141,7 +141,7 @@ def figure_data_from_result(result, cancel=None, source_z=None):
     elif result.get('distribution'):
         # These legacy products carry a pre-binned elevation distribution.
         # Do not invent per-cell quantiles from those bins.
-        base.update(kind='binned',quantity='elevation',unit='m',histograms={'20':[
+        base.update(kind='binned',quantity='elevation',unit='m',histograms={str(len(result['distribution'])):[
             {'lower':b['lower_m'],'upper':b['upper_m'],'midpoint':(b['lower_m']+b['upper_m'])/2,
              'cells':b['cells'],'area_m2':b['area_m2'],
              'percent':100*b['cells']/max(1,result['valid_cells']),

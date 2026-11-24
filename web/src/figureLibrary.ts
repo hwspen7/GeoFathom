@@ -25,12 +25,13 @@ export interface FigureSettings {kind:FigureKind;title:string;x_label:string;y_l
  grid:boolean;x_log:boolean;y_log:boolean;width_mm:number;height_mm:number;dpi:number;series:number;sectors:number;metric_keys:string[];}
 export function defaultFigure(data:PlotData):FigureSettings{
  const kind:FigureKind=data.histograms?'histogram':data.kind==='directional'?'rose':data.kind==='profile'?'profile':data.classes.length?'class_bar':'metrics';
- return {kind,title:data.quantity.replaceAll('_',' ')+': '+FIGURES.find(f=>f.id===kind)!.title,x_label:'',y_label:'',bins:40,measure:'percent',palette:'mono',font:'sans',font_size:16,grid:true,x_log:false,y_log:false,width_mm:160,height_mm:110,dpi:300,series:0,sectors:16,metric_keys:[]};
+ return {kind,title:data.quantity.replaceAll('_',' ')+': '+FIGURES.find(f=>f.id===kind)!.title,x_label:'',y_label:'',bins:data.histograms?.['40']?40:Number(Object.keys(data.histograms??{})[0]??40),measure:'percent',palette:'mono',font:'sans',font_size:16,grid:true,x_log:false,y_log:false,width_mm:160,height_mm:110,dpi:300,series:0,sectors:16,metric_keys:[]};
 }
 export function availableFigures(data:PlotData):FigureRecipe[]{
  return FIGURES.filter(f=>{
   if(['scatter','joint_density'].includes(f.id))return !!data.joint;
-  if(['histogram','density'].includes(f.id))return !!data.histograms;
+  if(f.id==='histogram')return !!data.histograms;
+  if(f.id==='density')return !!data.histograms&&Object.values(data.histograms).some(bins=>bins.some(b=>b.density!==null&&Number.isFinite(b.density)));
   if(['cdf','exceedance'].includes(f.id))return !!data.cdf?.length;
   if(f.id==='box')return !!data.box;
   if(f.id==='quantile')return !!data.quantiles?.length;
@@ -56,7 +57,7 @@ export function localPlotData(record:PersistedTerrainResult):PlotData|null{
  if(record.advanced&&!record.advanced.raster){
   const a=record.advanced;
   const base:PlotData={schema:'geofathom-plot-data-1',kind:'summary',operation:a.operation,quantity:record.title,unit:'',valid_cells:a.valid_cells,cell_area_m2:a.cell_area_m2,classes:[],metrics:a.metrics,notes:[a.warning]};
-  if(a.distribution){base.kind='binned';base.quantity='Elevation';base.unit='m';base.histograms={'20':a.distribution.map(b=>({lower:b.lower_m,upper:b.upper_m,midpoint:(b.lower_m+b.upper_m)/2,cells:b.cells,area_m2:b.area_m2,percent:100*b.cells/Math.max(1,a.valid_cells),density:b.upper_m>b.lower_m?b.cells/Math.max(1,a.valid_cells)/(b.upper_m-b.lower_m):null,cumulative_pct:b.cumulative_pct}))};}
+  if(a.distribution){base.kind='binned';base.quantity='Elevation';base.unit='m';base.histograms={[String(a.distribution.length)]:a.distribution.map(b=>({lower:b.lower_m,upper:b.upper_m,midpoint:(b.lower_m+b.upper_m)/2,cells:b.cells,area_m2:b.area_m2,percent:100*b.cells/Math.max(1,a.valid_cells),density:b.upper_m>b.lower_m?b.cells/Math.max(1,a.valid_cells)/(b.upper_m-b.lower_m):null,cumulative_pct:b.cumulative_pct}))};}
   return base;
  }
  return null;
@@ -193,6 +194,8 @@ export function makeFigure(data:PlotData,s:FigureSettings):FigureScene{
  }else{
   let segment:Array<[number,number]>=[];
   const flush=()=>{if(segment.length>1)poly(segment);else if(segment.length===1)p.push({kind:'circle',x:segment[0][0],y:segment[0][1],radius:2.5,fill:ink,stroke:ink,line_width:0});segment=[];};
+  const cumulative=['cdf','exceedance'].includes(s.kind);
+  if(cumulative&&points.length&&!logY&&(!logX||points[0][0]>0)){const initial=s.kind==='cdf'?0:100;segment.push([left,y(initial)],[x(points[0][0]),y(initial)]);}
   points.forEach(pt=>{
    if(!okay(pt)){flush();return;}
    const xx=x(pt[0]),yy=y(pt[1]!);
@@ -203,7 +206,9 @@ export function makeFigure(data:PlotData,s:FigureSettings):FigureScene{
     if(['cdf','exceedance'].includes(s.kind)&&segment.length)segment.push([xx,segment[segment.length-1][1]]);
     segment.push([xx,yy]);
    }
-  });flush();
+  });
+  if(cumulative&&segment.length)segment.push([right,segment[segment.length-1][1]]);
+  flush();
   if(s.kind==='qq'&&data.summary){
    const slope=(data.summary.q3-data.summary.q1)/(2*.6744897501960817),intercept=(data.summary.q1+data.summary.q3)/2;
    const start=slope>0?Math.max(xmin,(ymin-intercept)/slope):xmin;

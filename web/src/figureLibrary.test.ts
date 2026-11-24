@@ -43,6 +43,8 @@ describe('scientific figure recipes',()=>{
   expect(makeFigure(plotFixture,{...settings,kind:'box',y_log:true}).error).toBeTruthy();
   expect(makeFigure(plotFixture,{...settings,x_log:true}).error).toBeTruthy();
   expect(makeFigure(plotFixture,{...settings,kind:'scatter',y_log:true}).note).toContain('omit non-positive');
+  const cdf=makeFigure(plotFixture,{...settings,kind:'cdf',x_log:true});
+  expect(cdf.primitives.flatMap(p=>p.points??[]).flat().every(Number.isFinite)).toBe(true);
  });
  it('renders directional frequencies with area-proportional polar sectors',()=>{
   const data:PlotData={schema:'test',kind:'directional',quantity:'Aspect',unit:'degree',valid_cells:5,directional_cells:4,flat_cells:1,cell_area_m2:100,classes:[],notes:[],roses:{'16':Array.from({length:16},(_,i)=>({bearing_deg:22.5*i,cells:i===0?4:0,percent:i===0?100:0,area_m2:i===0?400:0}))}};
@@ -79,6 +81,21 @@ describe('scientific figure recipes',()=>{
   const scene=makeFigure(data,defaultFigure(data));
   expect(scene.primitives.filter(p=>p.kind==='circle')).toHaveLength(1);
   expect(scene.primitives.filter(p=>p.kind==='polyline')).toHaveLength(0);
+ });
+
+ it('draws the full CDF jump for a constant population',()=>{
+  const data={...plotFixture,cdf:[{value:5,cells_le:4,percent_le:100}]};
+  const scene=makeFigure(data,{...defaultFigure(data),kind:'cdf'});
+  const line=scene.primitives.find(p=>p.kind==='polyline')!;
+  expect(line.points!.some((point,i,array)=>i>0&&point[0]===array[i-1][0]&&point[1]!==array[i-1][1])).toBe(true);
+  expect(Math.max(...line.points!.map(p=>p[1]))).toBe(470);
+  expect(Math.min(...line.points!.map(p=>p[1]))).toBe(75);
+ });
+
+ it('preserves native legacy bin counts without offering undefined density estimates',()=>{
+  const legacy:PlotData={schema:'test',kind:'binned',quantity:'Elevation',unit:'m',valid_cells:4,cell_area_m2:100,classes:[],notes:[],histograms:{'1':[{lower:100,upper:100,midpoint:100,cells:4,area_m2:400,percent:100,density:null,cumulative_pct:100}]}};
+  expect(defaultFigure(legacy).bins).toBe(1);
+  expect(availableFigures(legacy).map(r=>r.id)).toEqual(['histogram']);
  });
 
 });

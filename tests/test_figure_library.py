@@ -121,7 +121,7 @@ def test_real_slope_result_carries_exact_plot_tables_and_regenerates_old_receipt
 def test_summary_and_legacy_binned_data_do_not_invent_exact_quantiles():
     binned=figure_data_from_result({'operation':'distribution','valid_cells':2,'metrics':{},'distribution':[
         {'lower_m':100,'upper_m':100,'cells':2,'area_m2':50,'cumulative_pct':100}]})
-    assert binned['kind']=='binned' and binned['histograms']['20'][0]['density'] is None
+    assert binned['kind']=='binned' and binned['histograms']['1'][0]['density'] is None
     assert 'box' not in binned and 'normal_qq' not in binned
     summary=figure_data_from_result({'operation':'volume','metrics':{'cut_m3':42},'valid_cells':2})
     assert summary['kind']=='summary' and summary['metrics']['cut_m3']==42
