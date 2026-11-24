@@ -32,6 +32,7 @@ import SpatialSciencePanel from './SpatialSciencePanel';
 import RemoteSensingPanel from './RemoteSensingPanel';
 import NetworkSciencePanel from './NetworkSciencePanel';
 import SpacetimePanel from './SpacetimePanel';
+import LidarPanel from './LidarPanel';
 import CartographyProPanel from './CartographyProPanel';
 import type {ExternalTile} from './DataServicesPanel';
 import DataWorkbench from './DataWorkbench';
@@ -524,7 +525,7 @@ export default function App() {
       return;
     }
     setShowTools(true);setActiveTool(id);if(id!=='tools-terrain'){setTerrainPicking(false);setTerrainHover(null);}
-    setObjectsOpen(!['tools-terrain','tools-spatial-science','tools-remote-sensing','tools-network-science','tools-spacetime'].includes(id));
+    setObjectsOpen(!['tools-terrain','tools-spatial-science','tools-remote-sensing','tools-network-science','tools-spacetime','tools-lidar'].includes(id));
     // Tool activation, including keyboard shortcuts, dismisses the transient
     // drawer so it cannot intercept input intended for the operations dock.
     // Its project/search state stays mounted and the selected place is retained.
@@ -1797,7 +1798,7 @@ export default function App() {
                   onClick={()=>setNetworkPage(v=>v+1)}>Next</button>
               </div>}
             </section>,resultsTarget)}
-          {resultsTarget&&!['tools-terrain','tools-spatial-science','tools-remote-sensing','tools-network-science','tools-spacetime'].includes(activeTool)&&!(['tools-survey','tools-services'].includes(activeTool)&&(networkAreas?.count??0)>1)&&(geometry||measurement||preview)&&createPortal(<section className="panel-section results-summary">
+          {resultsTarget&&!['tools-terrain','tools-spatial-science','tools-remote-sensing','tools-network-science','tools-spacetime','tools-lidar'].includes(activeTool)&&!(['tools-survey','tools-services'].includes(activeTool)&&(networkAreas?.count??0)>1)&&(geometry||measurement||preview)&&createPortal(<section className="panel-section results-summary">
             <div className="section-heading"><Compass size={16} /><span>Selection</span></div>
             <div className="analysis-card">
               
@@ -2106,6 +2107,10 @@ export default function App() {
             <SpatialSciencePanel key={activeProjectId??'no-project'} active={activeTool==='tools-spatial-science'} resultsTarget={resultsTarget} geometry={preview||drawingMode?null:geometry} connected={Boolean(capabilities)} projectId={activeProjectId} layers={projectWorkspace?.layers??[]} assets={rasterLayers.map(l=>l.asset)} terrainProducts={terrainRasters.map(l=>({name:l.title,data:l.raster.geotiff,unit:l.raster.unit??'',band:1}))} onPreview={features=>{if(projectCurrent()){setSpatialResults(features);setSpatialVisible(true);}}} onRasterPreview={layer=>{if(projectCurrent()){setSpatialRaster(layer);setSpatialVisible(true);}}}/>
           </section>
 
+          <section id="tools-lidar" hidden={activeTool!=='tools-lidar'} className="panel-section">
+            <div className="section-heading"><Layers3 size={16}/><span>3D &amp; LiDAR</span></div>
+            <LidarPanel key={'lidar-'+(activeProjectId??'no-project')} active={activeTool==='tools-lidar'} connected={Boolean(capabilities)} resultsTarget={resultsTarget}/>
+          </section>
           <section id="tools-spacetime" hidden={activeTool!=='tools-spacetime'} className="panel-section">
             <div className="section-heading"><Layers3 size={16}/><span>Spatiotemporal Analysis</span></div>
             <SpacetimePanel key={activeProjectId??'no-project'} active={activeTool==='tools-spacetime'} connected={Boolean(capabilities)} resultsTarget={resultsTarget} assets={rasterLayers.map(l=>l.asset)} derivedRasters={[...terrainRasters,...(spatialRaster?[spatialRaster]:[]),...(remoteRaster?[remoteRaster]:[])].map(l=>({name:l.title,data:l.raster.geotiff,unit:l.raster.unit}))} onPreview={layer=>{if(projectCurrent()){setSpacetimeRaster(layer);setSpacetimeVisible(true);}}}/>

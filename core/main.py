@@ -9,6 +9,7 @@ from .security import APIBoundaryMiddleware
 from .health import router as health_router
 from analysis.routes import router as analysis_router
 from analysis.network_routes import router as network_science_router
+from analysis.lidar_routes import router as lidar_router
 from analysis.spacetime_routes import router as spacetime_router
 from analysis.science_routes import router as spatial_science_router, source_router as spatial_source_router
 from analysis.pro_routes import router as spatial_workflow_router
@@ -58,6 +59,7 @@ app.include_router(places_router)
 app.include_router(intelligence_router)
 app.include_router(analysis_router)
 app.include_router(network_science_router)
+app.include_router(lidar_router)
 app.include_router(spacetime_router)
 app.include_router(spatial_science_router)
 app.include_router(spatial_source_router)

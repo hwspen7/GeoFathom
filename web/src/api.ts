@@ -1290,3 +1290,12 @@ export function runSpacetime(body:SpacetimeInput,signal?:AbortSignal):Promise<Sp
 
 export function archiveStudio(input:StudioInput|StudioComposition,provenance:unknown,signal?:AbortSignal):Promise<{archive:string;manifest:Record<string,unknown>}>{return request('/terrain/studio/archive',{method:'POST',signal,headers:{'Content-Type':'application/json'},body:JSON.stringify({input,provenance:provenance??null})});}
 export function reopenStudio(input:unknown,provenance:unknown,signal?:AbortSignal):Promise<{input:StudioInput|StudioComposition;provenance:unknown}>{return request('/terrain/studio/reopen',{method:'POST',signal,headers:{'Content-Type':'application/json'},body:JSON.stringify({input,provenance:provenance??null})});}
+
+
+export interface LidarMethod {id:string;title:string;assumption:string}
+export interface LidarResult {operation:string;columns:string[];rows:(number|null)[][];row_count:number;csv:string;figure_csv:string;metrics:Record<string,unknown>;assumption:string;receipt:Record<string,unknown>}
+export function getLidarCatalog(signal?:AbortSignal):Promise<{operations:LidarMethod[]}>{return request('/analysis/lidar/catalog',{signal});}
+export function runLidar(params:Record<string,string>,cloud:File,reference:File|null,signal?:AbortSignal):Promise<LidarResult>{
+ const body=new FormData();body.append('cloud',cloud);if(reference)body.append('reference',reference);
+ return request('/analysis/lidar/run?'+new URLSearchParams(params),{method:'POST',body,signal});
+}
