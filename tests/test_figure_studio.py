@@ -86,6 +86,7 @@ def test_every_recipe_renders_actual_data(recipe,raster_fixture):
     assert metadata['recipe']==recipe and metadata['used_count']>0
     assert metadata['family']==BY_ID[recipe][2]
     assert metadata['layout']['canvas_pixels'][0]>0
+    assert metadata['layout']['layout_frozen'] and isinstance(metadata['layout']['preflight_passed'],bool)
     assert metadata['plot_table_rows']==max(0,len(table)-1)
     import json
     json.dumps({'metadata':metadata,'table':table},allow_nan=False)
@@ -539,3 +540,16 @@ def test_spatial_buffer_excludes_nearby_training_observations():
     pred,fold,report=block_regression(coords,x,y,200,3,0,101)
     assert np.allclose(pred,y) and sum(f['buffer_excluded'] for f in report['folds'])>0
     assert report['buffer_m']==101
+
+
+def test_publication_layout_finalization_keeps_physical_size_and_data():
+    from matplotlib.figure import Figure
+    from matplotlib.backends.backend_agg import FigureCanvasAgg
+    from terrain.studio_publication import prepare_publication
+    fig=Figure(figsize=(4,3),layout='constrained');FigureCanvasAgg(fig)
+    ax=fig.add_subplot(111);line,=ax.plot([0,1,2],[3,5,4]);ax.set_xticks([0,1,2],['Long category A','Long category B','Long category C'])
+    receipt=prepare_publication(fig)
+    assert receipt['layout_frozen'] and receipt['layout_attempts']
+    assert np.array_equal(fig.get_size_inches(),[4,3])
+    assert np.array_equal(line.get_ydata(),[3,5,4])
+    assert isinstance(receipt['preflight_passed'],bool)

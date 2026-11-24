@@ -134,6 +134,38 @@ def layout_receipt(fig):
             'layout_check':'canvas and tick bounding-box preflight; visual review still required'}
 
 
+
+def prepare_publication(fig):
+    """Try compact typography without changing data, axis limits or figure size.
+
+    Layout is finalized on the Agg canvas and frozen before vector/raster
+    export to avoid backend-dependent constrained-layout recalculation.
+    Unresolved layout problems remain explicitly visible in the receipt.
+    """
+    import warnings
+    from matplotlib.text import Text
+    attempts=[]
+    original={id(text):text.get_fontsize() for text in fig.findobj(match=Text)}
+    receipt=None
+    for factor in (1.,.90,.80,.70):
+        for text in fig.findobj(match=Text):
+            if id(text) in original:
+                text.set_fontsize(max(min(6,original[id(text)]),original[id(text)]*factor))
+        with warnings.catch_warnings(record=True) as captured:
+            warnings.simplefilter('always',UserWarning)
+            fit_publication_text(fig)
+            receipt=layout_receipt(fig)
+        layout_warnings=list(dict.fromkeys(str(w.message) for w in captured if 'layout' in str(w.message).lower()))
+        collapsed=any(ax.get_visible() and min(ax.get_position().width,ax.get_position().height)<.025 for ax in fig.axes)
+        unresolved=bool(layout_warnings or collapsed or receipt['potentially_clipped_axes'] or receipt['clipped_tick_text'] or receipt['tick_overlaps'])
+        attempts.append({'font_factor':factor,'layout_warnings':layout_warnings,'collapsed_axes':collapsed,'unresolved':unresolved})
+        # Do not discard labels, reduce plotted data, or expand requested page dimensions.
+        if not unresolved:break
+    receipt.update(preflight_passed=not attempts[-1]['unresolved'],layout_attempts=attempts,
+                   typography_factor=attempts[-1]['font_factor'],layout_frozen=True)
+    fig.set_layout_engine('none')
+    return receipt
+
 def publication_title(text,width_mm,font_size):
     import textwrap
     # Conservative physical-width estimate, including long uninterrupted words.

@@ -18,7 +18,7 @@ def _require(condition,message):
     if not condition:raise FigureInputError(message)
 
 from .studio_publication import (response_grid, cell_edges, profile_data, raster_profiles,
-                                 numeric_rows, layout_receipt, fit_publication_text, publication_title)
+                                 numeric_rows, layout_receipt, fit_publication_text, publication_title, prepare_publication)
 
 def render(req, container=None, panel_label='', grid_sink=None):
     from matplotlib.figure import Figure
@@ -505,8 +505,7 @@ def render(req, container=None, panel_label='', grid_sink=None):
         meta['omitted_count']=max(0,meta['input_count']-meta['used_count'])
         meta['plot_table_rows']=max(0,len(derived)-1)
         if container is not None:return b'',meta,derived
-        fit_publication_text(fig)
-        meta['layout']=layout_receipt(fig)
+        meta['layout']=prepare_publication(fig)
         meta['publication']={'width_mm':req.width_mm,'height_mm':req.height_mm,'export_dpi':req.dpi,'format':req.format,'font_size_pt':req.font_size,'line_width_pt':req.line_width,'palette':req.palette}
         buffer=io.BytesIO()
         dpi=req.dpi

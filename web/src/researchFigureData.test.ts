@@ -1,6 +1,8 @@
 import {expect,it} from 'vitest';
 import {researchFigureData,researchDistributionData} from './researchFigureData';
-import {availableFigures,defaultFigure,figureTable,makeFigure} from './figureLibrary';
+import {availableFigures,defaultFigure,figureTable,makeFigure,FIGURES} from './figureLibrary';
+import type {PlotData} from './api';
+import {plotFixture} from '../testFixtures/figureData';
 import type {ResearchResult} from './api';
 const result={runs:[{label:'Baseline'},{label:'A'},{label:'B'}],products:[],metric_table:[{metric:'cut_m3',values:[100,40,20],deltas:[0,-60,null],relative_pct:[0,-60,null]}],sensitivity:[{parameter:'reference',value:10,metrics:{cut_m3:100},derivatives:{}},{parameter:'reference',value:20,metrics:{cut_m3:40},derivatives:{cut_m3:-6}}],uncertainty:{coverage:.95,warning:'Conditional model',metrics:{cut_m3:{baseline:100,mean:105,low:80,high:120}},realizations:{cut_m3:[80,100,110,120]}}} as unknown as ResearchResult;
 it('preserves undefined deltas and physical units in the same scene and CSV table',()=>{
@@ -47,4 +49,27 @@ it('uses a full two-factor grid and leaves unmatched responses blank',()=>{
  const settings=defaultFigure(data);expect(settings.kind).toBe('parameter_heatmap');
  expect(figureTable(data,settings).rows).toEqual([[90,0,100],[90,.01,101],[95,0,50],[95,.01,null]]);
  const scene=makeFigure(data,settings);expect(scene.error).toBeUndefined();expect(scene.primitives.some(p=>p.text==='N/A')).toBe(true);
+});
+
+
+it('exercises all 24 native quick recipes across three palettes, with finite vector geometry and data tables',()=>{
+ const realized=researchFigureData(result,'cut_m3','realizations')!;
+ const paired:PlotData={...plotFixture,joint:{...plotFixture.joint!,regression:{slope:1,intercept:-100,r_squared:1},agreement:{bias:0,sample_std:1,lower:-1.96,upper:1.96}}};
+ const rose:PlotData={...plotFixture,kind:'directional',directional_cells:4,flat_cells:0,roses:{'16':Array.from({length:16},(_,i)=>({bearing_deg:22.5*i,cells:i===0?4:0,percent:i===0?100:0,area_m2:i===0?400:0}))}};
+ const profile:PlotData={...plotFixture,kind:'profile',profiles:[{name:'Profile',points:[{x:0,y:10},{x:10,y:20},{x:20,y:25}]}]};
+ const comparison=researchDistributionData({...result,products:[{name:'Baseline',role:'baseline',plot_data:realized},{name:'Alternative',role:'scenario',plot_data:{...realized,valid_cells:7}}]} as unknown as ResearchResult)!;
+ const factorial={x_parameter:'reference',y_parameter:'design_east_grade',x_values:[90,95],y_values:[0,.01],cells:[{x:90,y:0,metrics:{cut_m3:100},matched_population:true},{x:90,y:.01,metrics:{cut_m3:101},matched_population:true},{x:95,y:0,metrics:{cut_m3:50},matched_population:true},{x:95,y:.01,metrics:{cut_m3:51},matched_population:true}]};
+ const datasets=[paired,rose,profile,comparison,researchFigureData(result,'cut_m3','delta')!,researchFigureData(result,'cut_m3','derivative')!,researchFigureData(result,'cut_m3','interval')!,researchFigureData({...result,factorial},'cut_m3','factorial')!];
+ const seen=new Set<string>();
+ for(const data of datasets)for(const recipe of availableFigures(data)){
+   if(seen.has(recipe.id))continue;seen.add(recipe.id);
+   for(const palette of ['mono','blue','earth'] as const){
+     const settings={...defaultFigure(data),kind:recipe.id,palette};
+     const scene=makeFigure(data,settings),table=figureTable(data,settings);
+     expect(scene.error,recipe.id).toBeUndefined();expect(scene.primitives.length,recipe.id).toBeGreaterThan(0);
+     const finite=(v:unknown):void=>{if(typeof v==='number')expect(Number.isFinite(v),recipe.id).toBe(true);else if(Array.isArray(v))v.forEach(finite);else if(v&&typeof v==='object')Object.values(v).forEach(finite);};
+     finite(scene);finite(table);expect(table.rows.length,recipe.id).toBeGreaterThan(0);
+   }
+ }
+ expect([...seen].sort()).toEqual(FIGURES.map(f=>f.id).sort());
 });
