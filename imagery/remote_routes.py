@@ -15,6 +15,7 @@ from analysis.science_raster import require
 from analysis.science_routes import raster_product,raster_preview,csv_output
 from analysis.science_figures import figure_sources,csv_text
 from .remote_catalog import BY_ID,catalog,SERIES_IDS
+from .remote_inference import atmospheric_reflectance,robust_harmonization,irmad,cloud_buffer,series_break
 from .remote_research import surface_temperature,c_correction,ndvi_uncertainty,change_vectors,spatial_classifier,long_series,gamma_map,mad_distance
 from .remote_products import rgb_product
 from .remote_kernels import ratio,nd,optical,quality_mask,transition,agreement,temporal,pca,classify,sen_slope,temporal_slope_se,lee_filter,unmix,stratified_accuracy
@@ -81,19 +82,20 @@ def read_band(source,binding,quantity,raw,sha):
         if quantity in {'power','radiance'}:require(np.all(v>=0),'Linear power and radiance cannot be negative.')
         if quantity=='kelvin':require(np.all(v>0),'Kelvin temperature must be positive.')
         if quantity=='emissivity':require(np.all((v>0)&(v<=1)),'Emissivity must be in (0,1].')
+        if quantity=='fraction':require(np.all((v>=0)&(v<=1)),'Fraction must be in [0,1].')
         if quantity=='transmittance':require(np.all((v>0)&(v<=1)),'Transmittance must be in (0,1].')
         if quantity=='nonnegative':require(np.all(v>=0),'Standard uncertainty must be nonnegative.')
         if quantity=='slope':require(np.all((v>=0)&(v<=90)),'Slope must be in [0,90] degrees.')
         if quantity=='aspect':require(np.all((v>=0)&(v<=360)),'Aspect must be in [0,360] degrees.')
         if quantity=='db':require(np.all((v>=-1000)&(v<=1000)),'Radar dB outside supported numeric range.')
-        expected={'reflectance':'reflectance','class':'class','power':'linear_power','db':'dB','radiance':'radiance','kelvin':'K','emissivity':'unitless','transmittance':'unitless','nonnegative':'reflectance','slope':'degree','aspect':'degree'}.get(quantity)
+        expected={'reflectance':'reflectance','class':'class','power':'linear_power','db':'dB','radiance':'radiance','kelvin':'K','emissivity':'unitless','transmittance':'unitless','fraction':'unitless','nonnegative':'reflectance','slope':'degree','aspect':'degree'}.get(quantity)
         unit=expected or binding.unit or tag
         if quantity=='numeric':require(bool(unit),'Declare the physical unit of each numeric band.')
         if binding.unit and expected:require(binding.unit==expected,'Declared unit conflicts with required physical quantity.')
         # Explicit role binding asserts semantics; known incompatible tagged units cannot be overridden.
         if tag and quantity!='class':
             allowed={unit}
-            if quantity in {'reflectance','emissivity','power','transmittance','nonnegative'}:allowed|={'unitless','1','dimensionless'}
+            if quantity in {'reflectance','emissivity','power','transmittance','fraction','nonnegative'}:allowed|={'unitless','1','dimensionless'}
             if quantity in {'slope','aspect'}:allowed|={'degrees','deg'}
             require(tag in allowed or encoding in {'landsat_sr','landsat_st','custom'},'GeoTIFF unit conflicts with selected band quantity.')
         g=Grid(source.name,z,a,ds.crs,unit,sha,b,ds.count,scale,offset)
@@ -163,13 +165,19 @@ def execute(body):
     elif kind=='calibrated_reflectance':out=v['band']
     elif kind=='ndvi_change':out=nd(v['nir_after'],v['red_after'])-nd(v['nir_before'],v['red_before'])
     elif kind=='dnbr':out=nd(v['nir_before'],v['swir_before'])-nd(v['nir_after'],v['swir_after'])
+    elif kind=='atmospheric_reflectance':out,meta=atmospheric_reflectance(v)
+    elif kind=='robust_harmonization':out,meta=robust_harmonization(v,params)
+    elif kind=='irmad':out,headers,rows,meta=irmad(v,params)
+    elif kind=='cloud_buffer':out,meta=cloud_buffer(v['qa'],params['radius'])
     elif kind=='surface_temperature_rte':out,meta=surface_temperature(v,params)
     elif kind=='topographic_c':out,meta=c_correction(v,params)
     elif kind=='ndvi_uncertainty':out,meta=ndvi_uncertainty(v,params)
     elif kind in {'change_vector','change_mahalanobis'}:out,meta=change_vectors(v,kind=='change_mahalanobis')
     elif kind=='spatial_lda':out,headers,rows,meta=spatial_classifier(v,first,params)
     elif kind in SERIES_IDS:
-        out,meta=long_series(kind,np.stack(list(v.values())),body.times,params.get('period',365))
+        stack=np.stack(list(v.values()))
+        if kind.startswith('series_break_'):out,meta=series_break(stack,body.times,params['min_segment'],kind)
+        else:out,meta=long_series(kind,stack,body.times,params.get('period',365))
         headers=['time','valid_cells','mean'];rows=[[t,int(np.isfinite(z).sum()),float(np.nanmean(z)) if np.isfinite(z).any() else None] for t,z in zip(body.times,v.values())]
     elif method.group=='Optical':
         out=optical(kind,v,params);out[~common]=np.nan
@@ -232,6 +240,7 @@ def execute(body):
     plots=[{'title':'Publication RGB composite','recipe':'spectral_rgb','bindings':{},'csv':None,'raster':True,'bands':[1,2,3]}] if rgb else figure_sources(result,[])
     def add(title,recipe,bindings,table=None):
         plots.append({'title':title,'recipe':recipe,'bindings':bindings,'csv':csv if table is None else table,'raster':False})
+    if kind=='irmad':add('Canonical correlation convergence','multi_line',{'x':'iteration','columns':['rho1','rho2','rho3']})
     if kind=='pca':add('PCA explained variance','basic_column',{'x':'component','y':'explained_fraction'})
     if kind=='transition_matrix':add('Transition area by class pair','basic_column',{'x':'transition','y':'area_m2'},csv_text(['transition','area_m2'],[[str(a)+' → '+str(b),area] for a,b,_,area,_ in rows]) ) if len(rows)<=50 else None
     if kind in SERIES_IDS and any(row[2] is not None for row in rows):add('Acquisition mean time series','basic_line',{'x':'time','y':'mean'})

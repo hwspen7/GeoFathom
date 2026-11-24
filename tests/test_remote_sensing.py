@@ -189,7 +189,7 @@ def test_remote_invalid_inputs_and_recovery():
         response=client.post('/analysis/remote-sensing/run',json=bad);assert response.status_code==422,response.text
     response=client.post('/analysis/remote-sensing/run',json=good);assert response.status_code==200,response.text
     np.testing.assert_allclose(grid(response.json()),.5)
-    assert client.get('/analysis/remote-sensing/catalog').json()['operation_count']==len(BY_ID)==70
+    assert client.get('/analysis/remote-sensing/catalog').json()['operation_count']==len(BY_ID)==77
 
 def test_temporal_independent_quality_masks():
     # Cloud at one date does not erase the other valid acquisitions.
@@ -447,3 +447,44 @@ def test_sar_mad_reference(kind):
         assert np.sum(out[:99])==pytest.approx(3*98,abs=1e-7)
         assert out[99]>np.quantile(out[:99],.99)
         assert all(0<=q<1 for q in r['receipt']['metrics']['canonical_correlations'])
+
+
+@pytest.mark.parametrize('kind',['atmospheric_reflectance','robust_harmonization','irmad','cloud_buffer','series_break_time','series_break_jump','series_break_strength'])
+def test_inference_reference(kind):
+    if kind=='atmospheric_reflectance':
+        surface=np.linspace(.05,.8,12).reshape(3,4);path=.06;trans=.7;albedo=.15
+        toa=path+trans*surface/(1-albedo*surface)
+        np.testing.assert_allclose(grid(run(kind,{'toa':toa,'path':constant(path),'transmission':constant(trans),'spherical_albedo':constant(albedo)})),surface,atol=1e-12)
+    elif kind=='robust_harmonization':
+        x=np.linspace(.1,.7,100).reshape(10,10);truth=.04+.9*x;y=truth.copy();y[2,3]=1.;y[3,4]=.01
+        mask=np.ones(x.shape);mask[-1]=2
+        r=run(kind,{'candidate':x,'reference':y,'calibration':mask})
+        np.testing.assert_allclose(grid(r),truth,atol=1e-7)
+        assert r['receipt']['metrics']['heldout_cells']==10 and r['receipt']['metrics']['heldout_rmse']<1e-7
+    elif kind=='irmad':
+        rng=np.random.default_rng(32);x=rng.normal(.4,.055,(400,3));y=x+rng.normal(0,.012,x.shape);y[-20:]+=.16
+        a={r+'_before':x[:,i].reshape(20,20) for i,r in enumerate(('red','nir','swir'))}
+        a.update({r+'_after':y[:,i].reshape(20,20) for i,r in enumerate(('red','nir','swir'))})
+        r=run(kind,a,{'iterations':2});out=grid(r).ravel()
+        # Independent first iteration and exact chi-square(3) weighting, then a second fit.
+        def ref(w):
+            mx=np.average(x,axis=0,weights=w);my=np.average(y,axis=0,weights=w)
+            a=x-mx;b=y-my;cov=(a*w[:,None]).T@a/w.sum();cy=(b*w[:,None]).T@b/w.sum()
+            la=np.linalg.cholesky(cov);lb=np.linalg.cholesky(cy)
+            aa=np.linalg.solve(la,a.T).T;bb=np.linalg.solve(lb,b.T).T
+            u,s,vt=np.linalg.svd((aa*w[:,None]).T@bb/w.sum())
+            return np.sum((aa@u-bb@vt.T)**2/(2*(1-s)),axis=1)
+        d=ref(np.ones(len(x)));q=np.sqrt(d/2)
+        w=np.array([math.erfc(z) for z in q])+2/np.sqrt(np.pi)*q*np.exp(-q*q)
+        np.testing.assert_allclose(out,ref(w),rtol=1e-9,atol=1e-9)
+        assert np.median(out[-20:])>np.quantile(out[:-20],.9)
+        assert len(r['rows'])==2
+    elif kind=='cloud_buffer':
+        z=np.ones((7,7));z[3,3]=0;z[0,0]=np.nan
+        rr,cc=np.indices(z.shape);expected=(((rr-3)**2+(cc-3)**2>4)&(rr**2+cc**2>4)).astype(float);expected[0,0]=np.nan
+        np.testing.assert_array_equal(grid(run(kind,{'qa':z},{'radius':2})),expected)
+    else:
+        t=[0,1,2,3,5,6,7,8,10,11];y=[2]*5+[7]*5;data=np.array([constant(v) for v in y])
+        data[1,0,0]=np.nan;s=source(data);bindings={f'date{i+1}':{'source':0,'band':i+1,'unit':'index'} for i in range(len(t))}
+        result=checked(execute(RemoteInput(operation=kind,sources=[s],bindings=bindings,times=t,parameters={'min_segment':3})))
+        np.testing.assert_allclose(grid(result),{'series_break_time':5.5,'series_break_jump':5,'series_break_strength':1}[kind],atol=1e-12)

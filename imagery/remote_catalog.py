@@ -24,8 +24,15 @@ TIME=(p('time1','First acquisition time',0,-1e6,1e6),p('time2','Second acquisiti
 TIMES=numeric('date1','date2','date3','date4')
 CLASSES=(('before','class'),('after','class'))
 SPECTRUM=refl('blue','green','red','nir')
-SERIES_IDS={'series_median','series_count','series_slope','series_amplitude','series_harmonic_rmse'}
+SERIES_IDS={'series_median','series_count','series_slope','series_amplitude','series_harmonic_rmse','series_break_time','series_break_jump','series_break_strength'}
 METHODS=(
+m('atmospheric_reflectance','Preprocessing','Conditional Lambertian atmospheric correction',refl('toa','path')+(('transmission','transmittance'),('spherical_albedo','fraction')),'reflectance','Supplied band atmospheric path reflectance, combined transmission and spherical albedo; no aerosol retrieval.'),
+m('robust_harmonization','Preprocessing','Robust cross-scene radiometric harmonization',refl('candidate','reference')+(('calibration','class'),),'reflectance','Stable mask 1 fits Huber regression, mask 2 evaluates independent labeled pixels.',(p('huber_k','Huber tuning constant',1.345,.5,5),p('iterations','Maximum iterations',80,10,200,True))),
+m('irmad','Change','Iteratively reweighted MAD',refl('red_before','nir_before','swir_before','red_after','nir_after','swir_after'),'index','Chi-square survival reweighting of canonical alteration; convergence reported; no calibrated significance.',(p('iterations','Maximum iterations',60,2,100,True),p('tolerance','Canonical correlation tolerance',.0001,1e-8,.01))),
+m('cloud_buffer','Quality','Conservative cloud and invalid-pixel buffer',(('qa','class'),),'class','Binary clear mask, Euclidean disk in pixel units; original NoData retained.',(p('radius','Buffer radius (cells)',2,1,20,True),)),
+m('series_break_time','Time Series','Single mean-shift breakpoint time',numeric('date1','date2','date3','date4','date5','date6'),'time','Least-squares single mean shift; actual time midpoint; descriptive.',(p('min_segment','Minimum observations per segment',3,2,16,True),)),
+m('series_break_jump','Time Series','Single breakpoint mean shift',numeric('date1','date2','date3','date4','date5','date6'),'source','After minus before segment mean at best split.',(p('min_segment','Minimum observations per segment',3,2,16,True),)),
+m('series_break_strength','Time Series','Single breakpoint explained variance',numeric('date1','date2','date3','date4','date5','date6'),'fraction','Fraction of centered sum of squares explained by one split; not a p-value.',(p('min_segment','Minimum observations per segment',3,2,16,True),)),
 m('sar_gamma_map','Radar','Gamma MAP adaptive speckle filtering',(('power','power'),),'linear_power','Calibrated intensity; Gamma multiplicative noise with specified equivalent number of looks.',(p('radius','Window radius (cells)',2,1,10,True),p('enl','Equivalent number of looks',4,1,1000))),
 m('sar_log_change','Radar','Paired SAR log-ratio change',(('before','power'),('after','power')),'dB','Comparable acquisition geometry, polarization and power calibration; positive paired observations.'),
 m('sar_gamma0_flat','Radar','Flat-earth sigma0 to gamma0',(('sigma0','power'),('incidence','slope')),'linear_power','Sigma0 divided by cosine of incidence angle; flat-earth normalization only, not terrain flattening.'),
