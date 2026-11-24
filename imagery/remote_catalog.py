@@ -40,6 +40,10 @@ FUSION_P=(p('correlation','Error correlation',0,-.999,.999),)
 CANOPY=(p('extinction','Directional extinction coefficient',.5,.001,10),p('clumping','Clumping factor',1,.001,1),p('par_extinction','PAR extinction coefficient',.5,.001,10))
 CLUSTER=(p('clusters','Number of clusters',4,2,16,True),p('iterations','Maximum iterations',100,10,300,True),p('seed','Random seed',42,0,2147483647,True))
 METHODS=(
+m('align_area_mean','Preprocessing','Exact nested-grid area mean',(('target','template'),('source','numeric')),'source_band','Same projected metre CRS and exact integer nested grids; no spatial sharpening; valid support threshold.',(p('minimum_coverage','Minimum valid source fraction',.8,.01,1),)),
+m('align_area_coverage','Preprocessing','Nested-grid valid support fraction',(('target','template'),('source','numeric')),'fraction','Fraction of contributing native source cells with finite measurements; target footprint contained in source.',(p('minimum_coverage','Diagnostic support threshold',.8,.01,1),)),
+m('continuous_reference_error','Validation','Independent continuous reference residuals',numeric('prediction','reference'),'source','Paired aligned same-quantity measurements; bias, RMSE, MAE, NMAD, correlation and mask disagreement; reference independence externally established.'),
+m('binary_reference_error','Validation','Binary cloud/quality reference error map',(('prediction','class'),('reference','class')),'class','0 TN, 1 FP, 2 FN, 3 TP; both reference classes required; precision, recall, F1, IoU and balanced accuracy.'),
 m('fusion_gls','Fusion','Covariance-aware multi-sensor fusion',FUSION,'source','Two aligned observations of same quantity and supplied standard deviations; correlated GLS.',FUSION_P),
 m('fusion_gls_sd','Fusion','Fused estimate standard uncertainty',FUSION,'source','Conditional GLS uncertainty; supplied errors and correlation.',FUSION_P),
 m('fusion_discrepancy','Fusion','Standardized inter-sensor discrepancy',FUSION,'index','Signed difference normalized by propagated difference uncertainty; not a calibrated p-value.',FUSION_P),

@@ -15,6 +15,7 @@ from analysis.science_raster import require
 from analysis.science_routes import raster_product,raster_preview,csv_output
 from analysis.science_figures import figure_sources,csv_text
 from .remote_catalog import BY_ID,catalog,SERIES_IDS,HYPER_IDS
+from .remote_validation import aggregate_nested,continuous_reference,binary_reference
 from .remote_band import read_calibrated
 from .remote_fusion import fusion,canopy,unsupervised
 from .remote_sar_complex import complex_products,calibrated_power,cloud_candidates,cloud_shadow
@@ -92,7 +93,7 @@ def execute(body):
         data=base64.b64decode(source.data,validate=True);require(len(data)<=24_000_000,'Source exceeds inline GeoTIFF budget.')
         raw.append(data);hashes.append(hashlib.sha256(data).hexdigest())
     grids={};provenance={};first=None;cells=0
-    aligning=method.id in {'align_continuous','align_categorical'}
+    aligning=method.id in {'align_continuous','align_categorical','align_area_mean','align_area_coverage'}
     if aligning:require(not body.quality,'Apply QA before or after explicit alignment, not during reprojection.')
     def load(binding,quantity,allow_mismatch=False):
         nonlocal first,cells
@@ -117,7 +118,11 @@ def execute(body):
     if any(q=='numeric' for q in roles.values()):
         units={grids[r].unit for r,q in roles.items() if q=='numeric'}
         require(len(units)==1,'Comparable numerical bands must share physical units.')
-    if aligning:
+    alignment_meta={}
+    if kind in {'align_area_mean','align_area_coverage'}:
+        require(grids['source'].unit!='class','Area means require continuous measurements.')
+        v['source'],alignment_meta=aggregate_nested(grids['source'],grids['target'],params,kind)
+    elif aligning:
         from rasterio.warp import reproject,Resampling
         target=grids['target'];source=grids['source'];out=np.full(target.values.shape,np.nan)
         if method.id=='align_continuous':require(source.unit!='class','Categorical rasters require nearest neighbor alignment.')
@@ -132,7 +137,10 @@ def execute(body):
     if kind in {'true_color','false_color'}:
         rgb=rgb_product(kind,np.stack(list(v.values())),first,list(v));meta['display_channel_order']=list(v)
     elif aligning:
-        out=v['source'];unit=grids['source'].unit;meta['resampling']='bilinear' if kind=='align_continuous' else 'nearest'
+        out=v['source'];unit='fraction' if kind=='align_area_coverage' else grids['source'].unit
+        meta.update(alignment_meta);meta['resampling']='nested_area' if kind.startswith('align_area_') else 'bilinear' if kind=='align_continuous' else 'nearest'
+    elif kind=='continuous_reference_error':out,headers,rows,meta=continuous_reference(v)
+    elif kind=='binary_reference_error':out,headers,rows,meta=binary_reference(v)
     elif kind=='calibrated_reflectance':out=v['band']
     elif kind=='ndvi_change':out=nd(v['nir_after'],v['red_after'])-nd(v['nir_before'],v['red_before'])
     elif kind=='dnbr':out=nd(v['nir_before'],v['swir_before'])-nd(v['nir_after'],v['swir_after'])
@@ -244,6 +252,8 @@ def execute(body):
     if kind in {'spectral_kmeans','spectral_kmeans_distance'}:
         add('Spectral cluster population','basic_column',{'x':'cluster','y':'cells'})
         for i,row in enumerate(rows):add('Cluster '+str(i+1)+' mean spectrum','basic_line',{'x':'band','y':'reflectance'},csv_text(['band','reflectance'],[[j+1,z] for j,z in enumerate(row[2:])]))
+    if kind=='continuous_reference_error':add('Reference residual quantiles','basic_line',{'x':'quantile','y':'residual'})
+    if kind=='binary_reference_error':add('Reference error by outcome','basic_column',{'x':'outcome','y':'cells'})
     if kind=='pca':add('PCA explained variance','basic_column',{'x':'component','y':'explained_fraction'})
     if kind=='transition_matrix':add('Transition area by class pair','basic_column',{'x':'transition','y':'area_m2'},csv_text(['transition','area_m2'],[[str(a)+' → '+str(b),area] for a,b,_,area,_ in rows]) ) if len(rows)<=50 else None
     if kind in SERIES_IDS and any(row[2] is not None for row in rows):add('Acquisition mean time series','basic_line',{'x':'time','y':'mean'})

@@ -189,7 +189,7 @@ def test_remote_invalid_inputs_and_recovery():
         response=client.post('/analysis/remote-sensing/run',json=bad);assert response.status_code==422,response.text
     response=client.post('/analysis/remote-sensing/run',json=good);assert response.status_code==200,response.text
     np.testing.assert_allclose(grid(response.json()),.5)
-    assert client.get('/analysis/remote-sensing/catalog').json()['operation_count']==len(BY_ID)==110
+    assert client.get('/analysis/remote-sensing/catalog').json()['operation_count']==len(BY_ID)==114
 
 def test_temporal_independent_quality_masks():
     # Cloud at one date does not erase the other valid acquisitions.
@@ -864,3 +864,38 @@ def test_disk_cube_matches_inline(kind,tmp_path):
     report=process(kind,spec,out,parameters=p,times=times,tile=64,quality=[{'path':str(mask),'scheme':'binary','roles':[names[1]]}])
     with rasterio.open(out) as ds:np.testing.assert_allclose(ds.read(1),expected,atol=1e-10,rtol=1e-10,equal_nan=True)
     assert report['axis_values']==times and report['valid_cells']==int(np.isfinite(expected).sum())
+
+
+@pytest.mark.parametrize('kind',['align_area_mean','align_area_coverage','continuous_reference_error','binary_reference_error'])
+def test_resolution_and_reference_accuracy(kind):
+    if kind.startswith('align_area_'):
+        fine=np.arange(48,dtype=float).reshape(6,8)
+        fine[0,0]=np.nan;fine[2:4,2:4]=np.nan
+        target=np.ones((3,4));target[2,3]=np.nan
+        sources=[source(target),source(fine,aff=from_origin(500000,4500000,5,5))]
+        r=execute(RemoteInput(operation=kind,sources=sources,bindings={'target':{'source':0},'source':{'source':1,'unit':'m'}},parameters={'minimum_coverage':.8}))
+        z=grid(r);expected=np.full((3,4),np.nan)
+        for i,j in np.ndindex(expected.shape):
+            sub=fine[2*i:2*i+2,2*j:2*j+2];valid=np.isfinite(sub);coverage=valid.sum()/4
+            if np.isfinite(target[i,j]):
+                if kind=='align_area_coverage':expected[i,j]=coverage
+                elif coverage>=.8:expected[i,j]=sub[valid].mean()
+        np.testing.assert_allclose(z,expected,equal_nan=True)
+        sources[1]=source(fine,aff=from_origin(500001,4500000,5,5))
+        with pytest.raises(FigureInputError,match='align'):
+            execute(RemoteInput(operation=kind,sources=sources,bindings={'target':{'source':0},'source':{'source':1,'unit':'m'}}))
+    elif kind=='continuous_reference_error':
+        reference=np.arange(12,dtype=float).reshape(3,4);prediction=reference+np.resize([1,-1,2,-2],reference.shape)
+        prediction[0,0]=np.nan;d=(prediction-reference)[np.isfinite(prediction)]
+        r=run(kind,{'prediction':prediction,'reference':reference});m=r['receipt']['metrics']
+        np.testing.assert_allclose(grid(r),prediction-reference,equal_nan=True)
+        assert m['bias']==pytest.approx(d.mean()) and m['rmse']==pytest.approx(np.sqrt((d*d).mean()))
+        assert m['mask_disagreement']==1 and m['paired_cells']==11
+        assert m['mae']==pytest.approx(abs(d).mean())
+    else:
+        reference=np.array([[0,0,1,1],[0,1,1,0],[0,0,1,1]],float)
+        prediction=np.array([[0,1,0,1],[0,1,1,0],[1,0,1,1]],float)
+        r=run(kind,{'prediction':prediction,'reference':reference});m=r['receipt']['metrics']
+        np.testing.assert_array_equal(grid(r),2*reference+prediction)
+        assert m['confusion_matrix_reference_rows']==[[4,2],[1,5]]
+        assert m['iou']==pytest.approx(5/8) and m['recall']==pytest.approx(5/6)
