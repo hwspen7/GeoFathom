@@ -164,6 +164,7 @@ def test_kriging_independent_dense_reference_and_holdout_isolation():
     np.testing.assert_allclose(mu,y@weights[:-1],atol=1e-10)
     var=1.2-np.sum(weights[:-1]*cross,axis=0)-weights[-1]
     np.testing.assert_allclose(sd,np.sqrt(meta['sill']*var),atol=1e-10)
+    _,fitted=fit(x,y,{**p,'fit_covariance':1});assert fitted['reml_objective']<=meta['reml_objective']+1e-8
     a=rng.normal(size=(8,3,6));t=np.arange(8.)
     cfg={**p,'sample_limit':24,'seed':7,'holdout_dates':2,'buffer_cells':1}
     g=SimpleNamespace(is_meter=True,transform=AFF)
@@ -195,3 +196,35 @@ def test_hotspot_independent_score_and_panel_absorbed_covariate():
     np.testing.assert_array_equal(q,hotspot(a,np.arange(8.),p,'hotspot_latest_p')[0])
     with pytest.raises(FigureInputError,match='absorbed'):
         panel(a,a,{'block_cells':2},'panel_spatial_effect')
+
+
+def test_panel_against_full_dummy_regression():
+    from analysis.spacetime_panel import panel
+    rng=np.random.default_rng(19);x=rng.normal(size=(8,4,4));spatial=np.arange(16).reshape(4,4)
+    y=2*x+spatial+np.arange(8.)[:,None,None]+rng.normal(0,.3,x.shape)
+    z,_,_,m=panel(y,x,{'block_cells':2},'panel_latest_residual')
+    t=np.repeat(np.arange(8),16);s=np.tile(np.arange(16),8)
+    A=np.column_stack([np.ones(128),x.ravel(),np.eye(8)[t,1:],np.eye(16)[s,1:]])
+    b=np.linalg.lstsq(A,y.ravel(),rcond=None)[0];e=y.ravel()-A@b
+    np.testing.assert_allclose(m['coefficient'],b[1],atol=1e-12)
+    np.testing.assert_allclose(z,e[-16:].reshape(4,4),atol=1e-12)
+    block=(s//4//2)*2+(s%4//2);bread=np.linalg.inv(A.T@A)
+    scores=np.array([A[block==i].T@e[block==i] for i in range(4)])
+    cov=bread@(scores.T@scores)@bread*(4/3)*(127/(128-A.shape[1]))
+    np.testing.assert_allclose(m['cluster_robust_se'],np.sqrt(cov[1,1]),atol=1e-12)
+
+def test_advanced_figures_actual_products():
+    from terrain.studio_routes import StudioInput
+    from terrain.studio_render import render
+    t=np.arange(18.);space=np.arange(1,17).reshape(4,4);a=(t[:,None,None]+1)*space
+    rng=np.random.default_rng(7);x=rng.normal(size=a.shape);y=2*x+a+rng.normal(0,.1,a.shape)
+    results=[run('st_holdout_rmse',a,t,{'sample_limit':24}),run('hotspot_class',a,t,{'radius':1,'permutations':39}),
+      run('panel_spatial_effect',y,t,sources=[source(y),source(x)],covariates=[{'source':1,'band':i+1,'unit':'index'} for i in range(len(t))]),
+      run('space_time_variogram',a,t,{'lag':2,'radius':2})]
+    assert any(f['recipe']=='basic_table_heatmap' for f in results[-1]['figures'])
+    for r in results:
+        for figure in r['figures']:
+            rasters=[{k:r['raster'][k] for k in ('name','data','unit','band')}] if figure['raster'] else []
+            req=StudioInput(recipe=figure['recipe'],csv=figure['csv'] or '',rasters=rasters,**figure['bindings'])
+            for fmt,magic in [('png',b'\x89PNG'),('svg',b'<?xml')]:
+                data,_,_=render(req.model_copy(update={'format':fmt}));assert data.startswith(magic)

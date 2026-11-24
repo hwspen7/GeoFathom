@@ -215,7 +215,21 @@ def execute(body):
         cols,rows,meta=variogram(stack,t,first,p)
         for direction in ('east','south','temporal'):
             sub=[r for r in rows if r[0]==direction]
-            if sub:plot(direction+' directional space-time semivariance','basic_scatter' if direction=='temporal' else 'basic_scatter',cols,sub,x='time_lag' if direction=='temporal' else 'space_m',y='semivariance')
+            if direction=='temporal':
+                if sub:plot('Pure temporal semivariance','basic_scatter',cols,sub,x='time_lag',y='semivariance')
+                continue
+            # Preserve the temporal dimension, not overlapping unrelated
+            # distances on a single scatter. Heatmap uses only complete bins.
+            distances=sorted({r[1] for r in sub});lags=sorted({r[2] for r in sub})
+            values={(r[1],r[2]):r[4] for r in sub}
+            for lag in lags:
+                group=[r for r in sub if r[2]==lag]
+                if len(group)>=2:plot(f'{direction} semivariance at time lag {lag:g}','basic_line',cols,group,x='space_m',y='semivariance')
+            if len(distances)>=2 and len(lags)>=2:
+                for start in range(0,len(distances),12):
+                    ds=distances[start:start+12];names=[f'{d:g} m' for d in ds]
+                    matrix=[[str(lag),*[values[d,lag] for d in ds]] for lag in lags if all((d,lag) in values for d in ds)]
+                    if len(matrix)>=2:plot(direction+' space-time semivariance matrix','basic_table_heatmap',['time_lag',*names],matrix,x='time_lag',columns=names)
     else:
         out,meta=long_series(kind,stack,body.times,p.get('period',365))
         if kind=='series_count':unit='count'
@@ -232,10 +246,10 @@ def execute(body):
     if out is not None and not np.isfinite(out).any():require(False,'No valid output cells meet the model assumptions.')
     product=raster_product(kind,out,first.transform,first.crs,unit) if out is not None else None
     if product:
-        figures.insert(0,{'title':METHODS[kind][1]+' map','recipe':'raster_continuous','bindings':{},'csv':None,'raster':True})
+        figures.insert(0,{'title':METHODS[kind][1]+' map','recipe':'raster_classes' if unit=='class' else 'raster_continuous','bindings':{},'csv':None,'raster':True})
         if not rows:cols=['quantile','value'];rows=product['summary']['quantiles']
     csv=csv_text(cols,rows)
-    receipt={'table_sha256':hashlib.sha256(csv.encode()).hexdigest(),'raster_sha256':product['sha256'] if product else None,'schema':'geofathom-spatiotemporal','operation':kind,'crs':str(first.crs),'unit':unit,'times':body.times,'time_unit':body.time_unit,'time_origin':body.time_origin,'parameters':p,'observations':bindings,'covariates':covariate_receipt,'quality':quality_receipt,'metrics':meta}
+    receipt={'table_sha256':hashlib.sha256(csv.encode()).hexdigest(),'raster_sha256':product['sha256'] if product else None,'schema':'geofathom-spatiotemporal','operation':kind,'crs':str(first.crs),'unit':unit,'times':body.times,'time_unit':body.time_unit,'time_origin':body.time_origin,'parameters':p,'covariate_quality_policy':'Covariate data must be independently quality-masked before import; response QA is applied only to response dates.' if body.covariates else None,'observations':bindings,'covariates':covariate_receipt,'quality':quality_receipt,'metrics':meta}
     result={'operation':kind,'receipt':receipt,'features':None,'raster':product,'preview':raster_preview(product) if product else None,'figures':figures,'columns':cols,'rows':rows,'csv':csv}
     json.dumps(result,allow_nan=False)
     return result
