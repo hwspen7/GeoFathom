@@ -1283,6 +1283,6 @@ export function runNetworkScience(body:NetworkScienceInput,signal?:AbortSignal):
 export function buildOSMNetwork(snapshot:unknown,speed_kmh_by_class:Record<string,number>,signal?:AbortSignal):Promise<{network:GeoJSON.FeatureCollection;receipt:Record<string,unknown>}>{return request('/analysis/network-science/build-osm',{method:'POST',signal,headers:{'Content-Type':'application/json'},body:JSON.stringify({snapshot,speed_kmh_by_class})});}
 
 export interface SpacetimeMethod {id:string;group:string;title:string;parameters:SpatialScienceMethod['parameters']}
-export interface SpacetimeInput {operation:string;sources:RemoteSource[];observations:RemoteBinding[];times:number[];quality:RemoteQuality[];time_unit:string;parameters:Record<string,number>}
+export interface SpacetimeInput {operation:string;sources:RemoteSource[];observations:RemoteBinding[];times:number[];quality:RemoteQuality[];time_unit:string;time_origin?:string;parameters:Record<string,number>}
 export function getSpacetimeCatalog(signal?:AbortSignal):Promise<{operations:SpacetimeMethod[];operation_count:number}>{return request('/analysis/spatiotemporal/catalog',{signal});}
 export function runSpacetime(body:SpacetimeInput,signal?:AbortSignal):Promise<SpatialScienceResult>{return request('/analysis/spatiotemporal/run',{method:'POST',signal,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});}

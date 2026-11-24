@@ -11,6 +11,7 @@ from imagery.remote_research import long_series
 from imagery.remote_temporal_models import seasonal_metrics,segmented_means
 from imagery.remote_inference import series_break
 from .spacetime_state import kalman,permutation_lag
+from .spacetime_modes import eof,block_trend
 from analysis.science_raster import require
 from analysis.science_routes import raster_product,raster_preview
 from analysis.science_figures import csv_text
@@ -18,9 +19,14 @@ from .spacetime_models import trend,temporal,forecast,spatial_lag,variogram
 
 router=APIRouter(prefix='/analysis/spatiotemporal',tags=['spatiotemporal science'])
 # parameter = (default,minimum,maximum,integer)
-P={'minimum_observations':(6,3,64,True),'lag':(1,1,32,True),'threshold':(0,-1e50,1e50,False),'horizon':(30,.000001,1e7,False),'radius':(3,1,20,True),'period':(365,.000001,1e7,False),'fraction':(.5,.01,.99,False),'minimum_amplitude':(.01,0,1e50,False),'min_segment':(3,2,32,True),'penalty':(1,.000001,1e50,False),'process_variance':(.01,1e-20,1e50,False),'observation_variance':(.1,1e-20,1e50,False),'initial_velocity_variance':(1,1e-20,1e50,False),'permutations':(199,19,999,True),'seed':(42,0,2147483647,True)}
+P={'minimum_observations':(6,3,64,True),'lag':(1,1,32,True),'threshold':(0,-1e50,1e50,False),'horizon':(30,.000001,1e7,False),'radius':(3,1,20,True),'period':(365,.000001,1e7,False),'fraction':(.5,.01,.99,False),'minimum_amplitude':(.01,0,1e50,False),'min_segment':(3,2,32,True),'penalty':(1,.000001,1e50,False),'process_variance':(.01,1e-20,1e50,False),'observation_variance':(.1,1e-20,1e50,False),'initial_velocity_variance':(1,1e-20,1e50,False),'permutations':(199,19,999,True),'seed':(42,0,2147483647,True),'mode':(1,1,64,True),'block_length':(3,2,21,True)}
 KALMAN_P=('minimum_observations','horizon','process_variance','observation_variance','initial_velocity_variance')
 METHODS={
+ 'eof_mode':('Space-time modes','Empirical orthogonal spatial mode',('mode',)),
+ 'eof_reconstruction_rmse':('Space-time modes','EOF truncated reconstruction RMSE',('mode',)),
+ 'eof_local_skill':('Space-time modes','Local EOF reconstruction skill',('mode',)),
+ 'block_trend_p':('Trend inference','Circular block-bootstrap trend probability',('permutations','seed','block_length')),
+ 'block_trend_by':('Trend inference','Block-bootstrap trend BY adjustment',('permutations','seed','block_length')),
  'kalman_level':('State space','Filtered terminal level',KALMAN_P),
  'kalman_velocity':('State space','Filtered terminal rate',KALMAN_P),
  'kalman_forecast':('State space','Irregular-time state-space forecast',KALMAN_P),
@@ -64,6 +70,7 @@ class CubeInput(BaseModel):
     quality:list[Quality]=Field(default_factory=list,max_length=64)
     parameters:dict[str,float]=Field(default_factory=dict,max_length=12)
     time_unit:str=Field(default='day',min_length=1,max_length=24)
+    time_origin:str=Field(default='',max_length=80)
 
 @router.get('/catalog')
 def catalog():
@@ -113,6 +120,13 @@ def execute(body):
     elif kind.startswith(('forecast_','hindcast_')):
         out,cols,rows,meta=forecast(stack,t,kind,p);unit='index' if kind=='hindcast_skill' else unit
         if len(rows)>=2:plot('Expanding-window forecast versus persistence error','multi_line',cols,rows,x='time',columns=['trend_rmse','persistence_rmse'])
+    elif kind.startswith('eof_'):
+        require(first.is_meter,'EOF requires a projected metre grid and equal native cell weights.')
+        out,cols,rows,meta=eof(stack,p,kind);unit='index' if kind in ('eof_mode','eof_local_skill') else unit
+        plot('EOF explained variance spectrum','basic_column',cols,rows,x='mode',y='explained_fraction')
+        plot('EOF principal component time series','basic_line',['time','score'],list(zip(body.times,meta['temporal_scores'])),x='time',y='score')
+    elif kind.startswith('block_trend_'):
+        out,meta=block_trend(stack,t,p,kind);unit='probability'
     elif kind.startswith('kalman_'):
         out,cols,rows,meta=kalman(stack,t,p,kind)
         if kind=='kalman_velocity':unit=unit+'/'+body.time_unit
@@ -156,7 +170,7 @@ def execute(body):
     if product:
         figures.insert(0,{'title':METHODS[kind][1]+' map','recipe':'raster_continuous','bindings':{},'csv':None,'raster':True})
         if not rows:cols=['quantile','value'];rows=product['summary']['quantiles']
-    receipt={'schema':'geofathom-spatiotemporal','operation':kind,'crs':str(first.crs),'unit':unit,'times':body.times,'time_unit':body.time_unit,'parameters':p,'observations':bindings,'quality':quality_receipt,'metrics':meta}
+    receipt={'schema':'geofathom-spatiotemporal','operation':kind,'crs':str(first.crs),'unit':unit,'times':body.times,'time_unit':body.time_unit,'time_origin':body.time_origin,'parameters':p,'observations':bindings,'quality':quality_receipt,'metrics':meta}
     return {'operation':kind,'receipt':receipt,'features':None,'raster':product,'preview':raster_preview(product) if product else None,'figures':figures,'columns':cols,'rows':rows,'csv':csv_text(cols,rows)}
 
 @router.post('/run')
