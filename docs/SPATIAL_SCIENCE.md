@@ -1,6 +1,6 @@
 # Spatial Analysis: scientific computing contract
 
-Spatial Analysis is independent of the Terrain module. Its catalog exposes 60 executable methods across vector, raster, sampling, spatial statistics, decision and integrated operations. The same validated endpoint is used by the manual workbench and the future AI research orchestrator. No language model is required for numerical computation.
+Spatial Analysis is independent of the Terrain module. Its catalog exposes 67 executable methods across vector, raster, sampling, spatial statistics, decision and integrated operations. The same validated endpoint is used by the manual workbench and the future AI research orchestrator. No language model is required for numerical computation.
 
 ## Inputs and outputs
 
@@ -11,7 +11,7 @@ Spatial Analysis is independent of the Terrain module. Its catalog exposes 60 ex
 
 ## Scope
 
-The 60 methods include exact fractional overlap zonal statistics/class area, Gaussian point intensity, spatially balanced and stratified sampling with design weights, permutation Moran/Geary/join-count diagnostics, AHP consistency-ratio enforcement, TOPSIS, weighted overlay and exact two-criterion Pareto cells. The module intentionally excludes full geostatistical inference, SAR, routing, time-series modeling and LiDAR, which belong to dedicated research modules. Geometry measurement is planar within the selected metre CRS; it is not a geodetic field-survey certification.
+The 67 methods include exact fractional overlap zonal statistics/class area, Gaussian point intensity, spatially balanced and stratified sampling with design weights, permutation Moran/Geary/join-count diagnostics, AHP consistency-ratio enforcement, TOPSIS, weighted overlay and exact two-criterion Pareto cells. The module intentionally excludes full geostatistical inference, maximum-likelihood SAR/SEM, routing, time-series modeling and LiDAR, which belong to dedicated research modules. Geometry measurement is planar within the selected metre CRS; it is not a geodetic field-survey certification.
 
 ## Acceptance
 
@@ -23,7 +23,7 @@ Managed rasters, complete saved project layers and Terrain output GeoTIFFs can b
 
 Local Moran and Getis–Ord Gi* expose statistics, permutation p, BY-adjusted q and significant class rasters. Significance is conditional on random-label exchangeability, neighborhood definition and multiplicity correction, not proof of a physical causal process. Raster results have a separate bounded, Mercator-aligned PNG map preview; scientific GeoTIFFs retain their original full-resolution grid.
 
-The automated acceptance gate requires a passing analytic test for each of the 60 methods, contract/error tests, GDAL CLI cross-interface grid alignment, and a 512×512 conservation/mask/sampling stress fixture. A missing, skipped or failed required case prevents the gate from passing. The updated evidence gate has a 95-point minimum numerical acceptance floor for the declared fixtures, not a claim of external scientific certification or broad production maturity. Browser and cross-platform checks must independently pass.
+The automated acceptance gate requires a passing analytic test for each of the 67 methods, contract/error tests, GDAL CLI cross-interface grid alignment, and a 512×512 conservation/mask/sampling stress fixture. A missing, skipped or failed required case prevents the gate from passing. The updated evidence gate has a 95-point minimum numerical acceptance floor for the declared fixtures, not a claim of external scientific certification or broad production maturity. Browser and cross-platform checks must independently pass.
 
 Advanced methods include exact anisotropic-cell-spacing Euclidean proximity, focal quantile, directional lag diagnostics, bivariate Moran permutation inference, Dirichlet weight uncertainty, spatially buffered out-of-fold raster regression, descriptive covariance ellipses and exact area-weighted quantiles. Zonal intersection uses bounded vectorized GEOS operations. The decision uncertainty is conditional on explicit weight assumptions, and regression scores are held-out spatial diagnostics, not causal evidence.
 
@@ -32,3 +32,7 @@ Spatial Research Figures bind actual null draws, directional lag statistics, sam
 Additional mandatory acceptance covers shared-edge metric precision, exact small-sample randomization references, anisotropic distance against brute force, missing-data zonal conservation, sampling-design repeated estimates, extreme weights, analytic uncertainty and real result-to-figure pipelines. Scores refer to the defined evidence gate, not universal algorithm accuracy.
 
 All derived rasters now include full-valid-grid quantile diagnostics (or class frequencies for up to 50 classes), explicitly excluding NoData. The result-specific figure shortcuts use these exact summaries rather than values sampled from the display preview. Calculation receipts include SHA-256 of the returned CSV and canonical GeoJSON, in addition to the original raster hashes. Global randomization budgets account for both population shuffles and graph edges, including isolated cells.
+
+## Advanced spatial modeling and scale sensitivity
+
+Seven additional methods extend the shared catalog: distance-band and KNN global Moran randomization, descriptive multiscale Moran/dispersion with coverage, exact empirical isotropic variograms, correlated linear-difference uncertainty, rook spatial lag structural regression via 2SLS, and fixed-bandwidth Gaussian geographically weighted leave-one-out prediction. The latter two expose residual Moran diagnostics and distinguish structural fits from held-out predictions; neither establishes causal effects or external-site validation. Spatial weights use explicit metric distances, stable KNN ties, bounded directed edges and row standardization. Spatial lag reports instrument rank and first-stage diagnostics; scientific interpretation requires independently justified instruments. Difference uncertainty uses four aligned same-unit rasters and an explicitly supplied same-cell error correlation. Square-window min/max/range now use separable exact reductions, lowering radius-dependent work without changing NoData semantics. Full geostatistical covariance fitting, kriging, SEM, arbitrary user matrices and out-of-core processing remain outside this bounded implementation.

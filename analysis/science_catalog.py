@@ -94,9 +94,16 @@ m('clip_raster','Integrated','Clip raster by polygon','integrated',1,1,(),'raste
 m('rasterize','Integrated','Polygon occupancy raster','integrated',1,1,(),'raster','Cell-center inclusion, template validity mask retained.'),
 m('extract_points','Integrated','Extract raster at points','integrated',1,1,(),'table','Nearest containing cell; outside/NoData becomes null.'),
 m('polygonize','Integrated','Polygonize categorical raster','raster',1,1,(),'vector','Four-connected integer classes, original grid boundaries.'),
+m('distance_moran','Statistics','Distance-weighted global Moran I','raster',1,1,(D,('power','Inverse distance exponent',1,0,3,False),P,S),'table','Projected distance-band graph; row-standardized weights; random-label null; isolates reported.'),
+m('knn_moran','Statistics','K-nearest-neighbor Moran I','raster',1,1,(K,('power','Inverse distance exponent',0,0,3,False),P,S),'table','Directed KNN graph with stable ties; row-standardized weights; random-label null.'),
+m('multiscale_moran','Statistics','Multiscale spatial dependence','raster',1,1,(('max_factor','Maximum aggregation factor',4,2,16,True),),'table','Native-origin block means, incomplete edge blocks discarded; descriptive scale dependence.'),
+m('empirical_variogram','Statistics','Isotropic empirical semivariogram','raster',1,1,(D,('bins','Lag bins',10,2,30,True)),'table','Matheron empirical semivariance for unique metric cell pairs; no fitted model.'),
+m('difference_uncertainty','Integrated','Difference uncertainty propagation','raster',4,4,(('correlation','Same-cell error correlation',0,-1,1,False),),'raster','Input order: A, B, standard uncertainty of A, standard uncertainty of B; matching physical units.'),
+m('spatial_lag_regression','Integrated','Spatial lag regression (2SLS)','raster',2,8,(),'raster','Response first, predictors next; rook row-standardized spatial lag; WX and W²X instruments; conditional structural fit, not forecast.'),
+m('geographically_weighted_regression','Integrated','Geographically weighted leave-one-out regression','raster',2,8,(B,),'raster','Response first; fixed Gaussian bandwidth in metres; leave-one-out local prediction, not spatial-block validation.'),
 )
 BY_ID={method.id:method for method in METHODS}
-assert len(BY_ID)==len(METHODS)==60
+assert len(BY_ID)==len(METHODS)==67
 
 def catalog():
     return [{'id':m.id,'group':m.group,'title':m.title,'source':m.source,
@@ -109,5 +116,5 @@ def catalog():
              'requires_weights':m.id in {'weighted_overlay','topsis','robust_overlay'},
              'requires_pairwise':m.id=='ahp_overlay',
              'requires_directions':m.id in {'weighted_overlay','topsis','ahp_overlay','pareto_cells','robust_overlay'},
-             'requires_robust_view':m.id=='robust_overlay', 'requires_regression_view':m.id=='blocked_regression'}
+             'requires_robust_view':m.id=='robust_overlay', 'requires_regression_view':m.id in {'blocked_regression','spatial_lag_regression','geographically_weighted_regression'}}
             for m in METHODS]

@@ -180,7 +180,7 @@ def test_integrated_operators_analytic_spatial_fixture(kind):
 
 def test_contract_count_and_invalid_input_rejections():
     client=TestClient(app);response=client.get('/analysis/science/catalog')
-    assert response.status_code==200 and response.json()['operation_count']==len(BY_ID)==60
+    assert response.status_code==200 and response.json()['operation_count']==len(BY_ID)==67
     assert set(m['group'] for m in response.json()['operations'])=={'Vector','Raster','Sampling','Statistics','Decision','Integrated'}
     assert response.json()['ai_tool']['input_schema']['properties']['operation']
     bad=[
@@ -444,3 +444,81 @@ def test_full_grid_figure_and_output_provenance():
     vector=run('centroid',vectors=[vectors(box(X,Y-10,X+10,Y))])
     canonical=json.dumps(vector['features'],sort_keys=True,separators=(',',':'),allow_nan=False).encode()
     assert vector['receipt']['vector_output_sha256']==hashlib.sha256(canonical).hexdigest()
+
+
+@pytest.mark.parametrize('kind',['distance_moran','knn_moran','multiscale_moran','empirical_variogram','difference_uncertainty','spatial_lag_regression','geographically_weighted_regression'])
+def test_research_depth_oracles(kind):
+    if kind in ('distance_moran','knn_moran'):
+        # Independent dense row-standardized rook graph for a regular grid.
+        u=Z.ravel()-Z.mean();coords=np.indices(Z.shape).reshape(2,-1).T
+        d=np.linalg.norm(coords[:,None]-coords[None,:],axis=2)
+        if kind=='distance_moran':
+            w=(d==1).astype(float);parameters={'distance_m':10.1,'power':1,'permutations':99}
+        else:
+            np.fill_diagonal(d,np.inf);w=np.zeros_like(d)
+            w[np.arange(len(d))[:,None],np.argsort(d,axis=1,kind='stable')[:,:2]]=1
+            parameters={'k':2,'power':0,'permutations':99}
+        w/=w.sum(axis=1,keepdims=True)
+        r=run(kind,rasters=[raster()],parameters=parameters)
+        assert r['receipt']['metrics']['observed']==pytest.approx(u@w@u/(u@u))
+        assert len(r['rows'])==99 and r['receipt']['metrics']['isolated_cells']==0
+    elif kind=='multiscale_moran':
+        r=run(kind,rasters=[raster()],parameters={'max_factor':2})
+        assert len(r['rows'])==2 and r['rows'][1][:5]==[2,20.,20.,4,1.]
+        assert r['rows'][1][5]==pytest.approx(8.5)
+        assert r['rows'][1][6]==pytest.approx(np.std([3.5,5.5,11.5,13.5]))
+        assert r['rows'][1][7]==pytest.approx(0)
+    elif kind=='empirical_variogram':
+        r=run(kind,rasters=[raster()],parameters={'distance_m':10.1,'bins':2})
+        assert len(r['rows'])==1 and r['rows'][0][3]==24
+        assert r['rows'][0][4]==pytest.approx(10)
+        assert r['rows'][0][5]==pytest.approx(4.25)
+    elif kind=='difference_uncertainty':
+        args={'rasters':[raster(Z),raster(Z-5),raster(np.full_like(Z,3)),raster(np.full_like(Z,4))]}
+        for rho,expected in [(0,5),(1,1),(-1,7)]:
+            r=run(kind,parameters={'correlation':rho},**args);out,_=result_grid(r)
+            np.testing.assert_allclose(out,expected)
+            assert r['receipt']['metrics']['mean_difference']==5
+    elif kind=='spatial_lag_regression':
+        rng=np.random.default_rng(22);x=rng.normal(size=(6,6));n=x.size
+        coords=np.indices(x.shape).reshape(2,-1).T;w=(np.abs(coords[:,None]-coords[None,:]).sum(axis=2)==1).astype(float)
+        w/=w.sum(axis=1,keepdims=True)
+        y=np.linalg.solve(np.eye(n)-.35*w,3+2*x.ravel()).reshape(x.shape)
+        r=run(kind,rasters=[raster(y),raster(x)])
+        m=r['receipt']['metrics'];assert m['rho']==pytest.approx(.35,abs=1e-9)
+        assert m['coefficients']==pytest.approx([2],abs=1e-9)
+        assert m['intercept']==pytest.approx(3,abs=1e-9)
+        assert m['rmse']<1e-9
+    else:
+        rng=np.random.default_rng(3);x=rng.normal(size=(6,6));y=4+2*x
+        r=run(kind,rasters=[raster(y),raster(x)],parameters={'bandwidth_m':30})
+        out,_=result_grid(r);np.testing.assert_allclose(out,y,atol=1e-9)
+        assert r['receipt']['metrics']['rmse']<1e-9
+        assert [row[-1] for row in r['rows']]==pytest.approx([2]*36,abs=1e-9)
+
+
+def test_large_separable_neighborhood_against_brute_force():
+    from analysis.science_raster import focal
+    rng=np.random.default_rng(17);z=rng.normal(size=(512,512));z[4:30,4:30]=np.nan
+    for kind,fn in [('focal_min',np.nanmin),('focal_max',np.nanmax),('focal_range',lambda a:np.nanmax(a)-np.nanmin(a))]:
+        out=focal(z,20,kind)
+        assert np.array_equal(np.isfinite(out),np.isfinite(z))
+        for i,j in [(0,0),(20,31),(200,200),(511,511)]:
+            window=z[max(0,i-20):i+21,max(0,j-20):j+21]
+            assert out[i,j]==pytest.approx(fn(window))
+
+
+def test_research_depth_invalid_and_model_figure():
+    from terrain.studio_routes import StudioInput
+    from terrain.studio_render import render
+    from terrain.studio_data import FigureInputError
+    with pytest.raises(FigureInputError,match='nonnegative'):
+        run('difference_uncertainty',rasters=[raster(),raster(),raster(-Z),raster()])
+    with pytest.raises(FigureInputError,match='fewer neighbors'):
+        run('knn_moran',rasters=[raster()],parameters={'k':16})
+    with pytest.raises(FigureInputError,match='collinear'):
+        run('spatial_lag_regression',rasters=[raster(),raster(Z*2),raster(Z*3)])
+    r=run('empirical_variogram',rasters=[raster()],parameters={'distance_m':35,'bins':4})
+    plot=next(p for p in r['figures'] if p['title']=='Empirical semivariogram')
+    image,_,_=render(StudioInput(recipe=plot['recipe'],csv=plot['csv'],**plot['bindings']))
+    assert image.startswith(b'\x89PNG')

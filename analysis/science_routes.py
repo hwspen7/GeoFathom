@@ -22,6 +22,7 @@ from .science_catalog import BY_ID,catalog
 from .science_raster import require,raster_operation,sample_cells,permutation_stat,decision,local_stat
 from .science_vector import load_layers,vector_operation,integrated
 from .science_advanced import euclidean_distance,focal_quantile,lag_scan,bivariate_moran,robust_overlay,blocked_raster_regression
+from .science_models import weighted_moran,multiscale,difference_uncertainty,empirical_variogram,fit_spatial_model
 
 router=APIRouter(prefix='/analysis/science',tags=['spatial science'])
 source_router=APIRouter(tags=['spatial science sources'])
@@ -121,6 +122,19 @@ def execute(body):
     features=None;headers=[];rows=[];product=None;meta={}
     if method.source=='vector':
         features,headers,rows,meta=vector_operation(kind,groups,reverse,params)
+    elif kind in {'distance_moran','knn_moran'}:
+        meta,null=weighted_moran(g,params,'knn' if kind=='knn_moran' else 'distance')
+        headers=['permutation','null_statistic','observed_statistic'];rows=[[i+1,float(value),meta['observed']] for i,value in enumerate(null)]
+    elif kind=='multiscale_moran':
+        headers,rows,meta=multiscale(g,params['max_factor'])
+    elif kind=='empirical_variogram':
+        headers,rows,meta=empirical_variogram(g,params)
+    elif kind=='difference_uncertainty':
+        stack,common=aligned_grids(grids);require(bool(g.unit),'Declare matching physical units for all four inputs.')
+        out,meta=difference_uncertainty(stack,common,params['correlation']);product=raster_product(kind,out,g.transform,g.crs,g.unit)
+    elif kind in {'spatial_lag_regression','geographically_weighted_regression'}:
+        out,headers,rows,meta=fit_spatial_model(grids,params,kind,body.regression_view)
+        product=raster_product(kind,out,g.transform,g.crs,g.unit)
     elif kind=='raster_distance':
         require(g.is_meter,'Exact proximity requires a projected metre raster.')
         out=euclidean_distance(g.values,g.transform.a,abs(g.transform.e));product=raster_product(kind,out,g.transform,g.crs,'m')

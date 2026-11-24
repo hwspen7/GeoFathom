@@ -8,6 +8,18 @@ def require(ok,msg):
 
 def focal(z,r,kind):
     h,w=z.shape
+    if kind in {'focal_min','focal_max','focal_range'}:
+        # Separability gives the exact square-window extrema in linear radius work.
+        require(z.size*(2*r+1)*2<=180_000_000,'Separable neighborhood exceeds work budget.')
+        def reduce(op):
+            horizontal=np.full_like(z,np.nan);pad=np.pad(z,((0,0),(r,r)),constant_values=np.nan)
+            for k in range(2*r+1):op(horizontal,pad[:,k:k+w],out=horizontal)
+            vertical=np.full_like(z,np.nan);pad=np.pad(horizontal,((r,r),(0,0)),constant_values=np.nan)
+            for k in range(2*r+1):op(vertical,pad[k:k+h,:],out=vertical)
+            return vertical
+        out=reduce(np.fmin) if kind=='focal_min' else reduce(np.fmax) if kind=='focal_max' else reduce(np.fmax)-reduce(np.fmin)
+        out[~np.isfinite(z)]=np.nan
+        return out
     require(z.size*(2*r+1)**2<=60_000_000,'Neighborhood exceeds cell-window work budget.')
     count=np.zeros(z.shape,np.int32);mean=np.zeros(z.shape);m2=np.zeros(z.shape)
     low=np.full(z.shape,np.inf);high=np.full(z.shape,-np.inf)

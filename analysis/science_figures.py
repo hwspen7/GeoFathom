@@ -20,7 +20,7 @@ def figure_sources(result,grids):
                 add('Class frequency (full valid grid)','basic_column',{'x':'class','y':'cell_count'},csv_text(['class','cell_count'],summary['class_counts']))
         else:
             add('Raster quantile profile (full valid grid)','basic_scatter',{'x':'quantile','y':'value'},csv_text(['quantile','value'],summary['quantiles']))
-    if kind in {'global_moran','global_geary','join_count','bivariate_moran'}:
+    if kind in {'global_moran','global_geary','join_count','bivariate_moran','distance_moran','knn_moran'}:
         table('Random-label permutation distribution','spatial_null_distribution',{'x':'null_statistic','y':'observed_statistic'})
     if kind=='directional_lag_scan':
         for field in ['semivariance','covariance','correlation']:
@@ -36,6 +36,19 @@ def figure_sources(result,grids):
         tx=Transformer.from_crs(4326,result['receipt']['crs'],always_xy=True)
         rows=[[*tx.transform(*f['geometry']['coordinates']),f['properties']['area_weight_m2']] for f in result['features']['features']]
         add('Polygon sample distribution','spatial_sample_design',{'x':'easting','y':'northing','z':'area_weight_m2'},csv_text(['easting','northing','area_weight_m2'],rows))
+    if kind=='multiscale_moran':
+        table('Moran statistic by aggregation scale','basic_scatter',{'x':'factor','y':'moran_i'})
+        table('Dispersion by aggregation scale','basic_scatter',{'x':'factor','y':'population_sd'})
+        table('Retained source coverage by scale','basic_scatter',{'x':'factor','y':'source_coverage'})
+    if kind=='empirical_variogram':
+        table('Empirical semivariogram','basic_scatter',{'x':'mean_distance_m','y':'semivariance'})
+        table('Lag pair support','basic_column',{'x':'bin','y':'pairs'})
+    if kind in {'spatial_lag_regression','geographically_weighted_regression'}:
+        table('Observed versus modeled response','basic_scatter',{'x':'observed','y':'prediction'})
+        table('Residual versus fitted response','basic_scatter',{'x':'prediction','y':'residual'})
+        table('Residual distribution','basic_rank',{'y':'residual'})
+        if kind=='geographically_weighted_regression':
+            table('Local first-predictor coefficient distribution','basic_rank',{'y':'local_coefficient_first_predictor'})
     if kind=='blocked_regression':
         table('Held-out observations versus prediction','spatial_oof_agreement',{'x':'observed','y':'prediction','group':'fold'})
         table('Held-out residual by fold','strip',{'y':'residual','group':'fold'})
