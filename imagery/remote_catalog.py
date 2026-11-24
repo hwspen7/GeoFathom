@@ -25,6 +25,8 @@ TIMES=numeric('date1','date2','date3','date4')
 CLASSES=(('before','class'),('after','class'))
 SPECTRUM=refl('blue','green','red','nir')
 METHODS=(
+m('true_color','Spectral','True-color reflectance composite',refl('red','green','blue'),'reflectance','Calibrated [0,1] reflectance RGB channels; common validity mask, no display stretch.'),
+m('false_color','Spectral','False-color NIR / red / green composite',refl('nir','red','green'),'reflectance','Calibrated [0,1] reflectance channels assigned to RGB in NIR/red/green order; no display stretch.'),
 m('calibrated_reflectance','Preprocessing','Calibrated reflectance export',refl('band'),'reflectance','Explicit source scale and offset; no atmospheric correction.'),
 m('align_continuous','Preprocessing','Align continuous band (bilinear)',(('target','template'),('source','numeric')),'source_band','Explicit reprojection to target grid; target NoData retained; no QA in this alignment operation.'),
 m('align_categorical','Preprocessing','Align categorical band (nearest)',(('target','template'),('source','class')),'class','Nearest-neighbor reprojection to target grid; target NoData retained; no QA in this alignment operation.'),

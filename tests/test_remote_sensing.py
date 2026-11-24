@@ -189,7 +189,7 @@ def test_remote_invalid_inputs_and_recovery():
         response=client.post('/analysis/remote-sensing/run',json=bad);assert response.status_code==422,response.text
     response=client.post('/analysis/remote-sensing/run',json=good);assert response.status_code==200,response.text
     np.testing.assert_allclose(grid(response.json()),.5)
-    assert client.get('/analysis/remote-sensing/catalog').json()['operation_count']==len(BY_ID)==53
+    assert client.get('/analysis/remote-sensing/catalog').json()['operation_count']==len(BY_ID)==55
 
 def test_temporal_independent_quality_masks():
     # Cloud at one date does not erase the other valid acquisitions.
@@ -286,3 +286,46 @@ def test_advanced_remote_reference(kind):
         assert m['area_adjusted_matrix_map_rows']==[[.25,.25],[0,.5]]
         assert m['area_adjusted_overall_accuracy']==.75
         assert m['overall_accuracy_standard_error']==pytest.approx(np.sqrt(.25*.5*.5*.5))
+
+
+@pytest.mark.parametrize('kind',['true_color','false_color'])
+def test_rgb_reference(kind):
+    roles=[r for r,_ in BY_ID[kind].roles];a={role:constant(v) for role,v in zip(roles,(.8,.4,.2))}
+    a[roles[0]][0,0]=np.nan
+    r=run(kind,a)
+    assert r['raster']['band_count']==3 and r['receipt']['metrics']['display_channel_order']==roles
+    with MemoryFile(base64.b64decode(r['raster']['data'])) as mem,mem.open() as ds:
+        assert ds.count==3 and list(ds.descriptions)==roles
+        data=ds.read();assert np.isnan(data[:,0,0]).all()
+        np.testing.assert_allclose(data[:,1,1],[.8,.4,.2])
+    assert r['preview'] is not None
+    assert r['figures'][0]['bands']==[1,2,3]
+
+
+def test_rgb_actual_figure_workflow():
+    client=TestClient(app);r=run('true_color',{'red':constant(.8),'green':constant(.4),'blue':constant(.2)})
+    p=r['figures'][0];raster=r['raster']
+    rasters=[{'name':raster['name']+' band '+str(b),'data':raster['data'],'band':b,'unit':'reflectance'} for b in p['bands']]
+    response=client.post('/terrain/studio/render',json={'recipe':p['recipe'],'rasters':rasters,'format':'png'})
+    assert response.status_code==200,response.text
+    assert base64.b64decode(response.json()['figure']).startswith(b'\x89PNG')
+
+
+def test_remote_gdal_reference(tmp_path):
+    import os,shutil,subprocess
+    import rasterio
+    executable=shutil.which('gdalwarp')
+    if executable is None:
+        if os.environ.get('GEOFATHOM_REQUIRE_REMOTE_GDAL')=='1':pytest.fail('GDAL CLI required.')
+        pytest.skip('GDAL CLI not installed.')
+    target=np.ones((4,4));target[0,0]=np.nan
+    s=source(np.array([[1,2],[3,4]],float),aff=from_origin(500000,4500000,20,20))
+    src=tmp_path/'source.tif';src.write_bytes(base64.b64decode(s['data']))
+    for kind,mode in [('align_continuous','bilinear'),('align_categorical','near')]:
+        dst=tmp_path/(kind+'.tif')
+        call=subprocess.run([executable,'-overwrite','-t_srs',CRS,'-te','500000','4499960','500040','4500000','-ts','4','4','-r',mode,'-srcnodata','nan','-dstnodata','nan','-ot','Float64',str(src),str(dst)],capture_output=True,text=True,timeout=45)
+        assert call.returncode==0,call.stderr
+        with rasterio.open(dst) as ds:expected=ds.read(1)
+        expected[0,0]=np.nan
+        result=execute(RemoteInput(operation=kind,sources=[source(target),s],bindings={'target':{'source':0},'source':{'source':1,'unit':'m' if mode=='bilinear' else ''}}))
+        np.testing.assert_allclose(grid(result),expected,equal_nan=True,atol=1e-10)

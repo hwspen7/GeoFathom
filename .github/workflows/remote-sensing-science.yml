@@ -20,12 +20,15 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Install locked scientific dependencies
-        run: python -m pip install -c requirements/linux.lock -e ".[dev]"
+      - name: Install independent GDAL and locked scientific dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends gdal-bin
+          python -m pip install -c requirements/linux.lock -e ".[dev]"
       - name: Verify numerical methods and full scientific workflows
         run: |
           mkdir -p build
-          python -m pytest -q --junitxml=build/remote-sensing-tests.xml tests/test_remote_sensing.py
+          GEOFATHOM_REQUIRE_REMOTE_GDAL=1 python -m pytest -q --junitxml=build/remote-sensing-tests.xml tests/test_remote_sensing.py
           python scripts/remote_sensing_gate.py --junit build/remote-sensing-tests.xml --output build/remote-sensing-acceptance.json
       - name: Preserve numerical evidence
         if: always()

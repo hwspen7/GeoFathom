@@ -10,6 +10,7 @@ from imagery.remote_catalog import BY_ID
 
 def expected_tests():
     groups={
+        'test_rgb_reference':'true_color false_color',
         'test_advanced_remote_reference':'calibrated_reflectance align_continuous align_categorical ndvi_change dnbr sar_lee temporal_sen temporal_trend_se spectral_unmix spectral_unmix_rmse stratified_accuracy',
         'test_optical_reference':'ndvi evi evi2 savi msavi2 gndvi ndre ndwi mndwi ndmi nbr nbr2 ndbi bsi ndsi arvi osavi simple_ratio nirv ci_green',
         'test_quality_reference':'sentinel_clear landsat_clear landsat_unsaturated',
@@ -25,7 +26,7 @@ def expected_tests():
 def required_tests():
     return ['test_sensor_calibration_and_quality_roles','test_thermal_landsat_surface_temperature_preset',
             'test_remote_invalid_inputs_and_recovery','test_temporal_independent_quality_masks',
-            'test_remote_to_spatial_and_figure_workflow','test_remote_medium_grid_and_undefined_ratio']
+            'test_remote_to_spatial_and_figure_workflow','test_remote_medium_grid_and_undefined_ratio','test_remote_gdal_reference','test_rgb_actual_figure_workflow']
 
 def evaluate(path):
     results={}

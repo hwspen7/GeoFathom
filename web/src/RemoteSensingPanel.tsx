@@ -22,7 +22,7 @@ export default function RemoteSensingPanel({active,connected,resultsTarget,asset
  const method=methods.find(m=>m.id===op);
  const available=methods.filter(m=>search.trim()?(m.title+' '+m.group+' '+m.id).toLowerCase().includes(search.trim().toLowerCase()):m.group===group);
  const resultTitle=methods.find(m=>m.id===result?.operation)?.title??result?.operation;
- useEffect(()=>{if(!active&&!open)return;const ac=new AbortController();getRemoteCatalog(ac.signal).then(c=>{if(!ac.signal.aborted){setMethods(c.operations);setOp(old=>old||c.operations[0]?.id||'');}}).catch(e=>{if(!ac.signal.aborted)setError(String(e.message??e));});return()=>ac.abort();},[active,open]);
+ useEffect(()=>{if(!active&&!open)return;const ac=new AbortController();getRemoteCatalog(ac.signal).then(c=>{if(!ac.signal.aborted){setMethods(c.operations);setOp(old=>old||c.operations.find(m=>m.id==='ndvi')?.id||c.operations[0]?.id||'');}}).catch(e=>{if(!ac.signal.aborted)setError(String(e.message??e));});return()=>ac.abort();},[active,open]);
  useEffect(()=>()=>request.current?.abort(),[]);
  useEffect(()=>{if(!open)return;const last=document.activeElement as HTMLElement|null;dialog.current?.focus();return()=>last?.focus();},[open]);
  function choose(id:string){setOp(id);setParams({});setBindings({});setQuality([]);setResult(null);setError('');}
@@ -74,5 +74,5 @@ export default function RemoteSensingPanel({active,connected,resultsTarget,asset
  <table><tbody>{Object.entries(result.receipt.metrics).map(([k,v])=><tr key={k}><th>{k.replaceAll('_',' ')}</th><td>{typeof v==='number'?v.toPrecision(7):JSON.stringify(v)}</td></tr>)}</tbody></table>
  {!!result.columns.length&&<div className="spatial-table"><table><thead><tr>{result.columns.map(c=><th key={c}>{c}</th>)}</tr></thead><tbody>{result.rows.slice(0,200).map((row,i)=><tr key={i}>{row.map((v,j)=><td key={j}>{v===null?'NoData':typeof v==='number'?v.toPrecision(7):v}</td>)}</tr>)}</tbody></table><small>Showing {Math.min(result.rows.length,200)} of {result.rows.length}; CSV contains all rows.</small></div>}
  <details><summary>Calculation provenance</summary><pre>{JSON.stringify(result.receipt,null,2)}</pre></details></>:<p>Choose sources and map the required bands.</p>}</div></div></div></div>,document.body)}
- {studio&&result&&<ScientificFigureStudio initialTier="all" source={{name:plot?.title??result.operation,csv:plot?plot.csv??undefined:result.csv||undefined,rasters:(!plot||plot.raster)&&result.raster?[input(result.raster)]:[],provenance:result.receipt,initialRecipe:plot?.recipe,initialBindings:plot?.bindings}} onClose={()=>setStudio(false)}/>}</>;
+ {studio&&result&&<ScientificFigureStudio initialTier="all" source={{name:plot?.title??result.operation,csv:plot?plot.csv??undefined:result.csv||undefined,rasters:(!plot||plot.raster)&&result.raster?(plot?.bands??(result.raster.band_count===3?[1,2,3]:[result.raster.band??1])).map(b=>({...input(result.raster!),band:b,name:result.raster!.name+' band '+b})):[],provenance:result.receipt,initialRecipe:plot?.recipe??(result.raster?.band_count===3?'spectral_rgb':undefined),initialBindings:plot?.bindings}} onClose={()=>setStudio(false)}/>}</>;
 }

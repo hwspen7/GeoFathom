@@ -15,6 +15,7 @@ from analysis.science_raster import require
 from analysis.science_routes import raster_product,raster_preview,csv_output
 from analysis.science_figures import figure_sources,csv_text
 from .remote_catalog import BY_ID,catalog
+from .remote_products import rgb_product
 from .remote_kernels import ratio,nd,optical,quality_mask,transition,agreement,temporal,pca,classify,sen_slope,temporal_slope_se,lee_filter,unmix,stratified_accuracy
 
 router=APIRouter(prefix='/analysis/remote-sensing',tags=['remote sensing'])
@@ -118,7 +119,7 @@ def execute(body):
         return g
     for name,quantity in method.roles:
         b=body.bindings[name];g=load(b,quantity,aligning and name=='source');grids[name]=g
-        provenance[name]={'source':g.name,'sha256':g.sha256,'band':g.band,'quantity':quantity,'unit':g.unit,'scale':g.scale,'offset':g.offset,'encoding':b.encoding}
+        provenance[name]={'source':g.name,'sha256':g.sha256,'band':g.band,'quantity':quantity,'unit':g.unit,'scale':g.scale,'offset':g.offset,'encoding':b.encoding,'crs':str(g.crs),'shape':list(g.values.shape),'transform':list(g.transform)[:6]}
     quality=[]
     for q in body.quality:
         require(set(q.roles)<=set(roles),'Unknown quality mask target role.')
@@ -141,9 +142,11 @@ def execute(body):
         out[~np.isfinite(target.values)]=np.nan
         v['source']=out
     common=np.logical_and.reduce([np.isfinite(z) for z in v.values()])
-    unit=method.unit;rows=[];headers=[];meta={};out=None
+    unit=method.unit;rows=[];headers=[];meta={};out=None;rgb=None
     if unit in {'source','source/time'}:unit=next(iter(grids.values())).unit+('/time' if unit=='source/time' else '')
-    if aligning:
+    if kind in {'true_color','false_color'}:
+        rgb=rgb_product(kind,np.stack(list(v.values())),first,list(v));meta['display_channel_order']=list(v)
+    elif aligning:
         out=v['source'];unit=grids['source'].unit;meta['resampling']='bilinear' if kind=='align_continuous' else 'nearest'
     elif kind=='calibrated_reflectance':out=v['band']
     elif kind=='ndvi_change':out=nd(v['nir_after'],v['red_after'])-nd(v['nir_before'],v['red_before'])
@@ -192,15 +195,15 @@ def execute(body):
         require(common.any(),'No common valid reference cells.')
         headers,rows,meta=agreement(v['prediction'][common],v['reference'][common])
     else:raise FigureInputError('Unimplemented remote method.')
-    product=raster_product(kind,out,first.transform,first.crs,unit) if out is not None else None
+    product=rgb[0] if rgb else raster_product(kind,out,first.transform,first.crs,unit) if out is not None else None
     meta.update(input_valid_cells={r:int(np.isfinite(z).sum()) for r,z in v.items()},common_valid_cells=int(common.sum()))
     csv=csv_output(headers,rows)
     receipt={'schema':'geofathom-remote-sensing-1','operation':kind,'assumption':method.assumption,'parameters':params,
              'crs':str(first.crs),'grid_shape':list(first.values.shape),'transform':list(first.transform)[:6],
              'bands':provenance,'quality_masks':quality,'metrics':meta,'table_sha256':hashlib.sha256(csv.encode()).hexdigest(),
              'raster_sha256':product['sha256'] if product else None,'raster_summary':product['summary'] if product else None}
-    result={'operation':kind,'receipt':receipt,'features':None,'raster':product,'preview':raster_preview(product) if product else None,'columns':headers,'rows':rows,'csv':csv}
-    plots=figure_sources(result,[])
+    result={'operation':kind,'receipt':receipt,'features':None,'raster':product,'preview':rgb[1] if rgb else raster_preview(product) if product else None,'columns':headers,'rows':rows,'csv':csv}
+    plots=[{'title':'Publication RGB composite','recipe':'spectral_rgb','bindings':{},'csv':None,'raster':True,'bands':[1,2,3]}] if rgb else figure_sources(result,[])
     def add(title,recipe,bindings,table=None):
         plots.append({'title':title,'recipe':recipe,'bindings':bindings,'csv':csv if table is None else table,'raster':False})
     if kind=='pca':add('PCA explained variance','basic_column',{'x':'component','y':'explained_fraction'})
@@ -210,7 +213,7 @@ def execute(body):
             if any(r[headers.index(key)] is not None for r in rows):add('Class '+key,'basic_column',{'x':'class','y':key})
     if kind in {'minimum_distance','spectral_unmix','spectral_unmix_rmse'}:
         add('Training support by class','basic_column',{'x':'class','y':'training_cells'})
-        add('Mean spectral signature by class','multi_line',{'x':'band','columns':[str(r[0]) for r in rows]},csv_text(['band',*[str(r[0]) for r in rows]],[[b,*[r[i+2] for r in rows]] for i,b in enumerate([1,2,3,4])]))
+        if len(rows)<=12:add('Mean spectral signature by class','multi_line',{'x':'band','columns':[str(r[0]) for r in rows]},csv_text(['band',*[str(r[0]) for r in rows]],[[b,*[r[i+2] for r in rows]] for i,b in enumerate([1,2,3,4])]))
     if kind=='stratified_accuracy':add('Validation accuracy by mapped stratum','basic_column',{'x':'map_class','y':'within_stratum_accuracy'})
     result['figures']=plots
     json.dumps(result,allow_nan=False)
