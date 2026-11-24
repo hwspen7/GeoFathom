@@ -59,3 +59,14 @@ it('keeps the previous chart available if PDF rendering fails',async()=>{
  expect((await screen.findByRole('alert')).textContent).toContain('PDF unavailable');
  fireEvent.click(screen.getByRole('button',{name:'Close figure library'}));expect(close).toHaveBeenCalledOnce();
 });
+
+it('contains keyboard shortcuts inside the figure dialog',()=>{
+ const listener=vi.fn();window.addEventListener('keydown',listener);
+ const close=vi.fn();
+ try{
+  render(<FigureGallery record={record} projectId="p" onClose={close}/>);
+  const dialog=screen.getByRole('dialog',{name:'Scientific figure library'});
+  fireEvent.keyDown(dialog,{key:'Delete'});expect(listener).not.toHaveBeenCalled();
+  fireEvent.keyDown(dialog,{key:'Escape'});expect(close).toHaveBeenCalledOnce();expect(listener).not.toHaveBeenCalled();
+ }finally{window.removeEventListener('keydown',listener);}
+});

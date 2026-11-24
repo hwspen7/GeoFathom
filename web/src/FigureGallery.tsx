@@ -66,7 +66,8 @@ export default function FigureGallery(p:{record:PersistedTerrainResult;projectId
  const plotValues=Object.keys(data?.metrics??{}).filter(k=>Number.isFinite(data!.metrics![k]));
  const pages=Math.max(1,Math.ceil((table?.rows.length??0)/8)),currentPage=Math.min(dataPage,pages-1);
  return createPortal(<div className="figure-gallery-backdrop"><div className="figure-gallery" role="dialog" aria-modal="true" aria-label="Scientific figure library" ref={dialog} tabIndex={-1} onKeyDown={e=>{
-  if(e.key==='Escape')p.onClose();
+  e.stopPropagation();
+  if(e.key==='Escape'){e.preventDefault();p.onClose();}
   if(e.key==='Tab'){
    const nodes=Array.from(e.currentTarget.querySelectorAll<HTMLElement>('button:enabled,input:enabled,select:enabled')).filter(n=>n.getClientRects().length>0);
    const first=nodes[0],last=nodes[nodes.length-1];

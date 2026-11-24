@@ -707,7 +707,7 @@ export default function TerrainWorkbench(p:Props){
    </section>}
    {(result||slope||profile)&&<ResultPane expanded={expanded} onClose={()=>setExpanded(false)}>
      <div id="terrain-result-content" role="tabpanel" aria-label={resultTab[0].toUpperCase()+resultTab.slice(1)+' terrain result'} className="terrain-tab-content">
-     <div className="section-heading">{selected?.title} <span>{resultTab==='visual'&&selected&&<button type="button" onClick={()=>setFigureGalleryOpen(true)}>Figure library</button>}<button onClick={()=>{if(expanded)setExpanded(false);else{setResultTab('visual');setExpanded(true);}}}>{expanded?'Close expanded':'Expand'}</button></span></div>
+     <div className="section-heading">{selected?.title} <span>{resultTab==='visual'&&selected&&<button type="button" onClick={()=>{setExpanded(false);setFigureGalleryOpen(true);}}>Figure library</button>}<button onClick={()=>{if(expanded)setExpanded(false);else{setResultTab('visual');setExpanded(true);}}}>{expanded?'Close expanded':'Expand'}</button></span></div>
      {resultTab==='visual'&&researchFigures.length>0&&<nav className="terrain-figure-tabs" aria-label="Research figures">
        <button type="button" aria-pressed={figureView==='analysis'} onClick={()=>setFigureView('analysis')}>Analysis</button>
        {researchFigures.map(item=><button type="button" key={item.id} aria-pressed={figureView===item.id}

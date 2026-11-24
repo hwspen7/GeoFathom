@@ -39,7 +39,12 @@ with tempfile.TemporaryDirectory() as directory:
  await page.getByRole('button',{name:'Run terrain operation'}).click();
  const response=await analysisResponse;expect(response.status()).toBe(200);const result=await response.json();
  await expect(page.getByLabel('Choose terrain result')).not.toHaveValue('');
- await page.getByRole('tab',{name:'Figures',exact:true}).click();await page.getByRole('button',{name:'Figure library',exact:true}).click();
+ await page.getByRole('tab',{name:'Figures',exact:true}).click();
+ await page.getByRole('button',{name:'Expand',exact:true}).click();
+ const expanded=page.getByRole('dialog',{name:'Expanded terrain result'});
+ await expect(expanded).toBeVisible();
+ await expanded.getByRole('button',{name:'Figure library',exact:true}).click();
+ await expect(expanded).toBeHidden();
  const dialog=page.getByRole('dialog',{name:'Scientific figure library'});await expect(dialog).toBeVisible();
  for(const [value,name] of [['histogram','Histogram'],['cdf','Cumulative distribution'],['box','Box and whisker'],['qq','Normal Q–Q'],['scatter','Elevation–result scatter'],['joint_density','Elevation–result density']] as const){
   await dialog.getByLabel('Chart type').selectOption(value);await expect(dialog.getByRole('img',{name:'Scientific figure: '+name})).toBeVisible();

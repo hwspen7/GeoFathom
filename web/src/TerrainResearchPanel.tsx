@@ -81,7 +81,8 @@ export default function TerrainResearchPanel(p:{projectId:string|null;record:Per
  }
  const metricSelect=<label>Result metric<select aria-label="Result metric" value={metricChoice} onChange={e=>setMetric(e.target.value)}>{metrics.map(key=><option key={key} value={key}>{label(key)}</option>)}</select></label>;
  return createPortal(<div className="research-dialog-backdrop"><div role="dialog" aria-modal="true" aria-label="Terrain research analysis" className="research-dialog" tabIndex={-1} ref={dialog} onKeyDown={e=>{
-  if(e.key==='Escape'){if(busy)cancel();else p.onClose();}
+  e.stopPropagation();
+  if(e.key==='Escape'){e.preventDefault();if(busy)cancel();else p.onClose();}
   if(e.key==='Tab'){
    const items=Array.from(e.currentTarget.querySelectorAll<HTMLElement>('button:enabled,input:enabled,select:enabled,a[href]')).filter(x=>x.getClientRects().length>0);
    if(!items.length)return;const first=items[0],last=items[items.length-1];
