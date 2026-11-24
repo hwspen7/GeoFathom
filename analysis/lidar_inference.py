@@ -14,8 +14,8 @@ def feature_registration(source, reference, k, radius, ratio, iterations, minimu
     """
     if not 0 < ratio < 1 or min(len(source),len(reference))<max(k+1,minimum,3):
         raise ValueError("Feature registration needs sufficient points and a ratio strictly between zero and one.")
-    if max(len(source),len(reference))>30000:
-        raise ValueError("Feature alignment limit is 30,000 points per epoch; use voxel reduction first.")
+    if max(len(source),len(reference))>30000 or k>32:
+        raise ValueError("Feature alignment limit is 30,000 points per epoch and 32 descriptor neighbors.")
     def descriptors(p):
         d,_=cKDTree(p).query(p,k=k+1)
         return d[:,1:]
@@ -167,28 +167,32 @@ def canopy_watershed(p,ground,size,radius,threshold):
     queue=[];fixed=set(seeds)
     for label,i in enumerate(seeds):
         labels[i]=label;score[i]=top[i];heapq.heappush(queue,(-top[i],label,i))
+    settled=np.zeros(len(keys),bool)
     while queue:
         neg,label,i=heapq.heappop(queue)
         s=-neg
-        if labels[i]!=label or score[i]!=s:continue
+        if settled[i] or labels[i]!=label or score[i]!=s:continue
+        settled[i]=True
         x,y=keys[i]
         for dx,dy in ((-1,-1),(-1,0),(-1,1),(0,-1),(0,1),(1,-1),(1,0),(1,1)):
             j=lookup.get((x+dx,y+dy))
-            if j is None or j in fixed:continue
+            if j is None or j in fixed or settled[j]:continue
             new=min(s,top[j])
             if new>score[j] or (new==score[j] and label<labels[j]):
                 score[j]=new;labels[j]=label;heapq.heappush(queue,(-new,label,j))
     # Suppression may remove all markers on a disconnected island; leave it unknown.
     counts=np.bincount(inv,minlength=len(keys))
     table=np.column_stack((xy,top,labels,counts,np.where(labels>=0,score,np.nan)))
+    assigned=labels>=0
+    cells_by_label=np.bincount(labels[assigned],minlength=len(seeds))
+    returns_by_label=np.bincount(labels[assigned],weights=counts[assigned],minlength=len(seeds))
     summary=[]
-    for label,i in enumerate(seeds):
-        mask=labels==label
+    for label,i in enumerate(seeds[:100]):
         summary.append({"id":label,"apex_xy_m":xy[i].tolist(),"apex_height_m":float(top[i]),
-            "occupied_footprint_m2":float(mask.sum()*size**2),"returns":int(counts[mask].sum())})
+            "occupied_footprint_m2":float(cells_by_label[label]*size**2),"returns":int(returns_by_label[label])})
     return table,{"candidate_crowns":len(seeds),"assigned_cells":int((labels>=0).sum()),
         "unassigned_cells":int((labels<0).sum()),"unsupported_ground_returns":int((~np.isfinite(h)).sum()),
-        "crowns":summary[:100],"reported_crown_summaries":min(100,len(summary)),
+        "crowns":summary[:100],"reported_crown_summaries":len(summary),
         "assumption":"occupied CHM footprint only; candidate instances, not validated biological crowns"}
 
 def multiscale_geometry(p,k):

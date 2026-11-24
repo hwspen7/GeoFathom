@@ -30,9 +30,8 @@ def test_clustered_normal_change_parallel_planes_and_block_support():
     assert out[0,10]==pytest.approx(.5)
     assert out[0,17]==1
     assert np.isnan(out[1,16])
-    _,m=clustered_normal_change(p+[0,0,.5],p,cores[:1],12,3.,2.,100.,.05,5)
-    # World-origin blocks can split at zero; use shifted core test for a single block below.
-    assert m["tested_cores"] in (0,1)
+    variance,groups=_cluster_variance(np.array([0.,1.,2.]),np.array([[.1,.1],[.2,.2],[.3,.3]]),1.)
+    assert groups==1 and np.isnan(variance)
 
 def test_watershed_does_not_bridge_unobserved_cells():
     p=np.array([[.1,.1,5],[1.1,.1,4],[2.1,.1,3],[4.1,.1,6],[5.1,.1,4]])

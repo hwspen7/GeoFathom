@@ -71,7 +71,28 @@ def table_input(recipe):
 @pytest.mark.parametrize('recipe',list(BY_ID))
 def test_every_recipe_renders_actual_data(recipe,raster_fixture):
     from terrain.studio_domain_catalog import IDS
-    if recipe in IDS:
+    # Publication recipes require distinct interval bindings, paired rasters,
+    # or actual vector geometry. Exercise them in the full-format matrix too.
+    if recipe=='research_time_fan':
+        rows=[(i,i+3,i,i+6,i+2,i+4) for i in range(12)]
+        body=StudioInput(recipe=recipe,csv=csv_text(['time','value','outer_lo','outer_hi','inner_lo','inner_hi'],rows),
+                         x='time',y='value',columns=['outer_lo','outer_hi','inner_lo','inner_hi'],width_mm=160,height_mm=100)
+    elif recipe=='research_spacetime_lag':
+        rows=[(s,t,s+t,12+s+t) for s in (0,1,2) for t in (1,2,3)]
+        body=StudioInput(recipe=recipe,csv=csv_text(['space','time','value','pairs'],rows),
+                         x='space',y='time',z='value',columns=['pairs'],width_mm=160,height_mm=100)
+    elif recipe in {'research_map_agreement','research_map_bivariate','research_map_change'}:
+        body=StudioInput(recipe=recipe,rasters=raster_fixture[0][:2],width_mm=160,height_mm=100)
+    elif recipe in {'research_vector_map','research_vector_overlay'}:
+        from pyproj import Transformer
+        inverse=Transformer.from_crs(32617,4326,always_xy=True)
+        def coord(x,y):return list(inverse.transform(x,y))
+        ring=[coord(x,y) for x,y in [(500010,4499910),(500080,4499910),(500080,4499980),(500010,4499980),(500010,4499910)]]
+        features={'type':'FeatureCollection','features':[{'type':'Feature','geometry':{'type':'Polygon','coordinates':[ring]},'properties':{'value':2}},
+            {'type':'Feature','geometry':{'type':'Point','coordinates':coord(500050,4499950)},'properties':{'value':3}}]}
+        body=StudioInput(recipe=recipe,vector_geojson=features,vector_attribute='value',vector_epsg=32617,
+                         rasters=raster_fixture[0][:1] if recipe.endswith('overlay') else [],width_mm=160,height_mm=100)
+    elif recipe in IDS:
         body=domain_input(recipe,raster_fixture)
     elif BY_ID[recipe][3]=='table':
         body=table_input(recipe)
@@ -127,8 +148,8 @@ def test_every_recipe_renders_actual_data(recipe,raster_fixture):
 
 
 def test_catalog_count_and_unique_recipes():
-    assert len(RECIPES)==len(BY_ID)==len(catalog())==194
-    assert len({r['title'] for r in catalog()})==194
+    assert len(RECIPES)==len(BY_ID)==len(catalog())==207
+    assert len({r['title'] for r in catalog()})==207
 
 
 @pytest.mark.parametrize('fmt,magic',[('svg',b'<?xml'),('pdf',b'%PDF'),('tiff',b'II*\x00')])
@@ -184,8 +205,8 @@ def test_api_catalog_render_metadata_and_validation():
     with TestClient(app) as client:
         response=client.get('/terrain/studio/catalog')
         assert response.status_code==200
-        assert response.json()['additional_recipe_count']+response.json()['legacy_recipe_count']==218
-        assert response.json()['basic_recipe_count']==40 and response.json()['professional_recipe_count']==178
+        assert response.json()['additional_recipe_count']+response.json()['legacy_recipe_count']==231
+        assert response.json()['basic_recipe_count']==40 and response.json()['professional_recipe_count']==191
         response=client.post('/terrain/studio/render',json=table_input('pareto').model_dump())
         assert response.status_code==200,response.text
         result=response.json()
@@ -386,7 +407,7 @@ def test_domain_recipe_counts_and_tiers():
     from terrain.studio_domain_catalog import BASIC,PROFESSIONAL
     assert len(BASIC)==16 and len(PROFESSIONAL)==126
     entries=catalog()
-    assert sum(r['tier']=='professional' for r in entries)==178
+    assert sum(r['tier']=='professional' for r in entries)==191
     assert sum(r['tier']=='basic' for r in entries)==16
 
 
