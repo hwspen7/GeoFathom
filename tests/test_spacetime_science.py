@@ -61,6 +61,13 @@ def test_every_spacetime_method_reference(kind):
         if kind.startswith('fitted_'):assert r['receipt']['metrics']['fitted_nll_per_observation']<=r['receipt']['metrics']['initial_nll_per_observation']+1e-8
         if kind=='rts_sd':assert np.min(grid(r))>=0
         return
+    if kind.startswith('gtwr_'):
+        rng=np.random.default_rng(22);t=np.arange(12.);x=rng.normal(size=(12,4,6));v=rng.normal(size=x.shape);y=4+2*x-3*v
+        r=run(kind,y,t,{'local_sample_limit':256,'spatial_range':100,'temporal_range':20},sources=[source(y),source(x),source(v)],covariates=[{'source':j,'band':i+1,'unit':'index'} for j in (1,2) for i in range(len(t))]);z=grid(r)
+        if kind=='gtwr_coefficient':np.testing.assert_allclose(z,2,atol=1e-9)
+        elif kind=='gtwr_holdout_rmse':np.testing.assert_allclose(z[np.isfinite(z)],0,atol=1e-9);assert np.isnan(z[:,:4]).all()
+        else:assert np.min(z)>=10
+        return
     if kind.startswith('panel_'):
         t=np.arange(8.);rng=np.random.default_rng(19);x=rng.normal(size=(8,4,4));spatial=np.arange(16).reshape(4,4);y=2*x+spatial+t[:,None,None]
         r=run(kind,y,t,{'block_cells':2},sources=[source(y),source(x)],covariates=[{'source':1,'band':i+1,'unit':'index'} for i in range(8)])
@@ -282,3 +289,19 @@ def test_rts_batch_gaussian_and_fitted_holdout_isolation():
     m,P=smooth(y,t,q,r,v);np.testing.assert_allclose(m[:,0],mu,atol=1e-9);np.testing.assert_allclose(P[:,0,0],var,atol=1e-9)
     a=y[:,None,None];p={'minimum_observations':4,'holdout_dates':2,'trajectory_limit':1,'seed':2,'process_variance':q,'observation_variance':r,'initial_velocity_variance':v}
     before=estimate(a,t,p);b=a.copy();b[-2:]+=200;assert before==estimate(b,t,p)
+
+
+def test_gtwr_direct_weighted_reference_and_holdout():
+    from analysis.spacetime_gtwr import local_fit,gtwr
+    from types import SimpleNamespace
+    rng=np.random.default_rng(33);coords=rng.uniform(0,10,(30,3));X=np.column_stack([np.ones(30),rng.normal(size=(30,2))]);y=rng.normal(size=30);target=np.array([3,4,5])
+    p={'spatial_range':6.,'temporal_range':4.,'effective_samples':5}
+    beta,eff=local_fit(coords,X,y,target,p)
+    W=np.diag(np.exp(-.5*(np.sum((coords[:,:2]-target[:2])**2,axis=1)/36+(coords[:,2]-5)**2/16)))
+    np.testing.assert_allclose(beta,np.linalg.solve(X.T@W@X,X.T@W@y),atol=1e-12)
+    a=rng.normal(size=(8,4,6));b=rng.normal(size=a.shape);v=2*a-b+1;g=SimpleNamespace(is_meter=True,transform=AFF)
+    cfg={**p,'spatial_range':100,'temporal_range':30,'local_sample_limit':128,'seed':2,'holdout_dates':2,'buffer_cells':1}
+    original=gtwr(v,[a,b],np.arange(8.),g,cfg,'gtwr_holdout_rmse')[3]
+    changed=v.copy();changed[-2:]+=100;changed[:,:,4:]+=100
+    result=gtwr(changed,[a,b],np.arange(8.),g,cfg,'gtwr_holdout_rmse')[3]
+    assert original['training_indices']==result['training_indices'] and original['rmse']<1e-10 and result['rmse']>100

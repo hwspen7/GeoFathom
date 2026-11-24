@@ -18,6 +18,7 @@ from .spacetime_hotspots import hotspot
 from .spacetime_panel import panel
 from .spacetime_dynamic import dynamic
 from .spacetime_multibreak import multi_break
+from .spacetime_gtwr import gtwr
 from analysis.science_raster import require
 from analysis.science_routes import raster_product,raster_preview
 from analysis.science_figures import csv_text
@@ -25,7 +26,7 @@ from .spacetime_models import trend,temporal,forecast,spatial_lag,variogram
 
 router=APIRouter(prefix='/analysis/spatiotemporal',tags=['spatiotemporal science'])
 # parameter = (default,minimum,maximum,integer)
-P={'minimum_observations':(6,3,64,True),'lag':(1,1,32,True),'threshold':(0,-1e50,1e50,False),'horizon':(30,.000001,1e7,False),'radius':(3,1,20,True),'period':(365,.000001,1e7,False),'fraction':(.5,.01,.99,False),'minimum_amplitude':(.01,0,1e50,False),'min_segment':(3,2,32,True),'penalty':(1,.000001,1e50,False),'process_variance':(.01,1e-20,1e50,False),'observation_variance':(.1,1e-20,1e50,False),'initial_velocity_variance':(1,1e-20,1e50,False),'permutations':(199,19,999,True),'seed':(42,0,2147483647,True),'mode':(1,1,64,True),'block_length':(3,2,21,True),'spatial_range':(100,1e-6,1e8,False),'temporal_range':(30,1e-6,1e8,False),'nugget_ratio':(.1,1e-6,10,False),'sample_limit':(128,12,256,True),'fit_covariance':(0,0,1,True),'holdout_dates':(2,2,32,True),'buffer_cells':(0,0,100,True),'bic_threshold':(6,0,1000,False),'maximum_gap':(30,.000001,1e9,False),'alpha':(.05,.001,.2,False),'block_cells':(2,1,1000,True),'interaction':(.5,.05,1,False),'target_date':(3,1,64,True),'trajectory_limit':(8,1,16,True),'max_breaks':(2,1,5,True)}
+P={'minimum_observations':(6,3,64,True),'lag':(1,1,32,True),'threshold':(0,-1e50,1e50,False),'horizon':(30,.000001,1e7,False),'radius':(3,1,20,True),'period':(365,.000001,1e7,False),'fraction':(.5,.01,.99,False),'minimum_amplitude':(.01,0,1e50,False),'min_segment':(3,2,32,True),'penalty':(1,.000001,1e50,False),'process_variance':(.01,1e-20,1e50,False),'observation_variance':(.1,1e-20,1e50,False),'initial_velocity_variance':(1,1e-20,1e50,False),'permutations':(199,19,999,True),'seed':(42,0,2147483647,True),'mode':(1,1,64,True),'block_length':(3,2,21,True),'spatial_range':(100,1e-6,1e8,False),'temporal_range':(30,1e-6,1e8,False),'nugget_ratio':(.1,1e-6,10,False),'sample_limit':(128,12,256,True),'fit_covariance':(0,0,1,True),'holdout_dates':(2,2,32,True),'buffer_cells':(0,0,100,True),'bic_threshold':(6,0,1000,False),'maximum_gap':(30,.000001,1e9,False),'alpha':(.05,.001,.2,False),'block_cells':(2,1,1000,True),'interaction':(.5,.05,1,False),'target_date':(3,1,64,True),'trajectory_limit':(8,1,16,True),'max_breaks':(2,1,5,True),'effective_samples':(10,4,100,True),'local_sample_limit':(256,16,512,True),'coefficient_index':(1,1,3,True)}
 KALMAN_P=('minimum_observations','horizon','process_variance','observation_variance','initial_velocity_variance')
 KRIGING_P=('spatial_range','temporal_range','nugget_ratio','sample_limit','fit_covariance','seed')
 BREAK_P=('period','min_segment','bic_threshold')
@@ -35,7 +36,11 @@ UNIVERSAL_P=KRIGING_P+('interaction',)
 RTS_P=('minimum_observations','process_variance','observation_variance','initial_velocity_variance','target_date')
 FITTED_P=('minimum_observations','process_variance','observation_variance','initial_velocity_variance','holdout_dates','trajectory_limit','seed')
 MULTI_P=('period','min_segment','max_breaks','bic_threshold')
+GTWR_P=('spatial_range','temporal_range','effective_samples','local_sample_limit','seed')
 METHODS={
+ 'gtwr_coefficient':('Space-time regression','GTWR local covariate coefficient',GTWR_P+('coefficient_index',)),
+ 'gtwr_support':('Space-time regression','GTWR effective local sample support',GTWR_P+('coefficient_index',)),
+ 'gtwr_holdout_rmse':('Joint validation','GTWR joint space-time holdout RMSE',GTWR_P+('holdout_dates','buffer_cells')),
  'rts_level':('State space','RTS smoothed latent level',RTS_P),
  'rts_velocity':('State space','RTS smoothed latent velocity',RTS_P),
  'rts_sd':('State space','RTS conditional latent SD',RTS_P),
@@ -117,7 +122,7 @@ class CubeInput(BaseModel):
     sources:list[Source]=Field(min_length=1,max_length=64)
     observations:list[Binding]=Field(min_length=6,max_length=64)
     times:list[float]=Field(min_length=6,max_length=64)
-    covariates:list[Binding]=Field(default_factory=list,max_length=64)
+    covariates:list[Binding]=Field(default_factory=list,max_length=192)
     quality:list[Quality]=Field(default_factory=list,max_length=64)
     parameters:dict[str,float]=Field(default_factory=dict,max_length=12)
     time_unit:str=Field(default='day',min_length=1,max_length=24)
@@ -125,7 +130,7 @@ class CubeInput(BaseModel):
 
 @router.get('/catalog')
 def catalog():
-    return {'operations':[{'id':k,'group':g,'title':title,'requires_covariate':k.startswith('panel_'),'parameters':[{'name':p,'label':p.replace('_',' '),'default':6 if p=='min_segment' and k.startswith(('harmonic_break_','multi_harmonic_')) else P[p][0],'minimum':P[p][1],'maximum':P[p][2],'integer':P[p][3]} for p in params]} for k,(g,title,params) in METHODS.items()],'operation_count':len(METHODS),'input_schema':CubeInput.model_json_schema()}
+    return {'operations':[{'id':k,'group':g,'title':title,'requires_covariate':k.startswith(('panel_','gtwr_')),'parameters':[{'name':p,'label':p.replace('_',' '),'default':6 if p=='min_segment' and k.startswith(('harmonic_break_','multi_harmonic_')) else P[p][0],'minimum':P[p][1],'maximum':P[p][2],'integer':P[p][3]} for p in params]} for k,(g,title,params) in METHODS.items()],'operation_count':len(METHODS),'input_schema':CubeInput.model_json_schema()}
 
 def execute(body):
     require(body.operation in METHODS,'Unknown space-time method.')
@@ -160,16 +165,18 @@ def execute(body):
         g=read(Binding(source=q.source,band=q.band,encoding='raw'),'class');clear=quality_mask(g.values,q.scheme)==1
         for i in set(names):arrays[int(i)-1][~clear]=np.nan
         quality_receipt.append({'source_sha256':sha[q.source],**q.model_dump()})
-    require(bool(body.covariates)==kind.startswith('panel_'),'Provide covariate observations only for panel regression.')
+    require(bool(body.covariates)==kind.startswith(('panel_','gtwr_')),'Provide covariate observations only for regression.')
     covariate=None;covariate_receipt=[]
     if body.covariates:
-        require(len(body.covariates)==n and n*first.values.size<=2_000_000,'Panel needs one aligned covariate observation per date within work budget.')
+        groups=len(body.covariates)//n
+        require(len(body.covariates)==groups*n and (groups==1 if kind.startswith('panel_') else 1<=groups<=3) and groups*n*first.values.size<=2_000_000,'Provide complete dated covariate groups within work budget.')
         cv=[];cu=None
-        for b in body.covariates:
+        for index,b in enumerate(body.covariates):
+            if index%n==0:cu=None
             quantity='reflectance' if b.encoding=='landsat_sr' else 'kelvin' if b.encoding=='landsat_st' else 'numeric'
             g=read(b,quantity);cu=cu or g.unit;require(g.unit==cu,'Covariate units must match across dates.')
             cv.append(g.values);covariate_receipt.append({'source_sha256':sha[b.source],'binding':b.model_dump(),'unit':g.unit,'scale':g.scale,'offset':g.offset})
-        covariate=np.stack(cv);require(np.isfinite(covariate).any() and np.max(np.abs(covariate[np.isfinite(covariate)]))<=1e50,'Invalid covariate values; rescale.')
+        covariate=np.stack(cv).reshape(groups,n,*first.values.shape);require(np.isfinite(covariate).any() and np.max(np.abs(covariate[np.isfinite(covariate)]))<=1e50,'Invalid covariate values; rescale.')
     stack=np.stack(arrays);require(np.isfinite(stack).any(),'No valid cube observations.')
     require(np.max(np.abs(stack[np.isfinite(stack)]))<=1e50,'Rescale cube values to at most 1e50 before statistical analysis.')
     out=None;rows=[];cols=[];meta={};figures=[];unit=first.unit
@@ -195,8 +202,13 @@ def execute(body):
         unit='class' if kind=='hotspot_class' else 'probability' if kind.endswith('_p') else 'fraction' if kind.endswith('_fraction') else 'index'
         plot('Significant hot and cold cells through time','multi_line',cols,rows,x='acquisition',columns=['hot_cells','cold_cells'])
         plot('Trajectory permutation maximum statistic quantiles','basic_line',['quantile','maximum'],meta['null_maximum_quantiles'],x='quantile',y='maximum')
+    elif kind.startswith('gtwr_'):
+        out,cols,rows,meta=gtwr(stack,covariate,t,first,p,kind)
+        if kind=='gtwr_support':unit='count'
+        elif kind=='gtwr_coefficient':unit=unit+'/'+covariate_receipt[(p['coefficient_index']-1)*n]['unit']
+        plot('GTWR effective local sample quantiles','basic_line',cols,rows,x='quantile',y='effective_samples')
     elif kind.startswith('panel_'):
-        out,cols,rows,meta=panel(stack,covariate,p,kind)
+        out,cols,rows,meta=panel(stack,covariate[0],p,kind)
         plot('Time fixed effects','basic_line',cols,rows,x='acquisition',y='time_effect')
         plot('Panel residual RMSE through time','basic_line',cols,rows,x='acquisition',y='residual_rmse')
     elif kind.startswith('harmonic_break_'):
