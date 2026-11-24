@@ -55,16 +55,27 @@ def obtain(root,name,expected):
     return dest
 
 def compare(candidate,reference,atol,rtol=0,minimum=1):
+    if not np.isfinite([atol,rtol]).all() or min(atol,rtol)<0 or minimum<1:raise ValueError('Invalid reference tolerances.')
+    n=0;disagreement=0;total=0.;squares=0.;maximum=0.;matches=True
     with rasterio.open(candidate) as a,rasterio.open(reference) as b:
         if (a.crs,a.transform,a.shape)!=(b.crs,b.transform,b.shape):raise ValueError('Reference grids must match exactly.')
         if a.count!=1 or b.count!=1:raise ValueError('Compare explicit single-band outputs.')
-        x=a.read(1,masked=True).astype(float).filled(np.nan);y=b.read(1,masked=True).astype(float).filled(np.nan)
-    am=np.isfinite(x);bm=np.isfinite(y);common=am&bm;n=int(common.sum())
+        # Fixed-size windows also work when a source has unusually large strips.
+        for row in range(0,a.height,512):
+            for col in range(0,a.width,512):
+                window=Window(col,row,min(512,a.width-col),min(512,a.height-row))
+                x=a.read(1,window=window,masked=True).astype(float).filled(np.nan)
+                y=b.read(1,window=window,masked=True).astype(float).filled(np.nan)
+                if np.isinf(x).any() or np.isinf(y).any():raise ValueError('Infinite reference or candidate values.')
+                am=np.isfinite(x);bm=np.isfinite(y);common=am&bm;disagreement+=int(np.count_nonzero(am!=bm))
+                x=x[common];y=y[common];d=x-y;n+=len(d)
+                if len(d):
+                    if not np.isfinite(d).all() or np.max(abs(d))>1e100:raise ValueError('Reference residual exceeds numeric range.')
+                    total+=float(d.sum());squares+=float(d@d);maximum=max(maximum,float(np.max(abs(d))))
+                    matches=matches and bool(np.allclose(x,y,atol=atol,rtol=rtol))
     if n<minimum:raise ValueError('Insufficient paired cells.')
-    d=x[common]-y[common]
-    return {'passed':bool(np.array_equal(am,bm) and np.allclose(x[common],y[common],atol=atol,rtol=rtol)),
-            'paired_cells':n,'mask_disagreement':int(np.count_nonzero(am!=bm)),'rmse':float(np.sqrt(np.mean(d*d))),
-            'bias':float(d.mean()),'maximum_absolute_error':float(np.max(abs(d))),
+    return {'passed':bool(disagreement==0 and matches),'paired_cells':n,'mask_disagreement':disagreement,
+            'rmse':float(np.sqrt(squares/n)),'bias':total/n,'maximum_absolute_error':maximum,
             'candidate_sha256':hash_file(candidate),'reference_sha256':hash_file(reference),'atol':atol,'rtol':rtol}
 
 def public_scene(root):

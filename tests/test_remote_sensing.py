@@ -667,6 +667,10 @@ def test_new_research_figure_rendering():
     x=rng.normal(.4,.05,(100,3));y=x+rng.normal(0,.015,x.shape)
     a={r+'_before':x[:,i].reshape(10,10) for i,r in enumerate(('red','nir','swir'))};a.update({r+'_after':y[:,i].reshape(10,10) for i,r in enumerate(('red','nir','swir'))})
     results.append(run('irmad',a,{'iterations':3}))
+    labels=np.resize([1.,2.,3.],(6,8));spectra={r:labels*.2 for r in ('blue','green','red','nir')}
+    results.append(run('spectral_kmeans',spectra,{'clusters':3}))
+    results.append(run('continuous_reference_error',{'prediction':constant(.3),'reference':constant(.4)}))
+    results.append(run('binary_reference_error',{'prediction':np.resize([0.,0.,1.,1.],(3,4)),'reference':np.resize([0.,1.,0.,1.],(3,4))}))
     titles=set()
     for result in results:
         for figure in result['figures']:
@@ -674,7 +678,7 @@ def test_new_research_figure_rendering():
             image,_,_=render(StudioInput(recipe=figure['recipe'],csv=figure['csv'],**figure['bindings']))
             assert image.startswith(b'\x89PNG') and len(image)>100
             titles.add(figure['title'])
-    assert {'Nested spatial outer-fold accuracy','Nested spatial selected C','Acquisition mean time series','Canonical correlation convergence'}<=titles
+    assert {'Nested spatial outer-fold accuracy','Nested spatial selected C','Acquisition mean time series','Canonical correlation convergence','Spectral cluster population','Cluster 1 mean spectrum','Reference residual quantiles','Reference error by outcome'}<=titles
 
 
 def test_managed_disk_job_snapshot_and_cancellation(tmp_path,monkeypatch):
@@ -899,3 +903,18 @@ def test_resolution_and_reference_accuracy(kind):
         np.testing.assert_array_equal(grid(r),2*reference+prediction)
         assert m['confusion_matrix_reference_rows']==[[4,2],[1,5]]
         assert m['iou']==pytest.approx(5/8) and m['recall']==pytest.approx(5/6)
+
+
+def test_external_reference_streaming_across_windows(tmp_path):
+    from scripts.remote_scene_reference import compare
+    z=np.arange(519*521,dtype=float).reshape(519,521)/1000
+    ref=z.copy();ref[510:515,510:515]=np.nan;z[510:515,510:515]=np.nan
+    z[-1,-1]+=.5
+    a=tmp_path/'a.tif';b=tmp_path/'b.tif'
+    a.write_bytes(base64.b64decode(source(z)['data']));b.write_bytes(base64.b64decode(source(ref)['data']))
+    n=int(np.isfinite(ref).sum());report=compare(a,b,.1,minimum=1000)
+    assert not report['passed'] and report['paired_cells']==n
+    assert report['maximum_absolute_error']==pytest.approx(.5)
+    assert report['rmse']==pytest.approx(.5/np.sqrt(n))
+    assert report['bias']==pytest.approx(.5/n)
+    assert compare(a,b,.51)['passed']

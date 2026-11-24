@@ -176,7 +176,7 @@ def execute(body):
     elif method.group=='Optical':
         out=optical(kind,v,params);out[~common]=np.nan
         meta['reflectance_outside_0_1']={r:int(np.count_nonzero(np.isfinite(z)&((z<0)|(z>1)))) for r,z in v.items()}
-    elif method.group=='Quality':out=quality_mask(v['qa'],kind)
+    elif kind in {'sentinel_clear','landsat_clear','landsat_unsaturated'}:out=quality_mask(v['qa'],kind)
     elif kind=='transition_matrix':
         require(first.is_meter and common.any(),'Transitions require common valid projected metre cells.')
         headers,rows,meta=transition(v['before'][common],v['after'][common],abs(first.transform.a*first.transform.e))
