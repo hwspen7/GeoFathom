@@ -163,6 +163,11 @@ def difference(reference, candidate, operation, cancel=None):
             if operation != 'aspect_map':
                 joint = joint_elevation_data(a, b, 'Candidate', unit, area, cancel)
                 joint.update(x_quantity='Baseline', x_unit=unit, identity_line=True)
+                if delta.size >= 2:
+                    bias = float(delta.mean())
+                    sd = float(delta.std(ddof=1))
+                    joint['agreement'] = {'bias':bias, 'sample_std':sd,
+                        'lower':bias-1.96*sd, 'upper':bias+1.96*sd}
                 plot_data['joint'] = joint
     return {'statistics': stats, 'kind': kind, 'plot_data': plot_data,
         'raster': research_raster(values, affine, crs, unit,

@@ -46,3 +46,12 @@ export function researchFigureData(result:ResearchResult,metric:string,source:Re
  const points=series.points.filter(p=>finite(p.value));if(!points.length)return null;
  return {...base,valid_cells:points.length,population:'experiment_observations',experiment_series:series};
 }
+
+/** Compare compatible continuous products, preserving each exact population. */
+export function researchDistributionData(result:ResearchResult):PlotData|null{
+ const products=result.products.filter(p=>['baseline','scenario'].includes(p.role??'')&&p.plot_data?.box&&p.plot_data.cdf?.length);
+ if(products.length<2)return null;
+ const unit=products[0].plot_data!.unit;if(products.some(p=>p.plot_data!.unit!==unit))return null;
+ const series=products.map(p=>({label:p.name,valid_cells:p.plot_data!.valid_cells,box:p.plot_data!.box!,cdf:p.plot_data!.cdf!}));
+ return {schema:'geofathom-plot-data-1',kind:'summary',quantity:products[0].plot_data!.quantity,unit,valid_cells:series.reduce((n,p)=>n+p.valid_cells,0),cell_area_m2:products[0].plot_data!.cell_area_m2,classes:[],population:'separate_scenario_populations',distribution_comparison:{series},notes:['Each distribution uses all finite values in its own exported raster; separate populations are not matched-pair effects.',result.comparison_warning??'']};
+}

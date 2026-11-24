@@ -1,7 +1,7 @@
 /** Plot recipes keep numerical tables, geometry and export styles in one model. */
 import type {PlotData} from './api';
 import type {PersistedTerrainResult} from './terrainResultStore';
-export type FigureKind='histogram'|'cdf'|'exceedance'|'density'|'box'|'quantile'|'qq'|'class_bar'|'class_dot'|'rose'|'profile'|'grade'|'metrics'|'scatter'|'joint_density'|'experiment_line'|'experiment_bar'|'experiment_dot'|'experiment_interval';
+export type FigureKind='histogram'|'cdf'|'exceedance'|'density'|'box'|'quantile'|'qq'|'class_bar'|'class_dot'|'rose'|'profile'|'grade'|'metrics'|'scatter'|'joint_density'|'experiment_line'|'experiment_bar'|'experiment_dot'|'experiment_interval'|'regression'|'bland_altman'|'comparison_boxes'|'comparison_cdf';
 export interface FigureRecipe {id:FigureKind;title:string;description:string;category:string}
 export const FIGURES:FigureRecipe[]=[
  {id:'histogram',title:'Histogram',description:'Exact counts or area within numerical bins',category:'Distribution'},
@@ -22,17 +22,24 @@ export const FIGURES:FigureRecipe[]=[
  {id:'experiment_bar',title:'Scenario bars',description:'One physical metric across named scenarios',category:'Experiments'},
  {id:'experiment_dot',title:'Scenario dots',description:'Named values without misleading connecting lines',category:'Experiments'},
  {id:'experiment_interval',title:'Model coverage interval',description:'Conditional empirical bounds, mean and deterministic baseline',category:'Experiments'},
+ {id:'regression',title:'Linear regression diagnostic',description:'Descriptive least-squares fit from every aligned pair; sampled markers',category:'Diagnostics'},
+ {id:'bland_altman',title:'Bland–Altman difference',description:'Pair mean versus signed difference, descriptive mean and ±1.96 sample SD',category:'Diagnostics'},
+ {id:'comparison_boxes',title:'Grouped box and whisker',description:'Observed quartiles and whiskers for compatible scenario products',category:'Experiments'},
+ {id:'comparison_cdf',title:'Scenario cumulative distributions',description:'Compare empirical cumulative percentages on a shared physical axis',category:'Experiments'},
  {id:'metrics',title:'Metric comparison',description:'Select quantities with the same physical unit',category:'Summary'},
 ];
 export interface FigureSettings {kind:FigureKind;title:string;x_label:string;y_label:string;bins:number;
  measure:'percent'|'cells'|'area';palette:'mono'|'blue'|'earth';font:'sans'|'serif';font_size:number;
  grid:boolean;x_log:boolean;y_log:boolean;width_mm:number;height_mm:number;dpi:number;series:number;sectors:number;metric_keys:string[];}
 export function defaultFigure(data:PlotData):FigureSettings{
- const kind:FigureKind=data.experiment_series?(data.experiment_series.interval_label?'experiment_interval':data.experiment_series.numeric?'experiment_line':'experiment_bar'):data.histograms?'histogram':data.kind==='directional'?'rose':data.kind==='profile'?'profile':data.classes.length?'class_bar':'metrics';
+ const kind:FigureKind=data.distribution_comparison?'comparison_boxes':data.experiment_series?(data.experiment_series.interval_label?'experiment_interval':data.experiment_series.numeric?'experiment_line':'experiment_bar'):data.histograms?'histogram':data.kind==='directional'?'rose':data.kind==='profile'?'profile':data.classes.length?'class_bar':'metrics';
  return {kind,title:data.quantity.replaceAll('_',' ')+': '+(availableFigures(data).find(f=>f.id===kind)?.title??'Summary'),x_label:'',y_label:'',bins:data.histograms?.['40']?40:Number(Object.keys(data.histograms??{})[0]??40),measure:'percent',palette:'mono',font:'sans',font_size:16,grid:true,x_log:false,y_log:false,width_mm:160,height_mm:110,dpi:300,series:0,sectors:16,metric_keys:[]};
 }
 export function availableFigures(data:PlotData):FigureRecipe[]{
  return FIGURES.filter(f=>{
+  if(f.id==='regression')return !!data.joint?.regression;
+  if(f.id==='bland_altman')return !!data.joint?.agreement;
+  if(f.id==='comparison_boxes'||f.id==='comparison_cdf')return (data.distribution_comparison?.series.length??0)>1;
   if(f.id==='experiment_line')return !!data.experiment_series?.numeric;
   if(f.id==='experiment_bar'||f.id==='experiment_dot')return !!data.experiment_series&&!data.experiment_series.numeric&&!data.experiment_series.interval_label;
   if(f.id==='experiment_interval')return !!data.experiment_series?.interval_label;
@@ -79,7 +86,10 @@ export interface PlotTable {columns:string[];rows:Array<Array<string|number|null
 export function figureTable(data:PlotData,s:FigureSettings):PlotTable{
  const unit=data.unit==='degree'?'deg':data.unit||'',quantity=data.quantity.replaceAll('_',' ');
  const key=unit==='degree'?'deg':unit.replace(/[^a-zA-Z0-9]+/g,'_').replace(/^_|_$/g,'')||'value';
- if(s.kind==='scatter'&&data.joint)return {columns:[data.joint.identity_line?'baseline_'+key:'elevation_m',data.joint.identity_line?'candidate_'+key:'result_'+key],rows:data.joint.samples.map(p=>[p.x,p.y]),x_label:data.joint.x_quantity+' ('+data.joint.x_unit+')',y_label:data.joint.y_quantity+' ('+data.joint.y_unit+')',unit:data.joint.y_unit,note:'Systematic sample; see metadata for full population statistics.'};
+ if(s.kind==='bland_altman'&&data.joint?.agreement)return {columns:['pair_mean_'+key,'candidate_minus_baseline_'+key],rows:data.joint.samples.map(p=>[(p.x+p.y)/2,p.y-p.x]),x_label:'Pair mean ('+unit+')',y_label:'Candidate minus baseline ('+unit+')',unit,note:'Sampled markers; descriptive lines use every common valid pair.'};
+ if(s.kind==='comparison_boxes'&&data.distribution_comparison)return {columns:['scenario','whisker_low_'+key,'q1_'+key,'median_'+key,'q3_'+key,'whisker_high_'+key,'valid_cells','lower_outliers','upper_outliers'],rows:data.distribution_comparison.series.map(r=>[r.label,r.box.whisker_low,r.box.q1,r.box.median,r.box.q3,r.box.whisker_high,r.valid_cells,r.box.lower_outliers,r.box.upper_outliers]),x_label:'Scenario',y_label:quantity+' ('+unit+')',unit};
+ if(s.kind==='comparison_cdf'&&data.distribution_comparison)return {columns:['scenario','value_'+key,'cells_le','percent_le'],rows:data.distribution_comparison.series.flatMap(r=>r.cdf.map(c=>[r.label,c.value,c.cells_le,c.percent_le])),x_label:quantity+' ('+unit+')',y_label:'Cumulative area (%)',unit};
+ if((s.kind==='scatter'||s.kind==='regression')&&data.joint)return {columns:[data.joint.identity_line?'baseline_'+key:'elevation_m',data.joint.identity_line?'candidate_'+key:'result_'+key],rows:data.joint.samples.map(p=>[p.x,p.y]),x_label:data.joint.x_quantity+' ('+data.joint.x_unit+')',y_label:data.joint.y_quantity+' ('+data.joint.y_unit+')',unit:data.joint.y_unit,note:'Systematic sample; see metadata for full population statistics.'};
  if(s.kind==='joint_density'&&data.joint)return {columns:data.joint.identity_line?['baseline_lower_'+key,'baseline_upper_'+key,'candidate_lower_'+key,'candidate_upper_'+key,'cells','area_m2']:['elevation_lower_m','elevation_upper_m','result_lower_'+key,'result_upper_'+key,'cells','area_m2'],rows:data.joint.density_cells.map(b=>[b.x_lower,b.x_upper,b.y_lower,b.y_upper,b.cells,b.area_m2]),x_label:data.joint.x_quantity+' ('+data.joint.x_unit+')',y_label:data.joint.y_quantity+' ('+data.joint.y_unit+')',unit:data.joint.y_unit};
  const sample=data.population==='monte_carlo_realizations';
  if(s.kind.startsWith('experiment_')&&data.experiment_series){const series=data.experiment_series;return {columns:['label','x','value_'+key,'lower_'+key,'upper_'+key,'baseline_'+key],rows:series.points.map(p=>[p.label,p.x,p.value,p.low??null,p.high??null,p.baseline??null]),x_label:series.x_label,y_label:quantity+(unit?' ('+unit+')':''),unit,note:series.interval_label};}
@@ -120,7 +130,8 @@ const finite=(x:unknown):x is number=>typeof x==='number'&&Number.isFinite(x);
 export function makeFigure(data:PlotData,s:FigureSettings):FigureScene{
  const table=figureTable(data,s),width=900,height=600,p:Primitive[]=[];
  const ink=s.palette==='blue'?'#225b87':s.palette==='earth'?'#826344':'#222222',fill=s.palette==='mono'?'#cccccc':s.palette==='blue'?'#b4cddd':'#d5c5af';
- const left=115,right=855,top=75,bottom=470,fw=right-left,fh=bottom-top;
+ const paired=s.kind==='scatter'&&!!data.joint?.identity_line;
+ const left=paired?260:115,right=paired?655:s.kind==='comparison_cdf'?710:s.kind==='joint_density'?770:855,top=75,bottom=470,fw=right-left,fh=bottom-top;
  const text=(x:number,y:number,t:string,anchor:'start'|'middle'|'end'='start',size=s.font_size,angle=0)=>p.push({kind:'text',x,y,text:t,anchor,font_size:size,font:s.font,fill:'#222222',angle});
  const line=(x:number,y:number,x2:number,y2:number,color='#222222',dashed=false)=>p.push({kind:'line',x,y,x2,y2,stroke:color,line_width:1.3,dashed});
  const poly=(points:Array<[number,number]>,color=ink)=>p.push({kind:'polyline',points,stroke:color,fill:'none',line_width:2});
@@ -129,8 +140,14 @@ export function makeFigure(data:PlotData,s:FigureSettings):FigureScene{
  const fmt=(n:number)=>{if(n===0)return '0';return Math.abs(n)>=1e5||Math.abs(n)<.001?n.toExponential(1):Number(n.toPrecision(4)).toString();};
  let xValues:number[]=[],yValues:number[]=[],categories:string[]=[],points:Array<[number,number|null]>=[];
  const col=s.measure==='cells'?1:s.measure==='area'?2:3;
- const categorical=['class_bar','class_dot','metrics','experiment_bar','experiment_dot','experiment_interval'].includes(s.kind);
- if(s.kind.startsWith('experiment_')){
+ const categorical=['class_bar','class_dot','metrics','experiment_bar','experiment_dot','experiment_interval','comparison_boxes'].includes(s.kind);
+ if(s.kind==='comparison_boxes'&&data.distribution_comparison){
+  categories=data.distribution_comparison.series.map(r=>r.label);xValues=categories.map((_,i)=>i);yValues=data.distribution_comparison.series.flatMap(r=>[r.box.whisker_low,r.box.whisker_high,...(r.box.fliers??[])]);
+ }else if(s.kind==='comparison_cdf'){
+  xValues=table.rows.map(r=>Number(r[1]));yValues=[0,100];
+ }else if(s.kind==='bland_altman'&&data.joint?.agreement){
+  points=table.rows.map(r=>[Number(r[0]),Number(r[1])]);yValues=[...points.map(p=>p[1]).filter(finite),data.joint.agreement.lower,data.joint.agreement.upper];
+ }else if(s.kind.startsWith('experiment_')){
   categories=table.rows.map(r=>String(r[0]));
   points=table.rows.map((r,i)=>[categorical?i:Number(r[1]),finite(r[2])?r[2]:null]);
   if(s.kind==='experiment_interval')yValues=table.rows.flatMap(r=>r.slice(2,6)).filter(finite);
@@ -140,13 +157,14 @@ export function makeFigure(data:PlotData,s:FigureSettings):FigureScene{
   points=table.rows.map(r=>[r[2] as number,finite(r[i])?r[i] as number:null]);
  }else if(s.kind==='joint_density'){xValues=table.rows.flatMap(r=>[r[0],r[1]]).filter(finite);yValues=table.rows.flatMap(r=>[r[2],r[3]]).filter(finite);}
  else if(s.kind==='cdf'||s.kind==='exceedance')points=table.rows.map(r=>[r[0] as number,r[s.kind==='cdf'?2:3] as number]);
- else if(['quantile','qq','profile','grade','scatter'].includes(s.kind))points=table.rows.map(r=>[r[0] as number,finite(r[1])?r[1] as number:null]);
+ else if(['quantile','qq','profile','grade','scatter','regression'].includes(s.kind))points=table.rows.map(r=>[r[0] as number,finite(r[1])?r[1] as number:null]);
  else if(categorical){categories=table.rows.map(r=>String(r[0]).replaceAll('_',' '));points=table.rows.map((r,i)=>[i,s.kind==='metrics'?r[1] as number:r[col] as number]);}
  else if(s.kind==='box'&&data.box){xValues=[0,1];yValues=[data.box.whisker_low,data.box.whisker_high,...(data.box.fliers??[])];}
  else if(s.kind==='rose'){xValues=[0,360];yValues=table.rows.map(r=>Number(r[col]));}
  if(!xValues.length)xValues=points.map(p=>p[0]).filter(finite);
  if(!yValues.length)yValues=points.map(p=>p[1]).filter(finite);
- const logX=s.x_log&&!categorical&&s.kind!=='box'&&s.kind!=='rose',logY=s.y_log&&s.kind!=='rose'&&s.kind!=='experiment_interval';
+ const diagnostic=paired||['bland_altman','regression'].includes(s.kind);
+ const logX=s.x_log&&!categorical&&!diagnostic&&s.kind!=='box'&&s.kind!=='rose',logY=s.y_log&&!diagnostic&&!['rose','experiment_interval','comparison_cdf'].includes(s.kind);
  const validX=xValues.filter(v=>!logX||v>0),validY=yValues.filter(v=>!logY||v>0);
  let xmin=categorical?-.5:Math.min(...validX),xmax=categorical?Math.max(.5,categories.length-.5):Math.max(...validX);
  let ymin=Math.min(...validY),ymax=Math.max(...validY);
@@ -162,11 +180,12 @@ export function makeFigure(data:PlotData,s:FigureSettings):FigureScene{
  }
  if(xmax===xmin){xmin-=Math.max(.5,Math.abs(xmin)*.02);xmax+=Math.max(.5,Math.abs(xmax)*.02);if(logX)xmin=Math.max(xmax/10,Number.MIN_VALUE);}
  if(ymax===ymin){const span=Math.max(.5,Math.abs(ymin)*.05);ymin-=span;ymax+=span;if(logY)ymin=Math.max(ymax/10,Number.MIN_VALUE);}
- const probabilityAxis=['cdf','exceedance'].includes(s.kind)&&!logY;
+ const probabilityAxis=['cdf','exceedance','comparison_cdf'].includes(s.kind)&&!logY;
  if(!logY&&!probabilityAxis)ymax+=(ymax-ymin)*.08;else if(logY)ymax*=1.08;
  const niceStep=(span:number)=>{const raw=span/5,power=10**Math.floor(Math.log10(raw)),fraction=raw/power;return (fraction<=1?1:fraction<=2?2:fraction<=2.5?2.5:fraction<=5?5:10)*power;};
  if(!categorical&&s.kind!=='box'&&!logX){const step=niceStep(xmax-xmin);xmin=Math.floor(xmin/step)*step;xmax=Math.ceil(xmax/step)*step;}
  if(!logY&&!probabilityAxis){const step=niceStep(ymax-ymin);ymin=Math.floor(ymin/step)*step;ymax=Math.ceil(ymax/step)*step;}
+ if(paired){const lower=Math.min(xmin,ymin),upper=Math.max(xmax,ymax);xmin=ymin=lower;xmax=ymax=upper;}
  const f=(v:number,lo:number,hi:number,log:boolean)=>log?(Math.log10(v)-Math.log10(lo))/(Math.log10(hi)-Math.log10(lo)):(v-lo)/(hi-lo);
  const x=(v:number)=>left+fw*f(v,xmin,xmax,logX),y=(v:number)=>bottom-fh*f(v,ymin,ymax,logY);
  const ticks=(lo:number,hi:number,log:boolean)=>{if(log)return Array.from({length:6},(_,i)=>10**(Math.log10(lo)+(Math.log10(hi)-Math.log10(lo))*i/5));const step=niceStep(hi-lo);return Array.from({length:Math.min(12,Math.floor((hi-lo)/step+1e-9)+1)},(_,i)=>lo+i*step);};
@@ -175,15 +194,22 @@ export function makeFigure(data:PlotData,s:FigureSettings):FigureScene{
   line(left,top,left,bottom);line(left,bottom,right,bottom);
   if(categorical){categories.forEach((name,i)=>text(x(i),bottom+22,name.length>18?name.slice(0,16)+'…':name,'end',Math.max(11,s.font_size-2),-35));}
   else if(s.kind!=='box')for(const tick of ticks(xmin,xmax,logX)){line(x(tick),bottom,x(tick),bottom+5);text(x(tick),bottom+25,fmt(tick),'middle');}
-  text((left+right)/2,555,s.x_label||table.x_label,'middle',s.font_size+1);text(26,(top+bottom)/2,s.y_label||table.y_label,'middle',s.font_size+1,-90);
+  text((left+right)/2,555,s.x_label||table.x_label,'middle',s.font_size+1);text(paired?left-100:26,(top+bottom)/2,s.y_label||table.y_label,'middle',s.font_size+1,-90);
  }
  const okay=(pt:[number,number|null])=>pt[1]!==null&&(!logX||pt[0]>0)&&(!logY||pt[1]>0);
  const zero=logY?bottom:y(0);
- if(s.kind==='joint_density'){
+ if(s.kind==='comparison_boxes'&&data.distribution_comparison){
+  const w=Math.min(70,fw/Math.max(1,categories.length)*.29);
+  data.distribution_comparison.series.forEach((r,i)=>{const b=r.box,xx=x(i);line(xx,y(b.whisker_low),xx,y(b.whisker_high),ink);for(const v of [b.whisker_low,b.whisker_high])line(xx-w/2,y(v),xx+w/2,y(v),ink);p.push({kind:'rect',x:xx-w,y:y(b.q3),width:2*w,height:y(b.q1)-y(b.q3),fill,stroke:ink,line_width:1.4});line(xx-w,y(b.median),xx+w,y(b.median),ink);for(const v of b.fliers??[])if(!logY||v>0)p.push({kind:'circle',x:xx,y:y(v),radius:2,fill:'none',stroke:ink});});
+ }else if(s.kind==='comparison_cdf'&&data.distribution_comparison){
+  const colors=s.palette==='mono'?['#111111','#777777','#444444','#999999','#333333','#666666','#222222','#555555','#888888']:['#225b87','#af4828','#42784e','#7b4c93','#88632b','#277b82','#94416b','#5d6681','#333333'];
+  data.distribution_comparison.series.forEach((r,i)=>{const color=colors[i%colors.length];const valid=r.cdf.filter(v=>!logX||v.value>0);if(!valid.length)return;const points:Array<[number,number]>=logX?[]:[[left,y(0)],[x(valid[0].value),y(0)]];let last=valid[0].percent_le;for(const v of valid){if(points.length)points.push([x(v.value),y(last)]);points.push([x(v.value),y(v.percent_le)]);last=v.percent_le;}points.push([right,y(last)]);p.push({kind:'polyline',points,stroke:color,fill:'none',line_width:2,dashed:i%2===1});line(right+12,100+i*31,right+40,100+i*31,color,i%2===1);text(right+44,104+i*31,r.label.length>15?r.label.slice(0,13)+'…':r.label,'start',12);});
+ }else if(s.kind==='joint_density'){
   const maximum=Math.max(1,...table.rows.map(r=>Number(r[4])));
   const shade=(value:number)=>{const t=Math.log1p(value)/Math.log1p(maximum);const rgb=s.palette==='blue'?[225-190*t,237-150*t,245-110*t]:s.palette==='earth'?[240-125*t,235-155*t,225-160*t]:[255-225*t,255-225*t,255-225*t];return '#'+rgb.map(v=>Math.round(v).toString(16).padStart(2,'0')).join('');};
   table.rows.forEach(r=>{if(Number(r[4])<=0)return;p.push({kind:'rect',x:x(Number(r[0])),y:y(Number(r[3])),width:x(Number(r[1]))-x(Number(r[0])),height:y(Number(r[2]))-y(Number(r[3])),fill:shade(Number(r[4])),line_width:0});});
-  text(right,60,'Cell count (log color): 1 to '+fmt(maximum),'end',12);
+  for(let i=0;i<30;i++)p.push({kind:'rect',x:right+22,y:top+i*fh/30,width:16,height:fh/30+.5,fill:shade(Math.exp(Math.log1p(maximum)*(1-i/29))-1),line_width:0});
+  text(right+44,top+8,fmt(maximum),'start',12);text(right+44,bottom,'1','start',12);text(right,60,'Cell count · log color','end',12);
  }else if(s.kind==='histogram')table.rows.forEach((r,i)=>{
   if(!okay(points[i]))return;const [lo,hi]=r as number[];if(logX&&(lo<=0||hi<=0))return;
   const yy=y(points[i][1]!);p.push({kind:'rect',x:x(lo),y:Math.min(yy,zero),width:Math.max(.5,x(hi)-x(lo)),height:Math.abs(zero-yy),fill,stroke:ink,line_width:.8});
@@ -216,7 +242,7 @@ export function makeFigure(data:PlotData,s:FigureSettings):FigureScene{
   points.forEach(pt=>{
    if(!okay(pt)){flush();return;}
    const xx=x(pt[0]),yy=y(pt[1]!);
-   if(['qq','class_dot','scatter','experiment_dot'].includes(s.kind)){
+   if(['qq','class_dot','scatter','experiment_dot','regression','bland_altman'].includes(s.kind)){
     if(s.kind==='class_dot')line(left,yy,xx,yy,'#dddddd');
     p.push({kind:'circle',x:xx,y:yy,radius:3,fill:ink,stroke:ink,line_width:0});
    }else{
@@ -227,6 +253,8 @@ export function makeFigure(data:PlotData,s:FigureSettings):FigureScene{
   });
   if(cumulative&&segment.length)segment.push([right,segment[segment.length-1][1]]);
   flush();
+  if(s.kind==='bland_altman'&&data.joint?.agreement){const a=data.joint.agreement;for(const [v,label] of [[a.bias,'Mean'],[a.lower,'−1.96 SD'],[a.upper,'+1.96 SD']] as const){line(left,y(v),right,y(v),'#777777',label!=='Mean');}text(right,60,`Mean ${fmt(a.bias)}; limits ${fmt(a.lower)}, ${fmt(a.upper)}`,'end',12);}
+  if(s.kind==='regression'&&data.joint?.regression){const r=data.joint.regression;const candidates=[xmin,xmax];if(r.slope!==0)candidates.push((ymin-r.intercept)/r.slope,(ymax-r.intercept)/r.slope);const valid=candidates.filter(v=>v>=xmin&&v<=xmax&&r.intercept+r.slope*v>=ymin-1e-9&&r.intercept+r.slope*v<=ymax+1e-9).sort((a,b)=>a-b);if(valid.length>=2)line(x(valid[0]),y(r.intercept+r.slope*valid[0]),x(valid.at(-1)!),y(r.intercept+r.slope*valid.at(-1)!),'#777777',true);text(right,60,`y = ${fmt(r.slope)}x + ${fmt(r.intercept)}; R² = ${r.r_squared===null?'undefined':fmt(r.r_squared)}`,'end',12);}
   if(s.kind==='scatter'&&data.joint?.identity_line){
    const lo=Math.max(xmin,ymin),hi=Math.min(xmax,ymax);
    if(hi>lo)line(x(lo),y(lo),x(hi),y(hi),'#888888',true);
@@ -239,7 +267,7 @@ export function makeFigure(data:PlotData,s:FigureSettings):FigureScene{
    if(end>=start&&intercept+slope*start>=ymin&&intercept+slope*end<=ymax)line(x(start),y(intercept+slope*start),x(end),y(intercept+slope*end),'#888888',true);
   }
  }
- const note=(s.kind==='scatter'&&data.joint?`Shown ${data.joint.sample_cells} / ${data.joint.population_cells} aligned pairs; r = ${data.joint.pearson_r?.toPrecision(4)??'undefined'}. `:'')+(logX||logY?'Log axes omit non-positive values. ':'')+`n = ${(s.kind==='rose'?(data.directional_cells??data.valid_cells):data.valid_cells).toLocaleString('en-US')} ${s.kind==='rose'?'directional cells':data.kind==='profile'?'valid profile samples':data.population==='monte_carlo_realizations'?'realizations':data.experiment_series?'experiment observations':'valid raster cells'}`;
+ const note=(data.distribution_comparison?'Separate valid populations; compare descriptive distributions. ':'')+(['scatter','regression','bland_altman'].includes(s.kind)&&data.joint?`Shown ${data.joint.sample_cells} / ${data.joint.population_cells} aligned pairs; r = ${data.joint.pearson_r?.toPrecision(4)??'undefined'}. `:'')+(logX||logY?'Log axes omit non-positive values. ':'')+`n = ${(s.kind==='rose'?(data.directional_cells??data.valid_cells):data.valid_cells).toLocaleString('en-US')} ${s.kind==='rose'?'directional cells':data.kind==='profile'?'valid profile samples':data.population==='monte_carlo_realizations'?'realizations':data.experiment_series?'experiment observations':data.distribution_comparison?'cells across products':'valid raster cells'}`;
  text(115,585,note,'start',11);
  return {width,height,width_mm:s.width_mm,height_mm:s.height_mm,title,primitives:p,note};
 }

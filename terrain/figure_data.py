@@ -172,12 +172,18 @@ def joint_elevation_data(elevation, product, quantity, unit, cell_area, cancel=N
         iy=np.clip(np.searchsorted(ye,b,side='right')-1,0,39)
         counts+=np.bincount(ix*40+iy,minlength=1600).reshape(40,40)
         da=a-mx;db=b-my;xx.append(float(np.dot(da,da)));yy.append(float(np.dot(db,db)));xy.append(float(np.dot(da,db)))
-    vx=math.fsum(xx);vy=math.fsum(yy)
+    vx=math.fsum(xx);vy=math.fsum(yy);cov=math.fsum(xy)
+    regression = None
+    if vx > 0:
+        slope = cov/vx
+        regression = {'slope':slope, 'intercept':my-slope*mx,
+                      'r_squared':min(1.,max(0.,cov*cov/(vx*vy))) if vy>0 else None}
     indices=np.arange(0,n,max(1,math.ceil(n/2000)))
     return {'x_quantity':'Elevation','x_unit':'m','y_quantity':quantity,'y_unit':unit,
         'population_cells':n,'sample_cells':int(indices.size),'sampling':'every_kth_valid_cell_in_grid_order',
         'samples':[{'x':float(x[i]),'y':float(y[i])} for i in indices],
-        'pearson_r':max(-1.,min(1.,math.fsum(xy)/math.sqrt(vx*vy))) if vx>0 and vy>0 else None,
+        'pearson_r':max(-1.,min(1.,cov/math.sqrt(vx*vy))) if vx>0 and vy>0 else None,
+        'regression':regression,
         'density_cells':[{'x_lower':float(xe[i]),'x_upper':float(xe[i+1]),
             'y_lower':float(ye[j]),'y_upper':float(ye[j+1]),'cells':int(counts[i,j]),
             'area_m2':int(counts[i,j])*cell_area} for i in range(40) for j in range(40)],

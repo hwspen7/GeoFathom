@@ -1,5 +1,5 @@
 import {expect,it} from 'vitest';
-import {researchFigureData} from './researchFigureData';
+import {researchFigureData,researchDistributionData} from './researchFigureData';
 import {availableFigures,defaultFigure,figureTable,makeFigure} from './figureLibrary';
 import type {ResearchResult} from './api';
 const result={runs:[{label:'Baseline'},{label:'A'},{label:'B'}],products:[],metric_table:[{metric:'cut_m3',values:[100,40,20],deltas:[0,-60,null],relative_pct:[0,-60,null]}],sensitivity:[{parameter:'reference',value:10,metrics:{cut_m3:100},derivatives:{}},{parameter:'reference',value:20,metrics:{cut_m3:40},derivatives:{cut_m3:-6}}],uncertainty:{coverage:.95,warning:'Conditional model',metrics:{cut_m3:{baseline:100,mean:105,low:80,high:120}},realizations:{cut_m3:[80,100,110,120]}}} as unknown as ResearchResult;
@@ -25,4 +25,18 @@ it('computes exact distribution tables from actual realizations and no geographi
  expect(data.summary?.median).toBe(105);expect(data.cdf?.at(-1)?.percent_le).toBe(100);
  const table=figureTable(data,defaultFigure(data));expect(table.rows.every(r=>r[4]===null)).toBe(true);
  expect(table.y_label).toBe('Realizations (%)');
+});
+
+it('compares separate scenario populations without inventing pooled quartiles',()=>{
+ const data=researchFigureData(result,'cut_m3','realizations')!;
+ const comparison=researchDistributionData({...result,products:[{name:'Baseline',role:'baseline',plot_data:data},{name:'Alternative',role:'scenario',plot_data:{...data,valid_cells:7}}]} as unknown as ResearchResult)!;
+ expect(comparison.valid_cells).toBe(11);expect(availableFigures(comparison).map(f=>f.id)).toEqual(['comparison_boxes','comparison_cdf']);
+ for(const recipe of availableFigures(comparison)){const settings={...defaultFigure(comparison),kind:recipe.id};expect(makeFigure(comparison,settings).error).toBeUndefined();expect(figureTable(comparison,settings).rows.length).toBeGreaterThan(1);}
+});
+it('uses the recorded paired moments rather than fitting a plotted sample',()=>{
+ const data=researchFigureData(result,'cut_m3','realizations')!;
+ data.joint={x_quantity:'Baseline',x_unit:'m3',y_quantity:'Candidate',y_unit:'m3',population_cells:4,sample_cells:2,sampling:'systematic',pearson_r:1,identity_line:true,samples:[{x:1,y:2},{x:3,y:4}],density_cells:[],notes:[],regression:{slope:1,intercept:1,r_squared:1},agreement:{bias:1,sample_std:0,lower:1,upper:1}};
+ expect(figureTable(data,{...defaultFigure(data),kind:'bland_altman'}).rows).toEqual([[1.5,1],[3.5,1]]);
+ expect(makeFigure(data,{...defaultFigure(data),kind:'bland_altman'}).primitives.some(p=>p.text?.includes('Mean 1'))).toBe(true);
+ expect(makeFigure(data,{...defaultFigure(data),kind:'regression'}).primitives.some(p=>p.text?.includes('R² = 1'))).toBe(true);
 });

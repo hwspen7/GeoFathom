@@ -1,7 +1,7 @@
 import {useEffect,useRef,useState} from 'react';
 import {createPortal} from 'react-dom';
 import FigureGallery from './FigureGallery';
-import {researchFigureData,type ResearchFigureSource} from './researchFigureData';
+import {researchFigureData,researchDistributionData,type ResearchFigureSource} from './researchFigureData';
 import {analyzeResearch,getResearchCatalog,type ResearchCatalog,type ResearchExperiment,type ResearchResult,type TerrainRasterLayer,type PlotData} from './api';
 import type {PersistedTerrainResult} from './terrainResultStore';
 import {researchBase,parseParameter,parseSweep,downloadResearch,loadResearch,saveResearch} from './terrainResearch';
@@ -53,6 +53,7 @@ export default function TerrainResearchPanel(p:{projectId:string|null;record:Per
  const metricSources:ResearchFigureSource[]=result?.mode==='uncertainty'?['interval','realizations']:result?.mode==='sensitivity'?['response','derivative','values','delta','relative']:['values','delta','relative'];
  const sourceChoice=metricSources.includes(metricFigureSource)?metricFigureSource:metricSources[0];
  const metricFigure=result&&metricChoice&&sourceChoice?researchFigureData(result,metricChoice,sourceChoice):null;
+ const distributionFigure=result?researchDistributionData(result):null;
  useEffect(()=>{
   let current=true;
   getResearchCatalog().then(value=>{if(current)setCatalog(value);}).catch(e=>{if(current)setError(String(e.message??e));});
@@ -133,7 +134,7 @@ export default function TerrainResearchPanel(p:{projectId:string|null;record:Per
   <p>Units follow metric names and the manifest. Changes are undefined for unmatched populations; percentages are also undefined for a zero baseline. The package includes every metric.</p>
  </>}
  {page==='figures'&&result&&<>
-  <label>Figure<select aria-label="Figure" value={figureMode} onChange={e=>{setFigureMode(e.target.value as typeof figureMode);setProductIndex(0);}}><option value="difference">Output and difference maps</option><option value="swipe" disabled={!result.products.some(p=>p.role==='scenario')}>Baseline / scenario swipe</option><option value="response" disabled={!result.sensitivity.length}>Sensitivity response</option><option value="metric">Scientific metric figures</option><option value="matrix" disabled={result.products.length<2}>Multi-map matrix</option></select></label>
+  <label>Figure<select aria-label="Figure" value={figureMode} onChange={e=>{setFigureMode(e.target.value as typeof figureMode);setProductIndex(0);}}><option value="difference">Output and difference maps</option><option value="swipe" disabled={!result.products.some(p=>p.role==='scenario')}>Baseline / scenario swipe</option><option value="response" disabled={!result.sensitivity.length}>Sensitivity response</option><option value="metric">Scientific metric figures</option><option value="matrix" disabled={result.products.length<2}>Multi-map matrix</option></select></label>{distributionFigure&&<button type="button" onClick={()=>setGalleryData(distributionFigure)}>Compare scenario distributions</button>}
   {figureMode==='metric'?<>{metricSelect}<label>Data source<select aria-label="Research figure data" value={sourceChoice} onChange={e=>setMetricFigureSource(e.target.value as ResearchFigureSource)}>{metricSources.map(s=><option key={s} value={s}>{({values:'Scenario values',delta:'Absolute change',relative:'Relative change',response:'Parameter response',derivative:'Baseline secant',interval:'Model coverage interval',realizations:'Monte Carlo realizations'})[s]}</option>)}</select></label><button type="button" disabled={!metricFigure} onClick={()=>setGalleryData(metricFigure||null)}>Open metric figure library</button>{!metricFigure&&<p>No valid recorded values for this selection.</p>}</>:figureMode==='matrix'?<div className="research-map-matrix" style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(230px,1fr))',gap:12}}>{result.products.map((item,i)=><figure key={i} style={{margin:0}}><figcaption>{item.name}</figcaption><img style={{width:'100%',objectFit:'contain'}} src={item.raster.png} alt={item.name+' matrix map'}/><div className="research-map-legend">{item.raster.legend.map((entry,j)=><span key={j}><i style={{background:entry.color}}/>{entry.label}</span>)}</div><button type="button" disabled={!item.plot_data} onClick={()=>setGalleryData(item.plot_data??null)}>Plot {item.name}</button></figure>)}</div>:figureMode==='response'?<>{metricSelect}<ResponsePlot parameter={result.sensitivity[0]?.parameter??''} metric={metricChoice} points={result.sensitivity.filter(r=>Number.isFinite(r.metrics[metricChoice])).map(r=>[r.value,r.metrics[metricChoice]])}/><p>Slopes from baseline: {result.sensitivity.map(r=>fmt(r.value)+' → '+fmt(r.derivatives[metricChoice])).join(' · ')}</p></>:<>
    <label>Map output<select aria-label="Map output" value={activeProductIndex} onChange={e=>setProductIndex(Number(e.target.value))}>{availableProducts.map((item,i)=><option key={i} value={i}>{item.name} · {item.role??item.kind}</option>)}</select></label>
    {product?<>

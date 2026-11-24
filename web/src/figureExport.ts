@@ -9,7 +9,7 @@ function encodePayload(value:unknown){
 }
 /** Self-contained Matplotlib program with the exact selected table embedded. */
 export function pythonFigure(table:PlotTable,settings:FigureSettings,data:PlotData,provenance:unknown):string{
- const payload=encodePayload({table,settings,summary:data.summary,box:data.box,provenance,joint:data.joint});
+ const payload=encodePayload({table,settings,summary:data.summary,box:data.box,provenance,joint:data.joint,comparison:data.distribution_comparison});
  return `"""GeoFathom scientific figure. Requires matplotlib; embedded data are unchanged.
 Tables/metadata may also be exported separately as CSV/JSON.
 """
@@ -59,13 +59,39 @@ elif kind == "joint_density":
     collection.set_array([r[4] for r in occupied])
     ax.add_collection(collection); ax.autoscale_view()
     fig.colorbar(collection, ax=ax, label="Cell count (log color)")
-elif kind in ("qq", "scatter"):
+elif kind == "comparison_boxes":
+    series = payload["comparison"]["series"]
+    ax.bxp([{"label": r["label"], "whislo": r["box"]["whisker_low"], "q1": r["box"]["q1"],
+             "med": r["box"]["median"], "q3": r["box"]["q3"], "whishi": r["box"]["whisker_high"],
+             "fliers": r["box"].get("fliers", [])} for r in series], showfliers=True)
+    ax.tick_params(axis="x", labelrotation=35)
+elif kind == "comparison_cdf":
+    for r in payload["comparison"]["series"]:
+        ax.step([c["value"] for c in r["cdf"]],[c["percent_le"] for c in r["cdf"]],where="post",label=r["label"])
+    ax.set_ylim(0,100); ax.legend(frameon=False)
+elif kind in ("qq", "scatter", "regression", "bland_altman"):
     ax.scatter([r[0] for r in rows], [r[1] for r in rows], s=8, color=color)
     if kind == "scatter" and (payload.get("joint") or {}).get("identity_line"):
         lo = max(min(r[0] for r in rows), min(r[1] for r in rows))
         hi = min(max(r[0] for r in rows), max(r[1] for r in rows))
         if hi > lo: ax.plot([lo, hi], [lo, hi], "--", color="0.5", label="1:1 agreement")
         if hi > lo: ax.legend(frameon=False)
+    joint = payload.get("joint") or {}
+    if kind == "scatter" and joint.get("identity_line"):
+        lo = min(min(r[0] for r in rows), min(r[1] for r in rows))
+        hi = max(max(r[0] for r in rows), max(r[1] for r in rows))
+        pad = max((hi-lo)*.05,.5) if hi==lo else (hi-lo)*.05
+        ax.set_xlim(lo-pad,hi+pad); ax.set_ylim(lo-pad,hi+pad); ax.set_aspect("equal",adjustable="box")
+    if kind == "regression" and joint.get("regression"):
+        r = joint["regression"]
+        xs = [min(v[0] for v in rows),max(v[0] for v in rows)]
+        ax.plot(xs,[r["intercept"]+r["slope"]*x for x in xs],"--",color="0.5",label="All-cell least squares")
+        ax.legend(frameon=False)
+    if kind == "bland_altman" and joint.get("agreement"):
+        r = joint["agreement"]
+        for key,desc,style in [("bias","Mean difference","-"),("lower","−1.96 SD","--"),("upper","+1.96 SD","--")]:
+            ax.axhline(r[key],linestyle=style,color="0.5",label=desc)
+        ax.legend(frameon=False)
     summary = payload.get("summary")
     if summary and kind == "qq":
         slope = (summary["q3"]-summary["q1"])/(2*0.6744897501960817)
@@ -103,8 +129,8 @@ elif kind == "rose":
 else:
     ax.plot([r[0] for r in rows], [float("nan") if r[1] is None else r[1] for r in rows], color=color, marker="o" if kind in ("profile", "grade") else None, markersize=2)
 if kind != "rose":
-    if settings["x_log"] and kind not in ("box", "class_bar", "class_dot", "metrics", "experiment_bar", "experiment_dot", "experiment_interval"): ax.set_xscale("log")
-    if settings["y_log"] and kind != "experiment_interval": ax.set_yscale("log")
+    if settings["x_log"] and kind not in ("box", "class_bar", "class_dot", "metrics", "experiment_bar", "experiment_dot", "experiment_interval", "comparison_boxes", "regression", "bland_altman") and not (kind == "scatter" and (payload.get("joint") or {}).get("identity_line")): ax.set_xscale("log")
+    if settings["y_log"] and kind not in ("experiment_interval","comparison_cdf","regression","bland_altman") and not (kind == "scatter" and (payload.get("joint") or {}).get("identity_line")): ax.set_yscale("log")
     ax.set_xlabel(settings["x_label"] or table["x_label"])
     ax.set_ylabel(settings["y_label"] or table["y_label"])
 ax.set_title(settings["title"])
