@@ -217,6 +217,12 @@ METHODS=METHODS+(
  m('atmospheric_reflectance_sd','Preprocessing','Correlated atmospheric reflectance uncertainty',ATMOS_ROLES+ATMOS_ERRORS,'reflectance','First-order Lambertian inversion uncertainty with supplied SD and positive-semidefinite correlations.',ATMOS_CONDITION+ATMOS_CORR),
  m('atmospheric_reflectance_condition','Preprocessing','Atmospheric inversion sensitivity norm',ATMOS_ROLES,'unitless','Euclidean norm of local inversion Jacobian; not a condition number or uncertainty estimate.',ATMOS_CONDITION),
 )
+WISHART_ROLES=tuple((r+'_'+epoch,q) for epoch in ('before','after') for r,q in DUAL_COV)
+WISHART_P=(p('looks_before','Before equivalent looks',8,4,1000),p('looks_after','After equivalent looks',8,4,1000))
+METHODS=METHODS+(
+ m('sar_wishart_statistic','Radar','Dual-pol complex Wishart change statistic',WISHART_ROLES,'index','Independent positive-definite complex covariance estimates; likelihood ratio statistic.',WISHART_P),
+ m('sar_wishart_p','Radar','Dual-pol Wishart asymptotic p-value',WISHART_ROLES,'probability','Asymptotic chi-square with four degrees of freedom; supplied effective looks; pointwise.',WISHART_P),
+)
 BY_ID={x.id:x for x in METHODS}
 assert len(BY_ID)==len(METHODS)
 # Only operators with a proven finite dependency radius are eligible for tiles.
@@ -224,7 +230,7 @@ WINDOWED_IDS={m.id for m in METHODS if m.group=='Optical'}|{'calibrated_reflecta
 WINDOWED_HALO={'sar_lee','sar_gamma_map','cloud_buffer'}
 HYPER_IDS|=GLOBAL_HYPER_IDS
 WINDOWED_CUBES=SERIES_IDS|(HYPER_IDS-{'spectral_endmembers'}-GLOBAL_HYPER_IDS)
-WINDOWED_IDS|={'atmospheric_reflectance_sd','atmospheric_reflectance_condition'}
+WINDOWED_IDS|={'atmospheric_reflectance_sd','atmospheric_reflectance_condition','sar_wishart_statistic','sar_wishart_p'}
 WINDOWED_IDS|=WINDOWED_CUBES|{'sar_gamma_change_p','sar_gamma_ratio_low','sar_gamma_ratio_high','quality_weighted_mean','quality_weighted_sd','quality_effective_count'}
 
 def windowed_roles(operation,times):

@@ -189,7 +189,7 @@ def test_remote_invalid_inputs_and_recovery():
         response=client.post('/analysis/remote-sensing/run',json=bad);assert response.status_code==422,response.text
     response=client.post('/analysis/remote-sensing/run',json=good);assert response.status_code==200,response.text
     np.testing.assert_allclose(grid(response.json()),.5)
-    assert client.get('/analysis/remote-sensing/catalog').json()['operation_count']==len(BY_ID)==149
+    assert client.get('/analysis/remote-sensing/catalog').json()['operation_count']==len(BY_ID)==151
 
 def test_temporal_independent_quality_masks():
     # Cloud at one date does not erase the other valid acquisitions.
@@ -772,6 +772,7 @@ def test_every_disk_method_matches_inline(kind,tmp_path):
         if q=='class':
             code={'sentinel_clear':4,'landsat_clear':64,'landsat_unsaturated':0}.get(kind,1)
             z=np.full(shape,float(code));z[31:34,61:66]=9 if kind=='sentinel_clear' else 8 if kind.startswith('landsat_') else 0
+        elif kind.startswith('sar_wishart_'):z=rng.uniform(2.,3.,shape) if role.startswith(('c11','c22')) else rng.uniform(-.2,.2,shape)
         elif q=='reflectance':z=rng.uniform(.2,.6,shape)
         elif q in {'emissivity','transmittance','fraction'}:z=rng.uniform(.7,.95,shape)
         elif q=='radiance':z=rng.uniform(9,11,shape) if role=='radiance' else rng.uniform(.8,1.2,shape)
@@ -1360,3 +1361,43 @@ def test_landsat_level1_metadata_calibration_and_quality(tmp_path):
     contents['PROCESSING_LEVEL']='L2SP'
     with pytest.raises(FigureInputError):
         calibration(metadata,4,'reflectance')
+
+
+@pytest.mark.parametrize('kind',['sar_wishart_statistic','sar_wishart_p'])
+def test_wishart_change_independent_reference(kind):
+    from scipy.stats import chi2
+    a=np.array([[2.,.2+.1j],[.2-.1j,1.]])
+    b=np.array([[4.,.5-.2j],[.5+.2j,2.]])
+    v={}
+    for epoch,m in [('before',a),('after',b)]:
+        for key,val in [('c11',m[0,0].real),('c22',m[1,1].real),('c12_real',m[0,1].real),('c12_imag',m[0,1].imag)]:
+            v[key+'_'+epoch]=constant(val)
+    v['c12_real_before'][0,0]=100 # invalid covariance
+    l1,l2=8,12;pooled=(l1*a+l2*b)/(l1+l2)
+    logdet=lambda x:np.linalg.slogdet(x)[1]
+    stat=2*((l1+l2)*logdet(pooled)-l1*logdet(a)-l2*logdet(b))
+    r=run(kind,v,{'looks_before':l1,'looks_after':l2});z=grid(r)
+    assert np.isnan(z[0,0])
+    np.testing.assert_allclose(z[np.isfinite(z)],stat if kind.endswith('statistic') else chi2.sf(stat,4),atol=1e-12)
+
+def test_atmospheric_lut_disk_interpolation_no_extrapolation(tmp_path):
+    import rasterio
+    from imagery.atmospheric_lut_disk import process
+    # Bilinear coefficient table evaluated exactly at the midpoint.
+    lut={'aod':[0.,1.],'water':[0.,2.],'path':[[.05,.07],[.15,.17]],
+         'transmission':[[.9,.8],[.7,.6]],'spherical_albedo':[[.1,.2],[.2,.3]],
+         'model':'synthetic analytical test LUT','water_unit':'cm','aod_wavelength_nm':550}
+    z=np.full((33,34),.4);a=np.full_like(z,.5);w=np.ones_like(z)
+    a[1,1]=1.1;w[1,2]=np.nan
+    paths=[tmp_path/f'{k}.tif' for k in ('toa','aod','water')]
+    for path,arr,unit in zip(paths,(z,a,w),('reflectance','aod','cm')):
+        path.write_bytes(base64.b64decode(source(arr,unit=unit)['data']))
+    table=tmp_path/'lut.json';table.write_text(json.dumps(lut))
+    out=tmp_path/'corrected.tif';receipt=process(*paths,table,out,tile=16)
+    expected=(.4-.11)/(.75+.2*(.4-.11))
+    with rasterio.open(out) as ds:
+        actual=ds.read(1);assert ds.transform==AFF
+        assert np.isnan(actual[1,1:3]).all()
+        np.testing.assert_allclose(actual[np.isfinite(actual)],expected,atol=1e-12)
+    assert receipt['outside_lut_or_missing_cells']==2
+    assert receipt['valid_cells']==33*34-2
