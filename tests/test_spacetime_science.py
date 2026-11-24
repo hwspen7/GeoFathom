@@ -410,3 +410,29 @@ def test_extreme_bootstrap_seed_and_order():
         a=bootstrap_interval(x,gev,0,20,8,39,17)
         assert a is not None and a[0]<a[1] and a[2]>=32
         assert a==bootstrap_interval(x,gev,0,20,8,39,17)
+
+
+@pytest.mark.parametrize('kind',['coverage','sen','mk_p','exceedance','lag_correlation','series_median','series_count','series_slope','series_amplitude','series_harmonic_rmse','season_peak','season_start','season_end','season_duration','forecast_mean','forecast_sd','hindcast_rmse','hindcast_skill','rts_level','rts_velocity','rts_sd','event_count','event_longest_span','event_total_span','event_integrated_excess'])
+def test_disk_pixel_method_parity(kind,tmp_path):
+    import rasterio
+    from analysis.spacetime_disk import execute as disk
+    t=np.arange(18.);r,c=np.indices((17,19));a=2+.1*t[:,None,None]+2*np.cos(2*np.pi*(t[:,None,None]-2)/6)+.1*r+.1*c
+    a[:,0,0]=np.nan;a[4,15,15]=np.nan
+    p={'period':6} if kind.startswith('season_') or kind in ('series_amplitude','series_harmonic_rmse') else {'threshold':3} if kind=='exceedance' or kind.startswith('event_') else {}
+    src=tmp_path/'cube.tif';dst=tmp_path/'result.tif'
+    with rasterio.open(src,'w',driver='GTiff',width=19,height=17,count=18,dtype='float64',crs=CRS,transform=AFF,nodata=np.nan) as ds:
+        ds.write(a);ds.update_tags(TERRAIN_UNIT='index')
+    disk(src,dst,t,kind,p,tile=16)
+    with rasterio.open(dst) as ds:np.testing.assert_allclose(ds.read(1),grid(run(kind,a,t,p)),equal_nan=True,atol=1e-9)
+
+def test_global_disk_priority_tile_invariance(tmp_path):
+    import rasterio
+    from analysis.spacetime_disk import execute as disk
+    rng=np.random.default_rng(23);a=rng.normal(size=(8,17,19));src=tmp_path/'cube.tif'
+    with rasterio.open(src,'w',driver='GTiff',width=19,height=17,count=8,dtype='float64',crs=CRS,transform=AFF,nodata=np.nan) as ds:
+        ds.write(a);ds.update_tags(TERRAIN_UNIT='index')
+    p={'sample_limit':24,'seed':42,'horizon':1}
+    m=disk(src,tmp_path/'a.tif',np.arange(8.),'st_universal_mean',p,tile=16)
+    n=disk(src,tmp_path/'b.tif',np.arange(8.),'st_universal_mean',p,tile=32)
+    assert m['metrics']['global_training_coordinates']==n['metrics']['global_training_coordinates']
+    with rasterio.open(tmp_path/'a.tif') as a,rasterio.open(tmp_path/'b.tif') as b:np.testing.assert_allclose(a.read(),b.read(),atol=1e-10)

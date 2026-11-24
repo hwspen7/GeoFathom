@@ -2,7 +2,7 @@
 
 Independent workbench for 6–64 explicitly dated, aligned GeoTIFF bands or scenes. The numerical cube is capped at four million dated cells and 48 MB encoded input, with tighter per-model work limits. Metadata/custom/Landsat physical calibration shares the remote-sensing reader; optional QA applies globally or per date. No automatic resampling or implicit missing-date compression. Calendar dates are UTC day offsets with a recorded origin.
 
-## Methods (84)
+## Methods (88)
 - Cube coverage, observed exceedance, lag correlation, median/count and actual-time OLS and Sen trends.
 - Tie-corrected asymptotic Mann–Kendall and BY adjustment; MK assumes temporal independence.
 - Circular residual block-bootstrap slopes with shared resample indices, BY adjustment; approximate inference for complete regular series with stationary residuals.
@@ -42,3 +42,6 @@ Local verification in isolation: exact Git blobs for spacetime_kriging.py (02b17
 - New reference tests have been committed; full application CI has not been confirmed.
 
 Independent isolated runs at commit 06a888e verified the two known seasonal breaks (15.5 and 31.5, count 2) and no false break on an exact harmonic fixture; GPD/GEV parameter recovery on 120 deterministic quantiles, gap-separated event families, and four extreme raster-kernel outputs. These were actual kernel checks with a minimal require stub and exact Git blob matches before the final small robustness edits; no claim of running full application/CI. Event figures limit displayed records, preserving the complete CSV inventory. Disk Sen uses bounded internal strips even at the maximum tile size.
+
+## Final depth refinement
+Optional joint Gneiting interaction REML uses bounded multistart optimization. Optional GTWR bandwidth choice compares nine candidates using identical nested future/spatial validation targets, never the outer holdout. GEV/GPD pointwise percentile parametric bootstrap includes conditional parameter uncertainty and binomial GPD occurrence uncertainty; small study windows only, no simultaneous or serial dependence guarantee. Disk execution now supports 25 pixel-independent outputs plus two universal-kriging outputs (27 total). The global sample priority is keyed to voxel IDs, invariant to tile size. Disk parity and global tile-invariance tests are required by the JUnit gate. Browser fixture regenerated locally as a 943-byte six-band native GeoTIFF with SHA-256 dbfc2e8f9d65a01d744edcc22d4f36101afcb50342853943eac12a4388732e86, verified readback before submission. No real-world benchmark or all-repository execution is claimed.
