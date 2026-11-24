@@ -64,7 +64,7 @@ def render(req, container=None, panel_label='', grid_sink=None):
     # Every recipe reports its actual source and selection contract.
     meta.update(family=recipe[2],source_type=source,required_fields=fields.split(),software={'numpy':np.__version__,'matplotlib':__import__('matplotlib').__version__})
     palette=COLORS if req.palette!='mono' else ['#1e1e1e','#777777','#a0a0a0','#4e4e4e','#b4b4b4','#333333','#8d8d8d','#555555']
-    cmap={'mono':'Greys','earth':'terrain','color':'viridis'}[req.palette]
+    cmap={'mono':'Greys','earth':'terrain','color':'viridis'}[req.palette] if req.sequential_cmap=='default' else req.sequential_cmap
     color=palette[0]
     rc={'font.family':'serif' if req.font=='serif' else 'sans-serif','font.size':req.font_size,
         'axes.labelsize':req.font_size,'xtick.labelsize':max(6,req.font_size-1),'ytick.labelsize':max(6,req.font_size-1),
@@ -367,6 +367,8 @@ def render(req, container=None, panel_label='', grid_sink=None):
             def map_axes(a,grid):
                 a.set_aspect('equal');a.set_xlabel('Easting' if grid.crs.is_projected else 'Longitude / x');a.set_ylabel('Northing' if grid.crs.is_projected else 'Latitude / y')
                 a.ticklabel_format(style='plain',useOffset=False);a.tick_params(labelsize=max(6,req.font_size-2));a.xaxis.set_major_locator(MaxNLocator(4));a.yaxis.set_major_locator(MaxNLocator(4))
+                if req.map_decoration=='minimal':
+                    a.set_xlabel('');a.set_ylabel('');a.set_xticks([]);a.set_yticks([]);return
                 a.annotate('Grid N',xy=(.94,.92),xytext=(.94,.79),xycoords='axes fraction',textcoords='axes fraction',arrowprops={'arrowstyle':'-|>','color':'#333333'},ha='center',fontsize=7)
                 if grid.is_meter:
                     xmin,xmax,ymin,ymax=grid.extent;target=(xmax-xmin)*.22;power=10**math.floor(math.log10(target));length=max(v*power for v in (.1,.2,.5,1,2,5,10) if v*power<=target)
@@ -378,8 +380,13 @@ def render(req, container=None, panel_label='', grid_sink=None):
                     units={'raster_slope':'degree','raster_hillshade':'unitless','raster_exceedance':'unitless'}
                     grid_sink.append(geotiff_product(grid,values,units.get(kind,grid.unit),kind,[{'sha256':v.sha256,'band':v.band} for v in grids]))
                 cm=colormaps[cm].copy() if isinstance(cm,str) else cm.copy();cm.set_bad('#e9e9e9')
+                if kind=='raster_continuous':
+                    if req.map_min is not None:vmin,vmax=req.map_min,req.map_max
+                    if req.map_style=='diverging':
+                        lim=max(abs(vmin if vmin is not None else np.nanmin(values)),abs(vmax if vmax is not None else np.nanmax(values)),1e-12);vmin,vmax=-lim,lim;cm=colormaps['RdBu_r'].copy();cm.set_bad('#e9e9e9')
                 im=a.imshow(values,extent=grid.extent,origin='upper',interpolation='nearest',cmap=cm,vmin=vmin,vmax=vmax);map_axes(a,grid)
-                meta.update(display_min=float(im.norm.vmin),display_max=float(im.norm.vmax),nodata_display='#e9e9e9')
+                finite=values[np.isfinite(values)]
+                meta.update(display_min=float(im.norm.vmin),display_max=float(im.norm.vmax),nodata_display='#e9e9e9',display_below=int(np.sum(finite<im.norm.vmin)),display_above=int(np.sum(finite>im.norm.vmax)))
                 if label:fig.colorbar(im,ax=a,label=label,shrink=.85)
                 return im
             if kind=='raster_profile':

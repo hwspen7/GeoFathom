@@ -80,6 +80,8 @@ class StudioInput(BaseModel):
     map_min:float|None=None
     map_max:float|None=None
     class_breaks:list[float]=Field(default_factory=list,max_length=25)
+    sequential_cmap:Literal['default','viridis','cividis','magma','plasma','Greys','terrain']='default'
+    map_decoration:Literal['grid','minimal']='grid'
     line_width:float=Field(default=1.3,ge=.4,le=4)
     legend_position:Literal['best','upper left','upper right','lower left','lower right','center left','center right']='best'
 
@@ -109,6 +111,7 @@ async def studio_render(body:StudioInput):
     try:
         grids=[] if body.export_grid else None
         payload,metadata,table=await run_in_threadpool(render,body,grid_sink=grids)
+        metadata['figure_sha256']=hashlib.sha256(payload).hexdigest()
         if body.csv:metadata['csv_sha256']=hashlib.sha256(body.csv.encode('utf-8')).hexdigest()
         metadata.update(schema='geofathom-studio-1',settings=body.model_dump(exclude={'csv','rasters'}))
         # Strict JSON serialization catches a broken numerical result before a successful response.
@@ -235,6 +238,7 @@ def render_composition(body):
 async def studio_compose(body:CompositionInput):
     try:
         payload,metadata=await run_in_threadpool(render_composition,body)
+        metadata['figure_sha256']=hashlib.sha256(payload).hexdigest()
         json.dumps(metadata,allow_nan=False)
         return {'figure':base64.b64encode(payload).decode('ascii'),
                 'media_type':{'png':'image/png','pdf':'application/pdf','svg':'image/svg+xml','tiff':'image/tiff'}[body.format],
@@ -261,3 +265,33 @@ async def inspect_studio_sources(body:SourceInspectionInput):
         return result
     except (FigureInputError,ValueError,OverflowError,RuntimeError,OSError) as error:
         raise HTTPException(status_code=422,detail=str(error)) from error
+
+class ArchiveInput(BaseModel):
+    model_config=ConfigDict(extra='forbid',allow_inf_nan=False)
+    input:StudioInput|CompositionInput
+    provenance:dict|list|str|None=None
+    @model_validator(mode='after')
+    def budget(self):
+        if len(self.model_dump_json())>80_000_000:raise ValueError('Archive payload exceeds limit.')
+        return self
+
+def render_archive(body):
+    from .studio_archive import build_archive
+    if isinstance(body.input,CompositionInput):
+        payload,metadata=render_composition(body.input);table=[]
+    else:
+        payload,metadata,table=render(body.input)
+        if body.input.csv:metadata['csv_sha256']=hashlib.sha256(body.input.csv.encode()).hexdigest()
+    metadata['figure_sha256']=hashlib.sha256(payload).hexdigest()
+    data,manifest=build_archive(payload,body.input.format,body.input.model_dump(),metadata,table,body.provenance)
+    return {'archive':base64.b64encode(data).decode('ascii'),'manifest':manifest}
+
+@router.post('/archive')
+async def studio_archive(body:ArchiveInput):
+    try:return await run_in_threadpool(render_archive,body)
+    except (FigureInputError,ValueError,OverflowError,RuntimeError,OSError) as error:
+        raise HTTPException(status_code=422,detail=str(error)) from error
+
+@router.post('/reopen')
+def reopen_studio(body:ArchiveInput):
+    return body.model_dump()

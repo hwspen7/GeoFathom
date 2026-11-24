@@ -119,12 +119,13 @@ def render_raster(kind,req,fig,ax,grids,meta):
     from matplotlib.patches import Rectangle
     from matplotlib.ticker import MaxNLocator
     g=grids[0];unit=g.unit or 'unit unspecified';z=g.values
-    def draw(target,a,title,cm='viridis',lo=None,hi=None,colorbar=True):
+    def draw(target,a,title,cm=None,lo=None,hi=None,colorbar=True):
         from matplotlib import colormaps
-        cm=colormaps[cm].copy();cm.set_bad('#dedede')
+        cm=colormaps[cm or (req.sequential_cmap if req.sequential_cmap!='default' else 'viridis')].copy();cm.set_bad('#dedede')
         im=target.imshow(a,extent=g.extent,origin='upper',interpolation='nearest',cmap=cm,vmin=lo,vmax=hi)
         target.set(title=title,aspect='equal',xlabel='Easting' if g.crs.is_projected else 'Longitude / x',ylabel='Northing' if g.crs.is_projected else 'Latitude / y')
         target.ticklabel_format(style='plain',useOffset=False);target.xaxis.set_major_locator(MaxNLocator(3));target.yaxis.set_major_locator(MaxNLocator(3))
+        if req.map_decoration=='minimal':target.set(xlabel='',ylabel='',xticks=[],yticks=[])
         if colorbar:fig.colorbar(im,ax=target,shrink=.78,label=unit)
         return im
     if kind=='research_map_distribution':
