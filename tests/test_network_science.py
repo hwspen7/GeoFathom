@@ -217,7 +217,7 @@ def test_advanced_network_result_figures_and_lineage():
     kw={'origins':['A','B'],'destinations':['B','C'],'demand':{'A':2,'B':4}}
     outputs=[
         run('pareto_path',n,origins=['A'],destinations=['C'],secondary_cost_field='risk'),
-        run('raster_impedance',collection(edge('ab','A','B',1),edge('bc','B','C',1)),raster=raster([1,3,5]),spacing_m=60),
+        run('raster_impedance',collection(edge('ab','A','B',1),edge('bc','B','C',1)),raster=raster([1,3,5]),spacing_m=60,exposure_reference=5,exposure_scale=4,exposure_alpha=math.log(2)),
         run('correlated_reliability',origins=['A','B'],destinations=['C'],failure_probability={'bc':.2,'ad':.3},trials=100),
         run('enhanced_two_step_fca',**kw,supply={'B':3,'C':1},threshold=10),
         run('p_median',**kw),run('maximum_coverage',**kw,threshold=1),

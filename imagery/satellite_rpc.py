@@ -83,7 +83,11 @@ def rectify(input_path,dem_path,target_path,output,*,height_reference,source_ban
                             else:
                                 # GDAL fractional coordinates use pixel corners.
                                 # Interpolate in center-index coordinates.
-                                y=row-.5;x=col-.5;r=np.floor(y).astype(int);c=np.floor(x).astype(int)
+                                y=row-.5;x=col-.5
+                                # Snap numerical RPC roundoff at exact pixel centers only.
+                                y=np.where(np.abs(y-np.rint(y))<=1e-9,np.rint(y),y)
+                                x=np.where(np.abs(x-np.rint(x))<=1e-9,np.rint(x),x)
+                                r=np.floor(y).astype(int);c=np.floor(x).astype(int)
                                 r0,r1=max(0,int(r.min())),min(src.height,int(r.max()+2))
                                 c0,c1=max(0,int(c.min())),min(src.width,int(c.max()+2))
                             cells=(r1-r0)*(c1-c0)

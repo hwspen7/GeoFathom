@@ -1,5 +1,5 @@
 import {expect,test} from './coverage-fixture';
-import {activateWorkspaceModule} from './workspace-ui';
+import {activateWorkspaceModule,openProjectDrawer} from './workspace-ui';
 // Actual six-band 3x3 uint8 georeferenced TIFF; each band is 3+2*t.
 const cube='SUkqAMwBAAAQAAABAwABAAAAAwAAAAEBAwABAAAAAwAAAAIBAwAGAAAAzgAAAAMBAwABAAAAAQAAAAYBAwABAAAAAQAAABEBBAABAAAAAAAAABUBAwABAAAABgAAABYBAwABAAAAAwAAABcBBAABAAAAAAAAABwBAwABAAAAAQAAAFIBAwAFAAAA2gAAAFMBAwAGAAAA5AAAAA6DDAADAAAA8AAAAIKEDAAGAAAACAEAAK+HAwAgAAAAOAEAALGHAgAeAAAAeAEAAAAAAAAIAAgACAAIAAgACAAAAAAAAAAAAAAAAQABAAEAAQABAAEAAAAAAAAAJEAAAAAAAAAkQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAICEHkEAAAAAiCpRQQAAAAAAAAAAAQABAAAABwAABAAAAQABAAEEAAABAAEAAgSxhxYAAAABCLGHBwAWAAYIAAABAI4jAAwAAAEAaX8EDAAAAQApI1dHUyA4NCAvIFVUTSB6b25lIDE3TnxXR1MgODR8AAMFBwkLDQMFBwkLDQMFBwkLDQMFBwkLDQMFBwkLDQMFBwkLDQMFBwkLDQMFBwkLDQMFBwkLDREAAAEDAAEAAAADAAAAAQEDAAEAAAADAAAAAgEDAAYAAACeAgAAAwEDAAEAAAABAAAABgEDAAEAAAABAAAAEQEEAAEAAACWAQAAFQEDAAEAAAAGAAAAFgEDAAEAAAADAAAAFwEEAAEAAAA2AAAAHAEDAAEAAAABAAAAUgEDAAUAAACqAgAAUwEDAAYAAAC0AgAADoMMAAMAAADAAgAAgoQMAAYAAADYAgAAr4cDACAAAAAIAwAAsYcCAB4AAABIAwAAgKQCAEkAAABmAwAAAAAAAAgACAAIAAgACAAIAAAAAAAAAAAAAAABAAEAAQABAAEAAQAAAAAAAAAkQAAAAAAAACRAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgIQeQQAAAACIKlFBAAAAAAAAAAABAAEAAAAHAAAEAAABAAEAAQQAAAEAAQACBLGHFgAAAAEIsYcHABYABggAAAEAjiMADAAAAQBpfwQMAAABACkjV0dTIDg0IC8gVVRNIHpvbmUgMTdOfFdHUyA4NHwAPEdEQUxNZXRhZGF0YT4KICA8SXRlbSBuYW1lPSJURVJSQUlOX1VOSVQiPmluZGV4PC9JdGVtPgo8L0dEQUxNZXRhZGF0YT4KAA==';
 test('dated multiband cube produces real trend raster and export',async({page})=>{
@@ -19,5 +19,8 @@ test('dated multiband cube produces real trend raster and export',async({page})=
  await expect(d.getByAltText('Computed spatiotemporal raster')).toBeVisible();
  const download=page.waitForEvent('download');await d.getByRole('button',{name:'GeoTIFF',exact:true}).click();expect((await download).suggestedFilename()).toBe('series_slope.tif');
  await d.getByRole('button',{name:'Show space-time raster on map'}).click();await expect(d).not.toBeVisible();
+ await expect(page.getByLabel('Interactive geospatial map')).toHaveAttribute('data-terrain-raster-count','1');
+ await openProjectDrawer(page,'layers');
  await expect(page.getByLabel('Spatiotemporal result layer')).toBeVisible();
+ await expect(page.getByLabel('Spatiotemporal result layer')).toBeChecked();
 });
