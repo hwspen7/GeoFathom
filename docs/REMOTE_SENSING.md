@@ -74,3 +74,6 @@ The published real-scene downloader uses the Zenodo record-file content API and 
 
 ## Managed variable-axis disk cubes
 The 14 variable-date methods and three local hyperspectral absorption methods also accept disk jobs with 6–64 ordered acquisition times or wavelengths, dynamic role binding and per-acquisition quality masks. The scheduler shrinks actual spatial windows to bound cube memory and quadratic change-point work. Temporal missingness is preserved rather than dropping every incomplete pixel. Global endmember extraction remains a whole-population method. Each local cube method has a mandatory tiled-versus-inline QA and missingness regression.
+
+## Explicit product-band suggestions
+The workbench recognizes official Landsat 8/9 Collection 2 Level-2 single-band filenames and Sentinel-2 tile/time/band/resolution filenames. Suggestions require one unique scene and one file per requested role, distinguish B08 and B8A, map QA_PIXEL/QA_RADSAT/SCL, and reject ambiguities. Users must review physical calibration and resolution; filenames alone do not establish Sentinel reflectance scale/offset or that exported Landsat values are original DN. No automatic cross-acquisition matching is performed. Sources: https://www.usgs.gov/faqs/how-do-i-use-a-scale-factor-landsat-level-2-science-products and Copernicus Sentinel-2 Product Specification.
