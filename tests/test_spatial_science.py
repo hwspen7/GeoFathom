@@ -86,7 +86,7 @@ def test_vector_metric_oracles(kind):
         assert all(box(X,Y-100,X+100,Y).covers(transform(LOCAL,shape(f['geometry']))) for f in result['features']['features'])
         assert sum(f['properties']['area_weight_m2'] for f in result['features']['features'])==pytest.approx(10000,rel=1e-7)
 
-@pytest.mark.parametrize('kind,expected',[('raster_sum',3*Z),('raster_difference',-Z),('raster_ratio',np.full_like(Z,.5)),('raster_mean',1.5*Z),('raster_sd',.5*Z),('raster_min',Z),('raster_max',2*Z)])
+@pytest.mark.parametrize('kind,expected',[('raster_sum',3*Z),('raster_difference',-Z),('raster_ratio',np.full_like(Z,.5)),('raster_mean',1.5*Z),('raster_sd',.5*Z),('raster_min',Z),('raster_max',2*Z)],ids=['raster_sum','raster_difference','raster_ratio','raster_mean','raster_sd','raster_min','raster_max'])
 def test_cell_arithmetic_oracles(kind,expected):
     result=run(kind,rasters=[raster(),raster(2*Z)])
     out,aff=result_grid(result)
@@ -199,14 +199,17 @@ def test_contract_count_and_invalid_input_rejections():
     assert r.status_code==200 and r.json()['receipt']['metrics']['mean']==0
 
 
-def test_explicit_resampling_and_class_breaks():
-    z,aff=result_grid(run('resample_grid',rasters=[raster(),raster(Z,x=X+10)]))
-    assert np.isnan(z[:,0]).all()
-    np.testing.assert_allclose(z[:,1:],Z[:,:3]);assert aff==from_origin(X,Y,10,10)
-    z,_=result_grid(run('reclassify',rasters=[raster()],breaks=[1,5,9,16]))
-    np.testing.assert_array_equal(z,np.array([[0]*4,[1]*4,[2]*4,[2]*4]))
-    response=TestClient(app).post('/analysis/science/run',json={'operation':'reclassify','rasters':[raster()],'breaks':[1,1,2]})
-    assert response.status_code==422
+@pytest.mark.parametrize('kind',['resample_grid','reclassify'])
+def test_explicit_resampling_and_class_breaks(kind):
+    if kind=='resample_grid':
+        z,aff=result_grid(run(kind,rasters=[raster(),raster(Z,x=X+10)]))
+        assert np.isnan(z[:,0]).all()
+        np.testing.assert_allclose(z[:,1:],Z[:,:3]);assert aff==from_origin(X,Y,10,10)
+    else:
+        z,_=result_grid(run(kind,rasters=[raster()],breaks=[1,5,9,16]))
+        np.testing.assert_array_equal(z,np.array([[0]*4,[1]*4,[2]*4,[2]*4]))
+        response=TestClient(app).post('/analysis/science/run',json={'operation':kind,'rasters':[raster()],'breaks':[1,1,2]})
+        assert response.status_code==422
 
 
 @pytest.mark.parametrize('kind',['local_moran','getis_ord_gi_star'])
@@ -221,3 +224,49 @@ def test_local_statistics_and_multiplicity(kind):
     assert np.isfinite(p).all() and np.all((p>=.01)&(p<=1)) and np.all(q>=p-1e-12)
     assert r['preview']['png'].startswith('data:image/png;base64,')
     assert r['preview']['corners'][0][1]>r['preview']['corners'][3][1]
+
+
+def test_spatial_gdal_cli_alignment_reference(tmp_path):
+    import shutil,subprocess,os
+    executable=shutil.which('gdalwarp')
+    if executable is None:
+        if os.environ.get('GEOFATHOM_REQUIRE_SPATIAL_GDAL')=='1':pytest.fail('GDAL CLI is required for scientific acceptance.')
+        pytest.skip('GDAL CLI not installed.')
+    import rasterio
+    src=tmp_path/'input.tif';dst=tmp_path/'reference.tif'
+    input_raster=raster(Z,x=X+10);src.write_bytes(base64.b64decode(input_raster['data']))
+    call=subprocess.run([executable,'-overwrite','-t_srs',CRS,'-te',str(X),str(Y-40),str(X+40),str(Y),'-ts','4','4',
+                         '-r','near','-srcnodata','nan','-dstnodata','nan','-ot','Float64',str(src),str(dst)],
+                        capture_output=True,text=True,timeout=45)
+    assert call.returncode==0,call.stderr
+    with rasterio.open(dst) as ds:expected=ds.read(1)
+    actual,_=result_grid(run('resample_grid',rasters=[raster(),input_raster]))
+    np.testing.assert_allclose(actual,expected,rtol=0,atol=1e-10,equal_nan=True)
+
+
+def test_spatial_medium_grid_mass_and_mask_conservation():
+    rng=np.random.default_rng(8);z=rng.normal(100,5,(512,512));z[50:80,100:150]=np.nan
+    src=raster(z)
+    result=run('aggregate_sum',rasters=[src],parameters={'factor':4});out,aff=result_grid(result)
+    assert aff.a==40 and out.shape==(128,128)
+    assert np.nansum(out)==pytest.approx(np.nansum(z),rel=1e-12)
+    a,_=result_grid(run('focal_mean',rasters=[src],parameters={'radius':2}))
+    assert np.array_equal(np.isfinite(a),np.isfinite(z))
+    assert a[200,200]==pytest.approx(np.mean(z[198:203,198:203]))
+    result=run('sample_spatial_balanced',rasters=[src],parameters={'count':100,'seed':5})
+    assert result['receipt']['metrics']['weight_sum']==int(np.isfinite(z).sum())
+
+
+def test_spatial_gate_rejects_missing_or_skipped_method_evidence(tmp_path):
+    from scripts.spatial_science_gate import expected_tests,evaluate
+    from xml.etree import ElementTree as ET
+    root=ET.Element('testsuite')
+    names=expected_tests()
+    for method,name in names.items():ET.SubElement(root,'testcase',name=name)
+    for name in ('test_contract_count_and_invalid_input_rejections','test_spatial_gdal_cli_alignment_reference','test_spatial_medium_grid_mass_and_mask_conservation'):
+        ET.SubElement(root,'testcase',name=name)
+    path=tmp_path/'junit.xml';ET.ElementTree(root).write(path)
+    assert evaluate(path)['passed']
+    ET.SubElement(root[0],'skipped')
+    ET.ElementTree(root).write(path)
+    assert not evaluate(path)['passed']
