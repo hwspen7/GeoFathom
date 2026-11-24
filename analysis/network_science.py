@@ -108,16 +108,16 @@ def dijkstra(a,source,limit=math.inf):
         du,u=heappop(queue)
         if du!=d[u]:continue
         for v,c,e in a[u]:
-            z=du+c
+            z=du+c;require(z>du,'Edge costs have excessive dynamic range for floating-point accumulation.')
             if z<=limit and z<d.get(v,math.inf):
                 d[v]=z;prev[v]=(u,e);heappush(queue,(z,v))
     return d,prev
 
 def components(a):
-    r=reverse(a);seen=set();groups={}
+    r=reverse(a);seen=set();groups={};group=0
     for u in sorted(a):
         if u in seen:continue
-        group=len(set(groups.values()))+1;stack=[u];seen.add(u)
+        group+=1;stack=[u];seen.add(u)
         while stack:
             v=stack.pop();groups[v]=group
             for n,_,_ in a[v]+r[v]:
@@ -135,7 +135,7 @@ def brandes(a):
             if du!=d[u]:continue
             order.append(u)
             for v,c,_ in a[u]:
-                z=du+c
+                z=du+c;require(z>du,'Edge costs have excessive dynamic range for floating-point accumulation.')
                 if z<d.get(v,math.inf):
                     d[v]=z;sigma[v]=sigma[u];pred[v]=[u];heappush(q,(z,v))
                 elif z==d.get(v):sigma[v]+=sigma[u];pred[v].append(u)
@@ -261,7 +261,7 @@ def execute(body):
         cols=["edge","mean","maximum","coverage","samples"]
         for e in g.edges:
             m,z,c,k=exposure[e.id];rows.append([e.id,m,z,c,k]);features.append(edge_feature(e,mean=m,maximum=z,coverage=c))
-        plot("Edge exposure and sample coverage","basic_scatter","coverage","mean")
+        if any(r[1] is not None for r in rows):plot("Edge exposure and sample coverage","basic_scatter","coverage","mean",values=(["coverage","mean"],[[r[3],r[1]] for r in rows if r[1] is not None]))
     else:
         require(origins and destinations,"Choose origins and destinations.");require(len(origins)*len(destinations)<=10000,"OD table exceeds 10,000 pairs.")
         budget(len(origins)*(2 if kind=="scenario_impact" else 1))
@@ -286,7 +286,7 @@ def execute(body):
             cols=["origin","destination","cost"]
             rows=[[s,t,ds[s].get(t)] for s in origins for t in destinations]
             metrics={"reachable_pairs":sum(r[-1] is not None for r in rows),"unreachable_pairs":sum(r[-1] is None for r in rows)}
-            if metrics["reachable_pairs"]:plot("OD cost distribution","basic_histogram","cost","cost",values=(["cost"],[[r[-1]] for r in rows if r[-1] is not None]))
+            if metrics["reachable_pairs"]:plot("OD cost distribution","normal_fit","cost","cost",values=(["cost"],[[r[-1]] for r in rows if r[-1] is not None]))
         elif kind=="nearest_facility":
             cols=["origin","facility","cost"]
             for s in origins:

@@ -1273,3 +1273,9 @@ export async function downloadRemoteDiskJob(projectId:string,id:string):Promise<
 export function readRemoteSceneCrop(body:{collection:'sentinel-2-l2a'|'sentinel-2-c1-l2a';item_id:string;bbox:[number,number,number,number];roles:string[]}):Promise<{bands:Array<RemoteSource&{role:string;unit:string;shape:number[];transform:number[];crs:string}>;warning:string}>{
  return request('/analysis/remote-sensing/scene-crop',{method:'POST',headers:{'Content-Type':'application/json','X-GeoFathom-Local-Import':'1'},body:JSON.stringify(body)});
 }
+
+export interface NetworkMethod {id:string;title:string;assumption:string}
+export interface NetworkScienceInput {operation:string;network:GeoJSON.FeatureCollection;cost_field:string;cost_unit:string;origins:string[];destinations:string[];demand:Record<string,number>;supply:Record<string,number>;threshold:number;beta:number;closed_edges:string[];multipliers:Record<string,number>;raster?:{data:string;band:number};spacing_m:number;minimum_coverage:number;hazard_threshold:number}
+export interface NetworkScienceResult {operation:string;columns:string[];rows:Array<Array<string|number|null>>;csv:string;features:GeoJSON.FeatureCollection;figures:SpatialFigureSource[];receipt:Record<string,unknown>&{metrics:Record<string,unknown>;nodes:number;edges:number}}
+export function getNetworkScienceCatalog(signal?:AbortSignal):Promise<{operations:NetworkMethod[]}>{return request('/analysis/network-science/catalog',{signal});}
+export function runNetworkScience(body:NetworkScienceInput,signal?:AbortSignal):Promise<NetworkScienceResult>{return request('/analysis/network-science/run',{method:'POST',signal,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});}

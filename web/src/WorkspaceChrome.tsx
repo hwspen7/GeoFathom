@@ -11,6 +11,7 @@ export const WORKSPACE_MODULES:readonly WorkspaceModule[]=[
   {id:'tools-spatial',label:'Analysis',description:'Spatial processing'},
   {id:'tools-terrain',label:'Terrain',description:'Elevation and hydrology'},
   {id:'tools-spatial-science',label:'Spatial Analysis',description:'Spatial scientific computing and research figures'},
+  {id:'tools-network-science',label:'Network Analysis',description:'Directed networks, accessibility and raster exposure research'},
   {id:'tools-remote-sensing',label:'Remote Sensing',description:'Calibrated spectral, thermal, radar and temporal research'},
   {id:'tools-raster',label:'Raster / AI',description:'Imagery and raster analysis'},
   {id:'tools-style',label:'Cartography',description:'Map layout and labels'},
