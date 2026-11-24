@@ -47,7 +47,22 @@ DUAL_COV=(('c11','power'),('c22','power'),('c12_real','signed_power'),('c12_imag
 BRDF_P=(p('solar_zenith','Source solar zenith',35,0,80),p('view_zenith','Source view zenith',10,0,80),p('relative_azimuth','Source relative azimuth',90,0,360),p('target_solar_zenith','Target solar zenith',35,0,80),p('target_view_zenith','Target view zenith',0,0,80),p('target_relative_azimuth','Target relative azimuth',0,0,360),p('min_model','Minimum modeled reflectance',.001,1e-8,1))
 CLOUD_CV=(p('block_m','Block width (m)',100,1,100000),p('folds','Spatial folds',5,3,10,True),p('buffer_blocks','Exclusion buffer (blocks)',0,0,1,True),p('iterations','Boosting iterations',100,10,200,True),p('leaves','Maximum leaves',15,3,31,True))
 PHASE_P=(p('reference_row','Reference pixel row (zero-based)',0,0,2000000,True),p('reference_col','Reference pixel column (zero-based)',0,0,2000000,True),p('reference_phase','Known reference phase (rad)',0,-1e6,1e6),p('min_coherence','Minimum coherence',.3,.001,1),p('max_iterations','Maximum solver iterations',2000,100,5000,True))
+JOINT_IDS={'joint_lai','joint_cab','joint_lai_sd','joint_cab_sd','joint_parameter_correlation','joint_effective_hypotheses'}
+LUT_IDS|=JOINT_IDS
+JOINT_P=LUT_SD+(p('band_correlation','Common band error correlation',0,-.32,.95),)
+TWO_ANCHOR=refl('fine_before','coarse_before','fine_after','coarse_after','coarse_target')
+TWO_P=(p('block_cells','Coarse block width in fine cells',2,2,32,True),p('radius','Neighborhood radius',2,1,8,True),p('spectral_sd','Spectral similarity SD',.1,.001,1),p('spatial_sd','Spatial weight SD',2,.1,20),p('target_fraction','Relative target time',.5,.001,.999))
 METHODS=(
+m('joint_lai','Biophysical','Joint Bayesian LAI posterior mean',SPECTRUM,'m2/m2','Joint LAI/chlorophyll spectral library and correlated Gaussian errors.',JOINT_P),
+m('joint_cab','Biophysical','Joint Bayesian chlorophyll posterior mean',SPECTRUM,'ug/cm2','Joint LAI/Cab posterior marginal mean.',JOINT_P),
+m('joint_lai_sd','Biophysical','Joint retrieval LAI posterior SD',SPECTRUM,'m2/m2','Conditional marginal uncertainty.',JOINT_P),
+m('joint_cab_sd','Biophysical','Joint retrieval chlorophyll posterior SD',SPECTRUM,'ug/cm2','Conditional marginal uncertainty.',JOINT_P),
+m('joint_parameter_correlation','Biophysical','Posterior LAI–chlorophyll correlation',SPECTRUM,'index','Per-pixel posterior parameter tradeoff diagnostic.',JOINT_P),
+m('joint_effective_hypotheses','Biophysical','Effective posterior library hypotheses',SPECTRUM,'count','Inverse concentration of discrete posterior masses; depends on library discretization.',JOINT_P),
+m('fusion_two_anchor','Fusion','Two-anchor support-constrained temporal fusion',TWO_ANCHOR,'reflectance','Bracketing reference pairs, exact coarse support constraint; not ESTARFM.',TWO_P),
+m('fusion_anchor_disagreement','Fusion','Two-anchor fusion disagreement',TWO_ANCHOR,'reflectance','Absolute difference between independent anchor predictions; not calibrated uncertainty.',TWO_P),
+m('cloud_calibrated_probability','Quality','Spatially calibrated cloud probability',refl('blue','green','red','nir','swir1','swir2')+(('training','class'),),'fraction','Independent outer validation and inner temperature calibration; user supplied labels.',CLOUD_CV),
+m('shadow_calibrated_probability','Quality','Spatially calibrated shadow probability',refl('blue','green','red','nir','swir1','swir2')+(('training','class'),),'fraction','Independent outer validation and inner temperature calibration; user supplied labels.',CLOUD_CV),
 m('insar_phase_wls','Radar','Reference-anchored weighted phase reconstruction',(('phase','wrapped_phase'),('coherence','fraction')),'radian','Connected coherent phase gradients; weighted sparse least-squares, anchored reference; residuals may indicate inconsistency.',PHASE_P),
 m('insar_relative_range','Radar','Conditional relative radar line-of-sight range',(('phase','wrapped_phase'),('coherence','fraction')),'m','Reference-relative WLS phase scaled by wavelength/(4π); external orbit/topography/atmosphere corrections and sign convention required.',PHASE_P+(p('wavelength_m','Radar wavelength (m)',.055465,.001,10),p('range_sign','Phase-to-range sign (+1 or -1)',1,-1,1,True))),
 m('sar_dual_entropy','Radar','Dual-pol covariance entropy',DUAL_COV,'fraction','Normalized two-eigenvalue entropy of a calibrated Hermitian covariance; not quad-pol H/A/alpha.'),
@@ -202,4 +217,4 @@ assert WINDOWED_IDS<=set(BY_ID)
 def catalog():
     return [{'id':x.id,'group':x.group,'title':x.title,'roles':[{'id':r,'quantity':q} for r,q in x.roles],
              'parameters':[dict(zip(('name','label','default','minimum','maximum','integer'),v)) for v in x.parameters],
-             'unit':x.unit,'assumption':x.assumption,'variable_series':x.id in SERIES_IDS or x.id in HYPER_IDS,'axis':'wavelength' if x.id in HYPER_IDS else 'time','windowed':x.id in WINDOWED_IDS,'library':x.id in LUT_IDS} for x in METHODS]
+             'unit':x.unit,'assumption':x.assumption,'variable_series':x.id in SERIES_IDS or x.id in HYPER_IDS,'axis':'wavelength' if x.id in HYPER_IDS else 'time','windowed':x.id in WINDOWED_IDS,'library':x.id in LUT_IDS,'joint_library':x.id in JOINT_IDS} for x in METHODS]

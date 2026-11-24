@@ -189,7 +189,7 @@ def test_remote_invalid_inputs_and_recovery():
         response=client.post('/analysis/remote-sensing/run',json=bad);assert response.status_code==422,response.text
     response=client.post('/analysis/remote-sensing/run',json=good);assert response.status_code==200,response.text
     np.testing.assert_allclose(grid(response.json()),.5)
-    assert client.get('/analysis/remote-sensing/catalog').json()['operation_count']==len(BY_ID)==129
+    assert client.get('/analysis/remote-sensing/catalog').json()['operation_count']==len(BY_ID)==139
 
 def test_temporal_independent_quality_masks():
     # Cloud at one date does not erase the other valid acquisitions.
@@ -1051,3 +1051,35 @@ def test_prosail_library_response_integration():
         simulate({**config,'samples':[config['samples'][0]]*2},model)
     bad={**responses,'blue':[[470,1],[480,1],[490,0]]}
     with pytest.raises(ValueError,match='zero'):simulate({**config,'responses':bad},model)
+
+
+@pytest.mark.parametrize('kind',['joint_lai','joint_cab','joint_lai_sd','joint_cab_sd','joint_parameter_correlation','joint_effective_hypotheses','fusion_two_anchor','fusion_anchor_disagreement','cloud_calibrated_probability','shadow_calibrated_probability'])
+def test_joint_research_reference(kind):
+    if kind.startswith('joint_'):
+        lib=np.array([[1,20,1,.2,.3,.4,.5],[1,60,2,.3,.4,.5,.6],[4,20,3,.4,.5,.6,.7],[4,60,1,.5,.6,.7,.8]])
+        x=np.array([.34,.44,.54,.64]);a={r:constant(z) for r,z in zip(('blue','green','red','nir'),x)}
+        p={r+'_sd':.15 for r in a};p.update(band_correlation=.3,max_chi2=100)
+        c=.15**2*(.7*np.eye(4)+.3*np.ones((4,4)));d=lib[:,3:]-x
+        weight=lib[:,2]*np.exp(-.5*np.einsum('ni,ij,nj->n',d,np.linalg.inv(c),d));weight/=weight.sum()
+        mean=weight@lib[:,:2];center=lib[:,:2]-mean;cov=(center*weight[:,None]).T@center
+        expected={'joint_lai':mean[0],'joint_cab':mean[1],'joint_lai_sd':np.sqrt(cov[0,0]),'joint_cab_sd':np.sqrt(cov[1,1]),'joint_parameter_correlation':cov[0,1]/np.sqrt(cov[0,0]*cov[1,1]),'joint_effective_hypotheses':1/(weight@weight)}[kind]
+        r=run(kind,a,p,library=lib.tolist());np.testing.assert_allclose(grid(r),expected,atol=1e-12)
+        assert sum(q[-1] for q in r['receipt']['metrics']['joint_posterior'])==pytest.approx(1)
+    elif kind.startswith('fusion_'):
+        fine=np.tile([[.2,.3],[.4,.5]],(3,3));after=np.tile([[.4,.5],[.6,.7]],(3,3));target=np.full(fine.shape,.45)
+        a={'fine_before':fine,'coarse_before':np.full(fine.shape,.35),'fine_after':after,'coarse_after':np.full(fine.shape,.55),'coarse_target':target}
+        r=run(kind,a);np.testing.assert_allclose(grid(r),fine+.1 if kind=='fusion_two_anchor' else 0,atol=1e-12)
+        assert r['receipt']['metrics']['maximum_coarse_mean_error']<1e-12
+    else:
+        rng=np.random.default_rng(9);row,col=np.indices((30,30));label=1+row%3
+        a={r:.15+.25*(label-1)+rng.normal(0,.015,label.shape) for r in ('blue','green','red','nir','swir1','swir2')};a['training']=label
+        r=run(kind,a,{'block_m':40,'iterations':40});m=r['receipt']['metrics']
+        assert m['oof_cells']==900 and sum(q[2] for q in m['reliability'])==900
+        assert m['roc_auc']>.98 and m['binary_brier']<.05
+        assert all(q[1]+q[2]+q[3]==900 for q in r['rows'])
+        assert all(0<=q<=1 for q in grid(r).ravel())
+        # Outer labels can affect scores, not the temperature learned for that fold.
+        hold=(col//4+2*(row//4))%5==0
+        a['training']=np.where(hold,1+label%3,label)
+        changed=run(kind,a,{'block_m':40,'iterations':40})
+        assert changed['rows'][0][4]==pytest.approx(r['rows'][0][4])

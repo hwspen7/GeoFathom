@@ -14,10 +14,11 @@ from terrain.studio_data import Grid,FigureInputError
 from analysis.science_raster import require
 from analysis.science_routes import raster_product,raster_preview,csv_output
 from analysis.science_figures import figure_sources,csv_text
-from .remote_catalog import BY_ID,catalog,SERIES_IDS,HYPER_IDS,LUT_IDS,GLOBAL_HYPER_IDS
+from .remote_catalog import BY_ID,catalog,SERIES_IDS,HYPER_IDS,LUT_IDS,GLOBAL_HYPER_IDS,JOINT_IDS
 from .remote_spectral_inference import spectral_covariance,matched_filter,library_retrieval
 from .remote_advanced_models import dualpol,brdf,support_fusion,cloud_model
 from .remote_phase import reconstruct
+from .remote_joint_models import joint_retrieval,two_anchor,calibrated_cloud
 from .remote_validation import aggregate_nested,continuous_reference,binary_reference
 from .remote_band import read_calibrated
 from .remote_fusion import fusion,canopy,unsupervised
@@ -62,7 +63,7 @@ class RemoteInput(BaseModel):
     quality:list[Quality]=Field(default_factory=list,max_length=64)
     parameters:dict[str,float]=Field(default_factory=dict,max_length=12)
     times:list[float]=Field(default_factory=list,max_length=64)
-    library:list[tuple[float,float,float,float,float,float]]=Field(default_factory=list,max_length=2048)
+    library:list[tuple[float,...]]=Field(default_factory=list,max_length=2048)
 
 def read_band(source,binding,quantity,raw,sha):
     with MemoryFile(raw) as mem,mem.open() as ds:
@@ -178,10 +179,15 @@ def execute(body):
     elif kind in {'spatial_rf_cv','spatial_svm_cv','spatial_lda_cv'}:out,headers,rows,meta=blocked_classifier(v,first,params,kind)
     elif kind=='spatial_nested_svm':out,headers,rows,meta=nested_svm(v,first,params)
     elif kind=='spatial_lda':out,headers,rows,meta=spatial_classifier(v,first,params)
+    elif kind in {'fusion_two_anchor','fusion_anchor_disagreement'}:
+        require(first.is_meter,'Support fusion requires a projected metre grid.')
+        out,headers,rows,meta=two_anchor(v,params,kind)
+    elif kind in {'cloud_calibrated_probability','shadow_calibrated_probability'}:out,headers,rows,meta=calibrated_cloud(v,first,params,kind)
     elif kind in LUT_IDS:
-        out,meta=library_retrieval(v,body.library,params,kind)
+        if kind in JOINT_IDS:out,headers,rows,meta=joint_retrieval(v,body.library,params,kind)
+        else:out,meta=library_retrieval(v,body.library,params,kind)
         meta['library_sha256']=hashlib.sha256(json.dumps(body.library,separators=(',',':'),allow_nan=False).encode()).hexdigest()
-        meta['library_inputs']={'columns':['lai','prior','blue','green','red','nir'],'rows':body.library}
+        meta['library_inputs']={'columns':(['lai','cab','prior','blue','green','red','nir'] if kind in JOINT_IDS else ['lai','prior','blue','green','red','nir']),'rows':body.library}
     elif kind=='spectral_matched_filter':out,meta=matched_filter(v,params)
     elif kind in GLOBAL_HYPER_IDS:out,headers,rows,meta=spectral_covariance(np.stack(list(v.values())),body.times,kind,params)
     elif kind in HYPER_IDS:
@@ -277,6 +283,17 @@ def execute(body):
     if kind in {'cloud_probability_model','shadow_probability_model'}:
         add('Spatial cloud probability Brier score','basic_column',{'x':'fold','y':'brier'})
         add('Spatial cloud probability log loss','basic_column',{'x':'fold','y':'log_loss'})
+    if kind in JOINT_IDS:
+        for label in ('LAI','Cab'):
+            add(label+' scene-average posterior mass','basic_column',{'x':'value','y':'posterior_mass'},csv_text(headers,[r for r in rows if r[0]==label]))
+        add('Joint LAI and chlorophyll posterior','remote_joint_posterior',{'x':'lai','y':'cab','z':'mass'},csv_text(['lai','cab','mass'],meta['joint_posterior']))
+    if kind in {'fusion_two_anchor','fusion_anchor_disagreement'}:
+        add('Signed anchor disagreement quantiles','basic_line',{'x':'quantile','y':'anchor_difference'})
+    if kind in {'cloud_calibrated_probability','shadow_calibrated_probability'}:
+        add('Outer-fold probability reliability','remote_reliability',{'x':'predicted','y':'observed','z':'cells'},csv_text(['predicted','observed','cells'],meta['reliability']))
+        add('Outer-fold ROC curve','remote_roc',{'x':'fpr','y':'tpr'},csv_text(['fpr','tpr'],meta['roc']))
+        add('Outer-fold confusion matrix','basic_table_heatmap',{'x':'reference','columns':['clear','cloud','shadow']},csv_text(['reference','clear','cloud','shadow'],[[label,*r] for label,r in zip(('clear','cloud','shadow'),meta['oof_confusion_matrix'])]))
+        add('Raw versus calibrated fold log loss','multi_line',{'x':'fold','columns':['raw_log_loss','calibrated_log_loss']})
     if kind=='spectral_mnf':add('MNF signal to noise variance ratio','basic_column',{'x':'component','y':'variance_ratio'})
     if kind=='pca':add('PCA explained variance','basic_column',{'x':'component','y':'explained_fraction'})
     if kind=='transition_matrix':add('Transition area by class pair','basic_column',{'x':'transition','y':'area_m2'},csv_text(['transition','area_m2'],[[str(a)+' → '+str(b),area] for a,b,_,area,_ in rows]) ) if len(rows)<=50 else None

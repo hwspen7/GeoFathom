@@ -10,6 +10,7 @@ from imagery.remote_catalog import BY_ID,WINDOWED_IDS,WINDOWED_CUBES
 
 def expected_tests():
     groups={
+        'test_joint_research_reference':'joint_lai joint_cab joint_lai_sd joint_cab_sd joint_parameter_correlation joint_effective_hypotheses fusion_two_anchor fusion_anchor_disagreement cloud_calibrated_probability shadow_calibrated_probability',
         'test_anchored_phase_reference':'insar_phase_wls insar_relative_range',
         'test_advanced_analysis_ready_reference':'sar_dual_entropy sar_dual_purity sar_dual_minor_fraction brdf_ross_li fusion_support_temporal cloud_probability_model shadow_probability_model',
         'test_spectral_inference_reference':'spectral_rx spectral_mnf spectral_matched_filter lai_library_mean lai_library_sd lai_library_misfit',

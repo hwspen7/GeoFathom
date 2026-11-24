@@ -32,7 +32,7 @@ def response_weights(response):
     if not np.isfinite(area) or area<=0:raise ValueError('Nonzero finite response integral required.')
     return axis,weights/area
 
-def simulate(config,model):
+def simulate(config,model,joint=False):
     if set(config)!={'sensor','responses','samples'} or not isinstance(config['sensor'],str) or not config['sensor'].strip():
         raise ValueError('Provide explicit sensor, response curves and parameter samples.')
     if set(config['responses'])!=set(ROLES):raise ValueError('Provide blue, green, red and NIR sensor-response curves.')
@@ -53,21 +53,22 @@ def simulate(config,model):
             raise ValueError('Invalid PROSAIL directional reflectance spectrum.')
         values=[float(np.trapezoid(np.interp(axis,WAVELENGTH,spectrum)*weights,axis)) for axis,weights in responses]
         if not all(0<=x<=1 for x in values):raise ValueError('Band-integrated spectrum outside library reflectance range [0,1].')
-        out.append([sample['lai'],sample['prior'],*values])
+        out.append([sample['lai'],*([sample['cab']] if joint else []),sample['prior'],*values])
     if len({row[0] for row in out})<2:raise ValueError('Library requires at least two distinct LAI values.')
+    if joint and len({row[1] for row in out})<2:raise ValueError('Joint library requires at least two distinct Cab values.')
     return out
 
 def main():
-    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('config',type=Path);parser.add_argument('output',type=Path)
+    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('config',type=Path);parser.add_argument('output',type=Path);parser.add_argument('--joint',action='store_true')
     args=parser.parse_args()
     if importlib.metadata.version('prosail')!='2.0.5':raise RuntimeError('Use the explicitly supported prosail==2.0.5 engine.')
     import prosail
-    raw=args.config.read_bytes();config=json.loads(raw);rows=simulate(config,prosail.run_prosail)
+    raw=args.config.read_bytes();config=json.loads(raw);rows=simulate(config,prosail.run_prosail,joint=args.joint)
     receipt=args.output.with_suffix(args.output.suffix+'.json')
     if args.output.exists() or receipt.exists():raise FileExistsError('Choose new output and receipt paths.')
     with args.output.open('x',newline='',encoding='utf-8') as stream:csv.writer(stream).writerows(rows)
     receipt.write_text(json.dumps({'engine':'prosail 2.0.5','model':'PROSPECT-D + 4SAIL SDR','sensor':config['sensor'],
         'config_sha256':hashlib.sha256(raw).hexdigest(),'library_csv_sha256':hashlib.sha256(args.output.read_bytes()).hexdigest(),
-        'samples':len(rows),'columns':['lai','prior',*ROLES],'scope':'Conditional forward simulation, no empirical validation.'},indent=2),encoding='utf-8')
+        'samples':len(rows),'columns':['lai',*(['cab'] if args.joint else []),'prior',*ROLES],'scope':'Conditional forward simulation, no empirical validation.'},indent=2),encoding='utf-8')
     return 0
 if __name__=='__main__':raise SystemExit(main())
