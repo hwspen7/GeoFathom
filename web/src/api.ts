@@ -1248,3 +1248,14 @@ export function runSpatialScience(body:SpatialScienceInput,signal?:AbortSignal):
 
 export function getSpatialLayerSource(projectId:string,layerId:string):Promise<GeoJSON.FeatureCollection>{return request('/projects/'+encodeURIComponent(projectId)+'/spatial-science/source/'+encodeURIComponent(layerId));}
 export function getSpatialRasterSource(imageId:string):Promise<StudioRaster>{return request('/imagery/'+encodeURIComponent(imageId)+'/spatial-science/source');}
+
+
+export type RemoteEncoding='metadata'|'raw'|'landsat_sr'|'landsat_st'|'custom';
+export type RemoteQualityScheme='binary'|'sentinel_clear'|'landsat_clear'|'landsat_unsaturated';
+export interface RemoteSource {name:string;data:string}
+export interface RemoteBinding {source:number;band:number;encoding:RemoteEncoding;scale:number;offset:number;unit:string}
+export interface RemoteQuality {source:number;band:number;scheme:RemoteQualityScheme;roles:string[]}
+export interface RemoteMethod {id:string;group:string;title:string;roles:Array<{id:string;quantity:string}>;parameters:SpatialScienceMethod['parameters'];unit:string;assumption:string}
+export interface RemoteInput {operation:string;sources:RemoteSource[];bindings:Record<string,RemoteBinding>;quality:RemoteQuality[];parameters:Record<string,number>}
+export function getRemoteCatalog(signal?:AbortSignal):Promise<{operations:RemoteMethod[];operation_count:number}>{return request('/analysis/remote-sensing/catalog',{signal});}
+export function runRemoteScience(body:RemoteInput,signal?:AbortSignal):Promise<SpatialScienceResult>{return request('/analysis/remote-sensing/run',{method:'POST',signal,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});}

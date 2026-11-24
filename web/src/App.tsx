@@ -29,6 +29,7 @@ import {WorkspaceModuleBar,WorkspaceCommandPalette,WorkspaceDockHeading,
 import GeometryAnalysis from './GeometryAnalysis';
 import SpatialToolsPanel from './SpatialToolsPanel';
 import SpatialSciencePanel from './SpatialSciencePanel';
+import RemoteSensingPanel from './RemoteSensingPanel';
 import CartographyProPanel from './CartographyProPanel';
 import type {ExternalTile} from './DataServicesPanel';
 import DataWorkbench from './DataWorkbench';
@@ -150,6 +151,8 @@ export default function App() {
   const [spatialResults,setSpatialResults]=useState<GeoJSON.Feature[]>([]);
   const [spatialRaster,setSpatialRaster]=useState<TerrainRasterLayer|null>(null);
   const [spatialVisible,setSpatialVisible]=useState(true);
+  const [remoteRaster,setRemoteRaster]=useState<TerrainRasterLayer|null>(null);
+  const [remoteVisible,setRemoteVisible]=useState(true);
   const [showLayers,setShowLayers]=useState(false);
   // Keep project management, map layers and place discovery on independent fixed pages.
   const [drawerTab,setDrawerTab]=useState<'project'|'layers'|'search'>('project');
@@ -206,7 +209,7 @@ export default function App() {
   const [snapping, setSnapping] = useState(true);
   const [projectWorkspace, setProjectWorkspace] = useState<GeoWorkspace | null>(null);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
-  useEffect(()=>{setSpatialResults([]);setSpatialRaster(null);},[activeProjectId]);
+  useEffect(()=>{setSpatialResults([]);setSpatialRaster(null);setRemoteRaster(null);},[activeProjectId]);
   const [selectedFeatureId, setSelectedFeatureId] = useState<string | null>(null);
   const [splitParts, setSplitParts] = useState<GeoJSON.Geometry[]>([]);
   const [refreshToken,setRefreshToken] = useState(0);
@@ -515,7 +518,7 @@ export default function App() {
       return;
     }
     setShowTools(true);setActiveTool(id);if(id!=='tools-terrain'){setTerrainPicking(false);setTerrainHover(null);}
-    setObjectsOpen(!['tools-terrain','tools-spatial-science'].includes(id));
+    setObjectsOpen(!['tools-terrain','tools-spatial-science','tools-remote-sensing'].includes(id));
     // Tool activation, including keyboard shortcuts, dismisses the transient
     // drawer so it cannot intercept input intended for the operations dock.
     // Its project/search state stays mounted and the selected place is retained.
@@ -1396,6 +1399,7 @@ export default function App() {
             <section className="panel-section gis-basemaps" hidden={drawerTab!=='layers'}>
               <div className="section-heading"><Layers3 size={15}/><span>Map overlays</span></div>
               {(spatialResults.length>0||spatialRaster)&&<label className="gis-check"><input aria-label="Spatial science result layer" type="checkbox" checked={spatialVisible} onChange={e=>setSpatialVisible(e.target.checked)}/> Spatial science results · {spatialResults.length+(spatialRaster?1:0)}</label>}
+              {remoteRaster&&<label className="gis-check"><input aria-label="Remote sensing result layer" type="checkbox" checked={remoteVisible} onChange={e=>setRemoteVisible(e.target.checked)}/> Remote sensing result</label>}
               {(terrainFeatures.length+terrainRasters.length)>0&&<label className="gis-check"><input aria-label="Terrain result layer" type="checkbox" checked={terrainVisible} onChange={e=>setTerrainVisible(e.target.checked)}/> Terrain result · {terrainFeatures.length+terrainRasters.length}</label>}
               {rasterLayers.map(layer=><div key={layer.asset.id} className="raster-layer-row">
                 <label className="gis-check"><input aria-label={'Show raster '+layer.asset.name} type="checkbox" checked={layer.visible}
@@ -1495,7 +1499,7 @@ export default function App() {
             preservePlaceSelection={!!selectedPlace}
             pinnedPlaces={pinnedPlaces.map(place=>({id:place.id,geometry:visibleGeometry(place)}))}
             onSelectPinnedPlace={id=>{const place=pinnedPlaces.find(p=>p.id===id);if(place)void selectPlace(place);}}
-            spatialResults={spatialVisible?spatialResults:[]} terrainResults={[...(terrainVisible?terrainFeatures:[]),...(terrainProfileLine?[{type:'Feature' as const,geometry:terrainProfileLine,properties:{name:'Profile measurement line',color:'#d26b2f'}}]:[])]} terrainRasters={[...(terrainVisible?terrainRasters:[]),...(spatialVisible&&spatialRaster?[spatialRaster]:[])]}
+            spatialResults={spatialVisible?spatialResults:[]} terrainResults={[...(terrainVisible?terrainFeatures:[]),...(terrainProfileLine?[{type:'Feature' as const,geometry:terrainProfileLine,properties:{name:'Profile measurement line',color:'#d26b2f'}}]:[])]} terrainRasters={[...(terrainVisible?terrainRasters:[]),...(spatialVisible&&spatialRaster?[spatialRaster]:[]),...(remoteVisible&&remoteRaster?[remoteRaster]:[])]}
             terrainFetchTarget={showTools&&activeTool==='tools-terrain'?terrainFetchTarget:null}
             onTerrainPick={position=>{setTerrainOrigin(position);setTerrainPicking(false);setMessage('Terrain point selected.');}}
             onContextMenu={(x,y)=>setContextMenu({x,y})} onDeselect={deselect}
@@ -1785,7 +1789,7 @@ export default function App() {
                   onClick={()=>setNetworkPage(v=>v+1)}>Next</button>
               </div>}
             </section>,resultsTarget)}
-          {resultsTarget&&!['tools-terrain','tools-spatial-science'].includes(activeTool)&&!(['tools-survey','tools-services'].includes(activeTool)&&(networkAreas?.count??0)>1)&&(geometry||measurement||preview)&&createPortal(<section className="panel-section results-summary">
+          {resultsTarget&&!['tools-terrain','tools-spatial-science','tools-remote-sensing'].includes(activeTool)&&!(['tools-survey','tools-services'].includes(activeTool)&&(networkAreas?.count??0)>1)&&(geometry||measurement||preview)&&createPortal(<section className="panel-section results-summary">
             <div className="section-heading"><Compass size={16} /><span>Selection</span></div>
             <div className="analysis-card">
               
@@ -2092,6 +2096,11 @@ export default function App() {
           <section id="tools-spatial-science" hidden={activeTool!=='tools-spatial-science'} className="panel-section">
             <div className="section-heading"><Layers3 size={16}/><span>Spatial Analysis</span></div>
             <SpatialSciencePanel key={activeProjectId??'no-project'} active={activeTool==='tools-spatial-science'} resultsTarget={resultsTarget} geometry={preview||drawingMode?null:geometry} connected={Boolean(capabilities)} projectId={activeProjectId} layers={projectWorkspace?.layers??[]} assets={rasterLayers.map(l=>l.asset)} terrainProducts={terrainRasters.map(l=>({name:l.title,data:l.raster.geotiff,unit:l.raster.unit??'',band:1}))} onPreview={features=>{if(projectCurrent()){setSpatialResults(features);setSpatialVisible(true);}}} onRasterPreview={layer=>{if(projectCurrent()){setSpatialRaster(layer);setSpatialVisible(true);}}}/>
+          </section>
+
+          <section id="tools-remote-sensing" hidden={activeTool!=='tools-remote-sensing'} className="panel-section">
+            <div className="section-heading"><Layers3 size={16}/><span>Remote Sensing</span></div>
+            <RemoteSensingPanel key={activeProjectId??'no-project'} active={activeTool==='tools-remote-sensing'} connected={Boolean(capabilities)} resultsTarget={resultsTarget} assets={rasterLayers.map(l=>l.asset)} onPreview={layer=>{if(projectCurrent()){setRemoteRaster(layer);setRemoteVisible(true);}}}/>
           </section>
 
           <section id="tools-spatial" hidden={activeTool!=='tools-spatial'} className="panel-section">
