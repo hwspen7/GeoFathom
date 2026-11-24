@@ -56,6 +56,7 @@ RECIPES = (
     ('terrain_surface','Three-dimensional terrain surface','3D','raster',''),
     ('terrain_wireframe','Three-dimensional terrain wireframe','3D','raster',''),
     ('scatter_3d','Three-dimensional point scatter','3D','table','x y z'),
+    ('raster_profile','Aligned raster transect profiles','Terrain','raster','x y'),
 )
 BY_ID = {item[0]:item for item in RECIPES}
 OPTIONS = {
@@ -84,7 +85,7 @@ NOTES = {
     'tornado':'Supply one baseline and low/high experimental response for each parameter; ranked by absolute response span.',
     'sobol':'x = A response, y = B response; selected columns = A with each corresponding B factor substituted. Rows must be aligned independent sample pairs from an appropriate design. Saltelli first-order / Jansen total-order estimators; finite-sample estimates may fall outside [0,1].',
     'morris':'x = trajectory identifier, y = response; selected columns = normalized parameter coordinates in [0,1]. Each ordered trajectory must vary each factor exactly once.',
-    'response_surface':'Requires a complete rectangular design grid. Connects actual evaluations; not a fitted response model.',
+    'response_surface':'Actual design grid; missing evaluations remain masked. Contours and surfaces interpolate visually only within complete cells.',
     'seasonal_cycle':'Regular numeric time steps; period is in samples and first observation is phase 1.',
     'seasonal_anomaly':'Subtracts observed phase mean, not an independently estimated seasonal model.',
     'seasonal_heatmap':'Regular numeric time steps; incomplete final cycle is masked.',
@@ -99,6 +100,7 @@ NOTES = {
     'hypsometric':'Fraction of observed valid area above normalized elevation; requires nonconstant elevations.',
     'terrain_surface':'Regular-grid visualization, decimated only for rendering; no new elevation data.',
     'terrain_wireframe':'Regular-grid visualization, decimated only for rendering.',
+    'raster_profile':'Supply a path coordinate CSV in the exact projected raster CRS. Samples native pixels without interpolation; preserves NoData gaps.',
 }
 def catalog():
     return [{'id':i,'title':t,'family':f,'source':s,'fields':r.split(),

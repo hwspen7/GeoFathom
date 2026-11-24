@@ -46,10 +46,27 @@ class StudioInput(BaseModel):
     height_mm:float=Field(default=125,ge=40,le=250)
     dpi:Literal[120,300,600]=120
     format:Literal['png','pdf','svg','tiff']='png'
+    response_style:Literal['heatmap','filled','contour','surface']='surface'
+    contour_levels:int=Field(default=12,ge=4,le=30)
+    show_values:bool=True
+    show_points:bool=True
+    optimum:Literal['none','min','max']='none'
+    profile_style:Literal['series','overlay','delta','bands']='series'
+    map_style:Literal['continuous','diverging','categorical']='continuous'
+    map_columns:int|None=Field(default=None,ge=1,le=3)
+    map_common_mask:bool=False
+    map_min:float|None=None
+    map_max:float|None=None
+    class_breaks:list[float]=Field(default_factory=list,max_length=25)
+    line_width:float=Field(default=1.3,ge=.4,le=4)
+    legend_position:Literal['best','upper left','upper right','lower left','lower right','center left','center right']='best'
 
     @model_validator(mode='after')
     def validate_budget(self):
         if self.recipe not in BY_ID:raise ValueError('Unknown figure recipe.')
+        if self.class_breaks and (len(self.class_breaks)<2 or any(a>=b for a,b in zip(self.class_breaks,self.class_breaks[1:]))):raise ValueError('Class breaks must be strictly increasing.')
+        if (self.map_min is None)!=(self.map_max is None) or (self.map_min is not None and self.map_min>=self.map_max):raise ValueError('Fixed display range requires increasing minimum and maximum.')
+        if self.recipe=='raster_profile' and not self.csv.strip():raise ValueError('Supply path coordinates.')
         if sum(len(r.data) for r in self.rasters)>48_000_000:raise ValueError('Combined raster payload exceeds limit.')
         if self.width_mm*self.height_mm*(self.dpi/25.4)**2>20_000_000:raise ValueError('Image exceeds 20 megapixels; reduce dimensions or DPI.')
         if any(not c or len(c)>120 for c in self.columns):raise ValueError('Invalid series column.')
@@ -89,4 +106,72 @@ class RasterTableInput(BaseModel):
 async def studio_raster_table(body:RasterTableInput):
     try:return await run_in_threadpool(raster_table,body.rasters,body.limit)
     except (FigureInputError,ValueError,RuntimeError,OSError) as error:
+        raise HTTPException(status_code=422,detail=str(error)) from error
+
+
+class CompositionInput(BaseModel):
+    model_config=ConfigDict(extra='forbid',allow_inf_nan=False)
+    panels:list[StudioInput]=Field(min_length=2,max_length=6)
+    title:str=Field(default='',max_length=200)
+    caption:str=Field(default='',max_length=600)
+    columns:int=Field(default=2,ge=1,le=3)
+    width_mm:float=Field(default=240,ge=120,le=300)
+    height_mm:float=Field(default=180,ge=80,le=300)
+    dpi:Literal[120,300,600]=120
+    format:Literal['png','pdf','svg','tiff']='png'
+    spacing:float=Field(default=.06,ge=.02,le=.2)
+
+    @model_validator(mode='after')
+    def budget(self):
+        if sum(len(p.csv)+sum(len(r.data) for r in p.rasters) for p in self.panels)>64_000_000:
+            raise ValueError('Composition data exceeds payload limit.')
+        if self.width_mm*self.height_mm*(self.dpi/25.4)**2>45_000_000:
+            raise ValueError('Composition exceeds 45 megapixels.')
+        if self.columns>len(self.panels):raise ValueError('Column count exceeds panel count.')
+        if self.width_mm/self.columns<65 or self.height_mm/math.ceil(len(self.panels)/self.columns)<45:
+            raise ValueError('Panels are too small; increase figure dimensions or change layout.')
+        return self
+
+def render_composition(body):
+    import io
+    import textwrap
+    from matplotlib.figure import Figure
+    from matplotlib.backends.backend_agg import FigureCanvasAgg
+    from matplotlib import rc_context
+    from .studio_render import LOCK
+    from .studio_publication import layout_receipt
+    with LOCK,rc_context({'pdf.fonttype':42,'svg.fonttype':'none','font.family':'sans-serif','font.size':9}):
+        fig=Figure(figsize=(body.width_mm/25.4,body.height_mm/25.4),layout='constrained',facecolor='white')
+        FigureCanvasAgg(fig)
+        nrows=math.ceil(len(body.panels)/body.columns)
+        # Subfigures share the parent canvas: plots, ticks and text remain vectors.
+        # Reserve a real caption row rather than drawing across the data panels.
+        if body.caption:
+            gs=fig.add_gridspec(2,1,height_ratios=[1,.10 if len(body.caption)<180 else .19])
+            top=fig.add_subfigure(gs[0]);bottom=fig.add_subplot(gs[1]);bottom.axis('off')
+            bottom.text(.01,.92,textwrap.fill(body.caption,width=max(36,int(body.width_mm/1.4))),ha='left',va='top',transform=bottom.transAxes,fontsize=8)
+        else:top=fig
+        containers=top.subfigures(nrows,body.columns,squeeze=False,wspace=body.spacing,hspace=body.spacing)
+        receipts=[]
+        for i,panel in enumerate(body.panels):
+            _,meta,table=render(panel,container=containers.flat[i],panel_label=f'({chr(97+i)}) ')
+            meta['csv_sha256']=hashlib.sha256(panel.csv.encode()).hexdigest() if panel.csv else None
+            receipts.append({'label':chr(97+i),'metadata':meta,'table':table})
+        if body.title:fig.suptitle(body.title,fontsize=12,fontweight='medium')
+        layout=layout_receipt(fig)
+        buf=io.BytesIO()
+        if body.format=='tiff':fig.savefig(buf,format='tiff',dpi=body.dpi,pil_kwargs={'compression':'tiff_lzw'})
+        else:fig.savefig(buf,format=body.format,dpi=body.dpi)
+        fig.clear()
+        return buf.getvalue(),{'schema':'geofathom-composition-1','layout':layout,'panel_count':len(receipts),'panels':receipts}
+
+@router.post('/compose')
+async def studio_compose(body:CompositionInput):
+    try:
+        payload,metadata=await run_in_threadpool(render_composition,body)
+        json.dumps(metadata,allow_nan=False)
+        return {'figure':base64.b64encode(payload).decode('ascii'),
+                'media_type':{'png':'image/png','pdf':'application/pdf','svg':'image/svg+xml','tiff':'image/tiff'}[body.format],
+                'metadata':metadata,'table':[]}
+    except (FigureInputError,ValueError,OverflowError,RuntimeError,OSError) as error:
         raise HTTPException(status_code=422,detail=str(error)) from error

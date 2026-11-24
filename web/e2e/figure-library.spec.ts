@@ -7,7 +7,7 @@ const API='http://127.0.0.1:8000';
 const tile=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/ZecAAAAASUVORK5CYII=','base64');
 
 test('a real slope result opens the scientific figure library and exports numerical data and publication figures',async({page},testInfo)=>{
- test.setTimeout(180000);
+ test.setTimeout(240000);
  const fixture=JSON.parse(execFileSync('python',['-c',`
 import json,tempfile
 from pathlib import Path
@@ -78,6 +78,7 @@ with tempfile.TemporaryDirectory() as directory:
  await studio.getByRole('button',{name:/Continuous georeferenced map/}).click();
  await studio.getByRole('button',{name:'Render figure'}).click();
  await expect(studio.getByAltText('Continuous georeferenced map preview')).toBeVisible({timeout:30000});
+ await studio.getByRole('button',{name:'Add to composition (0/6)'}).click();
  await studio.getByLabel('Figure category').selectOption('Scenarios');
  await studio.getByRole('button',{name:/Pareto dominance and trade-offs/}).click();
  await studio.getByLabel('Figure CSV data').fill('cost,benefit\n1,1\n2,3\n3,2\n4,5');
@@ -90,6 +91,12 @@ with tempfile.TemporaryDirectory() as directory:
  await studio.getByRole('button',{name:'PDF',exact:true}).click();
  expect((await studioDownload).suggestedFilename()).toBe('geofathom-pareto.pdf');
  await page.screenshot({path:testInfo.outputPath('extended-scientific-figure.png')});
+ await studio.getByRole('button',{name:'Add to composition (1/6)'}).click();
+ await studio.getByRole('button',{name:'Figure composer (2)'}).click();
+ await studio.getByLabel('Composition title').fill('Terrain and tradeoff study');
+ await studio.getByRole('button',{name:'Render composition'}).click();
+ await expect(studio.getByAltText('Publication composition preview')).toBeVisible({timeout:30000});
+ await page.screenshot({path:testInfo.outputPath('publication-composition.png')});
  await studio.getByRole('button',{name:'Close studio'}).click();
  await dialog.getByRole('button',{name:'Close figure library'}).click();
 });

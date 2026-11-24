@@ -2,7 +2,7 @@
 import {cleanup,fireEvent,render,screen,waitFor} from '@testing-library/react';
 import {afterEach,expect,it,vi} from 'vitest';
 import ScientificFigureStudio,{studioHeader} from './ScientificFigureStudio';
-const mocked=vi.hoisted(()=>({getStudioCatalog:vi.fn(),renderStudio:vi.fn()}));
+const mocked=vi.hoisted(()=>({getStudioCatalog:vi.fn(),renderStudio:vi.fn(),composeStudio:vi.fn()}));
 vi.mock('./api',()=>mocked);
 afterEach(()=>{cleanup();vi.clearAllMocks();});
 it('binds recorded numeric data, displays the server-rendered figure and preserves provenance',async()=>{
@@ -30,4 +30,21 @@ it('reads quoted headers and keeps controls unavailable until required bindings 
  fireEvent.change(screen.getByLabelText('Figure field y'),{target:{value:'value'}});
  fireEvent.click(screen.getByRole('button',{name:'Render figure'}));
  await waitFor(()=>expect(screen.getByRole('alert').textContent).toContain('Invalid numerical observations'));
+});
+
+it('collects two actual render receipts and composes them without image stitching',async()=>{
+ mocked.getStudioCatalog.mockResolvedValue({recipes:[{id:'pareto',title:'Pareto dominance',family:'Scenarios',source:'table',fields:['x','y'],note:'',minimum_rasters:1,option:null}]});
+ mocked.renderStudio.mockResolvedValue({figure:'AA==',media_type:'image/png',metadata:{input_count:2,used_count:2},table:[['x','y'],[1,2]]});
+ mocked.composeStudio.mockResolvedValue({figure:'AA==',media_type:'image/png',metadata:{panel_count:2},table:[]});
+ render(<ScientificFigureStudio source={{name:'Experiment',csv:'cost,benefit\n1,2\n2,3'}} onClose={()=>{}}/>);
+ await screen.findByRole('button',{name:/Pareto dominance/});
+ fireEvent.change(screen.getByLabelText('Figure field x'),{target:{value:'cost'}});
+ fireEvent.change(screen.getByLabelText('Figure field y'),{target:{value:'benefit'}});
+ fireEvent.click(screen.getByRole('button',{name:'Render figure'}));await screen.findByAltText('Pareto dominance preview');
+ fireEvent.click(screen.getByRole('button',{name:'Add to composition (0/6)'}));
+ fireEvent.click(screen.getByRole('button',{name:'Add to composition (1/6)'}));
+ fireEvent.click(screen.getByRole('button',{name:'Figure composer (2)'}));
+ fireEvent.change(screen.getByLabelText('Composition title'),{target:{value:'Study'}});
+ fireEvent.click(screen.getByRole('button',{name:'Render composition'}));await screen.findByAltText('Publication composition preview');
+ expect(mocked.composeStudio).toHaveBeenCalledWith(expect.objectContaining({title:'Study',panels:[expect.objectContaining({recipe:'pareto',x:'cost'}),expect.objectContaining({recipe:'pareto',y:'benefit'})]}),expect.any(AbortSignal));
 });

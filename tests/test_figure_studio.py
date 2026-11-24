@@ -75,7 +75,8 @@ def test_every_recipe_renders_actual_data(recipe,raster_fixture):
     else:
         rasters,classes=raster_fixture
         selected=[classes] if recipe=='raster_classes' else rasters[:3] if recipe=='raster_significant_change' else rasters[:2] if recipe in {'raster_difference','raster_uncertainty','raster_exceedance','raster_matrix'} else rasters[:1]
-        body=StudioInput(recipe=recipe,rasters=selected,width_mm=115,height_mm=90,dpi=120)
+        extra=dict(csv='e,n\n500005,4499995\n500015,4499995\n500025,4499995',x='e',y='n') if recipe=='raster_profile' else {}
+        body=StudioInput(recipe=recipe,rasters=selected,width_mm=115,height_mm=90,dpi=120,**extra)
     image,metadata,table=render(body)
     assert image[:8]==b'\x89PNG\r\n\x1a\n'
     assert len(image)>2000
@@ -93,8 +94,8 @@ def test_every_recipe_renders_actual_data(recipe,raster_fixture):
 
 
 def test_catalog_count_and_unique_recipes():
-    assert len(RECIPES)==len(BY_ID)==len(catalog())==51
-    assert len({r['title'] for r in catalog()})==51
+    assert len(RECIPES)==len(BY_ID)==len(catalog())==52
+    assert len({r['title'] for r in catalog()})==52
 
 
 @pytest.mark.parametrize('fmt,magic',[('svg',b'<?xml'),('pdf',b'%PDF'),('tiff',b'II*\x00')])
@@ -150,7 +151,7 @@ def test_api_catalog_render_metadata_and_validation():
     with TestClient(app) as client:
         response=client.get('/terrain/studio/catalog')
         assert response.status_code==200
-        assert response.json()['additional_recipe_count']+response.json()['legacy_recipe_count']==75
+        assert response.json()['additional_recipe_count']+response.json()['legacy_recipe_count']==76
         response=client.post('/terrain/studio/render',json=table_input('pareto').model_dump())
         assert response.status_code==200,response.text
         result=response.json()
@@ -174,3 +175,77 @@ def test_raster_table_exact_alignment_and_bounded_sampling(raster_fixture):
     assert data.numeric('grid_y')[0]==4499995
     full=raster_table(rasters[:1])
     assert full['metadata']['sampling']=='all_cells' and full['metadata']['sample_cells']==168
+
+
+@pytest.mark.parametrize('style',['heatmap','filled','contour','surface'])
+def test_response_views_use_identical_actual_design_and_mask_missing(style):
+    rows=[(a,b,None if (a,b)==(4,5) else a+2*b) for b in [0,2,5] for a in [0,1,4]]
+    body=StudioInput(recipe='response_surface',csv=csv_text(['a','b','response'],rows),x='a',y='b',z='response',response_style=style,optimum='max',width_mm=180,height_mm=130)
+    png,meta,table=render(body)
+    assert png.startswith(b'\x89PNG')
+    assert meta['grid_positions']==9 and meta['missing_positions']==1 and meta['used_count']==8
+    assert meta['observed_optimum']==[1.,5.,11.]
+    assert table[-1]==[4.,5.,None]
+    assert meta['interpolation']==('none' if style=='heatmap' else 'visual interpolation within complete evaluated cells only')
+    assert meta['layout']['potentially_clipped_axes']==[]
+
+
+def test_profile_gaps_delta_and_actual_raster_sampling(raster_fixture):
+    body=StudioInput(recipe='multi_line',csv='distance,base,scenario\n0,1,3\n10,,4\n20,2,\n30,3,5',x='distance',columns=['base','scenario'],profile_style='delta')
+    _,meta,table=render(body)
+    assert table[1:]==[[0.,2.],[10.,None],[20.,None],[30.,2.]]
+    assert meta['series_valid_counts']==[2]
+    rasters,_=raster_fixture
+    body=StudioInput(recipe='raster_profile',rasters=rasters[:2],csv='e,n\n500005,4499995\n500015,4499995\n500155,4499995',x='e',y='n',profile_style='delta')
+    _,meta,table=render(body)
+    assert table[1][1]==pytest.approx(2)
+    assert table[2]==pytest.approx([10,2])
+    assert table[3]==[150.,None]
+    assert meta['used_count']==2
+
+
+def test_profile_multiple_uncertainty_bands_preserve_missing_bounds():
+    csv='distance,a,al,ah,b,bl,bh\n0,10,9,11,12,11,13\n5,11,,12,13,12,14\n10,12,11,13,14,13,15'
+    _,meta,table=render(StudioInput(recipe='multi_line',csv=csv,x='distance',columns=['a','al','ah','b','bl','bh'],profile_style='bands'))
+    assert table[2]==[5.,11.,None,12.,13.,12.,14.]
+    assert meta['series_valid_counts']==[3,2,3,3,3,3]
+    assert 'Supplied pointwise' in meta['interval_note']
+
+
+def test_matrix_shared_classes_and_range(raster_fixture):
+    rasters,classes=raster_fixture
+    _,meta,_=render(StudioInput(recipe='raster_matrix',rasters=rasters[:2],map_style='diverging',map_columns=2,map_min=-150,map_max=150,map_common_mask=True,width_mm=230,height_mm=140))
+    assert meta['display_min']==-150 and meta['display_max']==150
+    assert meta['common_cells']==168 and meta['map_columns']==2
+    assert meta['layout']['potentially_clipped_axes']==[]
+    _,meta,_=render(StudioInput(recipe='raster_matrix',rasters=[classes,classes],map_style='categorical',width_mm=230,height_mm=140))
+    assert meta['class_codes']==[0.,1.,2.,3.]
+    _,meta,_=render(StudioInput(recipe='raster_matrix',rasters=rasters[:2],class_breaks=[90,110,130,150],width_mm=230,height_mm=140))
+    assert meta['display_min']==90 and meta['display_max']==150
+
+
+def test_publication_composer_vector_export_and_reproducible_raster(raster_fixture):
+    from terrain.studio_routes import CompositionInput,render_composition
+    from PIL import Image
+    from pypdf import PdfReader
+    rasters,_=raster_fixture
+    panels=[StudioInput(recipe='raster_continuous',rasters=rasters[:1],title='Terrain map'),
+            table_input('response_surface').model_copy(update={'response_style':'heatmap','title':'Response grid'}),
+            table_input('multi_line').model_copy(update={'title':'Profile curves','profile_style':'overlay'}),
+            table_input('pareto').model_copy(update={'title':'Tradeoffs'})]
+    body=CompositionInput(panels=panels,title='Combined scientific figure',caption='Observed and computed quantities.',columns=2,width_mm=240,height_mm=200)
+    png,meta=render_composition(body)
+    assert meta['panel_count']==4 and [p['label'] for p in meta['panels']]==list('abcd')
+    assert meta['layout']['potentially_clipped_axes']==[]
+    image=Image.open(io.BytesIO(png))
+    assert image.width==pytest.approx(240/25.4*120,abs=1)
+    assert image.height==pytest.approx(200/25.4*120,abs=1)
+    second,_=render_composition(body)
+    assert np.array_equal(np.asarray(image),np.asarray(Image.open(io.BytesIO(second))))
+    pdf,_=render_composition(body.model_copy(update={'format':'pdf'}))
+    page=PdfReader(io.BytesIO(pdf)).pages[0]
+    text=page.extract_text()
+    assert all(title in text for title in ['Terrain map','Response grid','Profile curves','Tradeoffs','Combined scientific figure'])
+    assert float(page.mediabox.width)==pytest.approx(240/25.4*72,abs=.01)
+    svg,_=render_composition(body.model_copy(update={'format':'svg'}))
+    assert b'Combined scientific figure' in svg and b'Response grid' in svg

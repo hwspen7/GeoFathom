@@ -13,7 +13,7 @@ function researchStudioTables(result:ResearchResult):StudioTableSource[]{
  const entries:StudioTableSource[]=[];
  const add=(name:string,columns:string[],rows:Array<Array<string|number|null>>)=>{if(rows.length)entries.push({name,csv:tableCSV({columns,rows,x_label:'',y_label:'',unit:''}),provenance:{experiment:result.title,manifest:result.manifest,table:name}});};
  if(result.sensitivity.length){const keys=Array.from(new Set(result.sensitivity.flatMap(r=>Object.keys(r.metrics))));add('Numeric parameter responses',[result.sensitivity[0].parameter,...keys],result.sensitivity.map(r=>[r.value,...keys.map(k=>r.metrics[k]??null)]));}
- if(result.factorial){const g=result.factorial,keys=Array.from(new Set(g.cells.flatMap(c=>Object.keys(c.metrics))));add('Two-factor evaluated combinations',[g.x_parameter,g.y_parameter,...keys],g.cells.filter(c=>c.matched_population).map(c=>[c.x,c.y,...keys.map(k=>c.metrics[k]??null)]));}
+ if(result.factorial){const g=result.factorial,keys=Array.from(new Set(g.cells.flatMap(c=>Object.keys(c.metrics))));add('Two-factor evaluated combinations',[g.x_parameter,g.y_parameter,...keys],g.cells.map(c=>[c.x,c.y,...keys.map(k=>c.matched_population?c.metrics[k]??null:null)]));}
  if(result.uncertainty){const u=result.uncertainty,keys=Object.keys(u.realizations??{});if(keys.length)add('Actual Monte Carlo realizations',['realization',...keys],Array.from({length:u.samples},(_,i)=>[i+1,...keys.map(k=>u.realizations?.[k]?.[i]??null)]));add('Model coverage intervals',['metric','mean','lower','upper','baseline','std'],Object.entries(u.metrics).map(([k,v])=>[k,v.mean,v.low,v.high,v.baseline??null,v.std]));}
  return entries;
 }
