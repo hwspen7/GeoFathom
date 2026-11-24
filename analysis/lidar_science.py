@@ -10,9 +10,17 @@ from scipy.spatial import cKDTree, Delaunay, QhullError
 
 from .lidar_advanced import robust_outlier, register, normal_change, canopy_structure
 
+from .lidar_geometry import ground_filter, tin_mesh, alpha_boundary, plane_icp, roof_planes, crown_candidates
+
 MAX_POINTS = 100_000
 MAX_BYTES = 16 * 1024 * 1024
 METHODS = {
+    "ground_filter": ("Progressive slope ground filter", "Local lower-envelope seeds and slope allowance; TIN interpolation within supported area."),
+    "tin_mesh": ("2.5D surface TIN", "XY Delaunay triangles filtered by maximum 3D edge length; median duplicate XY elevations."),
+    "alpha_boundary": ("3D alpha-complex boundary", "Regularized retained tetrahedra; no isolated alpha simplices or Poisson surface."),
+    "point_plane_icp": ("Robust point-to-plane ICP", "Huber-weighted local registration; rejects unobservable six-parameter systems."),
+    "roof_planes": ("RANSAC plane segmentation", "Geometric planar candidates; not semantic buildings."),
+    "crown_candidates": ("CHM apex candidates", "Ground-normalized sparse CHM nonmaximum suppression and nearest-apex assignment."),
     "quality": ("Cloud quality", "Finite XYZ; exact duplicate coordinates and observed extent."),
     "voxel": ("Voxel centroid reduction", "Fixed metric grid anchored at coordinate zero; retain counts."),
     "local_geometry": ("Local PCA geometry", "3D k-nearest-neighbor covariance; normals undefined for degenerate neighborhoods."),
@@ -112,7 +120,7 @@ def _local_geometry(p, k):
         cov = np.einsum("nki,nkj->nij",centered,centered) / k
         values, vectors = np.linalg.eigh(cov)
         values = np.maximum(values,0)
-        valid = (values[:,2] > 0) & (values[:,1] > values[:,2]*1e-12)
+        valid = (values[:,2] > 0) & (values[:,1]-values[:,0] > values[:,2]*1e-12)
         n = vectors[:,:,0]
         # Deterministic orientation: prefer positive Z, then Y, then X.
         dominant = np.where(np.abs(n[:,2])>1e-12,n[:,2],np.where(np.abs(n[:,1])>1e-12,n[:,1],n[:,0]))
@@ -174,9 +182,30 @@ def analyze(operation, p, reference=None, *, k=16, size=1., radius=2., max_edge=
     metrics = {"input_points":len(p)}
     if not (np.isfinite(threshold) and 0 <= threshold <= 1e6 and np.isfinite(registration_sigma) and 0 <= registration_sigma <= 1e6 and 3 <= min_neighbors <= 1000):
         raise ValueError("Invalid diagnostic or uncertainty parameters.")
-    if operation in ("cloud_distance","surface_change","ground_height","rigid_registration","normal_change","canopy_structure") and reference is None:
+    if operation in ("cloud_distance","surface_change","ground_height","rigid_registration","normal_change","canopy_structure","point_plane_icp","crown_candidates") and reference is None:
         raise ValueError("This method needs a reference cloud in the same CRS and vertical datum.")
-    if operation == "quality":
+    if operation == "ground_filter":
+        table,info=ground_filter(p,size,radius,threshold)
+        columns += ["ground_z_m","height_m","ground_flag"]
+        metrics.update(info)
+    elif operation in ("tin_mesh","alpha_boundary"):
+        table,info=tin_mesh(p,max_edge) if operation=="tin_mesh" else alpha_boundary(p,radius)
+        columns=[f"{axis}{i}_m" for i in (1,2,3) for axis in ("x","y","z")]+["surface_area_m2"]
+        if operation=="tin_mesh":columns+=["projected_area_m2"]
+        metrics.update(info)
+    elif operation == "point_plane_icp":
+        table,info=plane_icp(p,reference,k,radius,trim_fraction,max_iterations,tolerance)
+        columns += ["residual_m","signed_plane_residual_m","inlier_flag"]
+        metrics.update(info)
+    elif operation == "roof_planes":
+        table,info=roof_planes(p,threshold,min_neighbors,max_iterations,k)
+        columns += ["plane_id","residual_m","normal_x","normal_y","normal_z"]
+        metrics.update(info)
+    elif operation == "crown_candidates":
+        table,info=crown_candidates(p,_ground(p,reference,max_edge),size,radius,threshold)
+        columns += ["height_m","candidate_id","apex_height_m"]
+        metrics.update(info)
+    elif operation == "quality":
         table = p
         metrics.update(unique_points=len(np.unique(p,axis=0)),minimum_xyz_m=p.min(axis=0).tolist(),
                        maximum_xyz_m=p.max(axis=0).tolist(),median_z_m=float(np.median(p[:,2])))

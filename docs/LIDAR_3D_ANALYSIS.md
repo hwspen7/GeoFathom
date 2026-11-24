@@ -16,9 +16,13 @@ Quality and exact duplicates; globally anchored voxel centroids and count conser
 
 Trimmed rigid point-to-point ICP uses centered SVD, proper rotations, maximum correspondence distance and reports convergence and residuals. It is a local optimizer, not global registration. Robust statistical outliers use mean kNN distances, a median/MAD scale and an explicit zero-scale rule. M3C2-inspired normal projection uses baseline core voxels, local PCA normals and common cylinders, with conditional pointwise Welch intervals including operator-supplied registration standard uncertainty. These intervals are not corrected for spatial autocorrelation, normal uncertainty, or multiple testing. Canopy structure uses independently supplied ground TIN elevations and per-cell height percentiles; return fractions must not be interpreted as area cover or LAI.
 
+## Geometry and structure extension
+
+Progressive slope ground filtering uses locally supported lower-envelope seeds and TIN heights, with unsupported points kept unknown. A 2.5D TIN exports every triangle, 3D and projected area, and rejects long edges. Regularized 3D alpha-complex boundaries export consistently outward-oriented triangles and tetrahedral volume. Robust point-to-plane ICP uses Huber weights, SVD observability checks, and centered six-dimensional increments. Deterministic sequential RANSAC with orthogonal refinement extracts planar candidates; sparse CHM peak suppression extracts candidate crown apices. Neither candidate method constitutes validated semantic classification.
+
 ## Verification
 
-Run python -m pytest tests/test_lidar_science.py tests/test_lidar_advanced.py -q. Tests cover analytical planes, degenerate neighborhoods, exact voxel counts, scaled LAS coordinates, partial overlap, directed distance, TIN interpolation, malformed input and HTTP contracts. These are synthetic reference tests, not real-flight validation.
+Run python -m pytest tests/test_lidar_science.py tests/test_lidar_advanced.py tests/test_lidar_geometry.py -q. Tests cover analytical planes, degenerate neighborhoods, exact voxel counts, scaled LAS coordinates, partial overlap, directed distance, TIN interpolation, malformed input and HTTP contracts. These are synthetic reference tests, not real-flight validation.
 
 ## Remaining research work
 
