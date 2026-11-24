@@ -3,14 +3,8 @@ on:
   workflow_dispatch:
   push:
     branches: [main, develop]
-    paths:
-      - 'scripts/audit_file_checks.py'
-      - '.github/workflows/file-check-audit.yml'
   pull_request:
     branches: [main, develop]
-    paths:
-      - 'scripts/audit_file_checks.py'
-      - '.github/workflows/file-check-audit.yml'
 permissions:
   contents: read
   checks: read
