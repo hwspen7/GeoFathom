@@ -41,6 +41,10 @@ def figure_sources(result,grids):
             table('Moran statistic by aggregation scale','basic_scatter',{'x':'factor','y':'moran_i'})
         table('Dispersion by aggregation scale','basic_scatter',{'x':'factor','y':'population_sd'})
         table('Retained source coverage by scale','basic_scatter',{'x':'factor','y':'source_coverage'})
+    if kind=='fit_exponential_variogram':
+        table('Empirical semivariance','basic_scatter',{'x':'distance_m','y':'empirical_semivariance'})
+        table('Fitted semivariance','basic_scatter',{'x':'distance_m','y':'fitted_semivariance'})
+        table('Observed versus fitted semivariance','basic_scatter',{'x':'empirical_semivariance','y':'fitted_semivariance'})
     if kind=='empirical_variogram':
         table('Empirical semivariogram','basic_scatter',{'x':'mean_distance_m','y':'semivariance'})
         table('Lag pair support','basic_column',{'x':'bin','y':'pairs'})

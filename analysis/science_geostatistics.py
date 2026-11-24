@@ -136,3 +136,46 @@ def srs_estimation(grid,params):
         'total_estimate':mean*population,'mean_standard_error':se,'total_standard_error':se*population,
         'normal_95_mean_interval':[mean-1.95996398454*se,mean+1.95996398454*se],
         'interpretation':'SRS without replacement, finite population correction; normal interval is approximate and may be unreliable for small or skewed samples.'}
+
+
+def fit_exponential_variogram(distance,semivariance,pairs,lower,upper):
+    """Profile pair-count-weighted nonnegative LS; covariance scale is explicit."""
+    d,v,w=map(lambda a:np.asarray(a,float),(distance,semivariance,pairs))
+    require(len(d)>=4 and np.all(d>0) and np.all(v>=0) and np.all(w>0)
+            and 0<lower<upper,'Need four populated lag bins and ordered positive range bounds.')
+    scale=float(v.max());require(scale>0,'Constant data cannot identify a covariance model.')
+    target=v/scale;root=np.sqrt(w/w.sum())
+    def evaluate(log_range):
+        r=float(np.exp(log_range));basis=-np.expm1(-d/r)
+        x=np.column_stack((np.ones(len(d)),basis))*root[:,None];y=target*root
+        coef=np.linalg.lstsq(x,y,rcond=None)[0]
+        candidates=[np.array([max(float(root@y),0),0.]),
+                    np.array([0.,max(float(x[:,1]@y/(x[:,1]@x[:,1])),0)])]
+        if np.all(coef>=0):candidates.append(coef)
+        beta=min(candidates,key=lambda b:float(np.sum((x@b-y)**2)))
+        return float(np.sum((x@beta-y)**2)),beta
+    grid=np.linspace(np.log(lower),np.log(upper),161);scores=[evaluate(q)[0] for q in grid]
+    i=int(np.argmin(scores));lo=grid[max(0,i-1)];hi=grid[min(len(grid)-1,i+1)]
+    ratio=(np.sqrt(5)-1)/2
+    for _ in range(50):
+        a=hi-ratio*(hi-lo);b=lo+ratio*(hi-lo)
+        if evaluate(a)[0]<=evaluate(b)[0]:hi=b
+        else:lo=a
+    opt=min([grid[i],(lo+hi)/2],key=lambda q:evaluate(q)[0])
+    loss,beta=evaluate(opt);nugget,sill=beta*scale;r=float(np.exp(opt))
+    require(sill>1e-12*scale,'Exponential structured sill is not identifiable in the supplied lag bins.')
+    fitted=nugget+sill*(-np.expm1(-d/r))
+    return fitted,{'range_m':r,'sill':float(sill),'nugget_variance':float(nugget),
+                   'nugget_ratio':float(nugget/sill),'weighted_rmse':float(np.sqrt(loss)*scale),
+                   'range_at_search_boundary':bool(abs(opt-grid[0])<1e-6 or abs(opt-grid[-1])<1e-6),
+                   'interpretation':'Pair-count weighted fit to empirical bin means; no independent-pair likelihood or parameter confidence interval. Range bounds are explicit.'}
+
+
+def fitted_variogram(grid,params):
+    from .science_models import empirical_variogram
+    _,rows,report=empirical_variogram(grid,params)
+    d=np.array([r[4] for r in rows]);v=np.array([r[5] for r in rows]);w=np.array([r[3] for r in rows])
+    fitted,meta=fit_exponential_variogram(d,v,w,params['min_range_m'],params['max_range_m'])
+    data=[[float(a),float(b),float(c),int(n)] for a,b,c,n in zip(d,v,fitted,w)]
+    meta.update(report);meta['fit_method']='Nonnegative pair-count weighted least squares'
+    return ['distance_m','empirical_semivariance','fitted_semivariance','pairs'],data,meta

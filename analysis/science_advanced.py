@@ -89,9 +89,13 @@ def robust_overlay(stack,common,weights,directions,draws,concentration,threshold
     for draw in rng.dirichlet(w*concentration,size=draws):
         score=v@draw;hit+=score>=threshold
     probability=hit/draws
+    # Wilson intervals quantify binomial Monte Carlo error even at zero/all hits.
+    z=1.95996398454;den=1+z*z/draws
+    center=(probability+z*z/(2*draws))/den
+    half=z*np.sqrt(probability*(1-probability)/draws+z*z/(4*draws*draws))/den
     def grid(q):
         out=np.full(common.shape,np.nan);out[common]=q;return out
-    return {'mean':grid(mean),'sd':grid(np.sqrt(variance)),'probability':grid(probability),'mc_se':grid(np.sqrt(probability*(1-probability)/draws))}, {'draws':draws,'concentration':concentration,'threshold':threshold,'normalized_weights':w.tolist(),'moment_method':'Exact Dirichlet first and second moments','probability_method':'Monte Carlo frequency; plug-in binomial standard error (zero at observed endpoints is not proof of zero error)','model':'Dirichlet weight uncertainty conditional on fixed criterion rasters; not calibrated event probability.'}
+    return {'mean':grid(mean),'sd':grid(np.sqrt(variance)),'probability':grid(probability),'mc_se':grid(np.sqrt(probability*(1-probability)/draws)),'mc_lower':grid(np.clip(center-half,0,1)),'mc_upper':grid(np.clip(center+half,0,1))}, {'draws':draws,'concentration':concentration,'threshold':threshold,'normalized_weights':w.tolist(),'moment_method':'Exact Dirichlet first and second moments','probability_method':'Monte Carlo frequency; plug-in binomial standard error (zero at observed endpoints is not proof of zero error)','mc_interval_method':'Pointwise 95% Wilson interval for Monte Carlo frequency only; not a simultaneous spatial confidence band','model':'Dirichlet weight uncertainty conditional on fixed criterion rasters; not calibrated event probability.'}
 
 def blocked_raster_regression(grids,params):
     """Out-of-fold prediction on the complete-case raster grid, no spatial leakage across buffers."""

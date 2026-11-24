@@ -98,6 +98,7 @@ m('distance_moran','Statistics','Distance-weighted global Moran I','raster',1,1,
 m('knn_moran','Statistics','K-nearest-neighbor Moran I','raster',1,1,(K,('power','Inverse distance exponent',0,0,3,False),P,S),'table','Directed KNN graph with stable ties; row-standardized weights; random-label null.'),
 m('multiscale_moran','Statistics','Multiscale spatial dependence','raster',1,1,(('max_factor','Maximum aggregation factor',4,2,16,True),),'table','Native-origin block means, incomplete edge blocks discarded; descriptive scale dependence.'),
 m('empirical_variogram','Statistics','Isotropic empirical semivariogram','raster',1,1,(D,('bins','Lag bins',10,2,30,True)),'table','Matheron empirical semivariance for unique metric cell pairs; no fitted model.'),
+m('fit_exponential_variogram','Statistics','Exponential semivariogram calibration','raster',1,1,(D,('bins','Lag bins',10,4,30,True),('min_range_m','Minimum covariance range (m)',1,.01,100000,False),('max_range_m','Maximum covariance range (m)',1000,.02,100000,False)),'table','Nonnegative nugget and partial sill; pair-count weighted least squares; explicit range search; use diagnostics before kriging.'),
 m('difference_uncertainty','Integrated','Difference uncertainty propagation','raster',4,4,(('correlation','Same-cell error correlation',0,-1,1,False),),'raster','Input order: A, B, standard uncertainty of A, standard uncertainty of B; matching physical units.'),
 m('spatial_lag_regression','Integrated','Spatial lag regression (2SLS)','raster',2,8,(),'raster','Response first, predictors next; rook row-standardized spatial lag; WX and W²X instruments; conditional structural fit, not forecast.'),
 m('geographically_weighted_regression','Integrated','Geographically weighted leave-one-out regression','raster',2,8,(B,),'raster','Response first; fixed Gaussian bandwidth in metres; leave-one-out local prediction, not spatial-block validation.'),
@@ -108,7 +109,7 @@ m('difference_probability','Integrated','Gaussian difference exceedance probabil
 m('sample_srs_estimation','Sampling','Finite-population simple random estimation','raster',1,1,(N,S),'table','SRS without replacement; design-based mean/total standard errors with finite population correction.'),
 )
 BY_ID={method.id:method for method in METHODS}
-assert len(BY_ID)==len(METHODS)==72
+assert len(BY_ID)==len(METHODS)==73
 
 def catalog():
     return [{'id':m.id,'group':m.group,'title':m.title,'source':m.source,

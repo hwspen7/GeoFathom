@@ -180,7 +180,7 @@ def test_integrated_operators_analytic_spatial_fixture(kind):
 
 def test_contract_count_and_invalid_input_rejections():
     client=TestClient(app);response=client.get('/analysis/science/catalog')
-    assert response.status_code==200 and response.json()['operation_count']==len(BY_ID)==72
+    assert response.status_code==200 and response.json()['operation_count']==len(BY_ID)==73
     assert set(m['group'] for m in response.json()['operations'])=={'Vector','Raster','Sampling','Statistics','Decision','Integrated'}
     assert response.json()['ai_tool']['input_schema']['properties']['operation']
     bad=[
@@ -542,8 +542,11 @@ def test_geographically_weighted_multiple_coefficients():
     np.testing.assert_allclose(np.array(r['rows'])[:,-2:],np.tile([2,-3],(36,1)),atol=1e-9)
 
 
-@pytest.mark.parametrize('kind',['ordinary_kriging','kriging_uncertainty','spatial_error_regression','difference_probability','sample_srs_estimation'])
+@pytest.mark.parametrize('kind',['ordinary_kriging','kriging_uncertainty','spatial_error_regression','difference_probability','sample_srs_estimation','fit_exponential_variogram'])
 def test_geostatistical_oracles(kind):
+    if kind=='fit_exponential_variogram':
+        test_exponential_variogram_calibration_oracle()
+        return
     if kind in ('ordinary_kriging','kriging_uncertainty'):
         # Independent augmented ordinary kriging linear system for each target.
         z=np.full((4,4),np.nan);z[0,0]=2;z[0,3]=5;z[3,0]=7;z[3,3]=11
@@ -605,3 +608,29 @@ def test_kriging_exactness_mask_and_actual_figure():
     plot=next(p for p in r['figures'] if p['title']=='Kriging leave-one-out agreement')
     image,_,_=render(StudioInput(recipe=plot['recipe'],csv=plot['csv'],**plot['bindings']))
     assert image.startswith(b'\x89PNG')
+
+
+def test_exponential_variogram_calibration_oracle():
+    from analysis.science_geostatistics import fit_exponential_variogram
+    d=np.linspace(5,100,20);v=1.5+3*(-np.expm1(-d/25))
+    fitted,meta=fit_exponential_variogram(d,v,np.arange(1,21),1,100)
+    assert meta['range_m']==pytest.approx(25,rel=1e-5)
+    assert meta['sill']==pytest.approx(3,rel=1e-5)
+    assert meta['nugget_variance']==pytest.approx(1.5,rel=1e-5)
+    np.testing.assert_allclose(fitted,v,atol=1e-6)
+    # API contract and real empirical bin data, not a synthetic chart.
+    z=np.arange(100,dtype=float).reshape(10,10)
+    r=run('fit_exponential_variogram',rasters=[raster(z)],parameters={'distance_m':85,'bins':8,'min_range_m':2,'max_range_m':200})
+    assert len(r['rows'])>=4 and r['receipt']['metrics']['sill']>0
+    assert all(row[2]>=0 for row in r['rows'])
+
+
+def test_robust_overlay_wilson_endpoints():
+    a=np.arange(16,dtype=float).reshape(4,4)
+    args={'rasters':[raster(a),raster(a)],'weights':[1,1],'directions':['benefit','benefit'],
+          'parameters':{'draws':100,'concentration':10,'threshold':.5,'seed':2}}
+    lo,_=result_grid(run('robust_overlay',robust_view='mc_lower',**args))
+    hi,_=result_grid(run('robust_overlay',robust_view='mc_upper',**args))
+    expected=1.95996398454**2/(100+1.95996398454**2)
+    assert lo[0,0]==pytest.approx(0,abs=1e-12) and hi[0,0]==pytest.approx(expected)
+    assert hi[-1,-1]==pytest.approx(1) and lo[-1,-1]==pytest.approx(1-expected)

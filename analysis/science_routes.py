@@ -23,7 +23,7 @@ from .science_raster import require,raster_operation,sample_cells,permutation_st
 from .science_vector import load_layers,vector_operation,integrated
 from .science_advanced import euclidean_distance,focal_quantile,lag_scan,bivariate_moran,robust_overlay,blocked_raster_regression
 from .science_models import weighted_moran,multiscale,difference_uncertainty,empirical_variogram,fit_spatial_model
-from .science_geostatistics import ordinary_kriging,spatial_error_regression,difference_probability,srs_estimation
+from .science_geostatistics import ordinary_kriging,spatial_error_regression,difference_probability,srs_estimation,fitted_variogram
 
 router=APIRouter(prefix='/analysis/science',tags=['spatial science'])
 source_router=APIRouter(tags=['spatial science sources'])
@@ -41,7 +41,7 @@ class SpatialInput(BaseModel):
     breaks:list[float]=Field(default_factory=list,max_length=25)
     resampling:Literal['nearest','bilinear']='nearest'
     local_view:Literal['statistic','p','q','cluster']='statistic'
-    robust_view:Literal['mean','sd','probability','mc_se']='mean'
+    robust_view:Literal['mean','sd','probability','mc_se','mc_lower','mc_upper']='mean'
     neighborhood:Literal['rook','queen']='rook'
     regression_view:Literal['prediction','residual']='prediction'
 
@@ -128,6 +128,8 @@ def execute(body):
         headers=['permutation','null_statistic','observed_statistic'];rows=[[i+1,float(value),meta['observed']] for i,value in enumerate(null)]
     elif kind=='multiscale_moran':
         headers,rows,meta=multiscale(g,params['max_factor'])
+    elif kind=='fit_exponential_variogram':
+        headers,rows,meta=fitted_variogram(g,params)
     elif kind=='empirical_variogram':
         headers,rows,meta=empirical_variogram(g,params)
     elif kind=='difference_uncertainty':
@@ -163,7 +165,7 @@ def execute(body):
     elif kind=='robust_overlay':
         stack,common=aligned_grids(grids,require_same_unit=False)
         products,meta=robust_overlay(stack,common,body.weights,body.directions,params['draws'],params['concentration'],params['threshold'],params['seed'])
-        product=raster_product(kind,products[body.robust_view],g.transform,g.crs,'probability' if body.robust_view in {'probability','mc_se'} else 'unitless')
+        product=raster_product(kind,products[body.robust_view],g.transform,g.crs,'probability' if body.robust_view in {'probability','mc_se','mc_lower','mc_upper'} else 'unitless')
         meta['view']=body.robust_view
     elif kind=='blocked_regression':
         out,headers,rows,meta=blocked_raster_regression(grids,params)
