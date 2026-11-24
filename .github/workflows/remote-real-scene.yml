@@ -2,10 +2,15 @@ name: Remote sensing real-scene reference
 
 on:
   push:
-    branches: [feature/remote-sensing]
+    branches: [main, develop]
   pull_request:
     branches: [main, develop]
   workflow_dispatch:
+
+concurrency:
+  # Keep the newest PR revision; retain distinct main/develop and manual runs.
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('{0}-{1}', github.ref, github.sha) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   real-scene:

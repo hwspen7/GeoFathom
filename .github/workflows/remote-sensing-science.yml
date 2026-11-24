@@ -2,14 +2,15 @@ name: Remote sensing scientific reference gate
 
 on:
   push:
-    branches: [main, develop, feature/remote-sensing]
+    branches: [main, develop]
   pull_request:
     branches: [main, develop]
   workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.sha }}
-  cancel-in-progress: false
+  # Keep the newest PR revision; retain distinct main/develop and manual runs.
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('{0}-{1}', github.ref, github.sha) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   remote-sensing-reference:
@@ -25,6 +26,8 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends gdal-bin
           python -m pip install -c requirements/linux.lock -e ".[dev]"
+      - name: Compile Python scientific modules before numerical tests
+        run: python -m compileall -q imagery analysis terrain jobs scripts tests
       - name: Verify numerical methods and full scientific workflows
         run: |
           mkdir -p build
