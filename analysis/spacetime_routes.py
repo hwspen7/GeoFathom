@@ -27,17 +27,17 @@ from .spacetime_models import trend,temporal,forecast,spatial_lag,variogram
 
 router=APIRouter(prefix='/analysis/spatiotemporal',tags=['spatiotemporal science'])
 # parameter = (default,minimum,maximum,integer)
-P={'minimum_observations':(6,3,64,True),'lag':(1,1,32,True),'threshold':(0,-1e50,1e50,False),'horizon':(30,.000001,1e7,False),'radius':(3,1,20,True),'period':(365,.000001,1e7,False),'fraction':(.5,.01,.99,False),'minimum_amplitude':(.01,0,1e50,False),'min_segment':(3,2,32,True),'penalty':(1,.000001,1e50,False),'process_variance':(.01,1e-20,1e50,False),'observation_variance':(.1,1e-20,1e50,False),'initial_velocity_variance':(1,1e-20,1e50,False),'permutations':(199,19,999,True),'seed':(42,0,2147483647,True),'mode':(1,1,64,True),'block_length':(3,2,21,True),'spatial_range':(100,1e-6,1e8,False),'temporal_range':(30,1e-6,1e8,False),'nugget_ratio':(.1,1e-6,10,False),'sample_limit':(128,12,256,True),'fit_covariance':(0,0,1,True),'holdout_dates':(2,2,32,True),'buffer_cells':(0,0,100,True),'bic_threshold':(6,0,1000,False),'maximum_gap':(30,.000001,1e9,False),'alpha':(.05,.001,.2,False),'block_cells':(2,1,1000,True),'interaction':(.5,.05,1,False),'target_date':(3,1,64,True),'trajectory_limit':(8,1,16,True),'max_breaks':(2,1,5,True),'effective_samples':(10,4,100,True),'local_sample_limit':(256,16,512,True),'coefficient_index':(1,1,3,True),'return_period':(20,1.01,10000,False),'minimum_voxels':(2,1,10000,True),'extreme_minimum':(10,8,64,True)}
+P={'minimum_observations':(6,3,64,True),'lag':(1,1,32,True),'threshold':(0,-1e50,1e50,False),'horizon':(30,.000001,1e7,False),'radius':(3,1,20,True),'period':(365,.000001,1e7,False),'fraction':(.5,.01,.99,False),'minimum_amplitude':(.01,0,1e50,False),'min_segment':(3,2,32,True),'penalty':(1,.000001,1e50,False),'process_variance':(.01,1e-20,1e50,False),'observation_variance':(.1,1e-20,1e50,False),'initial_velocity_variance':(1,1e-20,1e50,False),'permutations':(199,19,999,True),'seed':(42,0,2147483647,True),'mode':(1,1,64,True),'block_length':(3,2,21,True),'spatial_range':(100,1e-6,1e8,False),'temporal_range':(30,1e-6,1e8,False),'nugget_ratio':(.1,1e-6,10,False),'sample_limit':(128,12,256,True),'fit_covariance':(0,0,1,True),'holdout_dates':(2,2,32,True),'buffer_cells':(0,0,100,True),'bic_threshold':(6,0,1000,False),'maximum_gap':(30,.000001,1e9,False),'alpha':(.05,.001,.2,False),'block_cells':(2,1,1000,True),'interaction':(.5,.05,1,False),'target_date':(3,1,64,True),'trajectory_limit':(8,1,16,True),'max_breaks':(2,1,5,True),'effective_samples':(10,4,100,True),'local_sample_limit':(256,16,512,True),'coefficient_index':(1,1,3,True),'return_period':(20,1.01,10000,False),'minimum_voxels':(2,1,10000,True),'extreme_minimum':(10,8,64,True),'fit_interaction':(0,0,1,True),'auto_bandwidth':(0,0,1,True)}
 KALMAN_P=('minimum_observations','horizon','process_variance','observation_variance','initial_velocity_variance')
 KRIGING_P=('spatial_range','temporal_range','nugget_ratio','sample_limit','fit_covariance','seed')
 BREAK_P=('period','min_segment','bic_threshold')
 EVENT_P=('threshold','maximum_gap','minimum_observations')
 HOT_P=('radius','permutations','seed','alpha')
-UNIVERSAL_P=KRIGING_P+('interaction',)
+UNIVERSAL_P=KRIGING_P+('interaction','fit_interaction')
 RTS_P=('minimum_observations','process_variance','observation_variance','initial_velocity_variance','target_date')
 FITTED_P=('minimum_observations','process_variance','observation_variance','initial_velocity_variance','holdout_dates','trajectory_limit','seed')
 MULTI_P=('period','min_segment','max_breaks','bic_threshold')
-GTWR_P=('spatial_range','temporal_range','effective_samples','local_sample_limit','seed')
+GTWR_P=('spatial_range','temporal_range','effective_samples','local_sample_limit','seed','auto_bandwidth')
 METHODS={
  'gev_shape':('Extreme value statistics','GEV block maxima shape',('block_length','extreme_minimum','return_period')),
  'gev_return_level':('Extreme value statistics','GEV block return level',('block_length','extreme_minimum','return_period')),
@@ -226,6 +226,9 @@ def execute(body):
         if kind=='gtwr_support':unit='count'
         elif kind=='gtwr_coefficient':unit=unit+'/'+covariate_receipt[(p['coefficient_index']-1)*n]['unit']
         plot('GTWR effective local sample quantiles','basic_line',cols,rows,x='quantile',y='effective_samples')
+        if meta.get('bandwidth_candidates'):
+            candidates=[[f'{r[0]:g} / {r[1]:g}',r[-1]] for r in meta['bandwidth_candidates'] if r[-1] is not None]
+            plot('Nested bandwidth validation RMSE','basic_column',['bandwidth','rmse'],candidates,x='bandwidth',y='rmse')
         if kind=='gtwr_holdout_rmse':plot('Joint holdout error against training mean','basic_column',['model','rmse'],[['GTWR',meta['rmse']],['training mean',meta['training_mean_rmse']]],x='model',y='rmse')
     elif kind.startswith('panel_'):
         out,cols,rows,meta=panel(stack,covariate[0],p,kind)

@@ -372,3 +372,22 @@ def test_multibreak_no_change_and_extreme_shape_independence():
     r1=run('gpd_shape',a,None,{'threshold':0,'return_period':1.1})
     r2=run('gpd_shape',a,None,{'threshold':0,'return_period':20})
     np.testing.assert_allclose(grid(r1),grid(r2),atol=1e-12)
+
+
+def test_joint_parameter_selection_and_nested_validation():
+    from analysis.spacetime_kriging import fit
+    from analysis.spacetime_gtwr import gtwr
+    from types import SimpleNamespace
+    rng=np.random.default_rng(52);coords=rng.uniform(0,8,(24,3));y=coords@np.array([.2,-.3,.7])+rng.normal(0,.5,len(coords))
+    p={'spatial_range':4.,'temporal_range':3.,'nugget_ratio':.2,'interaction':.5,'universal':1,'fit_covariance':1,'fit_interaction':1}
+    _,m=fit(coords,y,p)
+    assert m['interaction_fitted'] and .05<=m['interaction']<=1 and m['optimization_starts']==3
+    assert m['reml_objective']<=m['initial_reml_objective']+1e-7
+    x=rng.normal(size=(12,6,9));z=2*x+rng.normal(0,.1,x.shape)
+    cfg={'spatial_range':100.,'temporal_range':20.,'local_sample_limit':512,'effective_samples':5,'seed':3,'holdout_dates':2,'buffer_cells':1,'auto_bandwidth':1}
+    g=SimpleNamespace(is_meter=True,transform=AFF)
+    m=gtwr(z,[x],np.arange(12.),g,cfg,'gtwr_holdout_rmse')[3]
+    changed=z.copy();changed[-2:]+=100;changed[:,:,6:]+=100
+    n=gtwr(changed,[x],np.arange(12.),g,cfg,'gtwr_holdout_rmse')[3]
+    for key in ('bandwidth_candidates','inner_split','selected_spatial_range','selected_temporal_range','training_indices'):assert m[key]==n[key]
+    assert n['rmse']>100 and m['rmse']<1

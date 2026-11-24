@@ -17,12 +17,12 @@ def fit(x,y,p):
     H=design(x);rank=H.shape[1];require(np.linalg.matrix_rank(H)==rank,'Rank deficient drift design.')
     # Gneiting class: spatial dimension two, exponential spatial kernel,
     # temporal variogram |tau| and interaction in [0,1].
-    def correlation(ds,dt,rs,rt):
+    def correlation(ds,dt,rs,rt,interaction):
         if 'interaction' not in p:return np.exp(-ds/rs-dt/rt)
         u=1+dt/rt;return np.exp(-ds/rs/u**(interaction/2))/u**interaction
     def model(theta):
-        rs,rt,ratio=np.exp(theta)
-        K=correlation(ds,dt,rs,rt)+ratio*np.eye(len(z))
+        rs,rt,ratio=np.exp(theta[:3]);b=float(theta[3]) if len(theta)==4 else interaction
+        K=correlation(ds,dt,rs,rt,b)+ratio*np.eye(len(z))
         factor=cho_factor(K,lower=True,check_finite=True)
         u=cho_solve(factor,H);normal=H.T@u;drift_factor=cho_factor(normal,lower=True)
         beta=cho_solve(drift_factor,u.T@z)
@@ -30,29 +30,38 @@ def fit(x,y,p):
         sill=float(residual@alpha/(len(z)-rank))
         require(np.isfinite(sill) and sill>0,'Degenerate covariance fit.')
         objective=(len(z)-rank)*np.log(sill)+2*np.log(np.diag(factor[0])).sum()+2*np.log(np.diag(drift_factor[0])).sum()
-        return objective,(rs,rt,ratio,factor,u,drift_factor,beta,alpha,sill)
+        return objective,(rs,rt,ratio,factor,u,drift_factor,beta,alpha,sill,b)
     init=np.log([p['spatial_range'],p['temporal_range'],p['nugget_ratio']])
+    tune=bool(p.get('fit_interaction',0))
+    require(not tune or ('interaction' in p and p['fit_covariance']),'Interaction fitting requires Gneiting REML.')
+    initial_objective=float(model(init)[0]);starts=0
     if p['fit_covariance']:
         require(len(x)<=256,'REML fitting limited to 256 training samples.')
         bounds=[(v-np.log(10),v+np.log(10)) for v in init]
-        result=minimize(lambda a:model(a)[0],init,method='L-BFGS-B',bounds=bounds,options={'maxiter':100,'maxfun':600,'ftol':1e-9})
-        require(result.success,'REML covariance optimization failed; revise starting scales or use fixed ranges.')
-        theta=result.x
+        if tune:bounds.append((.05,1.))
+        guesses=[np.r_[init,b] for b in sorted(set([interaction,.1,.9]))] if tune else [init]
+        candidates=[]
+        for guess in guesses:
+            result=minimize(lambda a:model(a)[0],guess,method='L-BFGS-B',bounds=bounds,options={'maxiter':120,'maxfun':800,'ftol':1e-9})
+            if result.success and np.isfinite(result.fun):candidates.append(result)
+        starts=len(guesses);require(candidates,'REML covariance optimization failed; revise starting scales or use fixed ranges.')
+        best=min(candidates,key=lambda a:a.fun);require(best.fun<=initial_objective+1e-7,'REML fit failed to improve initial likelihood.')
+        theta=best.x
         boundary=bool(any(min(abs(v-lo),abs(v-hi))<1e-4 for v,(lo,hi) in zip(theta,bounds)))
     else:theta=init;boundary=False
-    obj,(rs,rt,ratio,factor,u,drift_factor,beta,alpha,sill)=model(theta)
+    obj,(rs,rt,ratio,factor,u,drift_factor,beta,alpha,sill,selected_interaction)=model(theta)
     def predict(target):
         mu=[];sd=[]
         for i in range(0,len(target),256):
             v=target[i:i+256]
-            cross=correlation(cdist(x[:,:2],v[:,:2]),cdist(x[:,2:],v[:,2:]),rs,rt)
+            cross=correlation(cdist(x[:,:2],v[:,:2]),cdist(x[:,2:],v[:,2:]),rs,rt,selected_interaction)
             solved=cho_solve(factor,cross);D=design(v).T-u.T@cross
             variance=1+ratio-np.sum(cross*solved,axis=0)+np.sum(D*cho_solve(drift_factor,D),axis=0)
             require(np.min(variance)>=-1e-8,'Invalid kriging variance.')
             mu.extend(center+scale*(design(v)@beta+cross.T@alpha));sd.extend(scale*np.sqrt(sill*np.maximum(variance,0)))
         return np.asarray(mu),np.asarray(sd)
     return predict,{'spatial_range':float(rs),'temporal_range':float(rt),'nugget_ratio':float(ratio),'sill':float(sill*scale**2),'reml_objective':float(obj),'fit_at_bound':boundary,
-        'covariance_fitted':bool(p['fit_covariance']),'training_mean':center,'training_samples':len(x),'drift_rank':rank,'covariance_family':'Gneiting' if 'interaction' in p else 'separable exponential','interaction':interaction}
+        'covariance_fitted':bool(p['fit_covariance']),'training_mean':center,'training_samples':len(x),'drift_rank':rank,'covariance_family':'Gneiting' if 'interaction' in p else 'separable exponential','interaction':selected_interaction,'interaction_fitted':tune,'initial_reml_objective':initial_objective,'optimization_starts':starts}
 
 def kriging(stack,t,grid,p,kind):
     n,h,w=stack.shape
