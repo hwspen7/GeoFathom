@@ -387,7 +387,9 @@ def render(req, container=None, panel_label='', grid_sink=None):
                 im=a.imshow(values,extent=grid.extent,origin='upper',interpolation='nearest',cmap=cm,vmin=vmin,vmax=vmax);map_axes(a,grid)
                 finite=values[np.isfinite(values)]
                 meta.update(display_min=float(im.norm.vmin),display_max=float(im.norm.vmax),nodata_display='#e9e9e9',display_below=int(np.sum(finite<im.norm.vmin)),display_above=int(np.sum(finite>im.norm.vmax)))
-                if label:fig.colorbar(im,ax=a,label=label,shrink=.85)
+                if label:
+                    extend='both' if meta['display_below'] and meta['display_above'] else 'min' if meta['display_below'] else 'max' if meta['display_above'] else 'neither'
+                    fig.colorbar(im,ax=a,label=label,shrink=.85,extend=extend)
                 return im
             if kind=='raster_profile':
                 _require(bool(req.csv),'Supply a path coordinate CSV in the grid CRS.')
@@ -437,6 +439,7 @@ def render(req, container=None, panel_label='', grid_sink=None):
                 else:
                     from matplotlib.colors import Normalize
                     cm=colormaps['RdBu_r' if mode=='diverging' else cmap];norm=Normalize(lo,hi,clip=False)
+                cm=cm.copy();cm.set_bad('#e9e9e9')
                 for i,a in enumerate(axes.flat):
                     if i>=len(grids):a.set_visible(False);continue
                     values=stack[i]

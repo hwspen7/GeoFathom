@@ -295,6 +295,7 @@ def execute(body):
                 group=[r for r in sub if r[2]==lag]
                 if len(group)>=2:plot(f'{direction} semivariance at time lag {lag:g}','basic_line',cols,group,x='space_m',y='semivariance')
             if len(distances)>=2 and len(lags)>=2:
+                plot(direction+' semivariance and pair support','research_spacetime_lag',cols,sub,x='space_m',y='time_lag',z='semivariance',columns=['pairs'])
                 for start in range(0,len(distances),12):
                     ds=distances[start:start+12];names=[f'{d:g} m' for d in ds]
                     matrix=[[str(lag),*[values[d,lag] for d in ds]] for lag in lags if all((d,lag) in values for d in ds)]

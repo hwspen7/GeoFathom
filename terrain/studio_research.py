@@ -61,7 +61,7 @@ def render_table(kind,req,fig,ax,table,meta,palette,rows):
         x,y=pair();m,d,stats=agreement(x,y);meta.update(stats)
         fig.delaxes(ax);a,b=fig.subplots(1,2)
         lo=min(x.min(),y.min());hi=max(x.max(),y.max())
-        a.hexbin(x,y,gridsize=28,mincnt=1,cmap='viridis');a.plot([lo,hi],[lo,hi],'--',color='#444444');a.set(xlabel=req.x,ylabel=req.y,title='Paired observations',aspect='equal')
+        im=a.hexbin(x,y,gridsize=28,mincnt=1,cmap='viridis');fig.colorbar(im,ax=a,label='Pair count',shrink=.8);a.plot([lo,hi],[lo,hi],'--',color='#444444');a.set(xlabel=req.x,ylabel=req.y,title='Paired observations',aspect='equal')
         b.scatter(m,d,s=9,color=color,alpha=.5,rasterized=len(m)>5000)
         for v,ls in [(stats['bias'],'-'),(stats['lower_agreement'],'--'),(stats['upper_agreement'],'--')]:b.axhline(v,color='#555555',linestyle=ls,linewidth=.8)
         b.set(xlabel='Pair mean',ylabel='Comparison − reference',title='Bland–Altman')
@@ -92,6 +92,7 @@ def render_table(kind,req,fig,ax,table,meta,palette,rows):
             r=float(np.clip(np.corrcoef(ref,v)[0,1],-1,1));cr=float(np.sqrt(np.mean(((v-v.mean())-(ref-ref.mean()))**2)*len(ref)/(len(ref)-1)))
             ax.scatter(np.arccos(r),s,s=32,label=name,color=palette[i%len(palette)]);records.append([name,r,s,cr])
         ax.scatter(0,sd,marker='*',s=64,color='#222222',label='Reference');ax.set_thetamin(0);ax.set_thetamax(180)
+        limit=max(sd,max(r[2] for r in records))*1.15;theta=np.linspace(0,np.pi,181);rad=np.linspace(0,limit,100);T,R=np.meshgrid(theta,rad);err=np.sqrt(np.maximum(0,sd*sd+R*R-2*sd*R*np.cos(T)));contour=ax.contour(T,R,err,levels=5,colors='#808080',linewidths=.55,linestyles='dotted');ax.clabel(contour,fontsize=7,fmt='%.2g');ax.set_ylim(0,limit)
         ticks=np.array([1,.9,.7,.5,0,-.5,-1]);ax.set_xticks(np.arccos(ticks),[str(v) for v in ticks]);ax.set_ylabel('Sample SD');ax.legend(loc='upper right',bbox_to_anchor=(1.2,1.12))
         meta['reference_sd']=sd
         return [['model','correlation','sample_sd','centered_rmse'],*records]
@@ -142,7 +143,9 @@ def render_raster(kind,req,fig,ax,grids,meta):
         out=np.full(z.shape,np.nan);out[common]=codes
         palette=['#e8e8e8','#ace4e4','#5ac8c8','#dfb0d6','#a5add3','#5698b9','#be64ac','#8c62aa','#3b4994']
         fig.delaxes(ax);a,b=fig.subplots(1,2,gridspec_kw={'width_ratios':[2,1]})
-        a.imshow(out,extent=g.extent,origin='upper',interpolation='nearest',cmap=ListedColormap(palette),norm=BoundaryNorm(np.arange(10)-.5,9));a.set_aspect('equal');a.set_title('Bivariate tertile classes')
+        cm=ListedColormap(palette);cm.set_bad('#dedede');a.imshow(out,extent=g.extent,origin='upper',interpolation='nearest',cmap=cm,norm=BoundaryNorm(np.arange(10)-.5,9));a.set_aspect('equal');a.set_title('Bivariate tertile classes');a.ticklabel_format(style='plain',useOffset=False)
+        a.set_xlabel('Easting' if g.crs.is_projected else 'Longitude / x');a.set_ylabel('Northing' if g.crs.is_projected else 'Latitude / y');a.xaxis.set_major_locator(MaxNLocator(3));a.yaxis.set_major_locator(MaxNLocator(3))
+        if req.map_decoration=='minimal':a.set(xlabel='',ylabel='',xticks=[],yticks=[])
         for j in range(3):
             for i in range(3):b.add_patch(Rectangle((i,j),1,1,color=palette[i+3*j]))
         b.set(xlim=(0,3),ylim=(0,3),aspect='equal',xlabel=grids[0].name,ylabel=grids[1].name);b.set_xticks([.5,1.5,2.5],['Low','Mid','High']);b.set_yticks([.5,1.5,2.5],['Low','Mid','High'])
