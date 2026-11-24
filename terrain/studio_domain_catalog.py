@@ -77,6 +77,11 @@ RASTER = (
 ('spatial_mae_tiles','Spatial neighborhood absolute-error surface','Spatial change','raster',''),
 )
 TABLE = (
+('spatial_null_distribution','Spatial permutation null and observed statistic','Spatial research','table','x y'),
+('spatial_directional_lag','Directional spatial lag curves','Spatial research','table','x y group'),
+('spatial_sample_design','Spatial sample design and design weights','Spatial research','table','x y z'),
+('spatial_oof_agreement','Spatial held-out prediction agreement','Spatial research','table','x y group'),
+('spatial_zonal_coverage','Zonal valid and missing coverage','Spatial research','table','x y z'),
 ('spectral_signature','Spectral reflectance signature','Remote sensing','table','x columns'),
 ('spectral_absorption','Continuum-removed spectral absorption','Remote sensing','table','x y'),
 ('spectral_derivative','Spectral first derivative','Remote sensing','table','x y'),

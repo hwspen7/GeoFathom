@@ -5,7 +5,7 @@ import {saveFigureBlob} from './figureExport';
 import {tableCSV} from './figureLibrary';
 
 export interface StudioTableSource {name:string;csv:string;provenance?:unknown}
-export interface StudioSource {name:string;csv?:string;tables?:StudioTableSource[];rasters?:StudioRaster[];provenance?:unknown;nativePanel?:StudioLegacyPanel;initialRecipe?:string;initialBindings?:Pick<StudioInput,'x'|'y'|'columns'>}
+export interface StudioSource {name:string;csv?:string;tables?:StudioTableSource[];rasters?:StudioRaster[];provenance?:unknown;nativePanel?:StudioLegacyPanel;initialRecipe?:string;initialBindings?:Partial<Pick<StudioInput,'x'|'y'|'z'|'group'|'low'|'high'|'columns'>>}
 const empty:StudioInput={recipe:'',csv:'',rasters:[],x:'',y:'',z:'',group:'',low:'',high:'',columns:[],title:'',x_label:'',y_label:'',parameter:null,maximize_x:false,maximize_y:false,palette:'color',font:'sans',font_size:10,grid:true,width_mm:180,height_mm:125,dpi:120,format:'png'};
 const fieldLabels:Record<string,string>={x:'X / category / design A',y:'Y / response / design B',z:'Z / secondary quantity',group:'Group',low:'Lower bound / low-setting response',high:'Upper bound / high-setting response'};
 function columns(csv:string):string[]{

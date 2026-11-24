@@ -340,3 +340,21 @@ def test_dirichlet_analytic_uncertainty_opposed_criteria():
     np.testing.assert_allclose(mean,.5);np.testing.assert_allclose(sd,np.sqrt(.025))
     prob,_=result_grid(run('robust_overlay',robust_view='probability',**args));se,_=result_grid(run('robust_overlay',robust_view='mc_se',**args))
     np.testing.assert_allclose(se,np.sqrt(prob*(1-prob)/40))
+
+
+@pytest.mark.parametrize('kind,inputs,parameters,recipe',[
+    ('global_moran',lambda:{'rasters':[raster()]},{'permutations':99},'spatial_null_distribution'),
+    ('directional_lag_scan',lambda:{'rasters':[raster()]},{'max_lag':2},'spatial_directional_lag'),
+    ('sample_polygon',lambda:{'vectors':[vectors(box(X,Y-100,X+100,Y))]},{'count':10},'spatial_sample_design'),
+    ('blocked_regression',lambda:{'rasters':[raster(3+2*np.arange(64).reshape(8,8)),raster(np.arange(64).reshape(8,8))]},{'block_size_m':20,'folds':4,'ridge_penalty':0,'buffer_m':1},'spatial_oof_agreement'),
+    ('zonal_statistics',lambda:{'rasters':[raster()],'vectors':[vectors(box(X,Y-10,X+15,Y))]},{},'spatial_zonal_coverage'),
+])
+def test_spatial_actual_result_figure_pipeline(kind,inputs,parameters,recipe):
+    from terrain.studio_routes import StudioInput
+    from terrain.studio_render import render
+    result=run(kind,parameters=parameters,**inputs())
+    plot=next(p for p in result['figures'] if p['recipe']==recipe)
+    image,metadata,table=render(StudioInput(recipe=plot['recipe'],csv=plot['csv'],**plot['bindings']))
+    assert image.startswith(b'\x89PNG') and len(table)>1 and metadata['recipe']==recipe
+    svg,_,svg_table=render(StudioInput(recipe=plot['recipe'],csv=plot['csv'],format='svg',**plot['bindings']))
+    assert b'<svg' in svg and svg_table==table

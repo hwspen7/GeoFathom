@@ -40,6 +40,9 @@ def render_table_domain(kind,req,fig,ax,table,parameter,meta,palette,cmap,rows):
     def integer(v,limit):
         require(float(v).is_integer() and 1<=v<=limit,'Choose an integer parameter within the data length.');return int(v)
     color=palette[0]
+    if kind in {'spatial_null_distribution','spatial_directional_lag','spatial_sample_design','spatial_oof_agreement','spatial_zonal_coverage'}:
+        from .studio_spatial_figures import render_spatial_figure
+        return render_spatial_figure(kind,req,fig,ax,table,meta,palette,cmap,rows)
     if kind.startswith('basic_'):
         if kind in {'basic_rank','basic_lorenz'}:
             a,_=rows([req.y]);v=np.sort(a[0])

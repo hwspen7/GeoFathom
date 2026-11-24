@@ -185,6 +185,8 @@ def execute(body):
              'weights':body.weights,'directions':body.directions,'pairwise':body.pairwise,'breaks':body.breaks,'resampling':body.resampling,'local_view':body.local_view,'neighborhood':body.neighborhood,'robust_view':body.robust_view,'regression_view':body.regression_view,'metrics':meta,
              'vector_count':len(features['features']) if features else 0,'table_rows':len(rows),'raster_sha256':product['sha256'] if product else None}
     result={'operation':kind,'receipt':receipt,'features':features,'raster':product,'preview':raster_preview(product) if product else None,'columns':headers,'rows':rows,'csv':csv_output(headers,rows)}
+    from .science_figures import figure_sources
+    result['figures']=figure_sources(result,grids)
     json.dumps(result,allow_nan=False)
     return result
 
