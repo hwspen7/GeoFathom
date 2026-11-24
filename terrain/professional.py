@@ -13,7 +13,7 @@ from rasterio.transform import array_bounds
 from shapely.geometry import LineString, MultiLineString
 from imagery.raster import RasterError
 from .cancellation import checkpoint
-from .compute_resources import current_limits
+from .compute_resources import current_limits, active_limits
 
 SURFACES = {"elevation", "slope_map", "aspect_map", "hillshade", "tri", "tpi",
             "curvature", "plan_curvature", "profile_curvature", "flow_direction", "flow_accumulation", "flow_accumulation_mfd", "streams", "stream_order",
@@ -379,6 +379,8 @@ def _derived_surface_tiled(z,valid,dx,dy,operation,max_slope=30.,
         0<=max_slope<=90 and min_elevation<=max_elevation and max_tri>=0
     ):
         raise RasterError("Invalid suitability limits.")
+    if active_limits() is not None:
+        block=min(block,current_limits().tile_size)
     output=np.full(z.shape,np.nan,dtype=np.float64)
     qualified=0
     suitable=0

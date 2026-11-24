@@ -81,9 +81,10 @@ async function rawRequest(path: string, init?: RequestInit): Promise<Response> {
   // Local geometry and project requests must not strand the editor indefinitely.
   const exchange=/\/(vector|package)(?:\/|$)/.test(path);
   const fast=!exchange&&/^\/(measure|edit\/|health|capabilities|projects(?:\/|$))/.test(path);
+  const timeout=/^\/terrain\/(analyze|advanced)$/.test(path)?1_800_000:fast?12000:120000;
   try{
     return await fetch(API_URL+path,{...init,headers:sessionHeaders(init?.headers),
-      signal:init?.signal?AbortSignal.any([init.signal,AbortSignal.timeout(fast?12000:120000)]):AbortSignal.timeout(fast?12000:120000)});
+      signal:init?.signal?AbortSignal.any([init.signal,AbortSignal.timeout(timeout)]):AbortSignal.timeout(timeout)});
   }catch(error){
     if(init?.signal?.aborted)throw new DOMException('Request cancelled','AbortError');
     const detail=error instanceof Error?error.message:String(error);
@@ -584,7 +585,25 @@ export function traceExisting(start:[number,number],end:[number,number],paths:[n
     body:JSON.stringify({start,end,paths,tolerance_m:30}),
   });
 }
+export type TerrainComputePolicy = {
+  mode:'automatic'|'manual';memory_percent:number;concurrent_tasks:number;tile_size:128|256|512|1024;
+  slope_cells:number;surface_cells:number;global_cells:number;visibility_cells:number;least_cost_cells:number;
+  viewshed_distance_m:number;ray_samples:number;
+};
+export type TerrainComputeLimits = Omit<TerrainComputePolicy,'mode'|'memory_percent'> & {memory_bytes:number;native_slope_cells:number};
+export interface TerrainComputeStatus {
+  policy:TerrainComputePolicy;hardware:{total_bytes:number;available_bytes:number;logical_cpus:number;scratch_free_bytes:number};
+  effective:TerrainComputeLimits;active_tasks:number;queued_tasks:number;scope:string;terrain_gpu:string;memory_protection:string;
+}
+export function getTerrainComputeResources(signal?:AbortSignal):Promise<TerrainComputeStatus>{
+  return request('/terrain/resources',{signal});
+}
+export function setTerrainComputeResources(policy:TerrainComputePolicy):Promise<TerrainComputeStatus>{
+  return request('/terrain/resources',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(policy)});
+}
+
 export interface TerrainResult {
+  compute_resources?:TerrainComputeLimits;
   elevation_min_m:number;elevation_max_m:number;elevation_mean_m:number;
   elevation_relief_m:number;mean_slope_deg:number;mean_aspect_deg:number|null;
   maximum_slope_deg:number;valid_pixels:number;engine:string;warning:string;
@@ -997,6 +1016,7 @@ export function fetchTerrainMeshTile(body:{
     headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
 }
 export interface AdvancedTerrainResult {
+  compute_resources?:TerrainComputeLimits;
   operation:TerrainOperation;source_crs:string;source_vertical_datum?:string|null;valid_cells:number;missing_cells:number;
   cell_area_m2:number;metrics:Record<string,number>;warning:string;
   algorithm_options?:{gradient_method:string;slope_classes:string;

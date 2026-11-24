@@ -17,12 +17,14 @@ from .compute_resources import task_resources, ResourceBusy
 from dataclasses import asdict
 
 
-async def run_cancelable(request, fn, *args):
+async def run_cancelable(request, fn, *args, budgeted=False):
     # Do not abandon a worker on browser disconnect: request cancellation
     # is observed at the algorithm checkpoints, and the worker is drained.
     cancel=Event()
     def execute():
-        with task_resources() as limits:
+        if not budgeted:
+            return fn(*args,cancel=cancel)
+        with task_resources(cancel) as limits:
             result=fn(*args,cancel=cancel)
             if isinstance(result,dict):
                 result["compute_resources"]=asdict(limits)
@@ -71,7 +73,7 @@ def raster(identifier):
 async def area(request:Request,body:TerrainInput)->dict:
     try:
         return await run_cancelable(request,analyze_area,raster(body.image_id),
-                                       body.geometry,body.vertical_unit,body.gradient_method)
+                                       body.geometry,body.vertical_unit,body.gradient_method,budgeted=True)
     except (GeometryError,RasterError,ValueError) as error:
         raise HTTPException(status_code=422,detail=str(error)) from error
 
@@ -214,6 +216,6 @@ async def advanced(request:Request,body:AdvancedTerrainInput):
             raster(body.dsm_image_id) if body.dsm_image_id and body.operation in {"visibility","viewshed_multi"} else None,
             body.mesh_lod,body.suitability_model,body.suitability_weights,
             raster(body.external_inflow_image_id) if body.external_inflow_image_id else None,
-            body.design_curvature_east,body.design_curvature_cross,body.design_curvature_north)
+            body.design_curvature_east,body.design_curvature_cross,body.design_curvature_north,budgeted=True)
     except (GeometryError,RasterError,ValueError,OverflowError) as error:
         raise HTTPException(status_code=422,detail=str(error)) from error

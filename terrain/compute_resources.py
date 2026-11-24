@@ -13,7 +13,8 @@ import math
 import os
 from pathlib import Path
 import shutil
-from threading import RLock
+from threading import RLock, Condition
+from .cancellation import checkpoint
 from uuid import uuid4
 
 import psutil
@@ -86,6 +87,8 @@ _REFERENCE = Limits(2*GiB, 1, 512, 32_000_000, 8_000_000, 1_000_000,
 _active: ContextVar[Limits | None] = ContextVar("terrain_compute_limits", default=None)
 _lock = RLock()
 _running = 0
+_waiting = 0
+_condition = Condition(_lock)
 
 
 class ResourceBusy(RuntimeError):
@@ -108,7 +111,7 @@ def load_policy():
 
 def save_policy(policy):
     with _lock:
-        if _running:
+        if _running or _waiting:
             raise ResourceBusy("Finish or cancel active terrain tasks before changing resource settings.")
         path = _settings_path()
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -161,7 +164,7 @@ def detect_host():
 
 def resolve_limits(policy, host):
     manual = policy.mode == "manual"
-    concurrency = min(host.logical_cpus, policy.concurrent_tasks if manual else 1)
+    concurrency = min(host.logical_cpus, policy.concurrent_tasks if manual else 2)
     concurrency = max(1, concurrency)
     percent = policy.memory_percent if manual else 65
     # Reserve host headroom and divide the aggregate budget among admitted tasks.
@@ -198,22 +201,32 @@ def active_limits():
 
 
 @contextmanager
-def task_resources():
-    global _running
-    with _lock:
-        limits = resolve_limits(load_policy(), detect_host())
-        if not limits.tile_size:
-            raise ResourceBusy("Insufficient available terrain memory. Free memory or reduce concurrent tasks.")
-        if _running >= limits.concurrent_tasks:
-            raise ResourceBusy("Terrain compute capacity is busy. Finish or cancel an active task.")
-        _running += 1
+def task_resources(cancel=None):
+    global _running, _waiting
+    with _condition:
+        if _waiting >= 16:
+            raise ResourceBusy("Terrain task queue is full.")
+        _waiting += 1
+        try:
+            while True:
+                checkpoint(cancel)
+                limits = resolve_limits(load_policy(), detect_host())
+                if not limits.tile_size:
+                    raise ResourceBusy("Insufficient available terrain memory. Free memory or reduce concurrent tasks.")
+                if _running < limits.concurrent_tasks:
+                    _running += 1
+                    break
+                _condition.wait(timeout=.1)
+        finally:
+            _waiting -= 1
     token = _active.set(limits)
     try:
         yield limits
     finally:
         _active.reset(token)
-        with _lock:
+        with _condition:
             _running -= 1
+            _condition.notify_all()
 
 
 def resource_status():
@@ -222,7 +235,7 @@ def resource_status():
         host = detect_host()
         limits = resolve_limits(policy, host)
         return {"policy": policy.model_dump(), "hardware": asdict(host),
-                "effective": asdict(limits), "active_tasks": _running,
+                "effective": asdict(limits), "active_tasks": _running, "queued_tasks": _waiting,
                 "scope": "local_backend_process",
                 "terrain_gpu": "not_available",
                 "memory_protection": "estimated_admission_not_os_enforcement"}

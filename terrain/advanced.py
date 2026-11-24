@@ -320,7 +320,7 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
     if neighborhood_radius not in (1,2,3,4):
         raise RasterError("Neighborhood radius must be 1–4 cells.")
     limits=current_limits()
-    if not math.isfinite(max_distance_m) or not 0<=max_distance_m<=limits.viewshed_distance_m:
+    if not math.isfinite(max_distance_m) or not 0<=max_distance_m<=(limits.viewshed_distance_m if operation in {"visibility","viewshed_multi"} else 100000):
         raise RasterError(f"Viewshed range must be 0–{limits.viewshed_distance_m:,} meters under the effective compute budget.")
     if not math.isfinite(view_azimuth) or not 0<=view_azimuth<=360:
         raise RasterError("Viewshed azimuth must be 0–360 degrees.")

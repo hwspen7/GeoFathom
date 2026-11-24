@@ -12,6 +12,7 @@ import {
 } from './api';
 import MapCanvas, { type FocusPoint } from './MapCanvas';
 import BoundaryEditor from './BoundaryEditor';
+import ComputingResources from './ComputingResources';
 import {loadDisplay,saveDisplay,areaText,distanceText,type AreaUnit} from './displaySettings';
 import {BASEMAPS,BASEMAP_GROUPS,basemapAvailable,customBasemap,defaultCustom,mapTilerImagery,type BasemapId,type CustomBasemap} from './basemaps';
 import {ScratchHistory} from './scratchHistory';
@@ -1185,6 +1186,7 @@ export default function App() {
             <label>Map contrast <select aria-label="Map contrast" value={display.contrast} onChange={e=>setDisplay(old=>({...old,contrast:e.target.value as typeof display.contrast}))}>
               <option value="auto">Automatic</option><option value="light">Light lines</option><option value="dark">Dark lines</option></select></label>
             <label>Selection fill <input aria-label="Selection fill opacity" type="range" min="0" max=".7" step=".02" value={display.fill} onChange={e=>setDisplay(old=>({...old,fill:Number(e.target.value)}))}/></label>
+            <ComputingResources/>
             <div className="section-heading">Imagery sources</div>
             <form className="professional-form" onSubmit={event=>{event.preventDefault();try{setCustom(mapTilerImagery(mapTilerKey));setTileError('');setMapTilerKey('');setMessage('HD imagery connected. Choose Licensed HD under Map type.');}catch(e){setTileError(String(e));}}}>
               <input type="password" autoComplete="off" aria-label="MapTiler browser API key" placeholder="MapTiler key (licensed)" value={mapTilerKey} onChange={e=>setMapTilerKey(e.target.value)}/>

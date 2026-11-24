@@ -317,7 +317,7 @@ export default function TerrainWorkbench(p:Props){
    (operation!=='flow_accumulation_mfd'||validNumber(mfdExponent,.5,8))&&
    (!['visibility','viewshed_multi'].includes(operation??'')||!considerCurvature||validNumber(refractionCoeff,0,.5))&&
    (!['visibility','viewshed_multi'].includes(operation??'')||validNumber(height,0,1000)&&validNumber(target,0,1000)&&
-     validNumber(viewshedDistance,0,10000)&&validNumber(viewshedAzimuth,0,360)&&validNumber(viewshedWidth,.01,360))&&
+     validNumber(viewshedDistance,0,100000)&&validNumber(viewshedAzimuth,0,360)&&validNumber(viewshedWidth,.01,360))&&
    (!['tri','tpi'].includes(operation??'')||validNumber(neighborhoodRadius,1,4)&&Number.isInteger(Number(neighborhoodRadius)))&&
    (operation!=='mesh'||validNumber(meshSamples,64,512)&&Number.isInteger(Number(meshSamples)));
  const canRun=operation!==null&&p.connected&&resultCacheReady&&verified&&!!correctShape&&!sourceMismatch&&!mapMismatch&&parametersValid;
@@ -425,6 +425,8 @@ export default function TerrainWorkbench(p:Props){
          suitability_weights:[Number(suitabilitySlopeWeight),Number(suitabilityTriWeight),Number(suitabilityElevationWeight)],
          external_inflow_image_id:operation==='flow_accumulation'&&flowRoutingMethod==='dinf'?externalInflowImageId||null:null},controller.signal);
      if(ticket!==sequence.current||controller.signal.aborted)return;
+     const compute=record.advanced?.compute_resources??record.slope?.compute_resources;
+     if(compute)for(const [key,value] of Object.entries(compute))parameters['compute_'+key]=value;
      // Commit scientific data before reporting a completed run. An immediate
      // reload or project switch must never race a pending cache write.
      let cached=false;
@@ -1155,7 +1157,7 @@ export default function TerrainWorkbench(p:Props){
      {['visibility','viewshed_multi'].includes(operation)&&<details className="terrain-method-settings">
         <summary>Viewing sector and range</summary>
         <label>Maximum distance (m, 0 = all)
-          <input aria-label="Viewshed maximum distance" type="number" min="0" max="10000"
+          <input aria-label="Viewshed maximum distance" type="number" min="0" max="100000"
             value={viewshedDistance} onChange={e=>setViewshedDistance(e.target.value)}/>
         </label>
         <div className="area-fields">
