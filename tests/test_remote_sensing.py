@@ -1083,3 +1083,25 @@ def test_joint_research_reference(kind):
         a['training']=np.where(hold,1+label%3,label)
         changed=run(kind,a,{'block_m':40,'iterations':40})
         assert changed['rows'][0][4]==pytest.approx(r['rows'][0][4])
+
+
+def test_joint_research_result_figures_render():
+    from terrain.studio_routes import StudioInput
+    from terrain.studio_render import render
+    lib=[[1,20,1,.2,.3,.4,.5],[1,60,1,.3,.4,.5,.6],[4,20,1,.4,.5,.6,.7],[4,60,1,.5,.6,.7,.8]]
+    a={r:constant(z) for r,z in zip(('blue','green','red','nir'),(.34,.44,.54,.64))}
+    retrieval=run('joint_lai',a,{**{r+'_sd':.15 for r in a},'max_chi2':100},library=lib)
+    fine=np.tile([[.2,.3],[.4,.5]],(3,3));coarse=np.full(fine.shape,.35)
+    fusion=run('fusion_two_anchor',{'fine_before':fine,'coarse_before':coarse,'fine_after':fine+.1,'coarse_after':coarse+.1,'coarse_target':coarse+.05})
+    row,col=np.indices((30,30));labels=1+row%3;rng=np.random.default_rng(9)
+    a={r:.15+.25*(labels-1)+rng.normal(0,.015,labels.shape) for r in ('blue','green','red','nir','swir1','swir2')};a['training']=labels
+    cloud=run('cloud_calibrated_probability',a,{'block_m':40,'iterations':40})
+    recipes=set()
+    for result in (retrieval,fusion,cloud):
+        for figure in result['figures']:
+            if figure['raster']:continue
+            body=StudioInput(recipe=figure['recipe'],csv=figure['csv'],**figure['bindings'])
+            png,meta,table=render(body);assert png.startswith(b'\x89PNG') and meta['used_count']>0
+            svg,_,t2=render(body.model_copy(update={'format':'svg'}));assert svg.startswith(b'<?xml') and t2==table
+            recipes.add(figure['recipe'])
+    assert {'remote_reliability','remote_roc','remote_joint_posterior','remote_posterior_marginal','remote_anchor_quantiles','basic_table_heatmap'}<=recipes

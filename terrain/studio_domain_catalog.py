@@ -77,6 +77,11 @@ RASTER = (
 ('spatial_mae_tiles','Spatial neighborhood absolute-error surface','Spatial change','raster',''),
 )
 TABLE = (
+('remote_reliability','Held-out probability reliability','Remote sensing','table','x y z'),
+('remote_roc','Held-out receiver operating characteristic','Remote sensing','table','x y'),
+('remote_joint_posterior','Joint physical parameter posterior','Remote sensing','table','x y z'),
+('remote_posterior_marginal','Discrete marginal parameter posterior','Remote sensing','table','x y'),
+('remote_anchor_quantiles','Signed fusion anchor disagreement quantiles','Remote sensing','table','x y'),
 ('spatial_null_distribution','Spatial permutation null and observed statistic','Spatial research','table','x y'),
 ('spatial_directional_lag','Directional spatial lag curves','Spatial research','table','x y group'),
 ('spatial_sample_design','Spatial sample design and design weights','Spatial research','table','x y z'),
@@ -166,6 +171,11 @@ OPTIONS = {
 MIN_RASTERS = {**{r[0]:2 for r in RASTER if r[0].startswith('ensemble_') or r[0].startswith('land_transition') or r[0] in ('land_gain_loss','spatial_relative_change','spatial_absolute_change','spatial_z_change','spatial_rmse_tiles','spatial_mae_tiles')},
  **{r[0]:2 for r in RASTER if r[0].startswith('spectral_')},'spectral_rgb':3,'spectral_evi':3,'spectral_angle':2,'spatial_z_change':3}
 NOTES={
+ 'remote_reliability':'Held-out bin mean probabilities, positive fractions and counts; symbol size is bin support, not an error bar.',
+ 'remote_roc':'Actual supplied ROC coordinates; plotted AUC may approximate a decimated curve; exact original AUC belongs to analysis receipt.',
+ 'remote_joint_posterior':'Actual discrete joint posterior mass, summed for duplicate parameter pairs; no interpolation or fabricated density.',
+ 'remote_posterior_marginal':'Discrete posterior masses, not a continuous density or independent field confidence interval.',
+ 'remote_anchor_quantiles':'Signed disagreement between reference-anchor predictions; not calibrated error or uncertainty.',
  'spatial_variogram':'Directional cardinal grid lags in projected metres; optional isotropic covariance fit and conditional ordinary-kriging leave-one-out diagnostics.',
  'spatial_covariogram':'Directional cardinal grid lags with full-population mean centering; descriptive covariance.',
  'spatial_correlogram':'Pairwise Pearson correlation by cardinal grid lag; no independence claim.',

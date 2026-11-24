@@ -285,10 +285,10 @@ def execute(body):
         add('Spatial cloud probability log loss','basic_column',{'x':'fold','y':'log_loss'})
     if kind in JOINT_IDS:
         for label in ('LAI','Cab'):
-            add(label+' scene-average posterior mass','basic_column',{'x':'value','y':'posterior_mass'},csv_text(headers,[r for r in rows if r[0]==label]))
+            add(label+' scene-average posterior mass','remote_posterior_marginal',{'x':'value','y':'posterior_mass'},csv_text(headers,[r for r in rows if r[0]==label]))
         add('Joint LAI and chlorophyll posterior','remote_joint_posterior',{'x':'lai','y':'cab','z':'mass'},csv_text(['lai','cab','mass'],meta['joint_posterior']))
     if kind in {'fusion_two_anchor','fusion_anchor_disagreement'}:
-        add('Signed anchor disagreement quantiles','basic_line',{'x':'quantile','y':'anchor_difference'})
+        add('Signed anchor disagreement quantiles','remote_anchor_quantiles',{'x':'quantile','y':'anchor_difference'})
     if kind in {'cloud_calibrated_probability','shadow_calibrated_probability'}:
         add('Outer-fold probability reliability','remote_reliability',{'x':'predicted','y':'observed','z':'cells'},csv_text(['predicted','observed','cells'],meta['reliability']))
         add('Outer-fold ROC curve','remote_roc',{'x':'fpr','y':'tpr'},csv_text(['fpr','tpr'],meta['roc']))

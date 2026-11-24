@@ -103,7 +103,7 @@ def calibrated_cloud(v,grid,p,kind):
             raw_oof[hold]=raw;oof[hold]=prob
             rows.append([j,int(train.sum()),int(cal.sum()),int(hold.sum()),temp,loss(raw,y),loss(prob,y)])
         y=labels[labeled].astype(int)-1;raw=raw_oof[labeled];prob=oof[labeled]
-        require(np.isfinite(prob).all(),'Incomplete outer validation.')
+        require(np.isfinite(prob).all() and all(np.count_nonzero(y==c)>0 for c in range(3)),'Incomplete outer validation.')
         final_temp=temperature(raw,y);model=fit(labeled);x=a[:,valid].T;out=np.full(valid.shape,np.nan);pred=[]
         target=1 if kind=='cloud_calibrated_probability' else 2
         for i in range(0,len(x),8192):pred.append(scaled(model.predict_proba(x[i:i+8192]),final_temp)[:,target])
