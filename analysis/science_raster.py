@@ -20,18 +20,24 @@ def focal(z,r,kind):
         out=reduce(np.fmin) if kind=='focal_min' else reduce(np.fmax) if kind=='focal_max' else reduce(np.fmax)-reduce(np.fmin)
         out[~np.isfinite(z)]=np.nan
         return out
-    require(z.size*(2*r+1)**2<=60_000_000,'Neighborhood exceeds cell-window work budget.')
+    # Merge horizontal running moments vertically using Chan's parallel variance
+    # formula. Unlike raw sum-of-squares, this is stable for high-offset data.
+    require(z.size*(2*r+1)*2<=180_000_000,'Separable neighborhood exceeds work budget.')
+    hc=np.zeros(z.shape,np.int32);hm=np.zeros(z.shape);h2=np.zeros(z.shape)
+    pad=np.pad(z,((0,0),(r,r)),constant_values=np.nan)
+    for k in range(2*r+1):
+        v=pad[:,k:k+w];ok=np.isfinite(v)
+        hc[ok]+=1;delta=v[ok]-hm[ok];hm[ok]+=delta/hc[ok]
+        if kind=='focal_sd':h2[ok]+=delta*(v[ok]-hm[ok])
     count=np.zeros(z.shape,np.int32);mean=np.zeros(z.shape);m2=np.zeros(z.shape)
-    low=np.full(z.shape,np.inf);high=np.full(z.shape,-np.inf)
-    pad=np.pad(z,r,constant_values=np.nan)
-    for dy in range(2*r+1):
-        for dx in range(2*r+1):
-            v=pad[dy:dy+h,dx:dx+w];ok=np.isfinite(v)
-            count[ok]+=1
-            delta=v[ok]-mean[ok];mean[ok]+=delta/count[ok];m2[ok]+=delta*(v[ok]-mean[ok])
-            low[ok]=np.minimum(low[ok],v[ok]);high[ok]=np.maximum(high[ok],v[ok])
-    out={'focal_mean':mean,'focal_sd':np.sqrt(np.maximum(0,m2)/np.maximum(count,1)),
-         'focal_min':low,'focal_max':high,'focal_range':high-low}[kind]
+    pc=np.pad(hc,((r,r),(0,0)));pm=np.pad(hm,((r,r),(0,0)));p2=np.pad(h2,((r,r),(0,0)))
+    for k in range(2*r+1):
+        c=pc[k:k+h];v=pm[k:k+h];ok=c>0
+        previous=count[ok];current=c[ok];total=previous+current
+        delta=v[ok]-mean[ok];mean[ok]+=delta*(current/total)
+        if kind=='focal_sd':m2[ok]+=p2[k:k+h][ok]+delta**2*(previous.astype(float)*current/total)
+        count[ok]=total
+    out=mean if kind=='focal_mean' else np.sqrt(np.maximum(0,m2)/np.maximum(count,1))
     out[~np.isfinite(z)]=np.nan
     return out
 

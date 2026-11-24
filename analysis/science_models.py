@@ -147,7 +147,7 @@ def fit_spatial_model(grids,params,kind,view):
         local=None
     else:
         require(n<=1500 and n*n*(p+1)**2<=80_000_000,'Geographically weighted leave-one-out fit exceeds bounded workspace.')
-        pred=np.full(n,np.nan);local=np.full(n,np.nan);effective=np.full(n,np.nan)
+        pred=np.full(n,np.nan);local=np.full((n,p),np.nan);effective=np.full(n,np.nan)
         bandwidth=params['bandwidth_m']
         for i,point in enumerate(coords):
             d=np.hypot(*(coords-point).T)/bandwidth
@@ -157,7 +157,7 @@ def fit_spatial_model(grids,params,kind,view):
             root=np.sqrt(w);weighted=design*root[:,None]
             if np.linalg.matrix_rank(weighted)<p+1 or np.linalg.cond(weighted)>1e9:continue
             coef=np.linalg.lstsq(weighted,yc*root,rcond=None)[0]
-            pred[i]=center+design[i]@coef;local[i]=coef[1]/scale[0];effective[i]=neff
+            pred[i]=center+design[i]@coef;local[i]=coef[1:]/scale;effective[i]=neff
         require(np.count_nonzero(np.isfinite(pred))>=max(3,p+2),'Too few locally identifiable predictions; increase bandwidth.')
         meta={'bandwidth_m':bandwidth,'unpredicted_cells':int(np.count_nonzero(~np.isfinite(pred))),
               'median_effective_neighbors':float(np.nanmedian(effective)),
@@ -170,6 +170,6 @@ def fit_spatial_model(grids,params,kind,view):
     headers=['easting','northing','observed','prediction','residual']
     rows=[[float(a),float(b),float(c),float(d),float(e)] for (a,b),c,d,e in zip(coords[good],y[good],pred[good],residual[good])]
     if local is not None:
-        headers.append('local_coefficient_first_predictor')
-        for row,c in zip(rows,local[good]):row.append(float(c))
+        headers.extend(['local_coefficient_first_predictor',*[f'local_coefficient_predictor_{j+1}' for j in range(1,p)]])
+        for row,c in zip(rows,local[good]):row.extend(c.tolist())
     return out,headers,rows,meta

@@ -37,7 +37,8 @@ def figure_sources(result,grids):
         rows=[[*tx.transform(*f['geometry']['coordinates']),f['properties']['area_weight_m2']] for f in result['features']['features']]
         add('Polygon sample distribution','spatial_sample_design',{'x':'easting','y':'northing','z':'area_weight_m2'},csv_text(['easting','northing','area_weight_m2'],rows))
     if kind=='multiscale_moran':
-        table('Moran statistic by aggregation scale','basic_scatter',{'x':'factor','y':'moran_i'})
+        if any(r[-1] is not None for r in result['rows']):
+            table('Moran statistic by aggregation scale','basic_scatter',{'x':'factor','y':'moran_i'})
         table('Dispersion by aggregation scale','basic_scatter',{'x':'factor','y':'population_sd'})
         table('Retained source coverage by scale','basic_scatter',{'x':'factor','y':'source_coverage'})
     if kind=='empirical_variogram':

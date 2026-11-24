@@ -522,3 +522,21 @@ def test_research_depth_invalid_and_model_figure():
     plot=next(p for p in r['figures'] if p['title']=='Empirical semivariogram')
     image,_,_=render(StudioInput(recipe=plot['recipe'],csv=plot['csv'],**plot['bindings']))
     assert image.startswith(b'\x89PNG')
+
+
+def test_large_stable_neighborhood_moments():
+    from analysis.science_raster import focal
+    rng=np.random.default_rng(13);z=1e9+rng.normal(size=(384,384));z[8:45,2:20]=np.nan
+    for kind,fn in [('focal_mean',np.nanmean),('focal_sd',np.nanstd)]:
+        out=focal(z,20,kind)
+        assert np.array_equal(np.isfinite(out),np.isfinite(z))
+        for i,j in [(0,0),(8,21),(200,200),(383,383)]:
+            win=z[max(0,i-20):i+21,max(0,j-20):j+21]
+            assert out[i,j]==pytest.approx(fn(win),rel=0,abs=2e-6)
+
+
+def test_geographically_weighted_multiple_coefficients():
+    rng=np.random.default_rng(71);x=rng.normal(size=(6,6));z=rng.normal(size=(6,6));y=7+2*x-3*z
+    r=run('geographically_weighted_regression',rasters=[raster(y),raster(x),raster(z)],parameters={'bandwidth_m':30})
+    assert r['columns'][-2:]==['local_coefficient_first_predictor','local_coefficient_predictor_2']
+    np.testing.assert_allclose(np.array(r['rows'])[:,-2:],np.tile([2,-3],(36,1)),atol=1e-9)

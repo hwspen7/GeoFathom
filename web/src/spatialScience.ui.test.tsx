@@ -23,3 +23,18 @@ it('uses exact catalog parameters and returns only actual result geometry',async
  fireEvent.click(screen.getByRole('button',{name:'Show vectors on map'}));expect(onPreview).toHaveBeenCalledWith([feature]);
  await waitFor(()=>expect(screen.queryByRole('dialog',{name:'Spatial science workbench'})).toBeNull());
 });
+
+
+it('distinguishes structural fits from held-out predictions',async()=>{
+ mocked.catalog.mockResolvedValue({operation_count:2,operations:[
+ {id:'spatial_lag_regression',group:'Integrated',title:'Spatial lag regression (2SLS)',source:'raster',minimum:2,maximum:8,parameters:[],result:'raster',assumption:'Conditional structural fit',requires_regression_view:true},
+ {id:'geographically_weighted_regression',group:'Integrated',title:'Geographically weighted regression',source:'raster',minimum:2,maximum:8,parameters:[],result:'raster',assumption:'Leave-one-out',requires_regression_view:true}
+ ]});
+ render(<SpatialSciencePanel geometry={null} connected onPreview={vi.fn()}/>);
+ fireEvent.click(screen.getByRole('button',{name:'Open Spatial Analysis'}));
+ await screen.findByRole('option',{name:'Structural fitted response'});
+ fireEvent.change(screen.getByLabelText('Spatial algorithm group'),{target:{value:'Integrated'}});
+ fireEvent.change(screen.getByLabelText('Spatial algorithm'),{target:{value:'geographically_weighted_regression'}});
+ expect(screen.getByRole('option',{name:'Leave-one-out prediction'})).toBeTruthy();
+ expect(screen.queryByRole('option',{name:'Out-of-fold prediction'})).toBeNull();
+});
