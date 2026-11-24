@@ -1276,3 +1276,53 @@ def test_exact_spectral_response_and_no_extrapolation():
     assert r['band_values']==pytest.approx([.5])
     with pytest.raises(FigureInputError):
         spectral_response([410,500],[0,1],[400,500],[1,1])
+
+
+def test_rpc_dem_orthorectification_known_height_shift(tmp_path):
+    import rasterio
+    from rasterio.rpc import RPC
+    from imagery.satellite_rpc import rectify
+    coeff=np.zeros(20);den=coeff.copy();den[0]=1
+    line=coeff.copy();line[2]=-1;line[3]=.2
+    sample=coeff.copy();sample[1]=1
+    rpc=RPC(0,100,40,.01,den.tolist(),line.tolist(),4.5,5,-83,.01,
+        den.tolist(),sample.tolist(),4.5,5)
+    native=np.arange(100.,dtype=float).reshape(10,10)
+    aff=from_origin(-83.01,40.01,.002,.002)
+    src,dem,grid=[tmp_path/f'{n}.tif' for n in ('rpc','dem','target')]
+    for path,z in ((src,native),(dem,np.full((10,10),100.)),(grid,np.ones((10,10)))):
+        if path==dem:z[1,1]=np.nan
+        with rasterio.open(path,'w',driver='GTiff',width=10,height=10,count=1,dtype='float64',
+                           crs='EPSG:4326',transform=aff,nodata=np.nan) as ds:
+            ds.write(z,1)
+            ds.update_tags(TERRAIN_UNIT='m')
+            if path==src:ds.rpcs=rpc
+    expected=np.full((10,10),np.nan);expected[:9]=native[1:];expected[1,1]=np.nan
+    for method in ('nearest','bilinear'):
+        out=tmp_path/f'{method}.tif'
+        receipt=rectify(src,dem,grid,out,height_reference='WGS84_ellipsoid_m',resampling=method,tile=16)
+        with rasterio.open(out) as ds:
+            np.testing.assert_allclose(ds.read(1),expected,atol=1e-8,equal_nan=True)
+            assert ds.transform==aff
+        assert receipt['missing_dem_cells']==1
+        assert receipt['valid_cells']==89
+    with pytest.raises(FigureInputError):
+        rectify(src,dem,grid,tmp_path/'bad.tif',height_reference='orthometric')
+
+def test_insar_shared_acquisition_gls_covariance():
+    from imagery.insar_timeseries import invert,phase_covariance
+    times=[0,12,24];pairs=[[0,1],[1,2],[0,2]]
+    sigma=[.2,.3,.4];epoch=[.1,.2,.3]
+    b=np.array([[-1.,1,0],[0,-1,1],[-1,0,1]])
+    a=b[:,1:];c=np.diag(np.square(sigma))+b@np.diag(np.square(epoch))@b.T
+    np.testing.assert_allclose(phase_covariance(times,pairs,sigma,epoch),c)
+    phase=np.array([2.,3.,5.1]);z=phase[:,None,None]
+    result,meta=invert(z,times,pairs,sigma,.056,1,epoch_sigma=epoch)
+    f=.056/(4*np.pi);ci=np.linalg.inv(c);cov=np.linalg.inv(a.T@ci@a);estimate=cov@a.T@ci@phase
+    np.testing.assert_allclose(result[:2,0,0],f*estimate,atol=1e-12)
+    np.testing.assert_allclose(result[2:4,0,0],f*np.sqrt(np.diag(cov)),atol=1e-12)
+    assert result[4,0,0]==pytest.approx((a@estimate-phase)@ci@(a@estimate-phase))
+    assert meta['covariance_model']=='independent pair errors plus shared-acquisition phase errors'
+    zero,_=invert(z,times,pairs,sigma,.056,1,epoch_sigma=[0,0,0])
+    independent,_=invert(z,times,pairs,sigma,.056,1)
+    np.testing.assert_allclose(zero,independent,atol=1e-12)

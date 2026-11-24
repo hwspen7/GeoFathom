@@ -30,7 +30,17 @@ def design(times,pairs,sigma):
     require(np.linalg.matrix_rank(a)==len(t)-1,"Acquisition graph is disconnected from the first date.")
     return a,sd
 
-def invert(phase,times,pairs,sigma,wavelength,range_sign):
+def phase_covariance(times,pairs,sigma,epoch_sigma=None):
+    a,sd=design(times,pairs,sigma)
+    covariance=np.diag(sd**2)
+    if epoch_sigma is not None:
+        e=np.asarray(epoch_sigma,float)
+        require(e.shape==(len(times),) and np.isfinite(e).all() and np.all((e>=0)&(e<=1e6)),"Supply one nonnegative shared phase SD per acquisition.")
+        incidence=np.column_stack((-a.sum(axis=1),a))
+        covariance+=(incidence*e**2)@incidence.T
+    return covariance
+
+def invert(phase,times,pairs,sigma,wavelength,range_sign,epoch_sigma=None):
     """Recover first-epoch-relative LOS range for fully identifiable pixels.
 
     Independent, known phase-error standard deviations are conditional inputs.
@@ -38,6 +48,7 @@ def invert(phase,times,pairs,sigma,wavelength,range_sign):
     reference date. Returns displacement, conditional SD, chi-square and dof.
     """
     a,sd=design(times,pairs,sigma)
+    covariance=phase_covariance(times,pairs,sigma,epoch_sigma)
     z=np.asarray(phase,float)
     require(z.ndim==3 and z.shape[0]==len(a) and z.size<=8_000_000 and not np.isinf(z).any(),"Invalid phase cube or memory budget.")
     require(math.isfinite(wavelength) and .001<=wavelength<=10 and range_sign in (-1,1),"Specify radar wavelength (m) and signed phase-to-range convention.")
@@ -46,7 +57,7 @@ def invert(phase,times,pairs,sigma,wavelength,range_sign):
     mask=np.isfinite(flat)
     patterns,ids=np.unique(np.packbits(mask.T,axis=1),axis=0,return_inverse=True)
     require(len(patterns)<=4096,"Too many missing-pair patterns; reduce window size.")
-    require(len(patterns)*len(a)*n*n+flat.shape[1]*len(a)*n<=300_000_000,"InSAR inverse work budget exceeded.")
+    require(len(patterns)*len(a)**3+flat.shape[1]*len(a)*max(n,len(a) if epoch_sigma is not None else n)<=300_000_000,"InSAR inverse work budget exceeded.")
     out=np.full((2*n+2,h*w),np.nan)
     # Sort once, rather than scanning the full pixel population for each pattern.
     ordered=np.argsort(ids,kind="stable")
@@ -56,11 +67,18 @@ def invert(phase,times,pairs,sigma,wavelength,range_sign):
     for pattern,columns in zip(patterns,groups):
         good=np.unpackbits(pattern)[:len(a)].astype(bool)
         if good.sum()<n:continue
-        aw=a[good]/sd[good,None]
+        if epoch_sigma is None:
+            aw=a[good]/sd[good,None]
+            lower=None
+        else:
+            from scipy.linalg import solve_triangular
+            lower=np.linalg.cholesky(covariance[np.ix_(good,good)])
+            aw=solve_triangular(lower,a[good],lower=True)
         u,s,vt=np.linalg.svd(aw,full_matrices=False)
         if len(s)<n or s[-1]<=s[0]*1e-10:continue
         pinv=(vt.T/s)@u.T
-        y=flat[np.ix_(good,columns)]/sd[good,None]
+        y=flat[np.ix_(good,columns)]
+        y=y/sd[good,None] if lower is None else solve_triangular(lower,y,lower=True)
         x=pinv@y
         error=aw@x-y
         out[:n,columns]=factor*x
@@ -70,10 +88,12 @@ def invert(phase,times,pairs,sigma,wavelength,range_sign):
         identifiable+=len(columns)
     return out.reshape(2*n+2,h,w),{"identifiable_cells":identifiable,"unidentified_cells":h*w-identifiable,
         "missingness_patterns":len(patterns),"reference_time":float(times[0]),"phase_to_range_m_per_rad":factor,
-        "assumptions":"independent supplied phase errors; already corrected unwrapped phase; no atmospheric, orbit, DEM or shared-acquisition covariance correction"}
+        "covariance_model":"independent pair errors plus shared-acquisition phase errors" if epoch_sigma is not None else "independent pair errors",
+        "assumptions":"supplied error model; already corrected unwrapped phase; no atmospheric, orbit or DEM correction"}
 
-def process(input_path,output,times,pairs,sigma,wavelength,range_sign,tile=64):
+def process(input_path,output,times,pairs,sigma,wavelength,range_sign,tile=64,epoch_sigma=None):
     a,_=design(times,pairs,sigma)
+    phase_covariance(times,pairs,sigma,epoch_sigma)
     require(isinstance(tile,int) and 16<=tile<=256,"Tile must be 16–256.")
     input_path,output=Path(input_path).resolve(),Path(output).resolve()
     require(input_path!=output and not output.exists() and output.parent.is_dir(),"Output must be a new file.")
@@ -87,7 +107,7 @@ def process(input_path,output,times,pairs,sigma,wavelength,range_sign,tile=64):
                 transform=src.transform,nodata=np.nan,compress="deflate",tiled=True,blockxsize=128,blockysize=128,BIGTIFF="IF_SAFER")
             total=0
             with rasterio.open(tmp,"w",**profile) as dst:
-                dst.update_tags(REFERENCE_TIME=str(times[0]),METHOD="conditional_insar_network_wls",PHASE_UNIT="radian")
+                dst.update_tags(REFERENCE_TIME=str(times[0]),METHOD="conditional_insar_network_gls" if epoch_sigma is not None else "conditional_insar_network_wls",PHASE_UNIT="radian")
                 for i,t in enumerate(times[1:]):
                     dst.set_band_description(i+1,f"relative_range_m_at_{t}")
                     dst.set_band_description(n+i+1,f"conditional_sd_m_at_{t}")
@@ -100,15 +120,15 @@ def process(input_path,output,times,pairs,sigma,wavelength,range_sign,tile=64):
                         tag=src.tags(i+1).get("TERRAIN_UNIT") or src.units[i] or src.tags().get("TERRAIN_UNIT")
                         require(not tag or tag in ("radian","rad"),"Phase band unit conflicts with radians.")
                         z[i]=z[i]*scale+offset
-                    result,meta=invert(z,times,pairs,sigma,wavelength,range_sign)
+                    result,meta=invert(z,times,pairs,sigma,wavelength,range_sign,epoch_sigma)
                     total+=meta["identifiable_cells"]
                     dst.write(result,window=win)
             require(total>0,"No pixel has an identifiable acquisition graph.")
             require(digest(input_path)==input_hash,"Input changed during processing.")
             receipt={"input_sha256":input_hash,"output_sha256":digest(tmp),"times":times,"pairs":pairs,"sigma_rad":sigma,
-                "wavelength_m":wavelength,"range_sign":range_sign,"identifiable_cells":total,
+                "wavelength_m":wavelength,"range_sign":range_sign,"epoch_sigma_rad":epoch_sigma,"phase_covariance_rad2":phase_covariance(times,pairs,sigma,epoch_sigma).tolist(),"identifiable_cells":total,
                 "unidentified_cells":src.width*src.height-total,"crs":str(src.crs),"transform":list(src.transform)[:6],
-                "assumption":"independent pair errors; corrected unwrapped phase; not a full SBAS processing chain"}
+                "assumption":"independent pair errors and optional independent shared epoch errors; corrected unwrapped phase; not a full SBAS processing chain"}
             os.link(tmp,output);return receipt
     finally:
         if tmp is not None:tmp.unlink(missing_ok=True)
