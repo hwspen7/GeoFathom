@@ -78,6 +78,7 @@ def read_band(source,binding,quantity,raw,sha):
 def execute(body):
     method=BY_ID.get(body.operation);require(method is not None,'Unknown remote sensing operation.')
     require(bool(body.library)==(method.id in LUT_IDS),'Supply a spectral library only for library retrieval methods.')
+    if body.library:require(all(len(row)==(7 if method.id in JOINT_IDS else 6) for row in body.library),'Incorrect spectral library row width.')
     roles=dict(method.roles)
     if method.id in SERIES_IDS:
         require(6<=len(body.times)<=64,'Supply 6–64 acquisition times.')

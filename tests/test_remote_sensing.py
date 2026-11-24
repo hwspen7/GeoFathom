@@ -1105,3 +1105,30 @@ def test_joint_research_result_figures_render():
             svg,_,t2=render(body.model_copy(update={'format':'svg'}));assert svg.startswith(b'<?xml') and t2==table
             recipes.add(figure['recipe'])
     assert {'remote_reliability','remote_roc','remote_joint_posterior','remote_posterior_marginal','remote_anchor_quantiles','basic_table_heatmap'}<=recipes
+
+
+def test_joint_ambiguity_and_nonzero_anchor_disagreement():
+    # Equal spectra with different physical parameters remain unidentifiable.
+    lib=[[1,20,1,.3,.4,.5,.6],[1,60,1,.3,.4,.5,.6],[5,20,1,.3,.4,.5,.6],[5,60,1,.3,.4,.5,.6]]
+    a={r:constant(z) for r,z in zip(('blue','green','red','nir'),(.3,.4,.5,.6))}
+    for kind,value in [('joint_lai',3),('joint_cab',40),('joint_lai_sd',2),('joint_cab_sd',20),('joint_effective_hypotheses',4),('joint_parameter_correlation',0)]:
+        np.testing.assert_allclose(grid(run(kind,a,library=lib)),value,atol=1e-12)
+    # Unequal subpixel structures but equal native block means: both anchors
+    # must conserve the target coarse measurement without erasing disagreement.
+    fine=np.tile([[.2,.3],[.4,.5]],(3,3));after=np.tile([[.5,.4],[.3,.2]],(3,3))
+    c=np.full(fine.shape,.35);v={'fine_before':fine,'coarse_before':c,'fine_after':after,'coarse_after':c,'coarse_target':c}
+    r=run('fusion_two_anchor',v,{'target_fraction':.25})
+    np.testing.assert_allclose(grid(r),.75*fine+.25*after,atol=1e-12)
+    disagreement=run('fusion_anchor_disagreement',v)
+    np.testing.assert_allclose(grid(disagreement),abs(after-fine),atol=1e-12)
+    assert disagreement['receipt']['metrics']['anchor_disagreement_rmse']==pytest.approx(np.sqrt(np.mean((after-fine)**2)))
+    assert r['receipt']['metrics']['maximum_coarse_mean_error']<1e-12
+
+
+def test_joint_prosail_adapter_retains_cab():
+    from scripts.build_prosail_library import simulate,WAVELENGTH,BOUNDS
+    responses={r:[[w-10,0],[w,1],[w+10,0]] for r,w in zip(('blue','green','red','nir'),(480,550,660,840))}
+    sample={name:(lo+hi)/2 for name,(lo,hi) in BOUNDS.items()}
+    config={'sensor':'synthetic response fixture','responses':responses,'samples':[{**sample,'lai':1,'cab':20,'prior':2},{**sample,'lai':3,'cab':60,'prior':1}]}
+    rows=simulate(config,lambda **kw: .1+WAVELENGTH*.0001+kw['lai']*.02,joint=True)
+    np.testing.assert_allclose(rows,[[1,20,2,.168,.175,.186,.204],[3,60,1,.208,.215,.226,.244]],atol=1e-12)
