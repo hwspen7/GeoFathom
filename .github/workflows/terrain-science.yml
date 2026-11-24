@@ -40,7 +40,7 @@ jobs:
           python -m pytest -q --junitxml=build/terrain-foundation-tests.xml tests/test_terrain_operation_matrix.py tests/test_terrain_numerical_gate.py tests/test_terrain_projection_validation.py tests/test_terrain_scope_validation.py tests/test_terrain_scientific_invariants.py tests/test_terrain_professional.py tests/test_terrain_conditioning.py tests/test_terrain_gradient_unification.py tests/test_terrain_catalog.py
       - name: Run advanced scientific analytic and GeoTIFF integration checks
         run: |
-          python -m pytest -q --junitxml=build/terrain-methods-tests.xml tests/test_terrain_scientific_methods.py tests/test_terrain_exact_coverage.py tests/test_terrain_uncertainty.py tests/test_terrain_mesh_streaming.py tests/test_terrain_independent_references.py tests/test_terrain_compiled_kernels.py tests/test_terrain_research.py
+          python -m pytest -q --junitxml=build/terrain-methods-tests.xml tests/test_terrain_scientific_methods.py tests/test_terrain_exact_coverage.py tests/test_terrain_uncertainty.py tests/test_terrain_mesh_streaming.py tests/test_terrain_independent_references.py tests/test_terrain_compiled_kernels.py tests/test_terrain_research.py tests/test_figure_library.py
       - name: Enforce >=95 foundational synthetic numerical score for every Terrain operation
         run: |
           python scripts/terrain_numerical_gate.py --junit build/terrain-foundation-tests.xml --reference build/terrain-reference.json --output build/terrain-foundation-matrix.json

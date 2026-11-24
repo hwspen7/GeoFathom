@@ -4,7 +4,7 @@ import type {ResearchExperiment,ResearchResult} from './api';
 /** Convert historical human-readable receipts back to engine input keys. */
 export function researchBase(record:PersistedTerrainResult):ResearchExperiment['base']{
  if(record.researchInput)return structuredClone(record.researchInput) as ResearchExperiment['base'];
- const aliases:Record<string,string>={reference_elevation_m:'reference',azimuth_deg:'azimuth',altitude_deg:'altitude',
+ const aliases:Record<string,string>={contour_interval_m:'interval',section_spacing_m:'section_spacing',section_half_width_m:'section_width',reference_elevation_m:'reference',azimuth_deg:'azimuth',altitude_deg:'altitude',
   neighborhood_radius_cells:'neighborhood_radius',curvature_radius_cells:'curvature_radius',
   max_slope_deg:'max_slope',min_elevation_m:'min_elevation',max_elevation_m:'max_elevation',max_tri_m:'max_tri',
   min_stream_cells:'stream_cells',observer_height_m:'observer_height',target_height_m:'target_height',
@@ -16,6 +16,7 @@ export function researchBase(record:PersistedTerrainResult):ResearchExperiment['
  }
  const p=record.parameters??{};
  if(p.observer_longitude!==undefined)parameters.point=[p.observer_longitude,p.observer_latitude];
+ if(p.end_longitude!==undefined)parameters.end_point=[p.end_longitude,p.end_latitude];
  return {image_id:record.source.id,geometry:structuredClone(record.geometry),
   operation:record.operation==='slope'?'slope_map':record.operation,...parameters};
 }

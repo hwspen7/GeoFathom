@@ -307,7 +307,7 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
                 design_east_grade=0.,design_north_grade=0.,design_max_grade=.3,elevation_sigma_m=0.,
                 optimize_observers=0,dsm_path=None,mesh_lod=False,
                 suitability_model="binary",suitability_weights=(.5,.25,.25),external_inflow_path=None,
-                design_curvature_east=0.,design_curvature_cross=0.,design_curvature_north=0.,cancel=None):
+                design_curvature_east=0.,design_curvature_cross=0.,design_curvature_north=0.,cancel=None,include_plot_data=True):
     checkpoint(cancel)
     if gradient_method not in {"horn","zevenbergen_thorne"}:
         raise RasterError("Unsupported terrain gradient method.")
@@ -705,5 +705,8 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
         "area_basis":"planar_projected_grid_cells",
         "projection_max_scale_error_pct":grid_scale_error_pct
     }
+    if include_plot_data:
+        from .figure_data import figure_data_from_result
+        result["plot_data"]=figure_data_from_result(result,cancel,source_z=z)
     checkpoint(cancel)
     return result

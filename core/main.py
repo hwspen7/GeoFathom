@@ -24,6 +24,7 @@ from storage.vector_routes import router as vector_router
 from imagery.routes import router as imagery_router
 from terrain.routes import router as terrain_router
 from terrain.research_routes import router as terrain_research_router
+from terrain.figure_routes import router as terrain_figure_router
 from vision.routes import router as vision_router
 from geometry.routes import router as geometry_router
 from geometry.edit_routes import router as edit_router
@@ -68,6 +69,7 @@ app.include_router(vector_router)
 app.include_router(imagery_router)
 app.include_router(terrain_router)
 app.include_router(terrain_research_router)
+app.include_router(terrain_figure_router)
 app.include_router(vision_router)
 
 

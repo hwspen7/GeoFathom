@@ -997,6 +997,7 @@ export function fetchTerrainMeshTile(body:{
     headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
 }
 export interface AdvancedTerrainResult {
+  plot_data?:PlotData;
   operation:TerrainOperation;source_crs:string;source_vertical_datum?:string|null;valid_cells:number;missing_cells:number;
   cell_area_m2:number;metrics:Record<string,number>;warning:string;
   algorithm_options?:{gradient_method:string;slope_classes:string;
@@ -1182,4 +1183,30 @@ export interface ResearchCatalog {sweep_parameters:Record<string,string[]>;uncer
 export function getResearchCatalog():Promise<ResearchCatalog>{return request('/terrain/research/catalog');}
 export function analyzeResearch(body:ResearchExperiment,signal?:AbortSignal):Promise<ResearchResult>{
  return request('/terrain/research/analyze',{method:'POST',signal,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+}
+
+
+export interface PlotBin {lower:number;upper:number;midpoint:number;cells:number;area_m2:number;percent:number;density:number|null;cumulative_pct:number}
+export interface PlotData {
+ schema:string;operation?:string;kind:'continuous'|'categorical'|'directional'|'binned'|'summary'|'profile';
+ quantity:string;unit:string;valid_cells:number;cell_area_m2:number;population?:string;source_crs?:string;source_sha256?:string;
+ metrics?:Record<string,number>;notes:string[];warning?:string;quality?:unknown;flat_cells?:number;directional_cells?:number;
+ classes:Array<{label:string;color:string;cells:number;area_m2:number;percent:number}>;
+ histograms?:Record<string,PlotBin[]>;
+ cdf?:Array<{value:number;cells_le:number;percent_le:number}>;
+ quantiles?:Array<{probability:number;value:number}>;
+ normal_qq?:Array<{probability:number;normal_quantile:number;observed_quantile:number}>;
+ summary?:{minimum:number;maximum:number;mean:number;population_std:number;q1:number;median:number;q3:number;iqr:number};
+ box?:{q1:number;median:number;q3:number;whisker_low:number;whisker_high:number;lower_outliers:number;upper_outliers:number;fliers?:number[];displayed_outliers?:number};
+ thresholds?:Array<{threshold_deg:number;cells_le:number;percent_le:number}>;
+ roses?:Record<string,Array<{bearing_deg:number;cells:number;area_m2:number;percent:number}>>;
+ profiles?:Array<{name:string;points:Array<{x:number;y:number|null}>}>;
+ joint?:{x_quantity:string;x_unit:string;y_quantity:string;y_unit:string;population_cells:number;sample_cells:number;sampling:string;pearson_r:number|null;samples:Array<{x:number;y:number}>;density_cells:Array<{x_lower:number;x_upper:number;y_lower:number;y_upper:number;cells:number;area_m2:number}>;notes:string[]}|null;
+}
+export function getTerrainPlotData(base:ResearchExperiment['base'],expectedSourceSha256?:string,signal?:AbortSignal):Promise<PlotData>{
+ return request('/terrain/figures/data',{method:'POST',signal,headers:{'Content-Type':'application/json'},body:JSON.stringify({base,expected_source_sha256:expectedSourceSha256})});
+}
+export async function exportFigurePDF(scene:unknown):Promise<Blob>{
+ const response=await rawRequest('/terrain/figures/pdf',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(scene)});
+ if(!response.ok)throw await responseError(response);return response.blob();
 }

@@ -43,3 +43,6 @@ precision = 2
 
 [tool.coverage.paths]
 source = [".", "*/GeoFathom", '*\GeoFathom']
+
+[tool.setuptools.package-data]
+terrain = ["fonts/*.ttf", "fonts/*.txt"]

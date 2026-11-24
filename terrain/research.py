@@ -69,7 +69,7 @@ MAX_SCENARIO_CELLS = 2_000_000
 INTEGER_PARAMETERS = {'neighborhood_radius', 'curvature_radius', 'stream_cells'}
 
 
-def execute(body, path, resolve, cancel=None):
+def execute(body, path, resolve, cancel=None, include_plot_data=True):
     options = body.model_dump(exclude={'image_id', 'texture_image_id', 'comparison_image_id',
         'dsm_image_id', 'external_inflow_image_id'})
     for identifier, target, enabled in [
@@ -80,7 +80,7 @@ def execute(body, path, resolve, cancel=None):
     ]:
         if identifier and enabled:
             options[target] = resolve(identifier)
-    return run_terrain(path, **options, cancel=cancel)
+    return run_terrain(path, **options, cancel=cancel, include_plot_data=include_plot_data)
 
 
 def unpack(product):
@@ -236,7 +236,7 @@ def analyze_experiment(body, resolve, cancel=None):
             raise RasterError('Dependency checksum changed; this experiment cannot reproduce the saved input.')
     dependencies = {identifier:file_sha256(resolve(identifier))
         for identifier in [body.base.dsm_image_id,body.base.external_inflow_image_id] if identifier}
-    baseline = execute(body.base, path, resolve, cancel)
+    baseline = execute(body.base, path, resolve, cancel, include_plot_data=False)
     runs = [_receipt(body.baseline_name, body.base, baseline)]
     products = []
     baseline_raster = baseline.get('raster')
@@ -265,7 +265,7 @@ def analyze_experiment(body, resolve, cancel=None):
         raise RasterError('Scenario experiment exceeds 12,000,000 cell evaluations; reduce the area or scenario count.')
     for name, variant, value in variants:
         checkpoint(cancel)
-        output = execute(variant, path, resolve, cancel)
+        output = execute(variant, path, resolve, cancel, include_plot_data=False)
         runs.append(_receipt(name, variant, output))
         if output.get('raster'):
             products.append({'name': name, 'role': 'scenario', 'raster': output['raster']})
@@ -338,7 +338,7 @@ def _uncertainty(body, path, resolve, z, valid, affine, crs, baseline, result, c
                 count=1, dtype='float64', crs=crs, transform=affine, nodata=float('nan')) as dst:
                 dst.write(perturbed, 1)
                 dst.update_tags(**tags)
-            output = execute(body.base, temporary, resolve, cancel)
+            output = execute(body.base, temporary, resolve, cancel, include_plot_data=False)
             metrics.append(_metrics(output))
             if output.get('raster'):
                 arrays.append(unpack(output['raster'])[0])

@@ -12,6 +12,7 @@ import {terrainParametersForOperation} from './terrainRunParameters';
 import {loadTerrainResults,cacheTerrainResult,deleteTerrainResult,markTerrainResultSaved,type PersistedTerrainResult} from './terrainResultStore';
 import WorkspaceToolShelf from './WorkspaceToolShelf';
 import TerrainResearchPanel from './TerrainResearchPanel';
+import FigureGallery from './FigureGallery';
 import {terrainFetchBounds,terrainGeometryBounds,terrainFetchBudget,terrainBoundsOverlap,terrainRasterMatchesTarget,describeTerrainBounds,preferredTerrainFetchScope,terrainSupportsUSGS,recommendDEMResolution,availableDEMResolutions,type FetchScope,type TerrainBBox} from './terrainSource';
 
 function MeshView({mesh}:{mesh:TerrainMesh}){
@@ -110,6 +111,7 @@ interface Props{
 }
 export default function TerrainWorkbench(p:Props){
  // Opening Terrain never preselects a calculation.
+ const [figureGalleryOpen,setFigureGalleryOpen]=useState(false);
  const [researchOpen,setResearchOpen]=useState(false);
  const [researchLayer,setResearchLayer]=useState<TerrainRasterLayer|null>(null);
  const [operation,setOperation]=useState<Operation|null>(null);
@@ -705,7 +707,7 @@ export default function TerrainWorkbench(p:Props){
    </section>}
    {(result||slope||profile)&&<ResultPane expanded={expanded} onClose={()=>setExpanded(false)}>
      <div id="terrain-result-content" role="tabpanel" aria-label={resultTab[0].toUpperCase()+resultTab.slice(1)+' terrain result'} className="terrain-tab-content">
-     <div className="section-heading">{selected?.title} <span><button onClick={()=>{if(expanded)setExpanded(false);else{setResultTab('visual');setExpanded(true);}}}>{expanded?'Close expanded':'Expand'}</button></span></div>
+     <div className="section-heading">{selected?.title} <span>{resultTab==='visual'&&selected&&<button type="button" onClick={()=>setFigureGalleryOpen(true)}>Figure library</button>}<button onClick={()=>{if(expanded)setExpanded(false);else{setResultTab('visual');setExpanded(true);}}}>{expanded?'Close expanded':'Expand'}</button></span></div>
      {resultTab==='visual'&&researchFigures.length>0&&<nav className="terrain-figure-tabs" aria-label="Research figures">
        <button type="button" aria-pressed={figureView==='analysis'} onClick={()=>setFigureView('analysis')}>Analysis</button>
        {researchFigures.map(item=><button type="button" key={item.id} aria-pressed={figureView===item.id}
@@ -922,6 +924,7 @@ export default function TerrainWorkbench(p:Props){
 
  </div>;
  return <>
+ {figureGalleryOpen&&selected&&<FigureGallery record={selected} projectId={p.projectId} onClose={()=>setFigureGalleryOpen(false)}/>}
  {researchOpen&&<TerrainResearchPanel projectId={p.projectId} record={selected??null} connected={p.connected}
    onClose={()=>setResearchOpen(false)} onLayer={setResearchLayer}/>}
  <div className="terrain-workbench professional-panel">

@@ -94,3 +94,37 @@ reproducibility targets.
 Method reference: [JCGM 101:2008, propagation of distributions using a Monte
 Carlo method](https://doi.org/10.59161/JCGM101-2008). The finite-trial stability
 checks do not claim full JCGM conformance or adaptive numerical convergence.
+
+## Scientific figure library
+
+Open a Terrain result, choose **Figures**, then **Figure library**. The gallery
+shows only recipes supported by the actual result data. Continuous rasters
+provide histograms, normalized frequency density, cumulative and exceedance
+curves, quantile curves, Tukey boxes and normal Q–Q diagnostics. Classified
+products provide class bars and dot plots; aspect provides area-proportional
+rose sectors; profiles preserve NoData gaps and support signed grades.
+Where a continuous product is aligned with source elevations, the library
+also offers elevation/result scatter and two-dimensional frequency maps.
+
+Distribution tables use every finite exported-raster value. Histograms have
+10, 20, 40, 80 or 160 numerical bins. CDF curves connect at most 257 exact
+cumulative knots. Quantiles use linear order-statistic interpolation; box
+whiskers use observed values within 1.5 IQR fences, with outlier counts.
+Scatter markers are an explicitly labeled systematic sample of at most
+2,000 valid pairs. Joint density and descriptive Pearson correlation use
+all valid aligned pairs. Spatial dependence is not used to claim p-values.
+
+Choose frequency, area share or projected area; edit the title and axis
+labels, palette, font, grid and applicable logarithmic scales. Save reusable
+styles per project. Preview the underlying numeric table before exporting.
+CSV headers carry quantity units; JSON includes all plot tables and source,
+geometry, parameters, quality and population metadata. Legacy results can
+regenerate tables from their recorded input with a source checksum check.
+Legacy binned elevation results do not acquire invented exact quantiles.
+
+Exports include SVG, vector PDF, 300/600 DPI PNG with physical-resolution
+metadata, CSV, JSON and a self-contained Matplotlib Python script. The script
+embeds the selected numerical table and regenerates SVG/PDF/PNG, allowing
+further analysis outside GeoFathom. Density curves are normalized frequency
+polygons, not fitted KDEs. Plot products are descriptive and retain the
+source DEM's validation limits.
