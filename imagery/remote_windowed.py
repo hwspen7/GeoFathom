@@ -17,7 +17,7 @@ import numpy as np
 import rasterio
 from rasterio.windows import Window
 from analysis.science_raster import require
-from .remote_catalog import BY_ID,WINDOWED_IDS,WINDOWED_HALO
+from .remote_catalog import BY_ID,WINDOWED_IDS,WINDOWED_HALO,WINDOWED_CUBES,SERIES_IDS,windowed_roles
 from .remote_kernels import quality_mask
 from .remote_band import read_calibrated
 from .remote_tile_kernels import compute
@@ -37,10 +37,11 @@ def windows(width,height,tile):
         for col in range(0,width,tile):
             yield Window(col,row,min(tile,width-col),min(tile,height-row))
 
-def process(operation,bindings,output,parameters=None,quality=(),tile=512,progress=None):
+def process(operation,bindings,output,parameters=None,quality=(),tile=512,progress=None,times=()):
     method=BY_ID.get(operation)
     require(operation in WINDOWED_IDS,'Operation is not certified for finite-neighborhood disk processing.')
-    require(set(bindings)=={r for r,_ in method.roles},'Bind every required role.')
+    times=list(times);roles=windowed_roles(operation,times)
+    require(set(bindings)=={r for r,_ in roles},'Bind every required role.')
     require(isinstance(tile,int) and 64<=tile<=1024,'Tile size must be 64–1024.')
     params={n:default for n,_,default,lo,hi,integer in method.parameters}
     overrides=parameters or {};require(set(overrides)<=set(params),'Unknown parameter.')
@@ -49,7 +50,11 @@ def process(operation,bindings,output,parameters=None,quality=(),tile=512,progre
         params[n]=int(x) if integer else float(x)
     output=Path(output).resolve();require(not output.exists(),'Output must not already exist.')
     require(output.parent.is_dir(),'Output directory must exist.')
-    require(len(quality)<=8,'At most eight global quality masks.')
+    require(len(quality)<=64,'At most 64 quality masks.')
+    # Bound the actual temporal/spectral stack and dynamic-programming work.
+    if operation in WINDOWED_CUBES:
+        n=len(times);limit=5_000_000//(n*n) if operation.startswith('segmented_') else 2_000_000//n
+        tile=min(tile,max(1,math.isqrt(limit)))
     tmp=None
     with ExitStack() as ctx:
         bands={};mask_inputs=[];first=None;provenance={}
@@ -68,12 +73,12 @@ def process(operation,bindings,output,parameters=None,quality=(),tile=512,progre
             # Validate metadata using one native pixel, before opening output.
             _,unit,scale,offset=read_calibrated(ds,binding,quantity,Window(0,0,1,1))
             return ds,binding,quantity,unit,scale,offset,str(path)
-        for role,quantity in method.roles:
+        for role,quantity in roles:
             item=open_band(bindings[role],quantity);bands[role]=item
             provenance[role]={'path':item[-1],'band':item[1].band,'quantity':quantity,'unit':item[3],'scale':item[4],'offset':item[5],'sha256':digest(item[-1])}
         numeric_units={item[3] for item in bands.values() if item[2]=='numeric'}
         require(len(numeric_units)<=1,'Comparable numerical bands must share physical units.')
-        unit=next(iter(bands.values()))[3] if method.unit=='source' else method.unit
+        unit=next(iter(bands.values()))[3]+('/time' if method.unit=='source/time' else '') if method.unit in {'source','source/time'} else method.unit
         for spec in quality:
             require(spec['scheme'] in {'binary','sentinel_clear','landsat_clear','landsat_unsaturated'},'Unknown quality scheme.')
             roles=spec.get('roles',[]) or list(bindings)
@@ -102,7 +107,8 @@ def process(operation,bindings,output,parameters=None,quality=(),tile=512,progre
                         mask=quality_mask(q,scheme)==1
                         for role in roles:v[role][~mask]=np.nan
                     common=np.logical_and.reduce([np.isfinite(z) for z in v.values()])
-                    z=compute(operation,v,params);z[~common]=np.nan
+                    z=compute(operation,v,params,times)
+                    if operation not in SERIES_IDS:z[~common]=np.nan
                     dr=int(window.row_off)-r0;dc=int(window.col_off)-c0
                     z=z[dr:dr+int(window.height),dc:dc+int(window.width)]
                     require(not np.isinf(z).any(),'Numerical overflow.')
@@ -112,7 +118,7 @@ def process(operation,bindings,output,parameters=None,quality=(),tile=512,progre
                     if progress is not None:progress(tiles/total_tiles)
             require(count>0,'No valid output pixels.')
             receipt={'operation':operation,'parameters':params,'bands':provenance,'quality_masks':quality_receipt,
-                     'width':first.width,'height':first.height,'tile_size':tile,'halo_cells':halo,'unit':unit,'windows':tiles,'valid_cells':count,
+                     'width':first.width,'height':first.height,'tile_size':tile,'halo_cells':halo,'axis_values':times,'unit':unit,'windows':tiles,'valid_cells':count,
                      'nodata_cells':first.width*first.height-count,'minimum':minimum,'maximum':maximum,'mean':total/count,
                      'sha256':digest(tmp),'crs':str(first.crs),'transform':list(first.transform)[:6]}
             # A hard link creates the destination without overwriting an existing

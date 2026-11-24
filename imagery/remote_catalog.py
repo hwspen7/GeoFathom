@@ -156,6 +156,19 @@ assert len(BY_ID)==len(METHODS)
 # Only operators with a proven finite dependency radius are eligible for tiles.
 WINDOWED_IDS={m.id for m in METHODS if m.group=='Optical'}|{'calibrated_reflectance','ndvi_change','dnbr','difference','relative_change','change_classes','surface_temperature_rte','brightness_temperature','temperature_celsius','lst_uncertainty','lst_correlated_uncertainty','sar_db','sar_linear','sar_ratio','dualpol_rvi','sar_log_change','sar_lee','sar_gamma_map','cloud_buffer','sentinel_clear','landsat_clear','landsat_unsaturated','fusion_gls','fusion_gls_sd','fusion_discrepancy','canopy_lai','canopy_fpar_proxy'}
 WINDOWED_HALO={'sar_lee','sar_gamma_map','cloud_buffer'}
+WINDOWED_CUBES=SERIES_IDS|(HYPER_IDS-{'spectral_endmembers'})
+WINDOWED_IDS|=WINDOWED_CUBES
+
+def windowed_roles(operation,times):
+    import math
+    from analysis.science_raster import require
+    if operation in WINDOWED_CUBES:
+        require(6<=len(times)<=64 and all(math.isfinite(t) for t in times) and all(b>a for a,b in zip(times,times[1:])),'Provide 6–64 increasing finite axis values.')
+        spectral=operation in HYPER_IDS
+        require(not spectral or times[0]>0,'Wavelengths must be positive.')
+        return tuple((('band' if spectral else 'date')+str(i+1),'reflectance' if spectral else 'numeric') for i in range(len(times)))
+    require(not times,'Axis values only accepted for variable-axis disk methods.')
+    return BY_ID[operation].roles
 assert WINDOWED_IDS<=set(BY_ID)
 
 def catalog():

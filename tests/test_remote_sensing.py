@@ -11,7 +11,7 @@ from rasterio.io import MemoryFile
 from rasterio.transform import from_origin
 
 from core.main import app
-from imagery.remote_catalog import BY_ID,WINDOWED_IDS
+from imagery.remote_catalog import BY_ID,WINDOWED_IDS,WINDOWED_CUBES
 from imagery.remote_routes import RemoteInput,execute
 from terrain.studio_data import FigureInputError
 
@@ -759,7 +759,7 @@ def test_windowed_science_matches_inline_across_seams(kind,tmp_path):
         assert report['valid_cells']==np.isfinite(expected).sum()
 
 
-@pytest.mark.parametrize('kind',sorted(WINDOWED_IDS))
+@pytest.mark.parametrize('kind',sorted(WINDOWED_IDS-WINDOWED_CUBES))
 def test_every_disk_method_matches_inline(kind,tmp_path):
     import rasterio
     from imagery.remote_windowed import process
@@ -828,3 +828,39 @@ def test_public_fixture_transport_fallback_and_checksum(tmp_path,monkeypatch):
     monkeypatch.setattr(scene.urllib.request,'urlopen',lambda *a,**k:io.BytesIO(b'wrong'))
     with pytest.raises(ValueError,match='checksum'):scene.obtain(tmp_path,'B04.tif',expected)
     assert not path.exists() and not list(tmp_path.glob('*.part'))
+
+
+@pytest.mark.parametrize('kind',sorted(WINDOWED_CUBES))
+def test_disk_cube_matches_inline(kind,tmp_path):
+    import rasterio
+    from imagery.remote_catalog import HYPER_IDS
+    from imagery.remote_windowed import process
+    shape=(67,69);n=18;row,col=np.indices(shape)
+    spectral=kind in HYPER_IDS
+    times=np.linspace(400,900,n).tolist() if spectral else list(range(n))
+    names=[('band' if spectral else 'date')+str(i+1) for i in range(n)]
+    if spectral:
+        values=.7-.3*np.exp(-((np.arange(n)-8)/3)**2);p={}
+    elif kind.startswith('segmented_'):
+        values=np.repeat([2.,8.,-2.],6);p={'penalty':1}
+    elif kind.startswith('series_break_'):
+        values=np.repeat([2.,8.],9);p={}
+    else:
+        values=3+.1*np.arange(n)+np.cos(2*np.pi*(np.arange(n)-2)/6)
+        p={'period':6} if kind.startswith('season_') or kind in {'series_amplitude','series_harmonic_rmse'} else {}
+    stack=np.broadcast_to(values[:,None,None],(n,*shape)).copy()
+    stack[3,30:34,62:66]=np.nan
+    stack[:,0,0]=np.nan
+    # Independent per-acquisition QA crosses a tile edge.
+    qa=np.ones(shape);qa[62:65,63:66]=0
+    s=source(stack);q=source(qa)
+    bindings={r:{'source':0,'band':i+1,'unit':'' if spectral else 'index'} for i,r in enumerate(names)}
+    expected=grid(checked(execute(RemoteInput(operation=kind,sources=[s,q],bindings=bindings,
+        times=times,parameters=p,quality=[{'source':1,'scheme':'binary','roles':[names[1]]}]))))
+    data=tmp_path/'cube.tif';data.write_bytes(base64.b64decode(s['data']))
+    mask=tmp_path/'qa.tif';mask.write_bytes(base64.b64decode(q['data']))
+    spec={r:{'path':str(data),'band':i+1,'unit':'' if spectral else 'index'} for i,r in enumerate(names)}
+    out=tmp_path/'out.tif'
+    report=process(kind,spec,out,parameters=p,times=times,tile=64,quality=[{'path':str(mask),'scheme':'binary','roles':[names[1]]}])
+    with rasterio.open(out) as ds:np.testing.assert_allclose(ds.read(1),expected,atol=1e-10,rtol=1e-10,equal_nan=True)
+    assert report['axis_values']==times and report['valid_cells']==int(np.isfinite(expected).sum())

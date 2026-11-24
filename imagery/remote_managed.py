@@ -5,7 +5,7 @@ from uuid import UUID
 from pydantic import BaseModel,ConfigDict,Field
 from typing import Literal
 import rasterio
-from .remote_catalog import BY_ID,WINDOWED_IDS
+from .remote_catalog import BY_ID,WINDOWED_IDS,windowed_roles
 from .remote_windowed import process
 from analysis.science_raster import require
 from storage.snapshots import copy_verified
@@ -24,13 +24,14 @@ class DiskQuality(BaseModel):
     image_id:UUID
     band:int=Field(default=1,ge=1,le=1024)
     scheme:Literal['binary','sentinel_clear','landsat_clear','landsat_unsaturated']='binary'
-    roles:list[str]=Field(default_factory=list,max_length=12)
+    roles:list[str]=Field(default_factory=list,max_length=64)
 
 class DiskInput(BaseModel):
     model_config=ConfigDict(extra='forbid',allow_inf_nan=False)
     operation:str=Field(max_length=80)
-    bindings:dict[str,DiskBand]=Field(min_length=1,max_length=12)
-    quality:list[DiskQuality]=Field(default_factory=list,max_length=8)
+    bindings:dict[str,DiskBand]=Field(min_length=1,max_length=64)
+    quality:list[DiskQuality]=Field(default_factory=list,max_length=64)
+    times:list[float]=Field(default_factory=list,max_length=64)
     parameters:dict[str,float]=Field(default_factory=dict,max_length=12)
     tile:int=Field(default=512,ge=64,le=1024)
 
@@ -43,7 +44,7 @@ def result_path(job_id):
 def validate(body):
     p=DiskInput.model_validate(body);m=BY_ID.get(p.operation)
     require(p.operation in WINDOWED_IDS,'Operation is not certified for finite-neighborhood disk processing.')
-    require(set(p.bindings)=={r for r,_ in m.roles},'Bind every required role.')
+    require(set(p.bindings)=={r for r,_ in windowed_roles(p.operation,p.times)},'Bind every required role.')
     return p
 
 def run_managed(payload,job_id,progress,check):
@@ -63,7 +64,7 @@ def run_managed(payload,job_id,progress,check):
         def tick(fraction):
             progress(fraction);check()
         result=process(p.operation,{role:spec(b) for role,b in p.bindings.items()},output,p.parameters,
-                       [spec(q) for q in p.quality],p.tile,progress=tick)
+                       [spec(q) for q in p.quality],p.tile,progress=tick,times=p.times)
         for role,entry in result['bands'].items():
             uid=str(p.bindings[role].image_id);require(entry['sha256']==hashes[uid],'Snapshot hash changed.')
             entry.pop('path',None);entry['image_id']=uid
