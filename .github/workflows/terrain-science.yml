@@ -41,10 +41,6 @@ jobs:
       - name: Run advanced scientific analytic and GeoTIFF integration checks
         run: |
           GEOFATHOM_FIGURE_REVIEW_DIR=build/figure-review python -m pytest -q --junitxml=build/terrain-methods-tests.xml tests/test_terrain_scientific_methods.py tests/test_terrain_exact_coverage.py tests/test_terrain_uncertainty.py tests/test_terrain_mesh_streaming.py tests/test_terrain_independent_references.py tests/test_terrain_compiled_kernels.py tests/test_terrain_research.py tests/test_figure_library.py tests/test_figure_studio.py
-      - name: Validate all spatial science methods against analytic references
-        run: |
-          GEOFATHOM_REQUIRE_SPATIAL_GDAL=1 python -m pytest -q --junitxml=build/spatial-science-tests.xml tests/test_spatial_science.py
-          python scripts/spatial_science_gate.py --junit build/spatial-science-tests.xml --output build/spatial-science-acceptance.json
       - name: Enforce >=95 foundational synthetic numerical score for every Terrain operation
         run: |
           python scripts/terrain_numerical_gate.py --junit build/terrain-foundation-tests.xml --reference build/terrain-reference.json --output build/terrain-foundation-matrix.json
@@ -64,8 +60,35 @@ jobs:
             build/terrain-foundation-tests.xml
             build/terrain-foundation-matrix.json
             build/terrain-methods-tests.xml
+            build/figure-review/
+          if-no-files-found: warn
+          retention-days: 30
+
+  spatial-workflows:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install independent GDAL and numerical dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends gdal-bin
+          python -m pip install -c requirements/linux.lock -e ".[dev]"
+      - name: Run every spatial method and cross-module scientific workflow
+        run: |
+          mkdir -p build
+          GEOFATHOM_REQUIRE_SPATIAL_GDAL=1 python -m pytest -q --junitxml=build/spatial-science-tests.xml tests/test_spatial_science.py tests/test_spatial_workflows.py
+          python scripts/spatial_science_gate.py --junit build/spatial-science-tests.xml --output build/spatial-science-acceptance.json
+      - name: Preserve spatial acceptance and failure evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: spatial-scientific-reference
+          path: |
             build/spatial-science-tests.xml
             build/spatial-science-acceptance.json
-            build/figure-review/
           if-no-files-found: warn
           retention-days: 30
