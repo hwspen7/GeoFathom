@@ -28,6 +28,7 @@ import {WorkspaceModuleBar,WorkspaceCommandPalette,WorkspaceDockHeading,
   WORKSPACE_MODULES,type WorkspaceCommand} from './WorkspaceChrome';
 import GeometryAnalysis from './GeometryAnalysis';
 import SpatialToolsPanel from './SpatialToolsPanel';
+import SpatialSciencePanel from './SpatialSciencePanel';
 import CartographyProPanel from './CartographyProPanel';
 import type {ExternalTile} from './DataServicesPanel';
 import DataWorkbench from './DataWorkbench';
@@ -146,6 +147,8 @@ export default function App() {
   const [terrainProfileLine,setTerrainProfileLine]=useState<GeoJSON.LineString|null>(null);
   const [terrainLineDrawing,setTerrainLineDrawing]=useState(false);
   const [terrainVisible,setTerrainVisible]=useState(true);
+  const [spatialResults,setSpatialResults]=useState<GeoJSON.Feature[]>([]);
+  const [spatialVisible,setSpatialVisible]=useState(true);
   const [showLayers,setShowLayers]=useState(false);
   // Keep project management, map layers and place discovery on independent fixed pages.
   const [drawerTab,setDrawerTab]=useState<'project'|'layers'|'search'>('project');
@@ -202,6 +205,7 @@ export default function App() {
   const [snapping, setSnapping] = useState(true);
   const [projectWorkspace, setProjectWorkspace] = useState<GeoWorkspace | null>(null);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+  useEffect(()=>{setSpatialResults([]);},[activeProjectId]);
   const [selectedFeatureId, setSelectedFeatureId] = useState<string | null>(null);
   const [splitParts, setSplitParts] = useState<GeoJSON.Geometry[]>([]);
   const [refreshToken,setRefreshToken] = useState(0);
@@ -1390,6 +1394,7 @@ export default function App() {
             </section>
             <section className="panel-section gis-basemaps" hidden={drawerTab!=='layers'}>
               <div className="section-heading"><Layers3 size={15}/><span>Map overlays</span></div>
+              {spatialResults.length>0&&<label className="gis-check"><input aria-label="Spatial science result layer" type="checkbox" checked={spatialVisible} onChange={e=>setSpatialVisible(e.target.checked)}/> Spatial science results · {spatialResults.length}</label>}
               {(terrainFeatures.length+terrainRasters.length)>0&&<label className="gis-check"><input aria-label="Terrain result layer" type="checkbox" checked={terrainVisible} onChange={e=>setTerrainVisible(e.target.checked)}/> Terrain result · {terrainFeatures.length+terrainRasters.length}</label>}
               {rasterLayers.map(layer=><div key={layer.asset.id} className="raster-layer-row">
                 <label className="gis-check"><input aria-label={'Show raster '+layer.asset.name} type="checkbox" checked={layer.visible}
@@ -1489,7 +1494,7 @@ export default function App() {
             preservePlaceSelection={!!selectedPlace}
             pinnedPlaces={pinnedPlaces.map(place=>({id:place.id,geometry:visibleGeometry(place)}))}
             onSelectPinnedPlace={id=>{const place=pinnedPlaces.find(p=>p.id===id);if(place)void selectPlace(place);}}
-            terrainResults={[...(terrainVisible?terrainFeatures:[]),...(terrainProfileLine?[{type:'Feature' as const,geometry:terrainProfileLine,properties:{name:'Profile measurement line',color:'#d26b2f'}}]:[])]} terrainRasters={terrainVisible?terrainRasters:[]}
+            spatialResults={spatialVisible?spatialResults:[]} terrainResults={[...(terrainVisible?terrainFeatures:[]),...(terrainProfileLine?[{type:'Feature' as const,geometry:terrainProfileLine,properties:{name:'Profile measurement line',color:'#d26b2f'}}]:[])]} terrainRasters={terrainVisible?terrainRasters:[]}
             terrainFetchTarget={showTools&&activeTool==='tools-terrain'?terrainFetchTarget:null}
             onTerrainPick={position=>{setTerrainOrigin(position);setTerrainPicking(false);setMessage('Terrain point selected.');}}
             onContextMenu={(x,y)=>setContextMenu({x,y})} onDeselect={deselect}
@@ -2084,6 +2089,8 @@ export default function App() {
           </section>
 
           <section id="tools-spatial" hidden={activeTool!=='tools-spatial'} className="panel-section">
+            <div className="section-heading"><Layers3 size={16}/><span>Spatial science</span></div>
+            <SpatialSciencePanel key={activeProjectId??'no-project'} geometry={preview||drawingMode?null:geometry} connected={Boolean(capabilities)} onPreview={features=>{if(projectCurrent()){setSpatialResults(features);setSpatialVisible(true);}}}/>
             <div className="section-heading"><Layers3 size={16}/><span>Geometry processing</span></div>
             <GeometryAnalysis geometry={preview||drawingMode?null:geometry} selectedId={selectedFeatureId??scratchId}
               features={[...scratch,...(projectWorkspace?.features??[])]} connected={Boolean(capabilities)}

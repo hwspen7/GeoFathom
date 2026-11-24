@@ -1,0 +1,60 @@
+import {useEffect,useRef,useState} from 'react';
+import {createPortal} from 'react-dom';
+import {getSpatialScienceCatalog,runSpatialScience,type SpatialScienceMethod,type SpatialScienceResult,type StudioRaster} from './api';
+import {saveFigureBlob} from './figureExport';
+import ScientificFigureStudio from './ScientificFigureStudio';
+
+function asCollection(raw:unknown):GeoJSON.FeatureCollection{
+ if(!raw||typeof raw!=='object')throw Error('Choose a valid GeoJSON object.');
+ const value=raw as GeoJSON.FeatureCollection|GeoJSON.Feature|GeoJSON.Geometry;
+ if(value.type==='FeatureCollection'&&Array.isArray(value.features))return value;
+ if(value.type==='Feature')return {type:'FeatureCollection',features:[value]};
+ if(['Point','MultiPoint','LineString','MultiLineString','Polygon','MultiPolygon'].includes(value.type))return {type:'FeatureCollection',features:[{type:'Feature',geometry:value as GeoJSON.Geometry,properties:{}}]};
+ throw Error('Use WGS84 GeoJSON geometries or features.');
+}
+function dataURL(file:File):Promise<string>{return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).split(',')[1]);reader.onerror=()=>reject(Error('File read failed.'));reader.readAsDataURL(file);});}
+function download(data:string,name:string,type:string){saveFigureBlob(new Blob([data],{type}),name);}
+function downloadRaster(r:StudioRaster){const bytes=Uint8Array.from(atob(r.data),c=>c.charCodeAt(0));saveFigureBlob(new Blob([bytes],{type:'image/tiff'}),r.name+'.tif');}
+export default function SpatialSciencePanel({geometry,connected,onPreview}:{geometry:GeoJSON.Geometry|null;connected:boolean;onPreview:(features:GeoJSON.Feature[])=>void}){
+ const [open,setOpen]=useState(false),[methods,setMethods]=useState<SpatialScienceMethod[]>([]),[group,setGroup]=useState('Vector'),[operation,setOperation]=useState('');
+ const [vectors,setVectors]=useState<Array<{name:string;data:GeoJSON.FeatureCollection}>>([]),[rasters,setRasters]=useState<StudioRaster[]>([]);
+ const [epsg,setEpsg]=useState(32617),[params,setParams]=useState<Record<string,number>>({}),[weights,setWeights]=useState<number[]>([]),[directions,setDirections]=useState<string[]>([]),[pairwise,setPairwise]=useState('');
+ const [error,setError]=useState(''),[busy,setBusy]=useState(false),[result,setResult]=useState<SpatialScienceResult|null>(null),[studio,setStudio]=useState(false);
+ const request=useRef<AbortController|null>(null),dialog=useRef<HTMLDivElement>(null);
+ const method=methods.find(m=>m.id===operation);
+ useEffect(()=>{if(!open)return;const ac=new AbortController();getSpatialScienceCatalog(ac.signal).then(c=>{if(!ac.signal.aborted){setMethods(c.operations);setOperation(old=>old||c.operations[0]?.id||'');}}).catch(e=>{if(!ac.signal.aborted)setError(String(e.message));});return()=>{ac.abort();request.current?.abort();};},[open]);
+ useEffect(()=>{if(!open)return;const last=document.activeElement as HTMLElement|null;dialog.current?.focus();return()=>last?.focus();},[open]);
+ function choose(id:string){setOperation(id);setParams({});setResult(null);setError('');}
+ function close(){request.current?.abort();request.current=null;setBusy(false);setOpen(false);}
+ async function addVector(file:File){try{if(file.size>8_000_000)throw Error('GeoJSON exceeds 8 MB.');const data=asCollection(JSON.parse(await file.text()));setVectors(v=>[...v.slice(0,1),{name:file.name,data}]);setResult(null);setError('');}catch(e){setError((e as Error).message);}}
+ async function addRaster(file:File){try{if(file.size>24_000_000)throw Error('GeoTIFF exceeds 24 MB.');const data=await dataURL(file);setRasters(r=>r.length<8?[...r,{name:file.name,data,unit:'',band:1}]:r);setResult(null);setError('');}catch(e){setError((e as Error).message);}}
+ const nv=method?.source==='raster'?0:vectors.length,nr=method?.source==='vector'?0:rasters.length;
+ const ready=Boolean(method&&(method.source==='vector'?nv>=method.minimum&&nv<=method.maximum:method.source==='raster'?nr>=method.minimum&&nr<=method.maximum:nv===1&&nr===1));
+ async function run(){if(!method||!ready||busy)return;setBusy(true);setError('');setResult(null);const ac=new AbortController();request.current=ac;
+ try{const output=await runSpatialScience({operation:method.id,vectors:method.source==='raster'?[]:vectors.map(v=>v.data),rasters:method.source==='vector'?[]:rasters,epsg,parameters:params,weights:method.requires_weights?rasters.map((_,i)=>weights[i]??1):[],directions:method.requires_directions?rasters.map((_,i)=>directions[i]??'benefit'):[],pairwise:method.requires_pairwise?JSON.parse(pairwise):[]},ac.signal);
+ if(!ac.signal.aborted)setResult(output);}catch(e){if(!ac.signal.aborted)setError((e as Error).message);}finally{if(request.current===ac){setBusy(false);request.current=null;}}
+ }
+ return <><button disabled={!connected} onClick={()=>setOpen(true)}>Open Spatial Analysis</button>{open&&createPortal(<div className="figure-studio-backdrop"><div ref={dialog} role="dialog" aria-modal="true" aria-label="Spatial science workbench" tabIndex={-1} className="spatial-science-dialog" onKeyDown={e=>{if(e.key==='Escape'&&!studio){e.stopPropagation();close();}if(e.key==='Tab'&&!studio){const nodes=Array.from(e.currentTarget.querySelectorAll<HTMLElement>('button:enabled,input:enabled,select:enabled,textarea:enabled')).filter(n=>n.getClientRects().length);if(e.shiftKey&&(document.activeElement===nodes[0]||document.activeElement===dialog.current)){e.preventDefault();nodes.at(-1)?.focus();}else if(!e.shiftKey&&document.activeElement===nodes.at(-1)){e.preventDefault();nodes[0]?.focus();}}}}>
+ <header><strong>Spatial Analysis · {methods.length||'…'} scientific methods</strong><button onClick={close}>Close</button></header>
+ <div className="spatial-science-columns"><div className="spatial-science-input"><fieldset disabled={busy}><legend>Method</legend><label>Algorithm group<select aria-label="Spatial algorithm group" value={group} onChange={e=>{setGroup(e.target.value);choose(methods.find(m=>m.group===e.target.value)?.id??'');}}>{[...new Set(methods.map(m=>m.group))].map(g=><option key={g}>{g}</option>)}</select></label>
+ <label>Algorithm<select aria-label="Spatial algorithm" value={operation} onChange={e=>choose(e.target.value)}>{methods.filter(m=>m.group===group).map(m=><option key={m.id} value={m.id}>{m.title}</option>)}</select></label><small>{method?.assumption}</small></fieldset>
+ <fieldset disabled={busy}><legend>Inputs</legend>
+ {method?.source!=='raster'&&<><label>WGS84 vector layer<input type="file" accept=".geojson,.json" onChange={e=>{const file=e.target.files?.[0];if(file)void addVector(file);e.target.value='';}}/></label><button disabled={!geometry||vectors.length>=2} onClick={()=>{if(geometry)setVectors(v=>[...v,{name:'Current map geometry',data:asCollection(geometry)}]);setResult(null);}}>Use current map geometry</button>
+ {vectors.map((v,i)=><div key={i} className="spatial-science-source">{i+1}. {v.name} · {v.data.features.length} features <button onClick={()=>{setVectors(old=>old.filter((_,j)=>j!==i));setResult(null);}}>Remove</button></div>)}
+ {method?.source==='vector'&&<label>Projected EPSG (metres)<input type="number" min="1" step="1" value={epsg} onChange={e=>setEpsg(Number(e.target.value))}/></label>}</>}
+ {method?.source!=='vector'&&<><label>GeoTIFF layer<input type="file" accept=".tif,.tiff" onChange={e=>{const file=e.target.files?.[0];if(file)void addRaster(file);e.target.value='';}}/></label>{rasters.map((r,i)=><div key={i} className="spatial-science-source"><strong>{i+1}. {r.name}</strong><label>Band<input type="number" min="1" max="1024" value={r.band??1} onChange={e=>setRasters(old=>old.map((v,j)=>i===j?{...v,band:Number(e.target.value)}:v))}/></label><label>Unit (if not embedded)<input value={r.unit} onChange={e=>setRasters(old=>old.map((v,j)=>i===j?{...v,unit:e.target.value}:v))}/></label>
+ {method?.requires_weights&&<label>Weight<input type="number" min=".000001" step="any" value={weights[i]??1} onChange={e=>setWeights(old=>rasters.map((_,j)=>j===i?Number(e.target.value):old[j]??1))}/></label>}
+ {method?.requires_directions&&<label>Direction<select value={directions[i]??'benefit'} onChange={e=>setDirections(old=>rasters.map((_,j)=>j===i?e.target.value:old[j]??'benefit'))}><option value="benefit">Maximize / benefit</option><option value="cost">Minimize / cost</option></select></label>}
+ <button onClick={()=>{setRasters(old=>old.filter((_,j)=>i!==j));setWeights(old=>old.filter((_,j)=>i!==j));setDirections(old=>old.filter((_,j)=>i!==j));setResult(null);}}>Remove</button></div>)}</>}
+ </fieldset><fieldset disabled={busy}><legend>Parameters</legend>{method?.parameters.map(p=><label key={p.name}>{p.label}<input type="number" min={p.minimum} max={p.maximum} step={p.integer?1:'any'} value={params[p.name]??p.default} onChange={e=>setParams(old=>({...old,[p.name]:Number(e.target.value)}))}/></label>)}{method?.requires_pairwise&&<label>Reciprocal AHP matrix (JSON)<textarea rows={4} value={pairwise} onChange={e=>setPairwise(e.target.value)} placeholder="[[1,2],[0.5,1]]"/></label>}
+ <button disabled={!ready||busy} onClick={()=>void run()}>Run analysis</button></fieldset>
+ {busy&&<><p role="status">Calculating spatial results…</p><button onClick={()=>{request.current?.abort();request.current=null;setBusy(false);}}>Cancel request</button></>}
+ {error&&<p role="alert">{error}</p>}</div><div className="spatial-science-output">
+ {result?<><h3>{method?.title??result.operation}</h3><p>{result.receipt.crs} · {result.features?.features.length??0} features · {result.rows.length} table rows</p>
+ <div className="spatial-science-actions">{result.features&&<><button onClick={()=>{onPreview(result.features!.features);close();}}>Show vectors on map</button><button onClick={()=>download(JSON.stringify(result.features),'spatial-result.geojson','application/geo+json')}>GeoJSON</button></>}{result.raster&&<button onClick={()=>downloadRaster(result.raster!)}>GeoTIFF</button>}{result.csv&&<button onClick={()=>download(result.csv,'spatial-result.csv','text/csv')}>CSV</button>}{(result.csv||result.raster)&&<button onClick={()=>setStudio(true)}>Scientific Figure Studio</button>}<button onClick={()=>download(JSON.stringify(result.receipt,null,2),'spatial-receipt.json','application/json')}>Research receipt</button></div>
+ {Object.keys(result.receipt.metrics).length>0&&<table><tbody>{Object.entries(result.receipt.metrics).map(([k,v])=><tr key={k}><th>{k.replaceAll('_',' ')}</th><td>{typeof v==='number'?v.toPrecision(7):JSON.stringify(v)}</td></tr>)}</tbody></table>}
+ {result.columns.length>0&&<div className="spatial-table"><table><thead><tr>{result.columns.map(c=><th key={c}>{c}</th>)}</tr></thead><tbody>{result.rows.slice(0,200).map((row,i)=><tr key={i}>{row.map((v,j)=><td key={j}>{v===null?'NoData':typeof v==='number'?v.toPrecision(7):v}</td>)}</tr>)}</tbody></table><small>Showing {Math.min(result.rows.length,200)} of {result.rows.length}; CSV contains every returned row.</small></div>}
+ <details><summary>Calculation provenance</summary><pre>{JSON.stringify(result.receipt,null,2)}</pre></details></>:<p>Choose inputs and run an algorithm.</p>}
+ </div></div></div></div>,document.body)}
+ {studio&&result&&<ScientificFigureStudio source={{name:result.operation,csv:result.csv||undefined,rasters:result.raster?[result.raster]:[],provenance:result.receipt}} onClose={()=>setStudio(false)}/>}</>;
+}

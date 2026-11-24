@@ -1236,3 +1236,10 @@ export function analyzeGlobalSensitivity(body:GlobalSensitivityInput,signal?:Abo
 
 export interface StudioSourceInspection {table:null|{rows:number;columns:Array<{name:string;kind:string;missing:number;nonmissing:number;distinct?:number;minimum?:number;maximum?:number;mean?:number}>};rasters:Array<{name:string;band:number;band_count:number;unit:string;crs:string;shape:number[];valid_cells:number;missing_cells:number;minimum:number;maximum:number;scale:number;offset:number;sha256:string}>;aligned:boolean|null;same_unit?:boolean;common_valid_cells?:number}
 export function inspectStudioSources(csv:string,rasters:StudioRaster[],signal?:AbortSignal):Promise<StudioSourceInspection>{return request('/terrain/studio/inspect',{method:'POST',signal,headers:{'Content-Type':'application/json'},body:JSON.stringify({csv,rasters})});}
+
+
+export interface SpatialScienceMethod {id:string;group:string;title:string;source:'vector'|'raster'|'integrated';minimum:number;maximum:number;parameters:Array<{name:string;label:string;default:number;minimum:number;maximum:number;integer:boolean}>;result:'vector'|'raster'|'table';assumption:string;requires_weights:boolean;requires_pairwise:boolean;requires_directions:boolean}
+export interface SpatialScienceInput {operation:string;vectors:GeoJSON.FeatureCollection[];rasters:StudioRaster[];epsg:number;parameters:Record<string,number>;weights:number[];directions:string[];pairwise:number[][]}
+export interface SpatialScienceResult {operation:string;receipt:Record<string,unknown>&{metrics:Record<string,number|string|null>;crs:string};features:GeoJSON.FeatureCollection|null;raster:(StudioRaster&{sha256:string})|null;columns:string[];rows:Array<Array<string|number|null>>;csv:string}
+export function getSpatialScienceCatalog(signal?:AbortSignal):Promise<{operations:SpatialScienceMethod[];operation_count:number}>{return request('/analysis/science/catalog',{signal});}
+export function runSpatialScience(body:SpatialScienceInput,signal?:AbortSignal):Promise<SpatialScienceResult>{return request('/analysis/science/run',{method:'POST',signal,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});}

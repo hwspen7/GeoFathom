@@ -64,6 +64,7 @@ interface Props {
   profileSamples?:ProfileSample[];
   onProfileCursor?:(index:number|null)=>void;
   terrainResults:GeoJSON.Feature[];
+  spatialResults?:GeoJSON.Feature[];
   terrainRasters?:TerrainRasterLayer[];
   terrainFetchTarget?:[number,number,number,number]|null;
   onTerrainPick:(point:Position)=>void;
@@ -292,7 +293,7 @@ type Drag = {
 
 export default function MapCanvas({
   selected,drawingMode,vertices,networkFaces=[],onSelectNetworkFace,focus,basemap,customBasemap,onBasemapStatus,measurement,showMeasurements,display,selectedFeatureId,rasterLayers,onRasterError,onMapClick,onFinishDrawing,
-  terrainPicking,terrainMarker,profileSamples=[],onProfileCursor,terrainResults,terrainRasters,terrainFetchTarget,onTerrainPick,onContextMenu,onEditingError,
+  terrainPicking,terrainMarker,profileSamples=[],onProfileCursor,terrainResults,spatialResults,terrainRasters,terrainFetchTarget,onTerrainPick,onContextMenu,onEditingError,
   onViewportChange, discovered, traceMode, onTraceClick,
   editing, moving,edgeMoving, snapping, selectedLocked, layerFeatures,
   promptPositive,promptNegative,promptBox,annotationMode,onAnnotationClick,
@@ -940,6 +941,10 @@ export default function MapCanvas({
       map.addSource('terrain-fetch-target',{type:'geojson',data:{type:'FeatureCollection',features:[]}});
       map.addLayer({id:'terrain-fetch-target-fill',source:'terrain-fetch-target',type:'fill',paint:{'fill-color':'#d47b19','fill-opacity':.055}});
       map.addLayer({id:'terrain-fetch-target-outline',source:'terrain-fetch-target',type:'line',paint:{'line-color':'#d47b19','line-width':2,'line-dasharray':[3,2]}});
+      map.addSource('spatial-science-result',{type:'geojson',data:{type:'FeatureCollection',features:[]}});
+      map.addLayer({id:'spatial-science-fill',source:'spatial-science-result',type:'fill',filter:['==',['geometry-type'],'Polygon'],paint:{'fill-color':'#8a4bb2','fill-opacity':.32}});
+      map.addLayer({id:'spatial-science-line',source:'spatial-science-result',type:'line',filter:['!=',['geometry-type'],'Point'],paint:{'line-color':'#914db6','line-width':2}});
+      map.addLayer({id:'spatial-science-point',source:'spatial-science-result',type:'circle',filter:['==',['geometry-type'],'Point'],paint:{'circle-color':'#914db6','circle-radius':4,'circle-stroke-color':'#fff','circle-stroke-width':1}});
       map.addSource('terrain-result',{type:'geojson',data:{type:'FeatureCollection',features:[]}});
       map.addLayer({id:'terrain-result-fill',source:'terrain-result',type:'fill',
         filter:['==',['geometry-type'],'Polygon'],
@@ -1127,6 +1132,7 @@ export default function MapCanvas({
     source?.setData({type:'FeatureCollection',features:terrainResults});
     container.current?.setAttribute('data-terrain-feature-count',String(terrainResults.length));
   },[terrainResults,ready]);
+  useEffect(()=>{const map=mapRef.current;if(!ready||!map)return;(map.getSource('spatial-science-result') as GeoJSONSource|undefined)?.setData({type:'FeatureCollection',features:spatialResults??[]});},[spatialResults,ready]);
   useEffect(()=>{
     const map=mapRef.current;if(!ready||!map)return;
     const source=map.getSource('terrain-fetch-target') as GeoJSONSource|undefined;
