@@ -310,7 +310,10 @@ test('a missing local-import capability does not prevent the DEM API from decidi
  await page.getByRole('button',{name:'Fetch DEM',exact:true}).click();
  const sent=await request;
  expect(sent.headers()['x-geofathom-local-import']).toBe('1');
- expect(sent.postDataJSON().bbox).toEqual([-82.915,39.985,-82.87,40.008]);
+ // The DEM request intentionally includes the 0.0004° raster margin.
+ const requested=sent.postDataJSON().bbox as number[];
+ expect(requested).toHaveLength(4);
+ [-82.9154,39.9846,-82.8696,40.0084].forEach((value,index)=>expect(requested[index]).toBeCloseTo(value,8));
  await expect(page.getByRole('alert')).toContainText('DEM access denied');
  await expect(page.getByLabel('DEM import token')).toBeVisible();
 });
