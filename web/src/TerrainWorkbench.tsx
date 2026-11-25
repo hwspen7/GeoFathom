@@ -1,6 +1,6 @@
 import {SectionIcon} from './SectionIcon';
 import TerrainPagedForm from './TerrainPagedForm';
-import {downloadTerrainRaster,materializeScientificRaster,type StudioRaster} from './api';
+import {ApiError,downloadTerrainRaster,materializeScientificRaster,type StudioRaster} from './api';
 import {terrainSource,type ScienceRaster} from './scienceRegistry';
 import {useEffect,useMemo,useRef,useState,type ChangeEvent} from 'react';
 import {createPortal} from 'react-dom';
@@ -130,6 +130,7 @@ export default function TerrainWorkbench(p:Props){
  const [resolution,setResolution]=useState<1|3|10|30|90>(30),[fetching,setFetching]=useState(false),[sourceInfo,setSourceInfo]=useState('');
  // The rectangular download footprint is an optional diagnostic, not the study polygon.
  const [showFetchExtent,setShowFetchExtent]=useState(false);
+ const [accessRequired,setAccessRequired]=useState(false);
  // The displayed fetch choice tracks a genuine selected area automatically.
  // An explicit dropdown choice takes precedence until the user changes it again.
  const [fetchChoice,setFetchChoice]=useState<'auto'|FetchScope>('auto');
@@ -493,6 +494,13 @@ export default function TerrainWorkbench(p:Props){
    alive.current=true;
    return()=>{alive.current=false;sequence.current++;sourceIntent.current++;analysisRequest.current?.abort();fetchAbort.current?.abort();};
  },[]);
+ // Let the server enforce authorization. Reveal credentials on an actual denial,
+ // including when an older API omits the local-import capability.
+ function sourceError(error:unknown){
+   if(error instanceof ApiError&&(error.status===401||error.status===403)){
+     setAccessRequired(true);setLeftTab('source');setError('DEM access denied. Enter the server access token.');
+   }else setError(error instanceof Error?error.message:String(error));
+ }
  async function importDEM(e:ChangeEvent<HTMLInputElement>){
    const file=e.target.files?.[0];e.target.value='';if(!file)return;
    const ticket=++sourceIntent.current;
@@ -504,7 +512,7 @@ export default function TerrainWorkbench(p:Props){
      if(item.bands!==1)throw Error('Select a single-band DEM, not RGB imagery.');
      setAssets(old=>[item,...old.filter(v=>v.id!==item.id)]);
      latest.current.onSelectRaster(item);
-   }catch(e){if(alive.current&&ticket===sourceIntent.current)setError(e instanceof Error?e.message:String(e));}
+   }catch(e){if(alive.current&&ticket===sourceIntent.current)sourceError(e);}
    finally{if(alive.current)setImporting(false);}
  }
  async function processDEM(){
@@ -526,7 +534,7 @@ export default function TerrainWorkbench(p:Props){
      setAssets(old=>[data.asset,...old.filter(a=>a.id!==data.asset.id)]);
      latest.current.onSelectRaster(data.asset);
      setInfo('DEM '+data.operation+' · '+data.valid_cells.toLocaleString()+'/'+data.total_cells.toLocaleString()+' valid cells · '+data.warning);
-   }catch(e){if(alive.current&&ticket===sourceIntent.current)setError(e instanceof Error?e.message:String(e));}
+   }catch(e){if(alive.current&&ticket===sourceIntent.current)sourceError(e);}
    finally{if(alive.current)setImporting(false);}
  }
  async function fetchDEM(){
@@ -555,7 +563,7 @@ export default function TerrainWorkbench(p:Props){
        ' · '+data.valid_cells+'/'+data.total_cells+' cells'+(data.missing_tiles.length?' · partial coverage':'')+
        ' · '+data.valid_coverage_pct.toFixed(1)+'% valid · center '+((bbox[0]+bbox[2])/2).toFixed(5)+', '+((bbox[1]+bbox[3])/2).toFixed(5));
      if(data.warning)setInfo(data.warning);
-   }catch(e){if(alive.current&&ticket===sourceIntent.current&&!controller.signal.aborted)setError(e instanceof Error?e.message:String(e));}
+   }catch(e){if(alive.current&&ticket===sourceIntent.current&&!controller.signal.aborted)sourceError(e);}
    finally{if(fetchAbort.current===controller)fetchAbort.current=null;if(alive.current)setFetching(false);}
  }
  async function save(){
@@ -656,7 +664,7 @@ export default function TerrainWorkbench(p:Props){
    }}>Terrain history JSON</button>}
  </div>;
  const runActions=operation?<div className="terrain-run-row">
-   <button className="primary-tool" disabled={!canRun||busy} onClick={()=>void run()}>{busy?'Calculating…':'Run terrain operation'}</button>
+   <button className="primary-tool" title={!p.connected?'Connect to the API':!dem?'Get or import a DEM':!verified?'Confirm elevation units':!correctShape?'Select the required study geometry':sourceMismatch?'DEM does not cover the study area':mapMismatch?'Fit the study area or DEM':!parametersValid?'Check analysis parameters':!resultCacheReady?'Restoring results':'Run the selected analysis'} disabled={!canRun||busy} onClick={()=>void run()}>{busy?'Calculating…':'Run terrain operation'}</button>
    {busy&&<button onClick={()=>{setLive(false);cancelAnalysis();setInfo('Analysis request cancelled.');}}>Cancel</button>}
    <label><input aria-label="Live terrain updates" type="checkbox" checked={live} onChange={e=>setLive(e.target.checked)}/> Live</label>
  </div>:null;
@@ -667,10 +675,10 @@ export default function TerrainWorkbench(p:Props){
        {[...usableRecords].reverse().map(r=><option value={r.id} key={r.id}>{r.title} · {new Date(r.createdAt).toLocaleTimeString()}</option>)}
      </select>
    </div>}
-   <h3>{selected.title}</h3>
+   <h3 className="terrain-flat-heading"><SectionIcon role="terrainResult"/> {selected.title}</h3>
    <small className="terrain-summary-source" title={selected.source.name}>{inputsChanged?'Previous result':selected.source.name}</small>
    {result?.raster?.png&&<img className="terrain-overview-preview" src={result.raster.png} alt="Terrain overview preview"/>}
-   {profile&&!expanded&&<ProfilePlot samples={profile.samples} length={profile.length_m} onHover={p.onHover} mapIndex={p.profileMapIndex??null}/>}
+   {profile&&<div aria-hidden={expanded} style={{visibility:expanded?'hidden':'visible'}}><ProfilePlot samples={profile.samples} length={profile.length_m} onHover={p.onHover} mapIndex={p.profileMapIndex??null}/></div>}
    {result&&<div className="terrain-metrics terrain-key-metrics">{featuredMetrics.slice(0,3).map(([key,value])=><div key={key}><span>{names[key]??key.replaceAll('_',' ')}</span><strong>{fmt(value)} {units[key]??(['product_min','product_max','product_mean','product_std','product_p10','product_p50','product_p90'].includes(key)?result.raster?.unit??'':'')}</strong></div>)}</div>}
    {slope&&<div className="terrain-metrics terrain-key-metrics"><div><span>Mean slope</span><strong>{fmt(slope.mean_slope_deg)}°</strong></div><div><span>Mean elevation</span><strong>{fmt(slope.elevation_mean_m)} m</strong></div></div>}
    {profile&&<small>{fmt(profile.length_m)} m · {profile.samples.length} samples</small>}
@@ -962,7 +970,7 @@ export default function TerrainWorkbench(p:Props){
              sourceIntent.current++;
              if(!e.target.value){p.onSelectRaster(null);setSourceInfo('');return;}
              const found=assets.find(item=>item.id===e.target.value)??(dem?.id===e.target.value?dem:null);
-             if(found)p.onSelectRaster(found);
+             if(found){setSourceInfo('');p.onSelectRaster(found);}
            }}>
            <option value="">Select elevation source</option>
            {[...assets,...(dem&&!assets.some(a=>a.id===dem.id)?[dem]:[])].map(asset=>
@@ -983,7 +991,7 @@ export default function TerrainWorkbench(p:Props){
          </select>
        </label><button className={leftTab==='tools'?'terrain-linked-active':''} type="button"
          aria-label="Browse terrain tools" aria-pressed={leftTab==='tools'}
-         onClick={()=>setLeftTab('tools')}>Browse</button></div>
+         onClick={()=>setLeftTab('tools')}>Browse</button><button type="button" aria-label="Terrain parameters" title="Return to the selected analysis parameters" disabled={!operation} aria-pressed={leftTab==='setup'} onClick={()=>setLeftTab('setup')}>Setup</button></div>
     <div className="terrain-secondary-actions"><button type="button" disabled={!dem}
          aria-label="Process DEM" aria-pressed={leftTab==='process'}
          onClick={()=>setLeftTab('process')}><SectionIcon role="demPreparation"/> Prepare</button><button type="button" aria-label="Research analysis" onClick={()=>setResearchOpen(true)}><SectionIcon role="terrainResearch"/> Research</button><button type="button" onClick={()=>{const r=selected?.advanced?.raster;setStudioRasters([]);if(!r){setStudioOpen(true);return;}void materializeScientificRaster({name:selected?.title??'Terrain result',data:r.geotiff,unit:r.unit??'',product_id:r.product_id}).then(x=>{if(alive.current){setStudioRasters([{name:x.name,data:x.data,unit:x.unit}]);setStudioOpen(true);}}).catch(e=>{if(alive.current){setError(String(e.message??e));setStudioRasters([]);setStudioOpen(true);}});}}><SectionIcon role="terrainFigures"/> Figure studio</button></div>
@@ -991,7 +999,7 @@ export default function TerrainWorkbench(p:Props){
    <section id="terrain-panel-source" className="terrain-source terrain-step terrain-control-page"
      role="region" aria-label="Source settings" hidden={leftTab!=='source'}>
      <TerrainPagedForm active={p.active&&leftTab==='source'} name="DEM source pages">
-     {p.localImport!==true&&<label className="terrain-access-row" title="Required only when the server requires administrator authorization"><SectionIcon role="demAccess"/> Access token<input type="password" aria-label="DEM import token" value={token} onChange={e=>setToken(e.target.value)} autoComplete="off"/></label>}
+     {(p.localImport===false||accessRequired)&&<label className="terrain-access-row" title="Required only when the server requires administrator authorization"><SectionIcon role="demAccess"/> Access token<input type="password" aria-label="DEM import token" value={token} onChange={e=>setToken(e.target.value)} autoComplete="off"/></label>}
      <label className="raster-upload" title="Single-band DEM GeoTIFF, projected in meters, with meter elevations"><Mountain size={14}/> {importing?'Importing…':'Import DEM'}
        <input type="file" aria-label="Import DEM" accept=".tif,.tiff" disabled={importing||fetching||!p.connected} onChange={e=>void importDEM(e)}/></label>
      {dem&&!/Copernicus DEM GLO-|USGS 3DEP Bare Earth DEM/.test(dem.provenance)&&<label className="gis-check"><input aria-label="Confirm DEM meter elevations" type="checkbox" checked={verticalConfirmed} onChange={e=>setVerticalConfirmed(e.target.checked)}/> Elevations in meters</label>}

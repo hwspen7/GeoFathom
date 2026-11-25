@@ -1,4 +1,4 @@
-import {ListTree,PanelLeft,FolderKanban,Paintbrush,Combine,MapPinned,Scan,ListChecks,BookOpen,Focus,Image,ChartScatter,Box,CalendarClock,Network,Satellite,Earth,Bot,Waypoints,Spline,CornerDownRight,GitMerge,TableProperties,FilePenLine,ArrowLeftRight,MountainSnow,DraftingCompass,ScanLine,Share2,FileText,Folder,Layers3,Palette,SlidersHorizontal,Compass,BrainCircuit,Target,Monitor,RadioTower,HeartPulse,Server,DatabaseZap,Timer,HardDrive,ListOrdered,Gauge,Wrench,FlaskConical,ChartNoAxesCombined,FileCog,Info,Landmark,Telescope,Scale,Binoculars,Cog,type LucideIcon} from 'lucide-react';
+import {ListTree,PanelLeft,FolderKanban,Paintbrush,Combine,MapPinned,Scan,ListChecks,BookOpen,Focus,Image,ChartScatter,Box,CalendarClock,Network,Satellite,Earth,Bot,Waypoints,Spline,CornerDownRight,GitMerge,TableProperties,FilePenLine,ArrowLeftRight,MountainSnow,DraftingCompass,ScanLine,Share2,FileText,Folder,Layers3,Palette,SlidersHorizontal,Compass,BrainCircuit,Target,Monitor,RadioTower,HeartPulse,Server,DatabaseZap,Timer,HardDrive,ListOrdered,Gauge,Wrench,FlaskConical,ChartNoAxesCombined,FileCog,Info,Landmark,Telescope,Scale,Binoculars,Cog,ChartColumnIncreasing,type LucideIcon} from 'lucide-react';
 
 // A distinct visual identifier for each functional section in the workspace.
 export const SECTION_ICONS={
@@ -58,6 +58,7 @@ export const SECTION_ICONS={
   criterionWeights:Scale,
   observers:Binoculars,
   demProcessing:Cog,
+  terrainResult:ChartColumnIncreasing,
 } satisfies Record<string,LucideIcon>;
 export type SectionIconRole=keyof typeof SECTION_ICONS;
 export function SectionIcon({role,size=13}:{role:SectionIconRole;size?:number}){

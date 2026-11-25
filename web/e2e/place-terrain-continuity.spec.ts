@@ -289,3 +289,28 @@ test('large US university footprint automatically finds usable 3 m grid without 
  await expect(page.getByLabel('Pinned places').getByRole('button',{name:'Select pinned Large Campus Acceptance'})).toBeVisible();
  await closeProjectDrawer(page);
 });
+
+
+test('a missing local-import capability does not prevent the DEM API from deciding authorization',async({page})=>{
+ await page.setViewportSize({width:1680,height:1000});
+ await page.route('**/capabilities',async route=>{
+   const response=await route.fetch();
+   const capabilities=await response.json();
+   delete capabilities.local_raster_import;
+   await route.fulfill({response,json:capabilities});
+ });
+ await page.route('**/imagery/dem/fetch',route=>route.fulfill({status:403,json:{detail:'Administrator token required'}}));
+ await page.goto('/');
+ await expect(page.getByLabel('Interactive geospatial map')).toHaveAttribute('data-label-layer-ready','true',{timeout:25000});
+ await search(page,cmh);
+ await activateWorkspaceModule(page,'Terrain');
+ await expect(page.getByLabel('DEM fetch area')).toHaveValue('selection');
+ await expect(page.getByLabel('DEM import token')).toHaveCount(0);
+ const request=page.waitForRequest(req=>req.url().endsWith('/imagery/dem/fetch')&&req.method()==='POST');
+ await page.getByRole('button',{name:'Fetch DEM',exact:true}).click();
+ const sent=await request;
+ expect(sent.headers()['x-geofathom-local-import']).toBe('1');
+ expect(sent.postDataJSON().bbox).toEqual([-82.915,39.985,-82.87,40.008]);
+ await expect(page.getByRole('alert')).toContainText('DEM access denied');
+ await expect(page.getByLabel('DEM import token')).toBeVisible();
+});

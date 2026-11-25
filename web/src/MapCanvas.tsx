@@ -1055,9 +1055,20 @@ export default function MapCanvas({
       bounds();
     });
     mapRef.current = map;
-    const resize=new ResizeObserver(()=>map.resize());resize.observe(container.current);
+    // Coalesce dock changes and avoid synthetic move events for unchanged dimensions.
+    const resizeHost=container.current;
+    let resizeFrame=0,lastWidth=resizeHost.clientWidth,lastHeight=resizeHost.clientHeight;
+    const resize=new ResizeObserver(()=>{
+      if(resizeFrame)return;
+      resizeFrame=requestAnimationFrame(()=>{
+        resizeFrame=0;
+        const width=resizeHost.clientWidth,height=resizeHost.clientHeight;
+        if(!width||!height||width===lastWidth&&height===lastHeight)return;
+        lastWidth=width;lastHeight=height;map.resize();
+      });
+    });resize.observe(resizeHost);
     return () => {
-      resize.disconnect();
+      resize.disconnect();if(resizeFrame)cancelAnimationFrame(resizeFrame);
       map.getContainer().removeEventListener('pointerdown',inspectVertexPointer,true);
       map.off('zoomend',refreshZoomLabels);
       map.off('movestart',clearHandleDiagnostics);

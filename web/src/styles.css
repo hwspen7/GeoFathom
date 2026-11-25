@@ -2252,3 +2252,8 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .desktop-gis .terrain-summary-monitor .terrain-overview-preview{max-height:150px}
 .desktop-gis .terrain-summary-monitor .terrain-run-selector{margin:0}
 .desktop-gis .gis-results-monitor .terrain-result-footer button{min-height:30px;padding:4px 7px}
+
+/* Keep the selected analysis directly accessible when returning from Get DEM. */
+.desktop-gis .terrain-linked-row>button[aria-label="Terrain parameters"]{min-width:43px;padding-inline:5px}
+.desktop-gis .terrain-summary-monitor .terrain-flat-heading{font-size:13px;line-height:18px}
+.desktop-gis .terrain-status-slot .terrain-inline-error{white-space:normal;overflow-wrap:anywhere}

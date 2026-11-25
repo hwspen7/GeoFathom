@@ -1758,7 +1758,7 @@ export default function App() {
                 setError(failure instanceof Error?failure.message:'Could not place annotation.');
               }finally{setBusy(false);}
             }}
-            onViewportChange={setViewport}
+            onViewportChange={next=>setViewport(old=>old&&old.every((value,index)=>value===next[index])?old:next)}
             onMapClick={position => {
               if(busy||!drawingMode)return;
               // The MapCanvas handles start-node pixel snapping and closure.
