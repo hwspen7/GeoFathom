@@ -6,7 +6,7 @@ import tempfile
 
 from fastapi import APIRouter, File, Header, HTTPException, UploadFile, Request
 from core.config import get_settings
-from core.security import _loopback
+from core.security import _loopback, local_raster_import_enabled
 import httpx
 from pydantic import BaseModel, Field
 from fastapi.responses import Response
@@ -78,8 +78,7 @@ def require_raster_import(request: Request, token: str | None):
     # the administrator check. A non-simple header prevents cross-site forms.
     origin = request.headers.get("origin")
     local_import = (
-        os.getenv("GEOFATHOM_AUTH_MODE", "local").lower() == "local"
-        and not os.getenv("GEOFATHOM_MODEL_ADMIN_TOKEN")
+        local_raster_import_enabled()
         and request.client is not None and _loopback(request.client.host)
         and request.headers.get("X-GeoFathom-Local-Import") == "1"
         and (origin is None or origin in get_settings().cors_origins)

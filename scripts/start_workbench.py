@@ -41,7 +41,10 @@ def main():
     try:
         if ready("http://127.0.0.1:8000/health/ready"):
             raise RuntimeError("Port 8000 already serves an API. Stop the old server before launching this revision.")
-        api=subprocess.Popen([sys.executable,"-m","uvicorn","core.main:app","--host","127.0.0.1","--port","8000"],cwd=ROOT)
+        # Explicit desktop opt-in; deployed required-mode APIs remain protected.
+        api_env = {**os.environ}
+        api_env.setdefault("GEOFATHOM_LOCAL_RASTER_IMPORT", "1")
+        api=subprocess.Popen([sys.executable,"-m","uvicorn","core.main:app","--host","127.0.0.1","--port","8000"],cwd=ROOT,env=api_env)
         children.append(api)
         wait(api,"http://127.0.0.1:8000/health/ready")
         front=subprocess.Popen([npm,"run","dev","--","--host","127.0.0.1"],cwd=ROOT/"web",

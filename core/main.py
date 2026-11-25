@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import get_settings
-from .security import APIBoundaryMiddleware
+from .security import APIBoundaryMiddleware, local_raster_import_enabled
 from .health import router as health_router
 from analysis.routes import router as analysis_router
 from analysis.network_routes import router as network_science_router
@@ -112,8 +112,7 @@ def capabilities() -> dict:
         "vision_methods": ["color", "sam2_optional"],
         "georeferenced_imagery": True,
         "remote_sensing": "scientific_catalog",
-        "local_raster_import": os.getenv("GEOFATHOM_AUTH_MODE","local").lower()=="local"
-            and not os.getenv("GEOFATHOM_MODEL_ADMIN_TOKEN"),
+        "local_raster_import": local_raster_import_enabled(),
         "spatial_discovery": "bounded_osm",
         "imagery": "local_geotiff_and_public_stac_metadata",
         "native_geometry": native_available(),

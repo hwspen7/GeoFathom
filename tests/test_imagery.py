@@ -205,6 +205,7 @@ def test_local_cog_import_preserves_overviews_and_source_checksum(tmp_path,monke
 
 def test_local_desktop_import_needs_explicit_header_and_trusted_origin(geotiff, monkeypatch):
     monkeypatch.delenv("GEOFATHOM_MODEL_ADMIN_TOKEN")
+    monkeypatch.delenv("GEOFATHOM_LOCAL_RASTER_IMPORT", raising=False)
     monkeypatch.setenv("GEOFATHOM_AUTH_MODE", "local")
     monkeypatch.setenv("GEOFATHOM_CORS_ORIGINS", "http://127.0.0.1:5173")
     files={"file":("local.tif",geotiff.read_bytes(),"image/tiff")}
@@ -257,3 +258,31 @@ def test_raster_source_metadata_keeps_native_units_and_declared_datum(tmp_path):
     with rasterio.open(path,"r+") as ds:
         ds.update_tags(VERTICAL_DATUM="")
     assert metadata(path)["vertical_datum"] is None
+
+
+def test_desktop_raster_opt_in_preserves_model_and_deployment_auth(geotiff, monkeypatch):
+    from core.security import local_raster_import_enabled
+    monkeypatch.setenv("GEOFATHOM_AUTH_MODE", "local")
+    monkeypatch.setenv("GEOFATHOM_MODEL_ADMIN_TOKEN", "protected")
+    monkeypatch.setenv("GEOFATHOM_LOCAL_RASTER_IMPORT", "1")
+    headers = {"X-GeoFathom-Local-Import": "1", "Origin": "http://127.0.0.1:5173"}
+    files = {"file": ("desktop.tif", geotiff.read_bytes(), "image/tiff")}
+    assert client.get("/capabilities").json()["local_raster_import"] is True
+    assert client.post("/imagery/upload", files=files, headers=headers).status_code == 201
+    assert client.post("/imagery/upload", files=files).status_code == 403
+    assert client.post("/imagery/upload", files=files, headers={
+        **headers, "Origin": "https://untrusted.example"
+    }).status_code == 403
+    from intelligence.catalog import require_admin
+    with pytest.raises(PermissionError):
+        require_admin(None)
+    monkeypatch.setenv("GEOFATHOM_LOCAL_RASTER_IMPORT", "0")
+    assert client.get("/capabilities").json()["local_raster_import"] is False
+    assert client.post("/imagery/upload", files=files, headers=headers).status_code == 403
+    monkeypatch.setenv("GEOFATHOM_LOCAL_RASTER_IMPORT", "1")
+    monkeypatch.setenv("GEOFATHOM_AUTH_MODE", "required")
+    assert not local_raster_import_enabled()
+    monkeypatch.setenv("GEOFATHOM_API_TOKEN", "x" * 32)
+    assert client.post("/imagery/upload", files=files, headers={
+        **headers, "X-GeoFathom-API-Key": "x" * 32
+    }).status_code == 403

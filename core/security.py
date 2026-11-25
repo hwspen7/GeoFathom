@@ -29,6 +29,21 @@ def _loopback(host):
         return False
 
 
+def local_raster_import_enabled() -> bool:
+    """Allow desktop raster work independently of model administration.
+
+    A standalone protected server retains its previous behavior by default.
+    The loopback desktop launcher explicitly opts in; required API mode
+    always takes precedence over this setting.
+    """
+    if os.getenv("GEOFATHOM_AUTH_MODE", "local").lower() != "local":
+        return False
+    configured = os.getenv("GEOFATHOM_LOCAL_RASTER_IMPORT")
+    if configured is not None:
+        return configured.strip().lower() in {"1", "true", "yes"}
+    return not os.getenv("GEOFATHOM_MODEL_ADMIN_TOKEN")
+
+
 def _authorized(request,mode):
     if request.method=="OPTIONS" or request.url.path=="/health":
         return None

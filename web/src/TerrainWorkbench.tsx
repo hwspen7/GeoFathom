@@ -131,6 +131,8 @@ export default function TerrainWorkbench(p:Props){
  // The rectangular download footprint is an optional diagnostic, not the study polygon.
  const [showFetchExtent,setShowFetchExtent]=useState(false);
  const [accessRequired,setAccessRequired]=useState(false);
+ // A successful acquisition returns to the selected operation without clearing its parameters.
+ const operationRef=useRef(operation);operationRef.current=operation;
  // The displayed fetch choice tracks a genuine selected area automatically.
  // An explicit dropdown choice takes precedence until the user changes it again.
  const [fetchChoice,setFetchChoice]=useState<'auto'|FetchScope>('auto');
@@ -498,7 +500,7 @@ export default function TerrainWorkbench(p:Props){
  // including when an older API omits the local-import capability.
  function sourceError(error:unknown){
    if(error instanceof ApiError&&(error.status===401||error.status===403)){
-     setAccessRequired(true);setLeftTab('source');setError('DEM access denied. Enter the server access token.');
+     setAccessRequired(true);setLeftTab('source');setError('DEM access denied. '+error.message);
    }else setError(error instanceof Error?error.message:String(error));
  }
  async function importDEM(e:ChangeEvent<HTMLInputElement>){
@@ -512,6 +514,7 @@ export default function TerrainWorkbench(p:Props){
      if(item.bands!==1)throw Error('Select a single-band DEM, not RGB imagery.');
      setAssets(old=>[item,...old.filter(v=>v.id!==item.id)]);
      latest.current.onSelectRaster(item);
+     // Imported rasters still require an explicit vertical-unit confirmation.
    }catch(e){if(alive.current&&ticket===sourceIntent.current)sourceError(e);}
    finally{if(alive.current)setImporting(false);}
  }
@@ -563,6 +566,7 @@ export default function TerrainWorkbench(p:Props){
        ' · '+data.valid_cells+'/'+data.total_cells+' cells'+(data.missing_tiles.length?' · partial coverage':'')+
        ' · '+data.valid_coverage_pct.toFixed(1)+'% valid · center '+((bbox[0]+bbox[2])/2).toFixed(5)+', '+((bbox[1]+bbox[3])/2).toFixed(5));
      if(data.warning)setInfo(data.warning);
+     if(operationRef.current)setLeftTab('setup');
    }catch(e){if(alive.current&&ticket===sourceIntent.current&&!controller.signal.aborted)sourceError(e);}
    finally{if(fetchAbort.current===controller)fetchAbort.current=null;if(alive.current)setFetching(false);}
  }
@@ -663,6 +667,7 @@ export default function TerrainWorkbench(p:Props){
      window.setTimeout(()=>URL.revokeObjectURL(url),1000);
    }}>Terrain history JSON</button>}
  </div>;
+ const runBlocker=!p.connected?'API offline':!dem?'DEM required':!verified?'Confirm elevation units':!correctShape?(lineOperation?'Select a profile line':'Select a study area'):sourceMismatch?'DEM does not cover selection':mapMismatch?'Fit the study area':!parametersValid?'Check parameters':!resultCacheReady?'Restoring results':'';
  const runActions=operation?<div className="terrain-run-row">
    <button className="primary-tool" title={!p.connected?'Connect to the API':!dem?'Get or import a DEM':!verified?'Confirm elevation units':!correctShape?'Select the required study geometry':sourceMismatch?'DEM does not cover the study area':mapMismatch?'Fit the study area or DEM':!parametersValid?'Check analysis parameters':!resultCacheReady?'Restoring results':'Run the selected analysis'} disabled={!canRun||busy} onClick={()=>void run()}>{busy?'Calculating…':'Run terrain operation'}</button>
    {busy&&<button onClick={()=>{setLive(false);cancelAnalysis();setInfo('Analysis request cancelled.');}}>Cancel</button>}
@@ -984,7 +989,7 @@ export default function TerrainWorkbench(p:Props){
            onChange={e=>{
              const value=e.target.value as Operation|'';
              setOperation(value||null);setLive(false);setPickEnd(false);
-             setLeftTab(value?'setup':'tools');
+             setLeftTab(value?(dem?'setup':'source'):'tools');
            }}>
            <option value="">Choose an analysis</option>
            {modes.map(item=><option key={item.id} value={item.id}>{item.title}</option>)}
@@ -1006,18 +1011,16 @@ export default function TerrainWorkbench(p:Props){
      <label>Area <select aria-label="DEM fetch area" value={fetchScope} onChange={e=>{setFetchChoice(e.target.value as FetchScope);setInfo('');}}>
        <option value="viewport">Current map view</option><option value="selection" disabled={!selectedGeometry}>Selected geometry</option>
      </select></label>
-     {selectedGeometry&&<div className="survey-action-bar">
-       <button disabled={fetchScope==='selection'} onClick={()=>{setFetchChoice('selection');setInfo('');}}>Use selected area</button>
-       {p.onFitSelectedArea&&<button onClick={()=>{setFetchChoice('selection');p.onFitSelectedArea?.();}}>Fit selected area</button>}
-     </div>}
      <div className="terrain-target-row">
+       {selectedGeometry&&fetchScope==='viewport'&&<button onClick={()=>{setFetchChoice('selection');setInfo('');}}>Use selected area</button>}
        <small className="terrain-target-detail" aria-label="DEM download target" title={fetchArea?describeTerrainBounds(fetchArea):'No valid download area'}>
          {fetchArea?<><span>{budget?'~'+budget.approximateCells.toLocaleString()+' cells':fetchScope==='viewport'?'Current map':'Selected geometry'}</span><span className="terrain-accessible-detail">{(fetchScope==='viewport'?'Current map · ':'Selected geometry · ')+describeTerrainBounds(fetchArea)}</span></>:'No valid download area'}
        </small>
+       {selectedGeometry&&p.onFitSelectedArea&&<button title="Fit selected area" onClick={()=>{setFetchChoice('selection');p.onFitSelectedArea?.();}}>Fit selected area</button>}
        <button type="button" disabled={!fetchArea} aria-label="Show DEM download extent" aria-pressed={showFetchExtent} title="Preview rectangular download bounds; analysis still uses the selected geometry" onClick={()=>setShowFetchExtent(v=>!v)}>Extent</button>
      </div>
      {budget?.warning&&<small role="alert" className="discovery-error">{budget.warning}</small>}
-     {fetchArea&&<div className="survey-action-bar">
+     {fetchArea&&<div className="terrain-resolution-tools">
        <button aria-label="Auto-fit DEM resolution" disabled={!recommendedResolution||fetching}
          onClick={()=>{if(!recommendedResolution)return;setResolution(recommendedResolution);
            setInfo('');}}>
@@ -1025,7 +1028,7 @@ export default function TerrainWorkbench(p:Props){
        </button>
        <small className="terrain-accessible-detail" aria-label="DEM source coverage">Up to 8M cells, 4096 px/side · {supportsUSGS?'USGS 3DEP / Copernicus':'Copernicus global'}</small>
      </div>}
-     <div className="area-fields">
+     <div className="area-fields terrain-fetch-actions">
        <select aria-label="Public DEM resolution" value={resolution}
           onChange={e=>setResolution(Number(e.target.value) as 1|3|10|30|90)}>
           <option value={30}>GLO-30 · 30 m</option>
@@ -1034,7 +1037,7 @@ export default function TerrainWorkbench(p:Props){
           <option value={3} disabled={!supportedResolutions.includes(3)}>USGS 3DEP · 3 m grid</option>
           <option value={1} disabled={!supportedResolutions.includes(1)}>USGS 3DEP · 1 m grid</option>
         </select>
-       <button disabled={!p.connected||!fetchArea||!!budget?.warning||fetching||importing} title="Download the explicitly displayed area, not a previous selection" onClick={()=>void fetchDEM()}>{fetching?'Fetching…':'Fetch DEM'}</button>
+       <button disabled={!p.connected||!fetchArea||!!budget?.warning||fetching||importing} className="terrain-fetch-primary" title="Download the explicitly displayed area, not a previous selection" onClick={()=>void fetchDEM()}>{fetching?'Fetching…':'Fetch DEM'}</button>
        {fetching&&<button aria-label="Cancel DEM download" onClick={()=>{sourceIntent.current++;fetchAbort.current?.abort();setInfo('Cancelling the previous download…');}}>Cancel</button>}
      </div>
      {mapMismatch&&<small className="discovery-error" role="status">DEM outside map. Use Fit or change source.</small>}
@@ -1049,7 +1052,7 @@ export default function TerrainWorkbench(p:Props){
       setCategory(name);setOperation(null);setLive(false);setPickEnd(false);
     }} onSelect={value=>{
       setOperation(value);
-      if(value)setLeftTab('setup');
+      if(value)setLeftTab(dem?'setup':'source');
       else setLive(false);
     }}/>
    </section>
@@ -1294,7 +1297,7 @@ export default function TerrainWorkbench(p:Props){
        </TerrainPagedForm></>:<span>No DEM selected</span>}
    </section>
    {/* Reserve a single status line so messages never move the controls or pager. */}
-   <div className="terrain-status-slot">{error?<p className="discovery-error terrain-inline-error" role="alert" title={error}>{error}</p>:info?<p className="project-info terrain-inline-status" title={info}>{info}</p>:null}</div>
+   <div className="terrain-status-slot">{error?<p className="discovery-error terrain-inline-error" role="alert" title={error}>{error}</p>:info?<p className="project-info terrain-inline-status" title={info}>{info}</p>:operation&&runBlocker?<p className="terrain-inline-status" title={runBlocker}>{runBlocker}</p>:null}</div>
  </div>
  {p.resultsTarget?(p.active&&monitor?createPortal(monitor,p.resultsTarget):null):monitor}
  {p.operationsFooterTarget?(p.active&&runActions?createPortal(runActions,p.operationsFooterTarget):null):null}

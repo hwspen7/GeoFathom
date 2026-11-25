@@ -2257,3 +2257,14 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .desktop-gis .terrain-linked-row>button[aria-label="Terrain parameters"]{min-width:43px;padding-inline:5px}
 .desktop-gis .terrain-summary-monitor .terrain-flat-heading{font-size:13px;line-height:18px}
 .desktop-gis .terrain-status-slot .terrain-inline-error{white-space:normal;overflow-wrap:anywhere}
+
+/* The source acquisition is one compact group with a single primary action. */
+.desktop-gis .gis-operations .terrain-target-row{gap:4px;flex-wrap:wrap;justify-content:flex-end}
+.desktop-gis .gis-operations .terrain-target-detail{flex:1 1 60px}
+.desktop-gis .gis-operations .terrain-target-row button{flex:none;min-height:25px!important;padding:3px 6px!important;font-size:10px!important}
+.desktop-gis .gis-operations .terrain-fetch-actions{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+.desktop-gis .gis-operations .terrain-fetch-actions .terrain-fetch-primary:not(:disabled){background:#276d91;color:white;border-color:#276d91}
+.desktop-gis .gis-operations .terrain-resolution-tools{display:flex;align-items:center;min-width:0}
+.desktop-gis .gis-operations .terrain-status-slot{flex-basis:30px;min-height:30px}
+.desktop-gis .gis-operations .terrain-status-slot .terrain-inline-error{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:14px;overflow:hidden}
+.desktop-gis .gis-operations .terrain-status-slot .terrain-inline-status{color:#627c8d}

@@ -93,9 +93,18 @@ $npm=Ensure-Node
 
 if($Mode -eq 'Start'){
     Require-FreePorts
-    Launch-Window 'GeoFathom API (8000)' $root $venv @(
-        '-m','uvicorn','core.main:app','--host','127.0.0.1','--port','8000'
-    )
+    # This launcher binds to loopback only. Keep any model-admin token intact.
+    # An explicit process override (including 0) is respected.
+    $previousRasterImport=$env:GEOFATHOM_LOCAL_RASTER_IMPORT
+    try{
+        if($null -eq $previousRasterImport){$env:GEOFATHOM_LOCAL_RASTER_IMPORT='1'}
+        Launch-Window 'GeoFathom API (8000)' $root $venv @(
+            '-m','uvicorn','core.main:app','--host','127.0.0.1','--port','8000'
+        )
+    }finally{
+        if($null -eq $previousRasterImport){Remove-Item Env:\GEOFATHOM_LOCAL_RASTER_IMPORT -ErrorAction SilentlyContinue}
+        else{$env:GEOFATHOM_LOCAL_RASTER_IMPORT=$previousRasterImport}
+    }
     Launch-Window 'GeoFathom Web (5173)' $web $npm @(
         'run','dev','--','--host','127.0.0.1','--port','5173','--strictPort'
     )
