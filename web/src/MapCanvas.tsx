@@ -106,6 +106,7 @@ interface Props {
   onSelectPinnedPlace?:(id:string)=>void;
   selectedBoundaryNode?:GeometryPath|null;
   selectedMeasuredEdge?:MeasuredEdge|null;
+  onClearMeasuredEdge?:()=>void;
   cuttingEdge?:boolean;
   onCutEdge?:(index:number)=>void;
   onSelectBoundaryNode?:(path:GeometryPath)=>void;
@@ -305,7 +306,7 @@ export default function MapCanvas({
   selectionBoxMode,onSelectionBox,selectedIds,qualityIssues,projectGrid,externalTiles,
   labelMoveMode,onLabelMove,
   onGeometryPreview, onGeometryCommit, onSelectSavedFeature,onDeselect,preservePlaceSelection=false,
-  pinnedPlaces=[],onSelectPinnedPlace,selectedBoundaryNode=null,onSelectBoundaryNode,selectedMeasuredEdge=null,cuttingEdge=false,onCutEdge,
+  pinnedPlaces=[],onSelectPinnedPlace,selectedBoundaryNode=null,onSelectBoundaryNode,selectedMeasuredEdge=null,onClearMeasuredEdge,cuttingEdge=false,onCutEdge,
 }: Props) {
   const container = useRef<HTMLDivElement>(null);
   const coordinateRef = useRef<HTMLDivElement>(null);
@@ -316,7 +317,7 @@ export default function MapCanvas({
   const eventRef = useRef({
     selected,selectedFeatureId,drawingMode,vertices, traceMode, annotationMode,selectionBoxMode,labelMoveMode,editing, moving,edgeMoving, snapping, selectedLocked,
     layerFeatures, onMapClick,onFinishDrawing,terrainPicking,onTerrainPick,onContextMenu,onEditingError, onTraceClick,onAnnotationClick,onSelectionBox,onLabelMove,onViewportChange,
-    onGeometryPreview, onGeometryCommit, onSelectSavedFeature,onSelectNetworkFace,onDeselect,preservePlaceSelection,onSelectPinnedPlace,onSelectBoundaryNode,
+    onGeometryPreview, onGeometryCommit, onSelectSavedFeature,onSelectNetworkFace,onDeselect,preservePlaceSelection,onSelectPinnedPlace,onSelectBoundaryNode,onClearMeasuredEdge,
     profileSamples,onProfileCursor,cuttingEdge,onCutEdge,
   });
   const renderRef = useRef({
@@ -339,7 +340,7 @@ export default function MapCanvas({
   eventRef.current = {
     selected,selectedFeatureId,drawingMode,vertices, traceMode, annotationMode,selectionBoxMode,labelMoveMode,editing, moving,edgeMoving, snapping, selectedLocked,
     layerFeatures, onMapClick,onFinishDrawing,terrainPicking,onTerrainPick,onContextMenu,onEditingError, onTraceClick,onAnnotationClick,onSelectionBox,onLabelMove,onViewportChange,
-    onGeometryPreview, onGeometryCommit, onSelectSavedFeature,onSelectNetworkFace,onDeselect,preservePlaceSelection,onSelectPinnedPlace,onSelectBoundaryNode,
+    onGeometryPreview, onGeometryCommit, onSelectSavedFeature,onSelectNetworkFace,onDeselect,preservePlaceSelection,onSelectPinnedPlace,onSelectBoundaryNode,onClearMeasuredEdge,
     profileSamples,onProfileCursor,cuttingEdge,onCutEdge,
   };
 
@@ -708,6 +709,9 @@ export default function MapCanvas({
           coordinate=>map.project(coordinate as maplibregl.LngLatLike),'vertex');
         if(node){state.onSelectBoundaryNode?.(node.path);return;}
       }else if (!state.editing) {
+        // Release the transient measurement highlight without deselecting the study geometry.
+        // Map navigation and drawing remain independent of the measurement inspector.
+        state.onClearMeasuredEdge?.();
         const features=hits(event);
         if(state.selected){
           const node=nearestEditableHandle(state.selected,event.point,

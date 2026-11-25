@@ -2342,7 +2342,7 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .measurement-edge-pager{display:flex;align-items:center;justify-content:space-between;gap:6px;padding-top:5px;font-size:10px;color:#657d8f}
 .measurement-edge-pager button{border:1px solid #dce6ed;border-radius:3px;background:#fff;color:#365b75;min-width:25px;min-height:23px;font-size:15px}
 .measurement-edge-pager button:disabled{opacity:.35}
-.map-edge-value.map-edge-selected{color:#a65710!important;background:#fff8ee;border:1px solid #f28c18;border-radius:3px;padding:2px 4px;text-shadow:none!important;z-index:5}
+.desktop-gis .map-edge-value.map-edge-selected{color:#a65710!important;background:transparent;border:0;box-shadow:none;border-radius:0;padding:0;text-shadow:0 0 2px #fff,1px 0 1px #fff,-1px 0 1px #fff,0 -1px 1px #fff;z-index:5}
 
 
 /* All workspaces use the Analysis object browser's single separator.
@@ -2446,4 +2446,32 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 }
 .desktop-gis .gis-operations .science-launch .science-launch-button:disabled{
  opacity:.48;cursor:not-allowed;
+}
+
+
+/* Map furniture is transparent; text/icon halos preserve contrast without
+   covering geographic content. Keep actual legend swatches and attribution. */
+.desktop-gis .map-legend-toggle,.desktop-gis .map-legend-items{
+ background:transparent;border:0;border-radius:0;box-shadow:none;color:#233f53;
+}
+.desktop-gis .map-legend-toggle{padding:5px 2px;text-shadow:0 0 2px #fff,0 0 4px #fff}
+.desktop-gis .map-legend-toggle svg{filter:drop-shadow(0 0 1px #fff) drop-shadow(0 0 1px #fff)}
+.desktop-gis .map-legend-items{padding:3px 2px}
+.desktop-gis .map-legend-item,.desktop-gis .map-legend-item small,.desktop-gis .named-raster-legend,.desktop-gis .named-raster-legend .temporal-scale{
+ color:#233f53;text-shadow:0 0 2px #fff,0 0 4px #fff;
+}
+.desktop-gis .map-canvas .maplibregl-ctrl-group{
+ background:transparent!important;border:0!important;border-radius:0!important;box-shadow:none!important;
+}
+.desktop-gis .map-canvas .maplibregl-ctrl-group button{
+ background-color:transparent!important;border:0!important;border-radius:0!important;box-shadow:none!important;
+}
+.desktop-gis .map-canvas .maplibregl-ctrl-group button .maplibregl-ctrl-icon{
+ filter:drop-shadow(0 0 1px #fff) drop-shadow(0 0 1px #fff);
+}
+.desktop-gis .map-canvas .maplibregl-ctrl-group button:hover .maplibregl-ctrl-icon{
+ filter:drop-shadow(0 0 2px #fff) drop-shadow(0 0 1px #fff);
+}
+.desktop-gis .map-canvas .maplibregl-ctrl-group button:focus-visible,.desktop-gis .map-legend-toggle:focus-visible{
+ outline:1px solid #397d9e;outline-offset:1px;
 }

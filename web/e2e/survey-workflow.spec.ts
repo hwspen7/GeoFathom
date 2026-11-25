@@ -58,6 +58,14 @@ for(const width of [1100,1280,1600])test(`drawing exits and error recovery stay 
  await edge.click();
  await expect(edge).toHaveAttribute('aria-pressed','true');
  await expect(map).toHaveAttribute('data-selected-measurement-edge','1');
+ await expect(page.locator('.map-edge-selected')).toHaveCSS('background-color','rgba(0, 0, 0, 0)');
+ // Clicking the map releases the measurement selection, not the study object.
+ const edgeMapBox=(await map.boundingBox())!;
+ await map.click({position:{x:12,y:Math.round(edgeMapBox.height/2)}});
+ await expect(map).toHaveAttribute('data-selected-measurement-edge','');
+ await expect(edge).toHaveAttribute('aria-pressed','false');
+ await expect(inspector.locator('.measurement-primary strong')).toBeVisible();
+ await expect(page.locator('.maplibregl-ctrl-group').first()).toHaveCSS('background-color','rgba(0, 0, 0, 0)');
  await inspector.locator('.edge-measurements summary').click();
  await page.screenshot({path:testInfo.outputPath('survey-objects-'+width+'.png')});
  // The map ends above the dedicated status row; dock footers do not overlap it.

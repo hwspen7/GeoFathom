@@ -1616,6 +1616,7 @@ export default function App() {
             onContextMenu={(x,y)=>setContextMenu({x,y})} onDeselect={deselect}
             selectedBoundaryNode={selectedBoundaryNode} onSelectBoundaryNode={setSelectedBoundaryNode}
             selectedMeasuredEdge={drawingMode||cuttingEdge?null:measuredEdges.edges[selectedEdgeIndex??-1]??null}
+            onClearMeasuredEdge={()=>setEdgeSelection(null)}
             cuttingEdge={cuttingEdge&&!drawingMode&&!editing&&!terrainPicking} onCutEdge={cutSelectedEdge}
             onEditingError={setError}
             editing={editing} moving={moving} edgeMoving={edgeMoving} snapping={snapping}
