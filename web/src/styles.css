@@ -2475,3 +2475,36 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .desktop-gis .map-canvas .maplibregl-ctrl-group button:focus-visible,.desktop-gis .map-legend-toggle:focus-visible{
  outline:1px solid #397d9e;outline-offset:1px;
 }
+
+
+/* Shared English file picker: the real input remains accessible and receives
+   files; its browser-localized filename/button rendering is visually hidden. */
+.english-file-input{position:relative;display:flex;align-items:center;gap:8px;min-width:0;width:100%;box-sizing:border-box;border:1px solid #cbdce7;border-radius:4px;background:#fff;padding:4px 7px;min-height:32px;overflow:hidden}
+.english-file-input>input[type=file]{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;opacity:0!important;cursor:pointer;margin:0!important;padding:0!important}
+.english-file-input:focus-within{outline:2px solid #337fa7;outline-offset:1px}
+.english-file-input:has(input:disabled){opacity:.48}
+.english-file-button{flex:none;color:#245b7d;font-size:11px;font-weight:600}
+.english-file-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:#657d8f}
+.lidar-dialog{width:min(1480px,97vw);height:min(900px,94dvh);max-width:97vw;max-height:94dvh}
+.lidar-columns{min-height:0;grid-template-columns:minmax(250px,320px) minmax(0,1fr)}
+.lidar-input,.lidar-output{min-height:0;min-width:0;overflow:auto}
+.lidar-input{display:flex;flex-direction:column;gap:9px;padding:14px}
+.lidar-input>label:not(.lidar-confirm){display:grid;gap:4px;font-size:12px}
+.lidar-input>label>input:not([type=checkbox]),.lidar-input>label>select{width:100%;min-width:0;box-sizing:border-box}
+.lidar-input .lidar-confirm{display:flex;align-items:flex-start;gap:7px;font-size:11px}
+.lidar-confirm input{width:14px;height:14px;flex:none;margin:1px 0}
+.lidar-output{padding:14px}
+.lidar-output>.panel-section{border:0;padding:0;margin:0}
+.lidar-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:7px;margin:0 0 9px}
+.lidar-monitor .lidar-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
+.lidar-metrics>div{min-width:0;padding:8px;border:1px solid #dce6ed;border-radius:5px;background:#f7fafc}
+.lidar-metrics dt{font-size:11px;color:#657d8f;overflow-wrap:anywhere}
+.lidar-metrics dd{margin:3px 0 0;font-weight:650;color:#24506b;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.lidar-review-button{width:100%;min-height:32px;background:#eaf3f8!important;color:#245b7d}
+.desktop-gis .map-legend{align-items:center}
+.desktop-gis .map-legend-toggle{align-self:center}
+.desktop-gis .map-legend-items{align-items:stretch;min-width:0}
+.desktop-gis .map-legend-select{display:flex;align-items:center;gap:6px;text-align:left;background:transparent!important;border:0!important;box-shadow:none!important;padding:3px 4px;color:#233f53;cursor:pointer;font:inherit;text-shadow:0 0 2px #fff,0 0 4px #fff}
+.desktop-gis .map-legend-select:hover:not(:disabled){text-decoration:underline;color:#17648b}
+.desktop-gis .map-legend-select:focus-visible{outline:1px solid #397d9e}
+.desktop-gis .map-legend-raster-title{font-weight:650}

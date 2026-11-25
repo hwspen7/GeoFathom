@@ -1249,34 +1249,38 @@ export default function App() {
   ];
   // Legend names are taken from the same visible objects as the map, not layer counts.
   const legendPalette=mapPalette(basemap,display.contrast);
-  const namedLegend:Array<{id:string;name:string;color:string;detail?:string}>= [];
+  const namedLegend:Array<{id:string;name:string;color:string;detail?:string;onSelect?:()=>void}>= [];
+  const focusBounds=(bounds:[number,number,number,number])=>{const [w,s,e,n]=bounds;setFocus({longitude:(w+e)/2,latitude:(s+n)/2,bbox:bounds,key:Date.now()});};
+  const focusGeometry=(g:GeoJSON.Geometry)=>{const bounds=terrainGeometryBounds(g);if(bounds)focusBounds(bounds);};
+  // Object clicks share the existing selection and measurement workflow.
+  const inspectObject=(select:()=>void)=>{if(drawingMode||busy)return;setEdgeSelection(null);select();revealPanel('tools-survey');};
   const savedLegendFeatures=[...(projectWorkspace?.features??[]),...pagedFeatures.filter(f=>!(projectWorkspace?.features??[]).some(row=>row.id===f.id))];
   for(const feature of savedLegendFeatures){
     const layer=projectWorkspace?.layers.find(l=>l.id===feature.layer_id);
     if(!layer?.visible)continue;
     const field=layer.style.symbol.category_field;
     const category=field==='name'?feature.name:field==='source'?feature.source:feature.properties[field];
-    namedLegend.push({id:'saved:'+feature.id,name:feature.name,color:spatialSelected.includes(feature.id)?'#f59e0b':featureColor(feature,layer.style,layer.color),detail:field&&category!=null&&typeof category!=='object'&&String(category)!==feature.name?String(category):undefined});
+    namedLegend.push({id:'saved:'+feature.id,name:feature.name,onSelect:()=>inspectObject(()=>openStoredFeature(feature)),color:spatialSelected.includes(feature.id)?'#f59e0b':featureColor(feature,layer.style,layer.color),detail:field&&category!=null&&typeof category!=='object'&&String(category)!==feature.name?String(category):undefined});
   }
-  for(const item of scratch.filter(f=>f.visible))namedLegend.push({id:'local:'+item.id,name:item.name,color:item.id===scratchId&&geometry?legendPalette.selected:'#168047'});
-  if(!drawingMode)for(const face of (networkAreas?.faces??[]).slice(0,300))namedLegend.push({id:'face:'+face.id,name:face.name,color:'#238d89'});
-  for(const item of rasterLayers.filter(l=>l.visible))namedLegend.push({id:'asset:'+item.asset.id,name:item.asset.name,color:'#a8adb0',detail:item.kind==='dem'?'DEM':'Raster'});
-  if(geometry&&!scratchId&&!selectedFeatureId&&selectedPlace)namedLegend.push({id:'selection',name:selectedPlace.name,color:legendPalette.selected});
+  for(const item of scratch.filter(f=>f.visible))namedLegend.push({id:'local:'+item.id,name:item.name,onSelect:()=>inspectObject(()=>selectScratch(item)),color:item.id===scratchId&&geometry?legendPalette.selected:'#168047'});
+  if(!drawingMode)for(const face of (networkAreas?.faces??[]).slice(0,300))namedLegend.push({id:'face:'+face.id,name:face.name,onSelect:()=>inspectObject(()=>{activateNetworkFace(face.id);focusGeometry(face.geometry);}),color:'#238d89'});
+  for(const item of rasterLayers.filter(l=>l.visible))namedLegend.push({id:'asset:'+item.asset.id,name:item.asset.name,onSelect:()=>{if(drawingMode||busy)return;focusBounds(item.asset.bbox);if(item.kind==='dem'){setDemLayer(item.asset);setRasterLayers(old=>selectDEM(old,item.asset));revealPanel('tools-terrain');}else{setImageLayer(item.asset);revealPanel('tools-survey');}},color:'#a8adb0',detail:item.kind==='dem'?'DEM':'Raster'});
+  if(geometry&&!scratchId&&!selectedFeatureId&&selectedPlace)namedLegend.push({id:'selection',name:selectedPlace.name,onSelect:()=>inspectObject(()=>focusGeometry(geometry)),color:legendPalette.selected});
   const visibleScienceRasters=[...(terrainVisible?terrainRasters:[]),...(spatialVisible&&spatialRaster?[spatialRaster]:[]),...(remoteVisible&&remoteRaster?[remoteRaster]:[]),...(spacetimeVisible&&spacetimeRaster?[spacetimeRaster]:[])];
   // Repeated scientific vector classes (e.g. contour lines) share a single symbol key.
-  const vectorLegend=new Map<string,{id:string;name:string;color:string}>();
+  const vectorLegend=new Map<string,{id:string;name:string;color:string;onSelect:()=>void}>();
   const addVectorLegend=(items:GeoJSON.Feature[],prefix:string,fallback:string)=>items.forEach((feature,index)=>{
     const props=feature.properties??{};
     const name=String(props.name??props.label??prefix+' '+(index+1));
     const color=prefix==='Spatial'?'#914db6':prefix==='Terrain'&&typeof props.elevation_m==='number'?(props.major?legendPalette.major:legendPalette.contour):prefix==='Terrain'&&name==='Visible terrain'?'#21bb72':typeof props.color==='string'?props.color:fallback;
     const id=prefix+':'+name+':'+color;
-    vectorLegend.set(id,{id,name,color});
+    if(!vectorLegend.has(id))vectorLegend.set(id,{id,name,color,onSelect:()=>{if(drawingMode||busy)return;focusGeometry(feature.geometry);revealPanel(prefix==='Terrain'?'tools-terrain':prefix==='Spatial'?'tools-spatial-science':'tools-network-science');}});
   });
   if(terrainVisible)addVectorLegend(terrainFeatures,'Terrain','#1ea8df');
   if(spatialVisible)addVectorLegend(spatialResults,'Spatial','#914db6');
   if(networkVisible)addVectorLegend(networkResults,'Network','#287aa1');
   namedLegend.push(...vectorLegend.values());
-  if(terrainProfileLine)namedLegend.push({id:'profile-line',name:'Profile measurement line',color:'#d26b2f'});
+  if(terrainProfileLine)namedLegend.push({id:'profile-line',name:'Profile measurement line',onSelect:()=>{if(drawingMode||busy)return;focusGeometry(terrainProfileLine);revealPanel('tools-terrain');},color:'#d26b2f'});
   // Keep the object portal host stable across navigation; only module tools change.
   const gisFlat=['tools-gis','tools-survey','tools-spatial','tools-terrain'].includes(activeTool);
   const GeometryContainer=gisFlat?'section':'details';
@@ -1817,12 +1821,12 @@ export default function App() {
               <SectionIcon role="legend" size={15}/> Legend
             </button>
             {showLegend&&!editing&&<div className="map-legend-items" aria-label="Map legend">
-              {namedLegend.map(item=><div key={item.id} className="map-legend-item" title={item.detail?item.name+' · '+item.detail:item.name}>
+              {namedLegend.map(item=><button type="button" key={item.id} className="map-legend-item map-legend-select" disabled={busy||Boolean(drawingMode)} onClick={item.onSelect} title={item.detail?item.name+' · '+item.detail:item.name}>
                 <span className="legend-swatch" style={{borderColor:item.color,backgroundColor:item.color}}/>
                 <span className="map-legend-name">{item.name}{item.detail&&<small> · {item.detail}</small>}</span>
-              </div>)}
+              </button>)}
               {visibleScienceRasters.map(item=><section key={item.id} className="named-raster-legend">
-                <strong title={item.title}>{item.title}</strong>
+                <button type="button" className="map-legend-raster-title map-legend-select" disabled={busy||Boolean(drawingMode)} onClick={()=>{const xs=item.raster.corners.map(p=>p[0]),ys=item.raster.corners.map(p=>p[1]);focusBounds([Math.min(...xs),Math.min(...ys),Math.max(...xs),Math.max(...ys)]);revealPanel(terrainRasters.includes(item)?'tools-terrain':item===spatialRaster?'tools-spatial-science':item===remoteRaster?'tools-remote-sensing':'tools-spacetime');}}>{item.title}</button>
                 {item.raster.scale?<TemporalScale scale={item.raster.scale} unit={item.raster.unit??''}/>:item.raster.legend.length>0?item.raster.legend.map((bin,i)=><div key={i} className="map-legend-item"><span className="legend-swatch" style={{borderColor:bin.color,backgroundColor:bin.color}}/><span>{bin.label}</span></div>):<small>{item.raster.unit||'Raster'}</small>}
               </section>)}
             </div>}
@@ -2212,7 +2216,7 @@ export default function App() {
             <SpatialSciencePanel key={activeProjectId??'no-project'} active={activeTool==='tools-spatial-science'} resultsTarget={resultsTarget} geometry={preview||drawingMode?null:geometry} connected={Boolean(capabilities)} projectId={activeProjectId} layers={projectWorkspace?.layers??[]} assets={rasterLayers.map(l=>l.asset)} terrainProducts={registrySources(scienceRegistry,'Spatial')} onScientificRaster={r=>publishScience('Spatial',[r])} onPreview={features=>{if(projectCurrent()){setSpatialResults(features);setSpatialVisible(true);}}} onRasterPreview={layer=>{if(projectCurrent()){setSpatialRaster(layer);setSpatialVisible(true);}}}/>
           </section>
 
-          <section id="tools-lidar" hidden={activeTool!=='tools-lidar'} className="panel-section">
+          <section id="tools-lidar" hidden={activeTool!=='tools-lidar'} className="panel-section science-launch-section">
             <div className="section-heading"><SectionIcon role="lidar" size={16}/><span>3D &amp; LiDAR</span></div>
             <LidarPanel key={'lidar-'+(activeProjectId??'no-project')} active={activeTool==='tools-lidar'} connected={Boolean(capabilities)} resultsTarget={resultsTarget}/>
           </section>

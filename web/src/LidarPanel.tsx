@@ -1,3 +1,5 @@
+import ScienceLaunch from './ScienceLaunch';
+import EnglishFileInput from './EnglishFileInput';
 import {useEffect,useRef,useState} from 'react';
 import {createPortal} from 'react-dom';
 import {getLidarCatalog,runLidar,type LidarMethod,type LidarResult} from './api';
@@ -12,6 +14,10 @@ export default function LidarPanel({active,connected,resultsTarget}:{active:bool
  const [k,setK]=useState(16),[size,setSize]=useState(1),[radius,setRadius]=useState(2),[edge,setEdge]=useState(10);
  const [result,setResult]=useState<LidarResult|null>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false),[studio,setStudio]=useState(false);
  const request=useRef<AbortController|null>(null);
+ const [open,setOpen]=useState(false);
+ const dialog=useRef<HTMLDivElement>(null);
+ useEffect(()=>{if(open)dialog.current?.focus();},[open]);
+ useEffect(()=>{if(!active)setOpen(false);},[active]);
  const [trim,setTrim]=useState(.8),[iterations,setIterations]=useState(60),[tolerance,setTolerance]=useState(.00001),[sigma,setSigma]=useState(.05),[minimum,setMinimum]=useState(5),[threshold,setThreshold]=useState(3.5);
  const [sigmaXY,setSigmaXY]=useState(.03),[sigmaZ,setSigmaZ]=useState(.05);
  const needsReference=['cloud_distance','surface_change','ground_height','rigid_registration','normal_change','canopy_structure','point_plane_icp','crown_candidates','correlated_change','coarse_pca','generalized_icp','feature_registration','clustered_normal_change','canopy_watershed','canopy_complexity','building_candidates','covariance_change'].includes(operation);
@@ -32,10 +38,10 @@ export default function LidarPanel({active,connected,resultsTarget}:{active:bool
  const xyz=columns.includes('x_m')&&columns.includes('y_m')&&Boolean(zField);
  const output=result&&<section className="panel-section" aria-label="3D and LiDAR results">
    <div className="section-heading"><span>{methods.find(m=>m.id===result.operation)?.title??result.operation}</span></div>
-   <small>{result.assumption}</small>
-   <dl>{Object.entries(result.metrics).map(([key,val])=><div key={key}><dt>{key.replaceAll('_',' ')}</dt><dd>{JSON.stringify(val)}</dd></div>)}</dl>
+ 
+   <dl className="lidar-metrics">{Object.entries(result.metrics).map(([key,val])=><div key={key}><dt>{key.replaceAll('_',' ')}</dt><dd>{typeof val==='number'?val.toLocaleString('en-US',{maximumFractionDigits:5}):JSON.stringify(val)}</dd></div>)}</dl>
    {xyz&&<LidarCloudView csv={result.figure_csv} columns={columns} zField={zField}/>}
-   <small>{result.row_count.toLocaleString()} result rows · preview up to 10</small>
+   <small>{result.row_count.toLocaleString()} rows</small>
    <div style={{overflowX:'auto'}}><table><thead><tr>{columns.map(c=><th key={c}>{c}</th>)}</tr></thead><tbody>{result.rows.slice(0,10).map((r,i)=><tr key={i}>{r.map((v,j)=><td key={j}>{v===null?'—':Number(v.toPrecision(7))}</td>)}</tr>)}</tbody></table></div>
    <button onClick={()=>saveFigureBlob(new Blob([result.csv],{type:'text/csv'}),'lidar-'+result.operation+'.csv')}>Export full CSV</button>
    <button onClick={()=>saveFigureBlob(new Blob([JSON.stringify(result.receipt,null,2)],{type:'application/json'}),'lidar-receipt.json')}>Export provenance</button>
@@ -44,13 +50,18 @@ export default function LidarPanel({active,connected,resultsTarget}:{active:bool
    <button onClick={()=>setStudio(true)}>Scientific Figure Studio</button>
    {studio&&<ScientificFigureStudio initialTier="all" source={{name:'LiDAR '+result.operation,csv:result.figure_csv,provenance:result.receipt,initialRecipe:xyz?'scatter_3d':undefined,initialBindings:xyz?{x:'x_m',y:'y_m',z:zField}:undefined}} onClose={()=>setStudio(false)}/>}
  </section>;
+ const summary=result&&<section className="panel-section spatial-monitor lidar-monitor" aria-label="LiDAR summary"><h3>{methods.find(m=>m.id===result.operation)?.title??result.operation}</h3><dl className="lidar-metrics">{Object.entries(result.metrics).filter(([,v])=>typeof v==='number'||typeof v==='string').slice(0,8).map(([k,v])=><div key={k}><dt>{k.replaceAll('_',' ')}</dt><dd>{typeof v==='number'?v.toLocaleString('en-US',{maximumFractionDigits:4}):v}</dd></div>)}</dl><button className="lidar-review-button" onClick={()=>setOpen(true)}>Review</button></section>;
  return <>
-   <label>Point cloud (LAS or XYZ CSV)<input type="file" accept=".las,.laz,.csv" onChange={e=>{setCloud(e.target.files?.[0]??null);setConfirmed(false);invalidate();}}/></label>
+   <ScienceLaunch label="Open 3D & LiDAR" disabled={!connected&&!result} onOpen={()=>setOpen(true)}/>
+   {open&&active&&createPortal(<div className="figure-studio-backdrop"><div role="dialog" aria-modal="true" aria-label="3D and LiDAR workbench" className="spatial-science-dialog temporal-dialog lidar-dialog" ref={dialog} tabIndex={-1} onKeyDown={e=>{if(e.key==='Escape'&&!studio){e.stopPropagation();setOpen(false);}if(e.key==='Tab'&&!studio){const nodes=Array.from(e.currentTarget.querySelectorAll<HTMLElement>('button:enabled,input:enabled,select:enabled,textarea:enabled')).filter(n=>n.getClientRects().length);if(e.shiftKey&&(document.activeElement===nodes[0]||document.activeElement===dialog.current)){e.preventDefault();nodes.at(-1)?.focus();}else if(!e.shiftKey&&document.activeElement===nodes.at(-1)){e.preventDefault();nodes[0]?.focus();}}}}>
+   <header><strong>3D &amp; LiDAR</strong><button onClick={()=>setOpen(false)}>Close</button></header>
+   <div className="spatial-science-columns temporal-columns lidar-columns"><div className="spatial-science-input lidar-input">
+   <label>Point cloud (LAS or XYZ CSV)<EnglishFileInput type="file" accept=".las,.laz,.csv" onChange={e=>{setCloud(e.target.files?.[0]??null);setConfirmed(false);invalidate();}}/></label>
    <label>Analysis method<select value={operation} onChange={e=>{const op=e.target.value;setOperation(op);if(op==='building_candidates')setRadius(.1);if(op==='stream_radius'){setSize(10);setRadius(2);}if(op==='feature_registration')setK(v=>Math.min(v,32));setThreshold(op==='screened_poisson' ? 2 : op==='cloth_filter' ? .3 : ['canopy_complexity','building_candidates'].includes(op) ? 2 : op==='feature_registration' ? .8 : op==='clustered_normal_change' ? .5 : op==='canopy_watershed' ? 2 : op==='generalized_icp' ? .01 : op==='roof_planes' ? .1 : ['ground_filter','progressive_morphology','progressive_tin'].includes(op) ? .3 : ['canopy_structure','crown_candidates'].includes(op) ? 2 : 3.5);invalidate();}}>{methods.map(m=><option key={m.id} value={m.id}>{m.title}</option>)}</select></label>
-   {needsReference&&<label>Reference cloud (ground points for normalized height)<input type="file" accept=".las,.laz,.csv" onChange={e=>{setReference(e.target.files?.[0]??null);setConfirmed(false);invalidate();}}/></label>}
+   {needsReference&&<label>Reference cloud (ground points for normalized height)<EnglishFileInput type="file" accept=".las,.laz,.csv" onChange={e=>{setReference(e.target.files?.[0]??null);setConfirmed(false);invalidate();}}/></label>}
    <label>Projected EPSG (metres)<input type="number" min="1" value={epsg} onChange={e=>{setEpsg(e.target.value);setConfirmed(false);invalidate();}}/></label>
    <label>Vertical datum / height reference<input value={datum} onChange={e=>{setDatum(e.target.value);setConfirmed(false);invalidate();}}/></label>
-   <label><input type="checkbox" checked={confirmed} onChange={e=>{setConfirmed(e.target.checked);invalidate();}}/> All input XYZ coordinates are in metres and share this horizontal CRS and vertical reference.</label>
+   <label className="lidar-confirm"><input type="checkbox" checked={confirmed} onChange={e=>{setConfirmed(e.target.checked);invalidate();}}/> Confirm metric XYZ and common CRS / vertical datum</label>
    {['local_geometry','robust_outlier','normal_change','point_plane_icp','roof_planes','generalized_icp','poisson_grid','feature_registration','clustered_normal_change','multiscale_geometry','building_candidates','screened_poisson','covariance_change'].includes(operation)&&<label>{operation==='roof_planes'?'Maximum planes (capped at 32)':'Neighbors'}<input type="number" min="3" max={operation==='feature_registration'?32:64} value={k} onChange={e=>{setK(Number(e.target.value));invalidate();}}/></label>}
    {['voxel','vertical_profile','surface_change','normal_change','canopy_structure','ground_filter','crown_candidates','stream_voxels','correlated_change','progressive_morphology','progressive_tin','poisson_grid','clustered_normal_change','canopy_watershed','cloth_filter','canopy_complexity','building_candidates','screened_poisson','covariance_change','stream_radius'].includes(operation)&&<label>Grid / bin size (m)<input type="number" min=".001" step="any" value={size} onChange={e=>{setSize(Number(e.target.value));invalidate();}}/></label>}
    {['density','rigid_registration','normal_change','point_plane_icp','ground_filter','alpha_boundary','crown_candidates','correlated_change','progressive_morphology','coarse_pca','generalized_icp','progressive_tin','feature_registration','clustered_normal_change','canopy_watershed','cloth_filter','canopy_complexity','building_candidates','covariance_change','stream_radius'].includes(operation)&&<label>{operation==='canopy_complexity'?'Vertical bin size (m)':operation==='building_candidates'?'Maximum roof roughness (m)':['rigid_registration','point_plane_icp','coarse_pca','generalized_icp','feature_registration'].includes(operation)?'Maximum correspondence distance (m)':['normal_change','clustered_normal_change','covariance_change'].includes(operation)?'Cylinder radius (m)':operation==='alpha_boundary'?'Alpha radius (m)':operation==='correlated_change'?'Registration correlation length (m)':['crown_candidates','canopy_watershed'].includes(operation)?'Apex suppression / assignment radius (m)':'Neighborhood radius (m)'}<input type="number" min=".001" step="any" value={radius} onChange={e=>{setRadius(Number(e.target.value));invalidate();}}/></label>}
@@ -63,9 +74,11 @@ export default function LidarPanel({active,connected,resultsTarget}:{active:bool
    {operation==='building_candidates'&&<label>Minimum occupied roof cells<input type="number" min="3" max="1000" value={minimum} onChange={e=>{setMinimum(Number(e.target.value));invalidate();}}/></label>}
    {operation==='feature_registration'&&<><label>RANSAC trial multiplier (×20, capped at 2000)<input type="number" min="1" max="100" value={iterations} onChange={e=>{setIterations(Number(e.target.value));invalidate();}}/></label><label>Minimum consensus matches<input type="number" min="3" max="1000" value={minimum} onChange={e=>{setMinimum(Number(e.target.value));invalidate();}}/></label></>}
    {operation==='roof_planes'&&<><label>RANSAC trials per plane<input type="number" min="1" max="100" value={iterations} onChange={e=>{setIterations(Number(e.target.value));invalidate();}}/></label><label>Minimum plane points<input type="number" min="3" max="1000" value={minimum} onChange={e=>{setMinimum(Number(e.target.value));invalidate();}}/></label></>}
-   <small>{['stream_voxels','stream_radius'].includes(operation)?'LAS/LAZ: up to 10 million points, 512 MiB and 100,000 occupied voxels. Requires LiDAR extension.':'100,000 points and 16 MiB per file; LAZ requires LiDAR extension.'} No automatic vertical datum conversion.</small>
+ 
    <button disabled={!connected||busy||!cloud||!epsg||!datum.trim()||!confirmed||!methods.length||(needsReference&&!reference)} onClick={()=>void run()}>{busy?'Analyzing…':'Run 3D analysis'}</button>
    {busy&&<button onClick={invalidate}>Cancel request</button>}{error&&<p role="alert">{error}</p>}
-   {active&&output&&(resultsTarget?createPortal(output,resultsTarget):output)}
+   </div><div className="spatial-science-output lidar-output">{output}</div></div>
+   </div></div>,document.body)}
+   {active&&!open&&summary&&(resultsTarget?createPortal(summary,resultsTarget):summary)}
  </>;
 }

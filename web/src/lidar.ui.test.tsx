@@ -11,6 +11,7 @@ it('requires explicit metric CRS and exports the full result with an independent
  mock.catalog.mockResolvedValue({operations:[{id:'quality',title:'Cloud quality',assumption:'XYZ'}]});
  mock.run.mockResolvedValue({operation:'quality',columns:['x_m','y_m','z_m'],rows:[[1,2,3]],row_count:1,csv:'x_m,y_m,z_m\n1,2,3\n',figure_csv:'x_m,y_m,z_m\n1,2,3\n',metrics:{input_points:1},assumption:'XYZ',receipt:{schema:'geofathom-lidar-1'}});
  render(<LidarPanel active connected/>);
+ fireEvent.click(screen.getByRole('button',{name:'Open 3D & LiDAR'}));
  await screen.findByRole('option',{name:'Cloud quality'});
  const run=screen.getByRole('button',{name:'Run 3D analysis'}) as HTMLButtonElement;
  const file=new File(['x,y,z\n1,2,3'],'cloud.csv',{type:'text/csv'});

@@ -5,7 +5,8 @@ test('LiDAR workbench imports real XYZ bytes, measures voxel counts and exports 
  await page.route('**/tile.openstreetmap.org/**',route=>route.fulfill({status:200,contentType:'image/png',body:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/ZecAAAAASUVORK5CYII=','base64')}));
  await page.goto('/');
  await activateWorkspaceModule(page,'LiDAR');
- const panel=page.locator('#tools-lidar');
+ await page.getByRole('button',{name:'Open 3D & LiDAR'}).click();
+ const panel=page.getByRole('dialog',{name:'3D and LiDAR workbench'});
  await panel.getByLabel('Analysis method').selectOption('voxel');
  await panel.getByLabel('Point cloud (LAS or XYZ CSV)').setInputFiles({name:'cloud.csv',mimeType:'text/csv',buffer:Buffer.from('x,y,z\n0.1,0.1,0.1\n0.3,0.3,0.3\n1.2,0.1,0.1\n')});
  await panel.getByLabel('Projected EPSG (metres)').fill('32617');
