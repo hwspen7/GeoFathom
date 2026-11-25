@@ -4,7 +4,7 @@ import {activateWorkspaceModule} from './workspace-ui';
 test('spatial science workbench computes actual sample points, exports and previews independently',async({page})=>{
  await page.route('**/tile.openstreetmap.org/**',route=>route.fulfill({status:200,contentType:'image/png',body:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/ZecAAAAASUVORK5CYII=','base64')}));
  await page.goto('/');
- await activateWorkspaceModule(page,'Spatial Analysis');
+ await activateWorkspaceModule(page,'Spatial');
  const open=page.getByRole('button',{name:'Open Spatial Analysis'});
  await expect(open).toBeEnabled();await open.click();
  const dialog=page.getByRole('dialog',{name:'Spatial science workbench'});

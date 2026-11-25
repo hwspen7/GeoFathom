@@ -6,7 +6,7 @@ const scene='SUkqAAgAAAAQAAABAwABAAAAAgAAAAEBAwABAAAAAgAAAAIBAwACAAAAIAAgAAMBAwA
 test('remote sensing maps two calibrated bands and exports actual NDVI',async({page})=>{
  await page.route('**/tile.openstreetmap.org/**',route=>route.fulfill({status:200,contentType:'image/png',body:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/ZecAAAAASUVORK5CYII=','base64')}));
  await page.goto('/');
- await activateWorkspaceModule(page,'Remote Sensing');
+ await activateWorkspaceModule(page,'Sensing');
  await page.getByRole('button',{name:'Open Remote Sensing'}).click();
  const dialog=page.getByRole('dialog',{name:'Remote sensing workbench'});
  await expect(dialog).toContainText('157 scientific methods');

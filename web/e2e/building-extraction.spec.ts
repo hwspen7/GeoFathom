@@ -41,7 +41,7 @@ with tempfile.TemporaryDirectory(dir=root) as temp:
   const project=(await response.json()).id;
   await page.goto('/');
   await page.getByLabel('Active project').selectOption(project);
-  await activateWorkspaceModule(page,'Raster / AI',true);
+  await activateWorkspaceModule(page,'Raster',true);
   await page.getByLabel('Select georeferenced imagery').selectOption(fixture.id);
   await page.getByText('GeoAI raster analysis & change detection').click();
   await page.getByLabel('GeoAI analysis operation').selectOption('building_extraction');

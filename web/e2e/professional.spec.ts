@@ -79,7 +79,7 @@ test('graduated choropleth writes real breaks; CRS grid converts and persists',a
     await add(page,id,'Asset '+i,{type:'Point',coordinates:[i*.002,22]},
       {height});
   await page.reload();
-  await activateWorkspaceModule(page,'Cartography');
+  await activateWorkspaceModule(page,'Mapping');
   await page.locator('details').filter({hasText:'Graduated numeric choropleth'})
     .locator('summary').click();
   await page.getByLabel('Graduated numeric field').fill('height');
@@ -170,7 +170,7 @@ test('Cartographic drag a saved point label and commit revisioned offset fields'
     const r=await page.request.get(API+'/projects/'+id+'/workspace');
     return (await r.json()).layers[0].style.labels.enabled;
   }).toBe(true);
-  await activateWorkspaceModule(page,'Cartography');
+  await activateWorkspaceModule(page,'Mapping');
   await page.locator('details').filter({hasText:'Advanced label placement & callouts'})
     .locator('summary').click();
   await page.getByLabel('Label rule field').fill('category');

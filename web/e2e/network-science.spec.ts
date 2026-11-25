@@ -3,7 +3,7 @@ import {activateWorkspaceModule} from './workspace-ui';
 
 test('network workbench computes a directed route, exports and previews it',async({page})=>{
  await page.route('**/tile.openstreetmap.org/**',route=>route.fulfill({status:200,contentType:'image/png',body:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/ZecAAAAASUVORK5CYII=','base64')}));
- await page.goto('/');await activateWorkspaceModule(page,'Network Analysis');
+ await page.goto('/');await activateWorkspaceModule(page,'Network');
  await page.getByRole('button',{name:'Open Network Analysis'}).click();
  const d=page.getByRole('dialog',{name:'Network science workbench'});
  await expect(d).toContainText('24 scientific methods');

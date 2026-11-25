@@ -11,10 +11,10 @@ describe('shared Onshape-style workspace command registry',()=>{
   const expected=['tools-survey','tools-gis','tools-spatial','tools-terrain','tools-spatial-science','tools-network-science','tools-spacetime','tools-lidar','tools-remote-sensing','tools-raster','tools-style','tools-services','tools-export','tools-ai'];
   expect(WORKSPACE_MODULES.map(m=>m.id)).toEqual(expected);
   expect(new Set(WORKSPACE_MODULES.map(m=>m.id)).size).toBe(expected.length);
-  expect(WORKSPACE_MODULES.find(m=>m.id==='tools-lidar')?.label).toBe('3D & LiDAR');
-  expect(WORKSPACE_MODULES.find(m=>m.id==='tools-spatial-science')?.label).toBe('Spatial Analysis');
+  expect(WORKSPACE_MODULES.find(m=>m.id==='tools-lidar')?.label).toBe('LiDAR');
+  expect(WORKSPACE_MODULES.find(m=>m.id==='tools-spatial-science')?.label).toBe('Spatial');
   expect(WORKSPACE_MODULES.some(m=>m.id==='tools-terrain')).toBe(true);
-  expect(WORKSPACE_MODULES.find(m=>m.id==='tools-remote-sensing')?.label).toBe('Remote Sensing');
+  expect(WORKSPACE_MODULES.find(m=>m.id==='tools-remote-sensing')?.label).toBe('Sensing');
   expect(WORKSPACE_MODULES.some(m=>m.id==='tools-services')).toBe(true);
   expect(WORKSPACE_MODULES.some(m=>m.id==='tools-export')).toBe(true);
  });
