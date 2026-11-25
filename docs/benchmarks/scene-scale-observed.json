@@ -1,0 +1,61 @@
+{
+  "passed": true,
+  "benchmark_sha256": "a3c538bb4008f86e5ccdf8e1601d7c35ef21dd6bf667832f8b80fc3bcb5268da",
+  "software": {
+    "source_tree_sha256": "016cc1d2cc474a18751ddd5a5493785c42a411cc182841188660483b26c9a628",
+    "python": "3.12.14",
+    "platform": "Linux",
+    "packages": {
+      "numpy": "2.4.6",
+      "scipy": "1.17.0",
+      "rasterio": "1.4.4",
+      "scikit-learn": "1.9.1",
+      "pyproj": "3.7.2",
+      "numba": "0.65.1"
+    },
+    "gdal": "3.10.3",
+    "thread_configuration": {
+      "OMP_NUM_THREADS": null,
+      "OPENBLAS_NUM_THREADS": null,
+      "MKL_NUM_THREADS": null,
+      "NUMBA_NUM_THREADS": null
+    },
+    "geofathom_commit": "aa7ab985db8047f08ad07c90796a9c245e624d71",
+    "working_tree_modified": true
+  },
+  "shape": [
+    4096,
+    4096
+  ],
+  "cells": 16777216,
+  "checks": [
+    {
+      "tile": 128,
+      "elapsed_seconds": 3.1912007410001024,
+      "pixels_per_second": 5257336.457856965,
+      "peak_rss_mb": 163.609375,
+      "maximum_rss_mb": 1024,
+      "paired_cells": 15153614,
+      "mask_disagreement": 0,
+      "maximum_absolute_error": 0.0,
+      "output_sha256": "96582445cd225bbf110b7996c2de1b0a34e89496f69260b095c04e4270b37720"
+    },
+    {
+      "tile": 512,
+      "elapsed_seconds": 2.4218139629997495,
+      "pixels_per_second": 6927541.196937816,
+      "peak_rss_mb": 187.2265625,
+      "maximum_rss_mb": 1024,
+      "paired_cells": 15153614,
+      "mask_disagreement": 0,
+      "maximum_absolute_error": 0.0,
+      "output_sha256": "ef7fcf42bc8220dac2060779795c2f29935c0b8aba0e82f857d1b2325fa59425"
+    }
+  ],
+  "input_sha256": {
+    "red": "8c131a4ae39d52ce102e90bd66c063d006f63f4f2d77c86da71f21f3b7e2f7ab",
+    "nir": "8e2d62fbfe3c393db8a886c6c54b27a7e13b74b26f0925dbcbdc53d280aba21b",
+    "qa": "4e54aced3927ca661a954983f12adad9251fd705a0b5b9a33021ac2ace713c9a"
+  },
+  "scope": "Structured synthetic scene-scale QA/window arithmetic and observed CPU-process RSS; not real-sensor accuracy or GPU performance."
+}

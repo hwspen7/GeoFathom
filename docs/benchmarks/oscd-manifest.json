@@ -1,0 +1,190 @@
+{
+  "dataset": "Onera Satellite Change Detection (OSCD)",
+  "source": "https://rcdaudt.github.io/oscd/",
+  "citation": "Daudt et al. (2018), Urban Change Detection for Multispectral Earth Observation Using Convolutional Neural Networks, IGARSS, pp. 2115\u20132118.",
+  "label_license": "CC BY-NC-SA, per dataset README; consult authors for commercial use.",
+  "imagery_archive": {
+    "url": "https://partage.imt.fr/index.php/s/gKRaWgRnLMfwMGo/download",
+    "bytes": 512716711,
+    "members": [
+      {
+        "name": "Onera Satellite Change Detection dataset - Images/README.txt",
+        "offset": 80,
+        "compressed": 1183,
+        "size": 2604,
+        "crc": 1325777884,
+        "compression": 8,
+        "destination": "README.txt",
+        "sha256": "5d00cc6dba9e19196ea60b92f925e8e354814f0d59f44fe07d95f789c2f0e3d4"
+      },
+      {
+        "name": "Onera Satellite Change Detection dataset - Images/beirut/beirut.geojson",
+        "offset": 87023694,
+        "compressed": 157,
+        "size": 316,
+        "crc": 1913358795,
+        "compression": 8,
+        "destination": "beirut/beirut.geojson",
+        "sha256": "993cf8959a7e22b8fc1050e801466e4f299d49adc18a3ee7ed89b66a3bc1d9df"
+      },
+      {
+        "name": "Onera Satellite Change Detection dataset - Images/beirut/dates.txt",
+        "offset": 87023952,
+        "compressed": 29,
+        "size": 34,
+        "crc": 3615872283,
+        "compression": 8,
+        "destination": "beirut/dates.txt",
+        "sha256": "a0da4f182f96f5297933a2030d31b4fc9b75af1b03d95c5445e48b9ad6028757"
+      },
+      {
+        "name": "Onera Satellite Change Detection dataset - Images/beirut/imgs_1/S2A_OPER_MSI_L1C_TL_EPA__20160929T004310_A000833_T36SYC_B04.tif",
+        "offset": 90651306,
+        "compressed": 1887020,
+        "size": 2528718,
+        "crc": 814223052,
+        "compression": 8,
+        "destination": "beirut/imgs_1/S2A_OPER_MSI_L1C_TL_EPA__20160929T004310_A000833_T36SYC_B04.tif",
+        "sha256": "17aa5c019d2d01c1b417fb2f3c95d586ab01bd1a4a124dd2231058050287f63b"
+      },
+      {
+        "name": "Onera Satellite Change Detection dataset - Images/beirut/imgs_1_rect/B04.tif",
+        "offset": 102166744,
+        "compressed": 1885610,
+        "size": 2525470,
+        "crc": 2671583863,
+        "compression": 8,
+        "destination": "beirut/imgs_1_rect/B04.tif",
+        "sha256": "36d9c32f83c09abf0c551d0ef9c756138d6d1f656489caef84231a4706bf1b49"
+      },
+      {
+        "name": "Onera Satellite Change Detection dataset - Images/beirut/imgs_1_rect/B08.tif",
+        "offset": 109585624,
+        "compressed": 1871670,
+        "size": 2525470,
+        "crc": 572151228,
+        "compression": 8,
+        "destination": "beirut/imgs_1_rect/B08.tif",
+        "sha256": "375b38718d72c5fcaf68cfed7e42092bec59a268fb8b1d35dd70b3cec35d80b0"
+      },
+      {
+        "name": "Onera Satellite Change Detection dataset - Images/beirut/imgs_2_rect/B04.tif",
+        "offset": 132882471,
+        "compressed": 1803225,
+        "size": 2525470,
+        "crc": 825743206,
+        "compression": 8,
+        "destination": "beirut/imgs_2_rect/B04.tif",
+        "sha256": "1f7cdcf0394da81c5bdafd52985f39484b38086cfe7040b30afb3abf14cc7c0c"
+      },
+      {
+        "name": "Onera Satellite Change Detection dataset - Images/beirut/imgs_2_rect/B08.tif",
+        "offset": 139946369,
+        "compressed": 1798088,
+        "size": 2525470,
+        "crc": 2916427235,
+        "compression": 8,
+        "destination": "beirut/imgs_2_rect/B08.tif",
+        "sha256": "97604fab80829fb080ac26a5da35735b18c995b9805bd403308db4552c300032"
+      },
+      {
+        "name": "Onera Satellite Change Detection dataset - Images/norcia/dates.txt",
+        "offset": 395698457,
+        "compressed": 29,
+        "size": 34,
+        "crc": 32318555,
+        "compression": 8,
+        "destination": "norcia/dates.txt",
+        "sha256": "0ea95dc935c9c87f6a598fe519a674b787da9efda4b0b974a6b2682cc73703d2"
+      },
+      {
+        "name": "Onera Satellite Change Detection dataset - Images/norcia/imgs_1/S2A_OPER_MSI_L1C_TL_EPA__20160811T174848_A000262_T33TUH_B04.tif",
+        "offset": 395955755,
+        "compressed": 135836,
+        "size": 186136,
+        "crc": 4285956466,
+        "compression": 8,
+        "destination": "norcia/imgs_1/S2A_OPER_MSI_L1C_TL_EPA__20160811T174848_A000262_T33TUH_B04.tif",
+        "sha256": "a07115ba418a7ed16d42cbd52729b0cf7c2a54194ca694c15fc4347111f06dd3"
+      },
+      {
+        "name": "Onera Satellite Change Detection dataset - Images/norcia/imgs_1_rect/B04.tif",
+        "offset": 396806915,
+        "compressed": 135682,
+        "size": 185838,
+        "crc": 2623739049,
+        "compression": 8,
+        "destination": "norcia/imgs_1_rect/B04.tif",
+        "sha256": "bd680f54c430774db5b840addecb189052748b9e68be3f4bf0e5f0461b574f96"
+      },
+      {
+        "name": "Onera Satellite Change Detection dataset - Images/norcia/imgs_1_rect/B08.tif",
+        "offset": 397365216,
+        "compressed": 138838,
+        "size": 185838,
+        "crc": 2104264775,
+        "compression": 8,
+        "destination": "norcia/imgs_1_rect/B08.tif",
+        "sha256": "f3a41eb40e7b1da0cd3a37ee9abc7d8633c21bb4483eef549e4c72cb07ee4637"
+      },
+      {
+        "name": "Onera Satellite Change Detection dataset - Images/norcia/imgs_2_rect/B04.tif",
+        "offset": 399175468,
+        "compressed": 135300,
+        "size": 185838,
+        "crc": 906729232,
+        "compression": 8,
+        "destination": "norcia/imgs_2_rect/B04.tif",
+        "sha256": "7b5d0c7489d0bf9ab8d47364420b1fdf1926ae8f2b6dc0602df4e1583f416c4a"
+      },
+      {
+        "name": "Onera Satellite Change Detection dataset - Images/norcia/imgs_2_rect/B08.tif",
+        "offset": 399742816,
+        "compressed": 144383,
+        "size": 185838,
+        "crc": 1729637609,
+        "compression": 8,
+        "destination": "norcia/imgs_2_rect/B08.tif",
+        "sha256": "084a0a0bebb6d57cbf47183bd819c873e81e261136ce0fd791d7ae1f999fa03c"
+      },
+      {
+        "name": "Onera Satellite Change Detection dataset - Images/norcia/norcia.geojson",
+        "offset": 400465321,
+        "compressed": 158,
+        "size": 319,
+        "crc": 2095308361,
+        "compression": 8,
+        "destination": "norcia/norcia.geojson",
+        "sha256": "01a5999a9941995bffcfe38372c6e68fa7fa4c97a4398727c62928ae89c8b77d"
+      }
+    ]
+  },
+  "label_archives": [
+    {
+      "split": "train",
+      "filename": "train-labels.zip",
+      "url": "https://partage.imt.fr/index.php/s/2D6n03k58ygBSpu/download",
+      "sha256": "89fb54cd12ad0dbea6c447528139dec305b865294215434bf6dd170fb8fd3ca5"
+    },
+    {
+      "split": "test",
+      "filename": "test-labels.zip",
+      "url": "https://partage.imt.fr/index.php/s/gpStKn4Mpgfnr63/download",
+      "sha256": "2e195eaa1b788b99fa93ea8073e3780bc0b763000b0c49dbf70548acf1e5d67d"
+    }
+  ],
+  "training_city": "beirut",
+  "test_city": "norcia",
+  "sampling_stride": 16,
+  "parameters": {
+    "trees": 64,
+    "max_depth": 12,
+    "min_leaf": 2,
+    "seed": 42,
+    "block_m": 100,
+    "folds": 3,
+    "buffer_blocks": 1,
+    "calibrate": true
+  },
+  "scope": "Fixed two-city integration/transfer benchmark subset, not the full OSCD leaderboard."
+}

@@ -148,8 +148,8 @@ def test_every_recipe_renders_actual_data(recipe,raster_fixture):
 
 
 def test_catalog_count_and_unique_recipes():
-    assert len(RECIPES)==len(BY_ID)==len(catalog())==207
-    assert len({r['title'] for r in catalog()})==207
+    assert len(RECIPES)==len(BY_ID)==len(catalog())==208
+    assert len({r['title'] for r in catalog()})==208
 
 
 @pytest.mark.parametrize('fmt,magic',[('svg',b'<?xml'),('pdf',b'%PDF'),('tiff',b'II*\x00')])
@@ -205,8 +205,8 @@ def test_api_catalog_render_metadata_and_validation():
     with TestClient(app) as client:
         response=client.get('/terrain/studio/catalog')
         assert response.status_code==200
-        assert response.json()['additional_recipe_count']+response.json()['legacy_recipe_count']==231
-        assert response.json()['basic_recipe_count']==40 and response.json()['professional_recipe_count']==191
+        assert response.json()['additional_recipe_count']+response.json()['legacy_recipe_count']==232
+        assert response.json()['basic_recipe_count']==40 and response.json()['professional_recipe_count']==192
         response=client.post('/terrain/studio/render',json=table_input('pareto').model_dump())
         assert response.status_code==200,response.text
         result=response.json()
@@ -351,6 +351,7 @@ def domain_input(recipe,raster_fixture):
     if recipe in {'basic_column','basic_waterfall','basic_paired_change','basic_pareto_frequency','basic_table_heatmap','opt_regret'}:args['x']='name'
     if recipe.startswith('spectral_'):
         args.update(y='reflectance_a',columns=['reflectance_a','reflectance_b'])
+    if recipe=='remote_selective_accuracy':args.update(csv='coverage,accuracy,accepted\n1,0.8,100\n0.5,0.9,50',x='coverage',y='accuracy',z='accepted')
     if recipe=='remote_reliability':args.update(csv='x,y,z\n0.1,0.2,10\n0.7,0.8,20',x='x',y='y',z='z')
     if recipe=='remote_roc':args.update(csv='x,y\n0,0\n0.2,0.8\n1,1',x='x',y='y')
     if recipe=='remote_joint_posterior':args.update(csv='x,y,z\n1,20,0.2\n1,50,0.3\n3,20,0.1\n3,50,0.4',x='x',y='y',z='z')
@@ -405,9 +406,9 @@ def test_domain_actual_values(raster_fixture):
 
 def test_domain_recipe_counts_and_tiers():
     from terrain.studio_domain_catalog import BASIC,PROFESSIONAL
-    assert len(BASIC)==16 and len(PROFESSIONAL)==126
+    assert len(BASIC)==16 and len(PROFESSIONAL)==127
     entries=catalog()
-    assert sum(r['tier']=='professional' for r in entries)==191
+    assert sum(r['tier']=='professional' for r in entries)==192
     assert sum(r['tier']=='basic' for r in entries)==16
 
 

@@ -1,0 +1,439 @@
+{
+  "passed": true,
+  "benchmark_sha256": "628f6ed585d1cc1a2082e4e79d9b4c0d6603d4c5e90199356c36088765db8864",
+  "dataset": "Onera Satellite Change Detection (OSCD)",
+  "source": "https://rcdaudt.github.io/oscd/",
+  "citation": "Daudt et al. (2018), Urban Change Detection for Multispectral Earth Observation Using Convolutional Neural Networks, IGARSS, pp. 2115\u20132118.",
+  "label_license": "CC BY-NC-SA, per dataset README; consult authors for commercial use.",
+  "manifest_sha256": "5814b0328e0efc74b40258edf62e4bc40810ae9cd0990b2fc30664fa76c064c4",
+  "training": {
+    "city": "beirut",
+    "original_split": "train",
+    "shape": [
+      1319,
+      1012
+    ],
+    "crs": "EPSG:32636",
+    "transform": [
+      10.0,
+      0.0,
+      727587.0103693228,
+      0.0,
+      -10.0,
+      3756049.9763977067
+    ],
+    "native_crs": "EPSG:4326",
+    "native_transform": [
+      9.89860463365216e-05,
+      0.0,
+      35.46180725097656,
+      0.0,
+      -9.893810454005515e-05,
+      33.918149900925556
+    ],
+    "anchor_sha256": "17aa5c019d2d01c1b417fb2f3c95d586ab01bd1a4a124dd2231058050287f63b",
+    "dates_record": "date_1: 20150820\ndate_2: 20171003\n",
+    "grid_proof": "Exact first-date red equality between rectified array and georeferenced original; all rectified band/label shapes verified.",
+    "resampling": {
+      "numeric_DN": "bilinear",
+      "labels": "nearest"
+    },
+    "legend": "1 unchanged, 2 urban change; pixel-wise checked against PNG 0/255."
+  },
+  "independent_test": {
+    "city": "norcia",
+    "original_split": "test",
+    "shape": [
+      298,
+      348
+    ],
+    "crs": "EPSG:32633",
+    "transform": [
+      10.0,
+      0.0,
+      342300.1972747467,
+      0.0,
+      -10.0,
+      4741170.028793922
+    ],
+    "native_crs": "EPSG:4326",
+    "native_transform": [
+      0.00010812437376623477,
+      0.0,
+      13.0720996857,
+      0.0,
+      -0.00010819455892116997,
+      42.8068621736
+    ],
+    "anchor_sha256": "a07115ba418a7ed16d42cbd52729b0cf7c2a54194ca694c15fc4347111f06dd3",
+    "dates_record": "date_1: 20150711\ndate_2: 20171018\n",
+    "grid_proof": "Exact first-date red equality between rectified array and georeferenced original; all rectified band/label shapes verified.",
+    "resampling": {
+      "numeric_DN": "bilinear",
+      "labels": "nearest"
+    },
+    "legend": "1 unchanged, 2 urban change; pixel-wise checked against PNG 0/255."
+  },
+  "sampling": {
+    "rule": "Fixed regular grid, independent of class identity",
+    "stride": 16,
+    "training_cells": 4959,
+    "class_support": {
+      "1": 4822,
+      "2": 137
+    }
+  },
+  "spatial_validation": {
+    "classes": [
+      1,
+      2
+    ],
+    "confusion_matrix_reference_rows": [
+      [
+        4733,
+        89
+      ],
+      [
+        77,
+        60
+      ]
+    ],
+    "cells": 4959,
+    "overall_accuracy": 0.9665255091752369,
+    "balanced_accuracy": 0.7097495663125517,
+    "macro_f1": 0.7011731001556583,
+    "mean_iou": 0.6158011297230607,
+    "precision": [
+      0.983991683991684,
+      0.40268456375838924
+    ],
+    "recall": [
+      0.9815429282455412,
+      0.43795620437956206
+    ],
+    "f1": [
+      0.982765780730897,
+      0.4195804195804196
+    ],
+    "iou": [
+      0.9661155337824046,
+      0.26548672566371684
+    ],
+    "support": [
+      4822,
+      137
+    ],
+    "multiclass_brier": 0.07193610424508183,
+    "log_loss": 0.1643878700075802,
+    "ece": 0.04222694679091362,
+    "reliability": [
+      [
+        0.5517068620418291,
+        0.696969696969697,
+        132
+      ],
+      [
+        0.6560762042230317,
+        0.8695652173913043,
+        230
+      ],
+      [
+        0.752351620678784,
+        0.945054945054945,
+        455
+      ],
+      [
+        0.853904523320357,
+        0.9413680781758957,
+        307
+      ],
+      [
+        0.9931147165489324,
+        0.9861799217731421,
+        3835
+      ]
+    ],
+    "raw_probability_scores": {
+      "multiclass_brier": 0.059389990637869365,
+      "log_loss": 0.21224858890169682,
+      "ece": 0.014024732189071715,
+      "reliability": [
+        [
+          0.5510522482237745,
+          0.625,
+          88
+        ],
+        [
+          0.6528527109100403,
+          0.7454545454545455,
+          110
+        ],
+        [
+          0.7530747778927314,
+          0.875,
+          176
+        ],
+        [
+          0.856050175413612,
+          0.9307692307692308,
+          390
+        ],
+        [
+          0.9861130459380614,
+          0.9866507747318236,
+          4195
+        ]
+      ]
+    },
+    "folds": [
+      {
+        "fold": 0,
+        "training_cells": 3306,
+        "validation_cells": 1653,
+        "buffer_excluded": 0,
+        "calibration_cells": 1653,
+        "calibration_fold": 1,
+        "calibration_training_cells": 1646,
+        "temperature": 0.5665540638914531,
+        "accuracy": 0.9534180278281912
+      },
+      {
+        "fold": 1,
+        "training_cells": 3299,
+        "validation_cells": 1653,
+        "buffer_excluded": 7,
+        "calibration_cells": 1646,
+        "calibration_fold": 2,
+        "calibration_training_cells": 1653,
+        "temperature": 1.7187093506110707,
+        "accuracy": 0.9776164549304295
+      },
+      {
+        "fold": 2,
+        "training_cells": 3299,
+        "validation_cells": 1653,
+        "buffer_excluded": 7,
+        "calibration_cells": 1653,
+        "calibration_fold": 0,
+        "calibration_training_cells": 1646,
+        "temperature": 3.3990216356941088,
+        "accuracy": 0.9685420447670902
+      }
+    ],
+    "scheme": "buffered_recursive_spatial_blocks",
+    "parameters": {
+      "trees": 64,
+      "max_depth": 12,
+      "min_leaf": 2,
+      "seed": 42,
+      "block_m": 100,
+      "folds": 3,
+      "buffer_blocks": 1,
+      "calibrate": true
+    },
+    "calibration_scope": "Outer holdout excluded from inner calibration and its estimator; final temperature fitted from raw spatial OOF predictions."
+  },
+  "independent_metrics": {
+    "overall_accuracy": 0.9641962919036179,
+    "macro_f1": 0.6193514192259499,
+    "mean_iou": 0.5557254132253919,
+    "classes": [
+      1,
+      2
+    ],
+    "precision": [
+      0.9927205117700816,
+      0.1771014492753623
+    ],
+    "recall": [
+      0.9708356875032103,
+      0.46855828220858897
+    ],
+    "f1": [
+      0.9816561409340203,
+      0.2570466975178797
+    ],
+    "iou": [
+      0.9639731532671005,
+      0.14747767318368332
+    ],
+    "support": [
+      97345,
+      1304
+    ],
+    "confusion_matrix_reference_rows": [
+      [
+        94506,
+        2839
+      ],
+      [
+        693,
+        611
+      ]
+    ],
+    "cells": 98649,
+    "reference_cells": 98649,
+    "training_excluded_cells": 0,
+    "unclassified_reference_cells": 0,
+    "coverage": 1.0,
+    "multiclass_brier": 0.13245013360640986,
+    "log_loss": 0.2716958976359383,
+    "selective_accuracy": [
+      {
+        "minimum_probability": 0.0,
+        "available_cells": 98649,
+        "accepted_cells": 98649,
+        "coverage": 1.0,
+        "accuracy": 0.9641962919036179
+      },
+      {
+        "minimum_probability": 0.5,
+        "available_cells": 98649,
+        "accepted_cells": 98649,
+        "coverage": 1.0,
+        "accuracy": 0.9641962919036179
+      },
+      {
+        "minimum_probability": 0.6,
+        "available_cells": 98649,
+        "accepted_cells": 92520,
+        "coverage": 0.9378706322415838,
+        "accuracy": 0.9800583657587548
+      },
+      {
+        "minimum_probability": 0.7,
+        "available_cells": 98649,
+        "accepted_cells": 77201,
+        "coverage": 0.7825826921712333,
+        "accuracy": 0.9864509527078664
+      },
+      {
+        "minimum_probability": 0.8,
+        "available_cells": 98649,
+        "accepted_cells": 50028,
+        "coverage": 0.5071313444637047,
+        "accuracy": 0.9898256976093388
+      },
+      {
+        "minimum_probability": 0.9,
+        "available_cells": 98649,
+        "accepted_cells": 19630,
+        "coverage": 0.19898833237032307,
+        "accuracy": 0.9911360163015792
+      },
+      {
+        "minimum_probability": 0.95,
+        "available_cells": 98649,
+        "accepted_cells": 8408,
+        "coverage": 0.08523147725775224,
+        "accuracy": 0.9904852521408183
+      },
+      {
+        "minimum_probability": 0.99,
+        "available_cells": 98649,
+        "accepted_cells": 2813,
+        "coverage": 0.028515240904621434,
+        "accuracy": 0.9925346605047991
+      }
+    ],
+    "selective_scope": "Probability-only thresholds on independent complete reference support, including current abstentions; threshold selection on this reference is exploratory.",
+    "reliability": [
+      [
+        0.5514317072270467,
+        0.7247511829009626,
+        6129
+      ],
+      [
+        0.6638879800278886,
+        0.9478425484692212,
+        15319
+      ],
+      [
+        0.7490102590241434,
+        0.9802377359879292,
+        27173
+      ],
+      [
+        0.8487397430283269,
+        0.9889795381275084,
+        30398
+      ],
+      [
+        0.9473277377383239,
+        0.9911360163015792,
+        19630
+      ]
+    ],
+    "ece": 0.17048611877988398,
+    "block_m": 100,
+    "training_buffer_m": 100,
+    "occupied_blocks": 1045,
+    "interval95": {
+      "overall_accuracy": [
+        0.9590685550040661,
+        0.9697154294124598
+      ],
+      "macro_f1": [
+        0.5869672320545454,
+        0.6531298934884447
+      ],
+      "mean_iou": [
+        0.5351574111804416,
+        0.5790916918206559
+      ]
+    },
+    "replicates": 500,
+    "seed": 42
+  },
+  "domain_diagnostics": {
+    "outside_marginal_support_fraction": {
+      "red_before": 0.016563776622165457,
+      "nir_before": 0.055033502620401624,
+      "red_after": 0.0018956096868696084,
+      "nir_after": 0.1541221907976766,
+      "red_difference": 0.038287260894687224,
+      "nir_difference": 0.11400014191730276
+    },
+    "mean_shift_training_sd": {
+      "red_before": -0.0993669828999704,
+      "nir_before": 1.4501617506410374,
+      "red_after": -0.19113007741180768,
+      "nir_after": 1.518226454910043,
+      "red_difference": -0.18045332289145272,
+      "nir_difference": -0.20436353723861883
+    },
+    "beyond_training_distance_p95_fraction": 0.7323743778446816,
+    "scope": "Standardized training support; descriptive distance and marginal bounds, not an OOD probability."
+  },
+  "unchanged_baseline": {
+    "overall_accuracy": 0.9867814169428986,
+    "change_f1": 0.0,
+    "scope": "All test observations labeled unchanged; highlights class imbalance."
+  },
+  "software": {
+    "source_tree_sha256": "016cc1d2cc474a18751ddd5a5493785c42a411cc182841188660483b26c9a628",
+    "python": "3.12.14",
+    "platform": "Linux",
+    "packages": {
+      "numpy": "2.4.6",
+      "scipy": "1.17.0",
+      "rasterio": "1.4.4",
+      "scikit-learn": "1.9.1",
+      "pyproj": "3.7.2",
+      "numba": "0.65.1"
+    },
+    "gdal": "3.10.3",
+    "thread_configuration": {
+      "OMP_NUM_THREADS": null,
+      "OPENBLAS_NUM_THREADS": null,
+      "MKL_NUM_THREADS": null,
+      "NUMBA_NUM_THREADS": null
+    },
+    "geofathom_commit": "aa7ab985db8047f08ad07c90796a9c245e624d71",
+    "working_tree_modified": true
+  },
+  "model_sha256": "72a5c44d0e71b3ad82a3318ef13c23a01d64ad31c45aceaffe9f9ae84aa26c8b",
+  "prediction_sha256": "c7562c599bd0fac47a14839a1b90c9d1782282ca55ba6c7d717e370bf0311371",
+  "error_sha256": "a6b74367666cb11b85f0788c81eb52afe229e7d1b7867590e01dddf0622682d8",
+  "scope": "Real human-labeled two-city OSCD transfer subset with raw registered L1C DN features. Not the full OSCD leaderboard, calibrated surface-reflectance validation or external field certification."
+}

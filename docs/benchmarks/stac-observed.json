@@ -1,0 +1,1007 @@
+{
+  "passed": true,
+  "benchmark_sha256": "8f9d7e790eb51e6145a1b6c540d398032618aaf88260d18aaf336b9ec80241cb",
+  "collection": "sentinel-2-c1-l2a",
+  "bbox": [
+    -83.018,
+    39.999,
+    -83.008,
+    40.009
+  ],
+  "scenes": [
+    {
+      "collection": "sentinel-2-c1-l2a",
+      "item_id": "S2A_T17TLE_20230603T162341_L2A",
+      "acquired_at": "2023-06-03T16:32:21.125000Z",
+      "bbox": [
+        -83.018,
+        39.999,
+        -83.008,
+        40.009
+      ],
+      "warning": "Native crops retain their original spatial resolution. Explicitly align different grids, including SCL; crops are not an automatic resampling or ground accuracy certification.",
+      "bands": [
+        {
+          "role": "red",
+          "name": "S2A_T17TLE_20230603T162341_L2A_red",
+          "unit": "reflectance",
+          "sha256": "1ba299ac9017020fe27d8c097b18aa7a8f5d42f2f393a1d033c5a1294dc0d296",
+          "asset_href": "https://e84-earth-search-sentinel-data.s3.us-west-2.amazonaws.com/sentinel-2-c1-l2a/17/T/LE/2023/6/S2A_T17TLE_20230603T162341_L2A/B04.tif",
+          "calibration": {
+            "scale": 0.0001,
+            "offset": -0.1,
+            "source": "stac"
+          },
+          "crs": "EPSG:32617",
+          "transform": [
+            10.0,
+            0.0,
+            327730.0,
+            0.0,
+            -10.0,
+            4430710.0
+          ],
+          "shape": [
+            114,
+            89
+          ],
+          "native_window": [
+            2773,
+            6929,
+            89,
+            114
+          ]
+        },
+        {
+          "role": "nir",
+          "name": "S2A_T17TLE_20230603T162341_L2A_nir",
+          "unit": "reflectance",
+          "sha256": "4a934a4941dfda112f4cc9efb9df5144556b4b129231f51a4f9a8984f1f08a7d",
+          "asset_href": "https://e84-earth-search-sentinel-data.s3.us-west-2.amazonaws.com/sentinel-2-c1-l2a/17/T/LE/2023/6/S2A_T17TLE_20230603T162341_L2A/B08.tif",
+          "calibration": {
+            "scale": 0.0001,
+            "offset": -0.1,
+            "source": "stac"
+          },
+          "crs": "EPSG:32617",
+          "transform": [
+            10.0,
+            0.0,
+            327730.0,
+            0.0,
+            -10.0,
+            4430710.0
+          ],
+          "shape": [
+            114,
+            89
+          ],
+          "native_window": [
+            2773,
+            6929,
+            89,
+            114
+          ]
+        },
+        {
+          "role": "scl",
+          "name": "S2A_T17TLE_20230603T162341_L2A_scl",
+          "unit": "class",
+          "sha256": "0b2a8556027ffcbaa17b8dcecc2050135ceacb4218dc03d88e4e20e29ee37644",
+          "asset_href": "https://e84-earth-search-sentinel-data.s3.us-west-2.amazonaws.com/sentinel-2-c1-l2a/17/T/LE/2023/6/S2A_T17TLE_20230603T162341_L2A/SCL.tif",
+          "calibration": {
+            "scale": 1.0,
+            "offset": 0.0,
+            "source": "raw SCL"
+          },
+          "crs": "EPSG:32617",
+          "transform": [
+            20.0,
+            0.0,
+            327720.0,
+            0.0,
+            -20.0,
+            4430720.0
+          ],
+          "shape": [
+            58,
+            45
+          ],
+          "native_window": [
+            1386,
+            3464,
+            45,
+            58
+          ]
+        }
+      ]
+    },
+    {
+      "collection": "sentinel-2-c1-l2a",
+      "item_id": "S2A_T17TLE_20230713T162016_L2A",
+      "acquired_at": "2023-07-13T16:32:22.356000Z",
+      "bbox": [
+        -83.018,
+        39.999,
+        -83.008,
+        40.009
+      ],
+      "warning": "Native crops retain their original spatial resolution. Explicitly align different grids, including SCL; crops are not an automatic resampling or ground accuracy certification.",
+      "bands": [
+        {
+          "role": "red",
+          "name": "S2A_T17TLE_20230713T162016_L2A_red",
+          "unit": "reflectance",
+          "sha256": "5b4353b46f25a166b6c43f4bc65f0d4e02728497f18187c78ef026950b155272",
+          "asset_href": "https://e84-earth-search-sentinel-data.s3.us-west-2.amazonaws.com/sentinel-2-c1-l2a/17/T/LE/2023/7/S2A_T17TLE_20230713T162016_L2A/B04.tif",
+          "calibration": {
+            "scale": 0.0001,
+            "offset": -0.1,
+            "source": "stac"
+          },
+          "crs": "EPSG:32617",
+          "transform": [
+            10.0,
+            0.0,
+            327730.0,
+            0.0,
+            -10.0,
+            4430710.0
+          ],
+          "shape": [
+            114,
+            89
+          ],
+          "native_window": [
+            2773,
+            6929,
+            89,
+            114
+          ]
+        },
+        {
+          "role": "nir",
+          "name": "S2A_T17TLE_20230713T162016_L2A_nir",
+          "unit": "reflectance",
+          "sha256": "9235072717bea9f479519c2d38eb940f6c1fe29b024061616e2115c359d3e1ba",
+          "asset_href": "https://e84-earth-search-sentinel-data.s3.us-west-2.amazonaws.com/sentinel-2-c1-l2a/17/T/LE/2023/7/S2A_T17TLE_20230713T162016_L2A/B08.tif",
+          "calibration": {
+            "scale": 0.0001,
+            "offset": -0.1,
+            "source": "stac"
+          },
+          "crs": "EPSG:32617",
+          "transform": [
+            10.0,
+            0.0,
+            327730.0,
+            0.0,
+            -10.0,
+            4430710.0
+          ],
+          "shape": [
+            114,
+            89
+          ],
+          "native_window": [
+            2773,
+            6929,
+            89,
+            114
+          ]
+        },
+        {
+          "role": "scl",
+          "name": "S2A_T17TLE_20230713T162016_L2A_scl",
+          "unit": "class",
+          "sha256": "4906cda3727e55b89d38db412b331f7d34b080a81646f03cbfb1d5517ac8a6db",
+          "asset_href": "https://e84-earth-search-sentinel-data.s3.us-west-2.amazonaws.com/sentinel-2-c1-l2a/17/T/LE/2023/7/S2A_T17TLE_20230713T162016_L2A/SCL.tif",
+          "calibration": {
+            "scale": 1.0,
+            "offset": 0.0,
+            "source": "raw SCL"
+          },
+          "crs": "EPSG:32617",
+          "transform": [
+            20.0,
+            0.0,
+            327720.0,
+            0.0,
+            -20.0,
+            4430720.0
+          ],
+          "shape": [
+            58,
+            45
+          ],
+          "native_window": [
+            1386,
+            3464,
+            45,
+            58
+          ]
+        }
+      ]
+    },
+    {
+      "collection": "sentinel-2-c1-l2a",
+      "item_id": "S2A_T17TLE_20230723T162339_L2A",
+      "acquired_at": "2023-07-23T16:32:21.819000Z",
+      "bbox": [
+        -83.018,
+        39.999,
+        -83.008,
+        40.009
+      ],
+      "warning": "Native crops retain their original spatial resolution. Explicitly align different grids, including SCL; crops are not an automatic resampling or ground accuracy certification.",
+      "bands": [
+        {
+          "role": "red",
+          "name": "S2A_T17TLE_20230723T162339_L2A_red",
+          "unit": "reflectance",
+          "sha256": "acbc99a11d0db77e2765ab6de72c1531c556881e80b5d3f3f393c6b32f6305ec",
+          "asset_href": "https://e84-earth-search-sentinel-data.s3.us-west-2.amazonaws.com/sentinel-2-c1-l2a/17/T/LE/2023/7/S2A_T17TLE_20230723T162339_L2A/B04.tif",
+          "calibration": {
+            "scale": 0.0001,
+            "offset": -0.1,
+            "source": "stac"
+          },
+          "crs": "EPSG:32617",
+          "transform": [
+            10.0,
+            0.0,
+            327730.0,
+            0.0,
+            -10.0,
+            4430710.0
+          ],
+          "shape": [
+            114,
+            89
+          ],
+          "native_window": [
+            2773,
+            6929,
+            89,
+            114
+          ]
+        },
+        {
+          "role": "nir",
+          "name": "S2A_T17TLE_20230723T162339_L2A_nir",
+          "unit": "reflectance",
+          "sha256": "909e7c5784c8e3ca30b5bff8048f05f6082bf3758efe383a2574dbe2868210d9",
+          "asset_href": "https://e84-earth-search-sentinel-data.s3.us-west-2.amazonaws.com/sentinel-2-c1-l2a/17/T/LE/2023/7/S2A_T17TLE_20230723T162339_L2A/B08.tif",
+          "calibration": {
+            "scale": 0.0001,
+            "offset": -0.1,
+            "source": "stac"
+          },
+          "crs": "EPSG:32617",
+          "transform": [
+            10.0,
+            0.0,
+            327730.0,
+            0.0,
+            -10.0,
+            4430710.0
+          ],
+          "shape": [
+            114,
+            89
+          ],
+          "native_window": [
+            2773,
+            6929,
+            89,
+            114
+          ]
+        },
+        {
+          "role": "scl",
+          "name": "S2A_T17TLE_20230723T162339_L2A_scl",
+          "unit": "class",
+          "sha256": "5a59f97a84caf6a607d4560794a0ee786fe274a262b9587b0fc150c84e9f8b6c",
+          "asset_href": "https://e84-earth-search-sentinel-data.s3.us-west-2.amazonaws.com/sentinel-2-c1-l2a/17/T/LE/2023/7/S2A_T17TLE_20230723T162339_L2A/SCL.tif",
+          "calibration": {
+            "scale": 1.0,
+            "offset": 0.0,
+            "source": "raw SCL"
+          },
+          "crs": "EPSG:32617",
+          "transform": [
+            20.0,
+            0.0,
+            327720.0,
+            0.0,
+            -20.0,
+            4430720.0
+          ],
+          "shape": [
+            58,
+            45
+          ],
+          "native_window": [
+            1386,
+            3464,
+            45,
+            58
+          ]
+        }
+      ]
+    },
+    {
+      "collection": "sentinel-2-c1-l2a",
+      "item_id": "S2A_T17TLE_20230802T162332_L2A",
+      "acquired_at": "2023-08-02T16:32:22.530000Z",
+      "bbox": [
+        -83.018,
+        39.999,
+        -83.008,
+        40.009
+      ],
+      "warning": "Native crops retain their original spatial resolution. Explicitly align different grids, including SCL; crops are not an automatic resampling or ground accuracy certification.",
+      "bands": [
+        {
+          "role": "red",
+          "name": "S2A_T17TLE_20230802T162332_L2A_red",
+          "unit": "reflectance",
+          "sha256": "4bb7cc1a0f763ef81d3dd06ca637538ebb659300f175dbc44b7f27d0d0f1ade6",
+          "asset_href": "https://e84-earth-search-sentinel-data.s3.us-west-2.amazonaws.com/sentinel-2-c1-l2a/17/T/LE/2023/8/S2A_T17TLE_20230802T162332_L2A/B04.tif",
+          "calibration": {
+            "scale": 0.0001,
+            "offset": -0.1,
+            "source": "stac"
+          },
+          "crs": "EPSG:32617",
+          "transform": [
+            10.0,
+            0.0,
+            327730.0,
+            0.0,
+            -10.0,
+            4430710.0
+          ],
+          "shape": [
+            114,
+            89
+          ],
+          "native_window": [
+            2773,
+            6929,
+            89,
+            114
+          ]
+        },
+        {
+          "role": "nir",
+          "name": "S2A_T17TLE_20230802T162332_L2A_nir",
+          "unit": "reflectance",
+          "sha256": "62cac3f9a9e3b1ede61e69be2843347c2ba472373939e715eadd7781922e9edd",
+          "asset_href": "https://e84-earth-search-sentinel-data.s3.us-west-2.amazonaws.com/sentinel-2-c1-l2a/17/T/LE/2023/8/S2A_T17TLE_20230802T162332_L2A/B08.tif",
+          "calibration": {
+            "scale": 0.0001,
+            "offset": -0.1,
+            "source": "stac"
+          },
+          "crs": "EPSG:32617",
+          "transform": [
+            10.0,
+            0.0,
+            327730.0,
+            0.0,
+            -10.0,
+            4430710.0
+          ],
+          "shape": [
+            114,
+            89
+          ],
+          "native_window": [
+            2773,
+            6929,
+            89,
+            114
+          ]
+        },
+        {
+          "role": "scl",
+          "name": "S2A_T17TLE_20230802T162332_L2A_scl",
+          "unit": "class",
+          "sha256": "215189bc23df114a2975fbc83b652db34ddf9288c6071ddbc5ef5a489bd928e9",
+          "asset_href": "https://e84-earth-search-sentinel-data.s3.us-west-2.amazonaws.com/sentinel-2-c1-l2a/17/T/LE/2023/8/S2A_T17TLE_20230802T162332_L2A/SCL.tif",
+          "calibration": {
+            "scale": 1.0,
+            "offset": 0.0,
+            "source": "raw SCL"
+          },
+          "crs": "EPSG:32617",
+          "transform": [
+            20.0,
+            0.0,
+            327720.0,
+            0.0,
+            -20.0,
+            4430720.0
+          ],
+          "shape": [
+            58,
+            45
+          ],
+          "native_window": [
+            1386,
+            3464,
+            45,
+            58
+          ]
+        }
+      ]
+    },
+    {
+      "collection": "sentinel-2-c1-l2a",
+      "item_id": "S2A_T17TLE_20230822T163027_L2A",
+      "acquired_at": "2023-08-22T16:32:23.442000Z",
+      "bbox": [
+        -83.018,
+        39.999,
+        -83.008,
+        40.009
+      ],
+      "warning": "Native crops retain their original spatial resolution. Explicitly align different grids, including SCL; crops are not an automatic resampling or ground accuracy certification.",
+      "bands": [
+        {
+          "role": "red",
+          "name": "S2A_T17TLE_20230822T163027_L2A_red",
+          "unit": "reflectance",
+          "sha256": "b0c955523103009db88471bc60be149433ed6af2e1c13ceb86f65d4370088eb6",
+          "asset_href": "https://e84-earth-search-sentinel-data.s3.us-west-2.amazonaws.com/sentinel-2-c1-l2a/17/T/LE/2023/8/S2A_T17TLE_20230822T163027_L2A/B04.tif",
+          "calibration": {
+            "scale": 0.0001,
+            "offset": -0.1,
+            "source": "stac"
+          },
+          "crs": "EPSG:32617",
+          "transform": [
+            10.0,
+            0.0,
+            327730.0,
+            0.0,
+            -10.0,
+            4430710.0
+          ],
+          "shape": [
+            114,
+            89
+          ],
+          "native_window": [
+            2773,
+            6929,
+            89,
+            114
+          ]
+        },
+        {
+          "role": "nir",
+          "name": "S2A_T17TLE_20230822T163027_L2A_nir",
+          "unit": "reflectance",
+          "sha256": "4cd867cabd7c1e44ed21c66823efac65bd9e994005c32cf6ac58be035de010c5",
+          "asset_href": "https://e84-earth-search-sentinel-data.s3.us-west-2.amazonaws.com/sentinel-2-c1-l2a/17/T/LE/2023/8/S2A_T17TLE_20230822T163027_L2A/B08.tif",
+          "calibration": {
+            "scale": 0.0001,
+            "offset": -0.1,
+            "source": "stac"
+          },
+          "crs": "EPSG:32617",
+          "transform": [
+            10.0,
+            0.0,
+            327730.0,
+            0.0,
+            -10.0,
+            4430710.0
+          ],
+          "shape": [
+            114,
+            89
+          ],
+          "native_window": [
+            2773,
+            6929,
+            89,
+            114
+          ]
+        },
+        {
+          "role": "scl",
+          "name": "S2A_T17TLE_20230822T163027_L2A_scl",
+          "unit": "class",
+          "sha256": "b01b8d37d64b1bc37d831b08fc74f177ab4cef45fcadf98e818e23ceef9f37c4",
+          "asset_href": "https://e84-earth-search-sentinel-data.s3.us-west-2.amazonaws.com/sentinel-2-c1-l2a/17/T/LE/2023/8/S2A_T17TLE_20230822T163027_L2A/SCL.tif",
+          "calibration": {
+            "scale": 1.0,
+            "offset": 0.0,
+            "source": "raw SCL"
+          },
+          "crs": "EPSG:32617",
+          "transform": [
+            20.0,
+            0.0,
+            327720.0,
+            0.0,
+            -20.0,
+            4430720.0
+          ],
+          "shape": [
+            58,
+            45
+          ],
+          "native_window": [
+            1386,
+            3464,
+            45,
+            58
+          ]
+        }
+      ]
+    },
+    {
+      "collection": "sentinel-2-c1-l2a",
+      "item_id": "S2A_T17TLE_20230901T162408_L2A",
+      "acquired_at": "2023-09-01T16:32:22.499000Z",
+      "bbox": [
+        -83.018,
+        39.999,
+        -83.008,
+        40.009
+      ],
+      "warning": "Native crops retain their original spatial resolution. Explicitly align different grids, including SCL; crops are not an automatic resampling or ground accuracy certification.",
+      "bands": [
+        {
+          "role": "red",
+          "name": "S2A_T17TLE_20230901T162408_L2A_red",
+          "unit": "reflectance",
+          "sha256": "4a26018e3953829a9a6b9284f20525ca1f18d58fc90474df145da69c1d0e1e5f",
+          "asset_href": "https://e84-earth-search-sentinel-data.s3.us-west-2.amazonaws.com/sentinel-2-c1-l2a/17/T/LE/2023/9/S2A_T17TLE_20230901T162408_L2A/B04.tif",
+          "calibration": {
+            "scale": 0.0001,
+            "offset": -0.1,
+            "source": "stac"
+          },
+          "crs": "EPSG:32617",
+          "transform": [
+            10.0,
+            0.0,
+            327730.0,
+            0.0,
+            -10.0,
+            4430710.0
+          ],
+          "shape": [
+            114,
+            89
+          ],
+          "native_window": [
+            2773,
+            6929,
+            89,
+            114
+          ]
+        },
+        {
+          "role": "nir",
+          "name": "S2A_T17TLE_20230901T162408_L2A_nir",
+          "unit": "reflectance",
+          "sha256": "8f7cd8a08e0e899a9f1d1e75a5eed729293e405478250e997fb580fbda398c3f",
+          "asset_href": "https://e84-earth-search-sentinel-data.s3.us-west-2.amazonaws.com/sentinel-2-c1-l2a/17/T/LE/2023/9/S2A_T17TLE_20230901T162408_L2A/B08.tif",
+          "calibration": {
+            "scale": 0.0001,
+            "offset": -0.1,
+            "source": "stac"
+          },
+          "crs": "EPSG:32617",
+          "transform": [
+            10.0,
+            0.0,
+            327730.0,
+            0.0,
+            -10.0,
+            4430710.0
+          ],
+          "shape": [
+            114,
+            89
+          ],
+          "native_window": [
+            2773,
+            6929,
+            89,
+            114
+          ]
+        },
+        {
+          "role": "scl",
+          "name": "S2A_T17TLE_20230901T162408_L2A_scl",
+          "unit": "class",
+          "sha256": "769dccbc92acde61935cf2e77ed9fb3cfdc0cc0c666cdc1def11f4ac0b5455e7",
+          "asset_href": "https://e84-earth-search-sentinel-data.s3.us-west-2.amazonaws.com/sentinel-2-c1-l2a/17/T/LE/2023/9/S2A_T17TLE_20230901T162408_L2A/SCL.tif",
+          "calibration": {
+            "scale": 1.0,
+            "offset": 0.0,
+            "source": "raw SCL"
+          },
+          "crs": "EPSG:32617",
+          "transform": [
+            20.0,
+            0.0,
+            327720.0,
+            0.0,
+            -20.0,
+            4430720.0
+          ],
+          "shape": [
+            58,
+            45
+          ],
+          "native_window": [
+            1386,
+            3464,
+            45,
+            58
+          ]
+        }
+      ]
+    }
+  ],
+  "cube": {
+    "schema": "geofathom-optical-cube-1",
+    "band_layout": [
+      {
+        "band": 1,
+        "acquisition": "S2A_T17TLE_20230603T162341_L2A",
+        "datetime": "2023-06-03T16:32:21.125000Z",
+        "sensor": "Sentinel-2A Collection-1 L2A",
+        "role": "red",
+        "unit": "reflectance",
+        "source_sha256": "e2dedd006891bd89752501c2503d47eb61c6911efae238f6ca2011b0d3bbd1d2",
+        "source_band": 1,
+        "scale": 1.0,
+        "offset": 0.0,
+        "correction": null,
+        "quality": [
+          {
+            "scheme": "sentinel_clear",
+            "file": "S2A_T17TLE_20230603T162341_L2A-scl.tif"
+          }
+        ]
+      },
+      {
+        "band": 2,
+        "acquisition": "S2A_T17TLE_20230603T162341_L2A",
+        "datetime": "2023-06-03T16:32:21.125000Z",
+        "sensor": "Sentinel-2A Collection-1 L2A",
+        "role": "nir",
+        "unit": "reflectance",
+        "source_sha256": "e4d75ab05da3958cda4e0fde8d2eef5ef5f171def5e4a2ace94d63e3c1074827",
+        "source_band": 1,
+        "scale": 1.0,
+        "offset": 0.0,
+        "correction": null,
+        "quality": [
+          {
+            "scheme": "sentinel_clear",
+            "file": "S2A_T17TLE_20230603T162341_L2A-scl.tif"
+          }
+        ]
+      },
+      {
+        "band": 3,
+        "acquisition": "S2A_T17TLE_20230713T162016_L2A",
+        "datetime": "2023-07-13T16:32:22.356000Z",
+        "sensor": "Sentinel-2A Collection-1 L2A",
+        "role": "red",
+        "unit": "reflectance",
+        "source_sha256": "83f81a7028be5da252fe9f19f9a5909e4f9612987607c7e2ceba38de2f26a2d3",
+        "source_band": 1,
+        "scale": 1.0,
+        "offset": 0.0,
+        "correction": null,
+        "quality": [
+          {
+            "scheme": "sentinel_clear",
+            "file": "S2A_T17TLE_20230713T162016_L2A-scl.tif"
+          }
+        ]
+      },
+      {
+        "band": 4,
+        "acquisition": "S2A_T17TLE_20230713T162016_L2A",
+        "datetime": "2023-07-13T16:32:22.356000Z",
+        "sensor": "Sentinel-2A Collection-1 L2A",
+        "role": "nir",
+        "unit": "reflectance",
+        "source_sha256": "e71f54b4514dc4d4a55f8b9f560539131e0a385bc5f31661da049a64313e6df5",
+        "source_band": 1,
+        "scale": 1.0,
+        "offset": 0.0,
+        "correction": null,
+        "quality": [
+          {
+            "scheme": "sentinel_clear",
+            "file": "S2A_T17TLE_20230713T162016_L2A-scl.tif"
+          }
+        ]
+      },
+      {
+        "band": 5,
+        "acquisition": "S2A_T17TLE_20230723T162339_L2A",
+        "datetime": "2023-07-23T16:32:21.819000Z",
+        "sensor": "Sentinel-2A Collection-1 L2A",
+        "role": "red",
+        "unit": "reflectance",
+        "source_sha256": "16bfbcf10b9075a42ee225a4b82a308fac1e4559da7c428e4e1ca2c6c41dfd3a",
+        "source_band": 1,
+        "scale": 1.0,
+        "offset": 0.0,
+        "correction": null,
+        "quality": [
+          {
+            "scheme": "sentinel_clear",
+            "file": "S2A_T17TLE_20230723T162339_L2A-scl.tif"
+          }
+        ]
+      },
+      {
+        "band": 6,
+        "acquisition": "S2A_T17TLE_20230723T162339_L2A",
+        "datetime": "2023-07-23T16:32:21.819000Z",
+        "sensor": "Sentinel-2A Collection-1 L2A",
+        "role": "nir",
+        "unit": "reflectance",
+        "source_sha256": "88c495eb104aa51c0713f081aa92dd75157884713269117b778f5482bf84abfa",
+        "source_band": 1,
+        "scale": 1.0,
+        "offset": 0.0,
+        "correction": null,
+        "quality": [
+          {
+            "scheme": "sentinel_clear",
+            "file": "S2A_T17TLE_20230723T162339_L2A-scl.tif"
+          }
+        ]
+      },
+      {
+        "band": 7,
+        "acquisition": "S2A_T17TLE_20230802T162332_L2A",
+        "datetime": "2023-08-02T16:32:22.530000Z",
+        "sensor": "Sentinel-2A Collection-1 L2A",
+        "role": "red",
+        "unit": "reflectance",
+        "source_sha256": "42fffcc329de1501b9732ee92464de0da3dd9e563fbb5dbe9c30d5da715b278e",
+        "source_band": 1,
+        "scale": 1.0,
+        "offset": 0.0,
+        "correction": null,
+        "quality": [
+          {
+            "scheme": "sentinel_clear",
+            "file": "S2A_T17TLE_20230802T162332_L2A-scl.tif"
+          }
+        ]
+      },
+      {
+        "band": 8,
+        "acquisition": "S2A_T17TLE_20230802T162332_L2A",
+        "datetime": "2023-08-02T16:32:22.530000Z",
+        "sensor": "Sentinel-2A Collection-1 L2A",
+        "role": "nir",
+        "unit": "reflectance",
+        "source_sha256": "39a4b35d15ec5541303b426a2f7bfb90ef9ce05050115f56a52f8788ffa81074",
+        "source_band": 1,
+        "scale": 1.0,
+        "offset": 0.0,
+        "correction": null,
+        "quality": [
+          {
+            "scheme": "sentinel_clear",
+            "file": "S2A_T17TLE_20230802T162332_L2A-scl.tif"
+          }
+        ]
+      },
+      {
+        "band": 9,
+        "acquisition": "S2A_T17TLE_20230822T163027_L2A",
+        "datetime": "2023-08-22T16:32:23.442000Z",
+        "sensor": "Sentinel-2A Collection-1 L2A",
+        "role": "red",
+        "unit": "reflectance",
+        "source_sha256": "21df8a63fd2cc8eea12e61c75713f967f7a6c0609760543ec860acbc3ceddaa0",
+        "source_band": 1,
+        "scale": 1.0,
+        "offset": 0.0,
+        "correction": null,
+        "quality": [
+          {
+            "scheme": "sentinel_clear",
+            "file": "S2A_T17TLE_20230822T163027_L2A-scl.tif"
+          }
+        ]
+      },
+      {
+        "band": 10,
+        "acquisition": "S2A_T17TLE_20230822T163027_L2A",
+        "datetime": "2023-08-22T16:32:23.442000Z",
+        "sensor": "Sentinel-2A Collection-1 L2A",
+        "role": "nir",
+        "unit": "reflectance",
+        "source_sha256": "2170c556b1e0918968c9067cac1a3009c8dab45d9258a4d28affe996ce79d010",
+        "source_band": 1,
+        "scale": 1.0,
+        "offset": 0.0,
+        "correction": null,
+        "quality": [
+          {
+            "scheme": "sentinel_clear",
+            "file": "S2A_T17TLE_20230822T163027_L2A-scl.tif"
+          }
+        ]
+      },
+      {
+        "band": 11,
+        "acquisition": "S2A_T17TLE_20230901T162408_L2A",
+        "datetime": "2023-09-01T16:32:22.499000Z",
+        "sensor": "Sentinel-2A Collection-1 L2A",
+        "role": "red",
+        "unit": "reflectance",
+        "source_sha256": "569597fbd513b6a2d6d3eea67fc971678337a11f34ce3cc79d44c2b3f6e358e2",
+        "source_band": 1,
+        "scale": 1.0,
+        "offset": 0.0,
+        "correction": null,
+        "quality": [
+          {
+            "scheme": "sentinel_clear",
+            "file": "S2A_T17TLE_20230901T162408_L2A-scl.tif"
+          }
+        ]
+      },
+      {
+        "band": 12,
+        "acquisition": "S2A_T17TLE_20230901T162408_L2A",
+        "datetime": "2023-09-01T16:32:22.499000Z",
+        "sensor": "Sentinel-2A Collection-1 L2A",
+        "role": "nir",
+        "unit": "reflectance",
+        "source_sha256": "01f2f9567e9a483165b153c703f9d31a030dbe6a7c07e2d4a370d2bc7fb90987",
+        "source_band": 1,
+        "scale": 1.0,
+        "offset": 0.0,
+        "correction": null,
+        "quality": [
+          {
+            "scheme": "sentinel_clear",
+            "file": "S2A_T17TLE_20230901T162408_L2A-scl.tif"
+          }
+        ]
+      }
+    ],
+    "source_sha256": {
+      "S2A_T17TLE_20230802T162332_L2A-red.tif": "42fffcc329de1501b9732ee92464de0da3dd9e563fbb5dbe9c30d5da715b278e",
+      "S2A_T17TLE_20230901T162408_L2A-nir.tif": "01f2f9567e9a483165b153c703f9d31a030dbe6a7c07e2d4a370d2bc7fb90987",
+      "S2A_T17TLE_20230713T162016_L2A-scl.tif": "4906cda3727e55b89d38db412b331f7d34b080a81646f03cbfb1d5517ac8a6db",
+      "S2A_T17TLE_20230713T162016_L2A-red.tif": "83f81a7028be5da252fe9f19f9a5909e4f9612987607c7e2ceba38de2f26a2d3",
+      "S2A_T17TLE_20230603T162341_L2A-nir.tif": "e4d75ab05da3958cda4e0fde8d2eef5ef5f171def5e4a2ace94d63e3c1074827",
+      "S2A_T17TLE_20230822T163027_L2A-scl.tif": "b01b8d37d64b1bc37d831b08fc74f177ab4cef45fcadf98e818e23ceef9f37c4",
+      "S2A_T17TLE_20230822T163027_L2A-nir.tif": "2170c556b1e0918968c9067cac1a3009c8dab45d9258a4d28affe996ce79d010",
+      "S2A_T17TLE_20230723T162339_L2A-red.tif": "16bfbcf10b9075a42ee225a4b82a308fac1e4559da7c428e4e1ca2c6c41dfd3a",
+      "S2A_T17TLE_20230901T162408_L2A-red.tif": "569597fbd513b6a2d6d3eea67fc971678337a11f34ce3cc79d44c2b3f6e358e2",
+      "S2A_T17TLE_20230723T162339_L2A-nir.tif": "88c495eb104aa51c0713f081aa92dd75157884713269117b778f5482bf84abfa",
+      "S2A_T17TLE_20230603T162341_L2A-red.tif": "e2dedd006891bd89752501c2503d47eb61c6911efae238f6ca2011b0d3bbd1d2",
+      "S2A_T17TLE_20230713T162016_L2A-nir.tif": "e71f54b4514dc4d4a55f8b9f560539131e0a385bc5f31661da049a64313e6df5",
+      "S2A_T17TLE_20230603T162341_L2A-scl.tif": "0b2a8556027ffcbaa17b8dcecc2050135ceacb4218dc03d88e4e20e29ee37644",
+      "S2A_T17TLE_20230901T162408_L2A-scl.tif": "769dccbc92acde61935cf2e77ed9fb3cfdc0cc0c666cdc1def11f4ac0b5455e7",
+      "S2A_T17TLE_20230822T163027_L2A-red.tif": "21df8a63fd2cc8eea12e61c75713f967f7a6c0609760543ec860acbc3ceddaa0",
+      "S2A_T17TLE_20230802T162332_L2A-nir.tif": "39a4b35d15ec5541303b426a2f7bfb90ef9ce05050115f56a52f8788ffa81074",
+      "S2A_T17TLE_20230723T162339_L2A-scl.tif": "5a59f97a84caf6a607d4560794a0ee786fe274a262b9587b0fc150c84e9f8b6c",
+      "S2A_T17TLE_20230802T162332_L2A-scl.tif": "215189bc23df114a2975fbc83b652db34ddf9288c6071ddbc5ef5a489bd928e9"
+    },
+    "roles": [
+      "red",
+      "nir"
+    ],
+    "acquisition_count": 6,
+    "utc_datetimes": [
+      "2023-06-03T16:32:21.125000+00:00",
+      "2023-07-13T16:32:22.356000+00:00",
+      "2023-07-23T16:32:21.819000+00:00",
+      "2023-08-02T16:32:22.530000+00:00",
+      "2023-08-22T16:32:23.442000+00:00",
+      "2023-09-01T16:32:22.499000+00:00"
+    ],
+    "time_origin": "2023-06-03T16:32:21.125000+00:00",
+    "time_unit": "day",
+    "times": [
+      0.0,
+      40.000014247685186,
+      50.00000803240741,
+      60.000016261574075,
+      80.00002681712962,
+      90.00001590277778
+    ],
+    "shape": [
+      114,
+      89
+    ],
+    "crs": "EPSG:32617",
+    "transform": [
+      10.0,
+      0.0,
+      327730.0,
+      0.0,
+      -10.0,
+      4430710.0
+    ],
+    "support_bands": {
+      "red": 13,
+      "nir": 14
+    },
+    "valid_observations": {
+      "red": 50646,
+      "nir": 50646
+    },
+    "resampling": "bilinear",
+    "harmonization_declaration": "",
+    "reference_sensor": "Sentinel-2A Collection-1 L2A",
+    "registration": [],
+    "minimum_coverage": null,
+    "sha256": "8ec815e0b43740ca6107d046c74aaf5a88ef39ada9a50331e7583aa1295e838b",
+    "assumptions": "Supplied analysis-ready reflectance and QA; gaps retained; no cloud imputation or inferred sensor equivalence."
+  },
+  "ndvi_checks": [
+    {
+      "item": "S2A_T17TLE_20230603T162341_L2A",
+      "valid_cells": 148,
+      "sha256": "a2c15ae982beb9a38d5981ba30e91a239c74477ea9843823276d6bba6a65e812"
+    },
+    {
+      "item": "S2A_T17TLE_20230713T162016_L2A",
+      "valid_cells": 10122,
+      "sha256": "5e5e059357eca51df0c2d599148298e732f009451b4318c6d85cfdb9c98c49b2"
+    },
+    {
+      "item": "S2A_T17TLE_20230723T162339_L2A",
+      "valid_cells": 10146,
+      "sha256": "f56dbb3edd917fa2f94500e8b4405958793cee128fd07066a37e0f682ed6172a"
+    },
+    {
+      "item": "S2A_T17TLE_20230802T162332_L2A",
+      "valid_cells": 10146,
+      "sha256": "3f82f964726ecc2043233cbc897b3cec32974c2818808abede293765db035269"
+    },
+    {
+      "item": "S2A_T17TLE_20230822T163027_L2A",
+      "valid_cells": 10142,
+      "sha256": "7ac1aa668e96d21441cd1c6d12cfeaad645ac8270448286399cd07d05755a40d"
+    },
+    {
+      "item": "S2A_T17TLE_20230901T162408_L2A",
+      "valid_cells": 9942,
+      "sha256": "ba8dff80bedf30908ed342dd686a9ec1bd1316fb37995759b0aac2daee44071d"
+    }
+  ],
+  "trend": {
+    "paired_cells": 10146,
+    "maximum_absolute_error": 1.1275702593849246e-17,
+    "unit": "unitless/day",
+    "sha256": "cedce6d63ffcd815b7007378de65227ab3d15d0a283d0b5a5ac93f8aef964685",
+    "time_unit": "day",
+    "times": [
+      0.0,
+      40.000014247685186,
+      50.00000803240741,
+      60.000016261574075,
+      80.00002681712962,
+      90.00001590277778
+    ]
+  },
+  "scope": "Real metadata-calibrated L2A radiometry, supplied SCL, dated cube and arithmetic/temporal integration; no independent vegetation or surface-reflectance field accuracy claim."
+}

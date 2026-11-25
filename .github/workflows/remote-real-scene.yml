@@ -2,7 +2,7 @@ name: Remote sensing real-scene reference
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, develop, feature/remote-sensing-research]
   pull_request:
     branches: [main, develop]
   workflow_dispatch:
@@ -15,7 +15,7 @@ concurrency:
 jobs:
   real-scene:
     runs-on: ubuntu-24.04
-    timeout-minutes: 12
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -27,11 +27,18 @@ jobs:
         run: |
           mkdir -p build
           python scripts/remote_scene_reference.py --public-scene build/scene --output build/remote-scene-reference.json
+      - name: Verify public OSCD annotation transfer subset
+        run: python scripts/remote_oscd_benchmark.py --cache build/oscd-cache --work build/oscd-work --output build/remote-oscd-reference.json
+      - name: Verify metadata-calibrated L2A dates and native QA pipeline
+        run: python scripts/remote_stac_pipeline.py --cache build/stac-cache --work build/stac-work --output build/remote-stac-reference.json
       - name: Preserve real-scene evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: remote-real-scene-evidence
-          path: build/remote-scene-reference.json
+          path: |
+            build/remote-scene-reference.json
+            build/remote-oscd-reference.json
+            build/remote-stac-reference.json
           if-no-files-found: warn
           retention-days: 30

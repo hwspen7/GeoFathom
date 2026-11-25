@@ -54,8 +54,17 @@ jobs:
       - name: Verify numerical methods and full scientific workflows
         run: |
           mkdir -p build
-          GEOFATHOM_REQUIRE_REMOTE_GDAL=1 python -m pytest -q --junitxml=build/remote-sensing-tests.xml tests/test_remote_sensing.py tests/test_remote_cog.py tests/test_remote_cube.py tests/test_remote_model.py tests/test_remote_model_validation.py tests/test_remote_reproducibility.py tests/test_remote_qa_support.py tests/test_remote_semantics.py tests/test_remote_harmonization.py tests/test_remote_confidence.py tests/test_remote_samples.py tests/test_remote_experiments.py
+          GEOFATHOM_REQUIRE_REMOTE_GDAL=1 python -m pytest -q --junitxml=build/remote-sensing-tests.xml tests/test_remote_sensing.py tests/test_remote_cog.py tests/test_remote_cube.py tests/test_remote_model.py tests/test_remote_model_validation.py tests/test_remote_reproducibility.py tests/test_remote_qa_support.py tests/test_remote_semantics.py tests/test_remote_harmonization.py tests/test_remote_confidence.py tests/test_remote_samples.py tests/test_remote_experiments.py tests/test_remote_benchmarks.py
           python scripts/remote_sensing_gate.py --junit build/remote-sensing-tests.xml --output build/remote-sensing-acceptance.json
+      - name: Verify scientific figure catalog integration
+        run: >-
+          python -m pytest -q
+          tests/test_figure_studio.py::test_catalog_count_and_unique_recipes
+          tests/test_figure_studio.py::test_api_catalog_render_metadata_and_validation
+          tests/test_figure_studio.py::test_domain_recipe_counts_and_tiers
+          'tests/test_figure_studio.py::test_every_recipe_renders_actual_data[remote_selective_accuracy]'
+      - name: Verify scene-scale bounded memory and exact raster arithmetic
+        run: python scripts/remote_scene_scale.py --work build/scene-scale --output build/remote-scene-scale.json
       - name: Preserve numerical evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -64,5 +73,6 @@ jobs:
           path: |
             build/remote-sensing-tests.xml
             build/remote-sensing-acceptance.json
+            build/remote-scene-scale.json
           if-no-files-found: warn
           retention-days: 30
