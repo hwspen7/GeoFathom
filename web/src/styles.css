@@ -1983,3 +1983,11 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 
 /* Keep Tools fixed; long legacy forms remain reachable without an expanded dock or a visible scrollbar. */
 .desktop-gis .gis-operations:not([data-active-module="tools-terrain"])>.sidebar-scroll:not(.data-fixed-operations){overflow-y:auto!important;overflow-x:hidden!important;scrollbar-width:none;}
+
+/* GIS is a flat, always-open tools panel, not an accordion. */
+.desktop-gis [data-active-module="tools-gis"] .gis-static-heading{margin:0;padding:6px 4px;font-size:11px;font-weight:650;color:#3c5b70}
+.desktop-gis [data-active-module="tools-gis"] .gis-static-layer-heading{display:flex;align-items:center;gap:5px;margin:0;padding:5px 3px;font-size:11px;font-weight:500;color:#405b70}
+.desktop-gis [data-active-module="tools-gis"] .gis-static-layer-heading small{margin-left:auto;color:#708898}
+.desktop-gis [data-active-module="tools-gis"] .gis-tool-group{border:1px solid #e3ebf4;border-radius:3px;background:#f9fbfe;padding:8px;margin:0 0 7px}
+.desktop-gis [data-active-module="tools-gis"] .gis-tool-heading{display:flex;align-items:center;gap:7px;margin:0;padding:5px 6px;font-size:11px;font-weight:750;color:#456787}
+.desktop-gis [data-active-module="tools-gis"] .gis-tool-group .professional-form{margin-top:6px}

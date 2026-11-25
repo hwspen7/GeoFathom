@@ -67,3 +67,23 @@ test('global survey toolbar persists across all research modules',async({page})=
  await expect(navigation.getByRole('button',{name:'Raster',exact:true})).toHaveAttribute('aria-pressed','true');
  await expect(toolbar.getByRole('button',{name:'Polygon',exact:true})).toHaveAttribute('aria-pressed','false');
 });
+
+test('GIS tools and object browser stay open without collapsible sections',async({page})=>{
+ await page.setViewportSize({width:1680,height:900});
+ await page.route('**/tile.openstreetmap.org/**',r=>r.fulfill({contentType:'image/png',body:tile}));
+ await page.goto('/');
+ const nav=page.getByRole('navigation',{name:'Workspace tools'});
+ await nav.getByRole('button',{name:'GIS',exact:true}).click();
+ const tools=page.getByRole('complementary',{name:'Operations'});
+ await expect(tools.getByRole('heading',{name:'Objects',exact:true})).toBeVisible();
+ await expect(tools.getByRole('heading',{name:/Attribute table/})).toBeVisible();
+ await expect(tools.getByLabel('Attribute search field')).toBeVisible();
+ await expect(tools.getByLabel('Import GIS vector file')).toBeAttached();
+ await expect(tools.getByLabel('GIS export format')).toBeVisible();
+ await expect(tools.getByRole('button',{name:/Analyze selected/})).toBeVisible();
+ await expect(tools.locator('#tools-gis details, details.workspace-objects')).toHaveCount(0);
+ await nav.getByRole('button',{name:'Survey',exact:true}).click();
+ await nav.getByRole('button',{name:'GIS',exact:true}).click();
+ await expect(tools.getByLabel('Attribute search field')).toBeVisible();
+ await expect(tools.getByLabel('Filter project features')).toBeVisible();
+});

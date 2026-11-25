@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent, type SyntheticEvent } from 'react';
 import {createPortal} from 'react-dom';
 import {
   ArrowRight, Compass, Globe2, Layers3, MapPin, Maximize2, Minimize2,
@@ -1188,6 +1188,10 @@ export default function App() {
     {id:'map:help',label:'Keyboard shortcuts',group:'Help',
       shortcut:'?',run:()=>setShortcutHelp(true)},
   ];
+  // GIS uses static sections; other modules retain their existing object-browser workflow.
+  const gisFlat=activeTool==='tools-gis';
+  const ObjectsContainer=gisFlat?'section':'details';
+  const GeometryContainer=gisFlat?'section':'details';
   return (
     <div className="workspace desktop-gis">
       <header className="gis-header">
@@ -1299,7 +1303,7 @@ export default function App() {
             <div className="section-heading"><Layers3 size={16} /><span>Projects</span></div>
             {!capabilities&&connectionError&&<div className="discovery-error" role="alert">{connectionError} <button onClick={()=>setConnectionRetry(v=>v+1)}>Reconnect</button></div>}
             <ProjectsPanel toolbarTarget={projectToolbarTarget} toolbarActionsTarget={projectActionsTarget} treeTarget={objectTreeTarget}
-              interactionBusy={busy||Boolean(drawingMode)} objectPageSize={3}
+              interactionBusy={busy||Boolean(drawingMode)} objectPageSize={3} objectsAlwaysOpen={gisFlat}
               onObjectMutation={(id,feature)=>{
                 // Search/attribute results may lie outside the workspace's
                 // first page. Update their owner as well, avoiding ghost
@@ -1757,16 +1761,16 @@ export default function App() {
           <WorkspaceDockHeading><Compass size={15}/> Tools</WorkspaceDockHeading>
           <div className={'sidebar-scroll'+(['tools-services','tools-export'].includes(activeTool)?' data-fixed-operations':'')}
             tabIndex={0} aria-label="Operations scrolling region">
-          <details className="workspace-objects" hidden={['tools-services','tools-export'].includes(activeTool)}
-            open={objectsOpen} onToggle={event=>setObjectsOpen(event.currentTarget.open)}>
-            <summary>Objects{activeTool==='tools-terrain'&&!objectsOpen&&<small className="workspace-object-current">
+          <ObjectsContainer className="workspace-objects" hidden={['tools-services','tools-export'].includes(activeTool)}
+            {...(gisFlat?{}:{open:objectsOpen,onToggle:(event:SyntheticEvent<HTMLElement>)=>setObjectsOpen((event.currentTarget as HTMLDetailsElement).open)})}>
+            {gisFlat?<h3 className="gis-static-heading">Objects</h3>:<summary>Objects{activeTool==='tools-terrain'&&!objectsOpen&&<small className="workspace-object-current">
               {selectedSaved?.name??scratch.find(item=>item.id===scratchId)?.name??selectedPlace?.name??'Choose an object'}
-            </small>}</summary>
+            </small>}</summary>}
             {activeTool==='tools-terrain'&&objectsOpen&&<button type="button" className="workspace-object-back"
               onClick={()=>setObjectsOpen(false)}>Back to terrain tools</button>}
             <div ref={setObjectTreeTarget}/>
-            {geometry&&<details className="geometry-edit-controls">
-              <summary>Geometry / vertices</summary>
+            {geometry&&<GeometryContainer className="geometry-edit-controls">
+              {gisFlat?<h4 className="gis-static-heading">Geometry / vertices</h4>:<summary>Geometry / vertices</summary>}
               <BoundaryEditor geometry={geometry} sourcePlace={selectedPlace} selectedParcel={selectedParcel}
                 onChooseParcel={value=>void chooseSelectedParcel(value)}
                 editing={editing&&!moving&&!edgeMoving} busy={busy} selectedNode={selectedBoundaryNode}
@@ -1782,9 +1786,9 @@ export default function App() {
                   try{void commitGeometry(removeVertex(geometry,path),'Boundary node removed and validated.');}
                   catch(e){setError(e instanceof Error?e.message:String(e));}
                 }}/>
-            </details>}
+            </GeometryContainer>}
 
-          </details>
+          </ObjectsContainer>
           {resultsTarget&&['tools-survey','tools-services'].includes(activeTool)&&
             (networkAreas?.count??0)>0&&createPortal(
             <section className="panel-section data-network-results" aria-label="Independent enclosed areas">

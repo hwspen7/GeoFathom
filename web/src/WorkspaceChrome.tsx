@@ -156,17 +156,17 @@ function ObjectRow({item,selected,disabled,locked,busy,onOpen,onRename,onDelete}
     {error&&<small role="alert" className="workspace-object-error">{error}</small>}
   </div>;
 }
-function FeatureGroup({name,features,visible,selectedId,onOpen,search,locked=false,busy=false,onRename,onDelete,total=features.length}:{
+function FeatureGroup({name,features,visible,selectedId,onOpen,search,locked=false,busy=false,onRename,onDelete,total=features.length,alwaysOpen=false}:{
   name:string;features:FeatureItem[];visible:boolean;selectedId:string|null;
   onOpen:(id:string)=>void;search:boolean;
   locked?:boolean;busy?:boolean;
   onRename?:(id:string,name:string)=>Promise<void>;onDelete?:(id:string)=>Promise<void>;
-  total?:number;
+  total?:number;alwaysOpen?:boolean;
 }){
   const [expanded,setExpanded]=useState(true);
-  return <details className="workspace-feature-group" open={search||expanded}
-    onToggle={event=>{if(!search)setExpanded(event.currentTarget.open);}}>
-    <summary><Layers3 size={13}/>{name}<small>{total}</small></summary>
+  const Group=alwaysOpen?'section':'details';
+  return <Group className="workspace-feature-group" {...(alwaysOpen?{}:{open:search||expanded,onToggle:(event:React.SyntheticEvent<HTMLElement>)=>{if(!search)setExpanded((event.currentTarget as HTMLDetailsElement).open);}})}>
+    {alwaysOpen?<h4 className="gis-static-layer-heading"><Layers3 size={13}/>{name}<small>{total}</small></h4>:<summary><Layers3 size={13}/>{name}<small>{total}</small></summary>}
     <div className="project-features">
       {features.map(item=><ObjectRow key={item.id} item={item}
         selected={selectedId===item.id} disabled={!visible} locked={locked} busy={busy}
@@ -174,20 +174,20 @@ function FeatureGroup({name,features,visible,selectedId,onOpen,search,locked=fal
         onRename={onRename?value=>onRename(item.id,value):undefined}
         onDelete={onDelete?()=>onDelete(item.id):undefined}/>)}
     </div>
-  </details>;
+  </Group>;
 }
 
 /** Object actions use their owner's revisioned API or local undo history.
  * Renaming never needs to load or replace the object's geometry selection.
  */
 export function WorkspaceFeatureTree<T extends FeatureItem>({
-  layers,features,selectedId,onOpen,onRename,onDelete,busy=false,additionalGroups=[],pageSize=5,
+  layers,features,selectedId,onOpen,onRename,onDelete,busy=false,additionalGroups=[],pageSize=5,alwaysOpen=false,
 }:{
   layers:readonly FeatureLayer[];features:readonly T[];
   selectedId:string|null;onOpen:(feature:T)=>void;
   onRename?:(feature:T,name:string)=>Promise<void>;onDelete?:(feature:T)=>Promise<void>;
   busy?:boolean;additionalGroups?:WorkspaceObjectGroup[];
-  pageSize?:number;
+  pageSize?:number;alwaysOpen?:boolean;
 }){
   const [filter,setFilter]=useState('');
   const [page,setPage]=useState(0);
@@ -234,14 +234,14 @@ export function WorkspaceFeatureTree<T extends FeatureItem>({
         value={filter} placeholder="Filter name or layer"
         onChange={e=>{setFilter(e.target.value);setPage(0);}}/>
     </label>
-    {groups.filter(g=>g.items.some(item=>paged.has(g.id+':'+item.id))).map(g=><FeatureGroup key={g.id} name={g.name}
+    {groups.filter(g=>g.items.some(item=>paged.has(g.id+':'+item.id))).map(g=><FeatureGroup key={g.id} name={g.name} alwaysOpen={alwaysOpen}
       features={g.items.filter(item=>paged.has(g.id+':'+item.id))} total={g.items.length}
       visible={g.visible} search={Boolean(lowered)}
       selectedId={selectedId} locked={g.locked} busy={busy}
       onRename={onRename?async(id,name)=>{const f=lookup.get(id);if(f)await onRename(f,name);}:undefined}
       onDelete={onDelete?async id=>{const f=lookup.get(id);if(f)await onDelete(f);}:undefined}
       onOpen={id=>{const f=lookup.get(id);if(f)onOpen(f);}}/>)}
-    {extras.filter(g=>g.items.some(item=>paged.has(g.id+':'+item.id))).map(g=><FeatureGroup key={g.id} name={g.name}
+    {extras.filter(g=>g.items.some(item=>paged.has(g.id+':'+item.id))).map(g=><FeatureGroup key={g.id} name={g.name} alwaysOpen={alwaysOpen}
       features={g.items.filter(item=>paged.has(g.id+':'+item.id))} total={g.items.length} visible
       selectedId={g.selectedId} search={Boolean(lowered)} busy={busy}
       onOpen={g.onOpen} onRename={g.onRename} onDelete={g.onDelete}/>)}

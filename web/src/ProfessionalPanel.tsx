@@ -39,7 +39,6 @@ export default function ProfessionalPanel({
   const [operator,setOperator]=useState<'contains'|'equals'|'gte'|'lte'|'exists'>('contains');
   const [result,setResult]=useState<AttributeResult|null>(null);
   const [selection,setSelection]=useState<string[]>([]);
-  const [tableOpen,setTableOpen]=useState(false);
   const [editField,setEditField]=useState('category');
   const [editValue,setEditValue]=useState('');
   const [editType,setEditType]=useState<'text'|'number'|'boolean'>('text');
@@ -134,7 +133,7 @@ export default function ProfessionalPanel({
   }).join(' '):'';
 
   const resultPanel=<div className="gis-professional-results">
-    {tableOpen&&<section className="gis-attribute-results" aria-label="Attribute results">
+    <section className="gis-attribute-results" aria-label="Attribute results">
       <strong>Attributes · {result?.total??0}</strong>
         <div className="attribute-table-scroll">
           <table className="attribute-table">
@@ -149,7 +148,7 @@ export default function ProfessionalPanel({
           </table>
         </div>
 
-    </section>}
+    </section>
           {terrain&&<div className="terrain-metrics">
             <div><span>Elevation</span><strong>{terrain.elevation_min_m.toFixed(1)}–{terrain.elevation_max_m.toFixed(1)} m</strong></div>
             <div><span>Relief</span><strong>{terrain.elevation_relief_m.toFixed(1)} m</strong></div>
@@ -166,8 +165,8 @@ export default function ProfessionalPanel({
   </div>;
   return (
     <div className="professional-panel">
-      <details onToggle={e=>setTableOpen(e.currentTarget.open)}>
-        <summary><TableProperties size={14}/> Attribute table · {result?.total ?? 0} features</summary>
+      <section className="gis-tool-group" aria-label="Attribute table">
+        <h3 className="gis-tool-heading"><TableProperties size={14}/> Attribute table · {result?.total ?? 0} features</h3>
         <form onSubmit={event=>void submitQuery(event)} className="professional-form">
           <div className="area-fields">
             <select aria-label="Attribute search field" value={field} onChange={e=>setField(e.target.value)}>
@@ -201,9 +200,9 @@ export default function ProfessionalPanel({
           <button type="submit" disabled={busy||!selection.length}>Save properties & revisions</button>
           <p className="project-hint">Changes are atomic, versioned, and rejected on locked layers.</p>
         </form>
-      </details>
-      <details>
-        <summary><Database size={14}/> GIS file import / export</summary>
+      </section>
+      <section className="gis-tool-group" aria-label="GIS file import / export">
+        <h3 className="gis-tool-heading"><Database size={14}/> GIS file import / export</h3>
         <div className="professional-form">
           <label className="raster-upload"><FileUp size={14}/> Import GIS file
             <input aria-label="Import GIS vector file" disabled={busy||!projectId}
@@ -223,9 +222,9 @@ export default function ProfessionalPanel({
           </div>
           <p className="project-hint">Import up to 100 features per file. Source coordinate systems are transformed to WGS84. GPX export is limited to points and lines.</p>
         </div>
-      </details>
-      <details>
-        <summary><Mountain size={14}/> Terrain slope & elevation profile</summary>
+      </section>
+      <section className="gis-tool-group" aria-label="Terrain slope and elevation profile">
+        <h3 className="gis-tool-heading"><Mountain size={14}/> Terrain slope & elevation profile</h3>
         <div className="professional-form">
           <button disabled={!raster||!geometry||busy} onClick={()=>void analyze()}>
             Analyze selected {geometry?.type==='LineString'?'elevation profile':'terrain area'}
@@ -233,7 +232,7 @@ export default function ProfessionalPanel({
           <p className="project-hint">Requires a meter-based projected DEM GeoTIFF, with meter elevations in its first band. Satellite RGB imagery is not a DEM.</p>
 
         </div>
-      </details>
+      </section>
       {notice&&<p className="project-info">{notice}</p>}
       {error&&<p className="discovery-error">{error}</p>}
       {resultsTarget?(active?createPortal(resultPanel,resultsTarget):null):resultPanel}
