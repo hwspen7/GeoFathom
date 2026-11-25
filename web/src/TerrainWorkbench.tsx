@@ -73,6 +73,27 @@ function MeshView({mesh}:{mesh:TerrainMesh}){
 type Operation=TerrainOperation|'slope'|'profile';
 type ProfileResult=Awaited<ReturnType<typeof terrainProfile>>;
 type TerrainRecord=PersistedTerrainResult;
+
+// Fixed eight-entry history pages; opening the menu never changes dock layout.
+export function TerrainResultPicker({records,selectedId,onSelect}:{records:readonly TerrainRecord[];selectedId:string;onSelect:(id:string)=>void}){
+ const [open,setOpen]=useState(false),[page,setPage]=useState(0);
+ const trigger=useRef<HTMLButtonElement>(null);
+ const ordered=[...records].reverse(),selected=ordered.find(r=>r.id===selectedId);
+ const pages=Math.max(1,Math.ceil(ordered.length/8)),current=Math.min(page,pages-1);
+ function close(){setOpen(false);trigger.current?.focus();}
+ if(!selected||records.length<2)return null;
+ const text=(r:TerrainRecord)=>r.title+' · '+new Date(r.createdAt).toLocaleTimeString();
+ return <div className="terrain-history-picker" onBlur={e=>{if(!e.currentTarget.contains(e.relatedTarget as Node|null))setOpen(false);}}
+   onKeyDown={e=>{if(e.key==='Escape'&&open){e.stopPropagation();e.preventDefault();close();}}}>
+   <button ref={trigger} type="button" className="terrain-history-trigger" aria-label="Choose terrain result" aria-expanded={open} aria-controls="terrain-history-menu" onClick={()=>{if(!open)setPage(Math.max(0,Math.floor(ordered.findIndex(r=>r.id===selectedId)/8)));setOpen(v=>!v);}}>
+     <span>{text(selected)}</span><span aria-hidden="true">⌄</span>
+   </button>
+   {open&&<div id="terrain-history-menu" className="terrain-history-menu" role="group" aria-label="Terrain result history">
+     <div className="terrain-history-options">{ordered.slice(current*8,current*8+8).map(r=><button key={r.id} type="button" aria-pressed={r.id===selectedId} title={text(r)} onClick={()=>{onSelect(r.id);close();}}>{text(r)}</button>)}</div>
+     {pages>1&&<div className="terrain-history-pagination"><button type="button" aria-label="Previous result page" disabled={current===0} onClick={()=>setPage(current-1)}>‹</button><span>{current+1} / {pages}</span><button type="button" aria-label="Next result page" disabled={current===pages-1} onClick={()=>setPage(current+1)}>›</button></div>}
+   </div>}
+ </div>;
+}
 const modes:Array<{id:Operation;title:string}>=[
  {id:'slope',title:'Slope / aspect'},{id:'profile',title:'Elevation profile'},{id:'contours',title:'Contours'},{id:'dem_difference',title:'DEM difference'},
  {id:'volume',title:'Cut / fill'},{id:'visibility',title:'Viewshed'},{id:'watershed',title:'Watershed (D8)'},{id:'mesh',title:'3D terrain'},
@@ -256,6 +277,8 @@ export default function TerrainWorkbench(p:Props){
  const featuredMetrics=(preferred.length?preferred:metricEntries.filter(([key])=>
    !['dataset_overlap_pct','valid_grid_pct','product_valid_cells'].includes(key))).slice(0,4);
  const shownKeys=new Set(featuredMetrics.map(([key])=>key));
+ const summaryEntries=[...preferred,...metricEntries.filter(([key])=>!priority.includes(key))].filter(([,value])=>typeof value==='number'&&Number.isFinite(value)).slice(0,8);
+ const summaryUnit=(key:string)=>['product_min','product_max','product_mean','product_std','product_p10','product_p50','product_p90'].includes(key)?result?.raster?.unit??'':units[key]??(key.endsWith('_m2')?'m²':key.endsWith('_m3')?'m³':key.endsWith('_m')?'m':key.endsWith('_deg')?'°':key.endsWith('_pct')?'%':'');
  const additionalMetrics=metricEntries.filter(([key])=>!shownKeys.has(key));
  const activeProfileSamples=profile?.samples??null;
  const comparableRuns=selected?records.filter(r=>r.id!==selected.id&&r.operation===selected.operation):[];
@@ -674,21 +697,19 @@ export default function TerrainWorkbench(p:Props){
  </div>:null;
  // Fixed summary matches the other analysis workbenches; detailed inspection is modal.
  const monitor=selected?<section className="panel-section spatial-monitor terrain-summary-monitor" aria-label="Terrain results">
-   {usableRecords.length>1&&<div className="terrain-run-selector">
-     <select aria-label="Choose terrain result" value={selectedRecord??''} onChange={e=>{setSelectedRecord(e.target.value);setInfo('');latest.current.onHover(null);}}>
-       {[...usableRecords].reverse().map(r=><option value={r.id} key={r.id}>{r.title} · {new Date(r.createdAt).toLocaleTimeString()}</option>)}
-     </select>
-   </div>}
-   <div className="terrain-summary-title"><h3 className="terrain-flat-heading"><SectionIcon role="terrainResult"/> {selected.title}</h3>
-     <button type="button" className="terrain-review-button" onClick={()=>{setResultTab('overview');setFigureView('analysis');setExpanded(true);}}>Review</button>
-   </div>
-   {inputsChanged&&<small className="terrain-summary-source">Previous result</small>}
+   <TerrainResultPicker records={usableRecords} selectedId={selected.id} onSelect={id=>{setSelectedRecord(id);setInfo('');latest.current.onHover(null);}}/>
+   <div className="terrain-summary-title"><h3 className="terrain-flat-heading"><SectionIcon role="terrainResult"/> {selected.title}</h3>{inputsChanged&&<small title="Inputs changed since this run">Previous result</small>}</div>
    {result?.raster?.png&&<img className="terrain-overview-preview" src={result.raster.png} alt="Terrain overview preview"/>}
    {profile&&<div aria-hidden={expanded} style={{visibility:expanded?'hidden':'visible'}}><ProfilePlot samples={profile.samples} length={profile.length_m} onHover={p.onHover} mapIndex={p.profileMapIndex??null}/></div>}
-   {result&&<div className="terrain-metrics terrain-key-metrics">{featuredMetrics.slice(0,3).map(([key,value])=><div key={key}><span>{names[key]??key.replaceAll('_',' ')}</span><strong>{fmt(value)} {units[key]??(['product_min','product_max','product_mean','product_std','product_p10','product_p50','product_p90'].includes(key)?result.raster?.unit??'':'')}</strong></div>)}</div>}
-   {slope&&<div className="terrain-metrics terrain-key-metrics"><div><span>Mean slope</span><strong>{fmt(slope.mean_slope_deg)}°</strong></div><div><span>Mean elevation</span><strong>{fmt(slope.elevation_mean_m)} m</strong></div></div>}
-   {profile&&<small>{fmt(profile.length_m)} m · {profile.samples.length} samples</small>}
-   {result&&<small>{result.valid_cells.toLocaleString()} valid cells{result.features.length?' · '+result.features.length+' features':''}</small>}
+   {result&&<div className="terrain-metrics terrain-key-metrics">{summaryEntries.map(([key,value])=><div key={key}><span>{names[key]??key.replaceAll('_',' ')}</span><strong>{fmt(value)} {summaryUnit(key)}</strong></div>)}</div>}
+   {slope&&<div className="terrain-metrics terrain-key-metrics">{[
+     ['Mean slope',fmt(slope.mean_slope_deg)+'°'],['Maximum slope',fmt(slope.maximum_slope_deg)+'°'],
+     ['Mean elevation',fmt(slope.elevation_mean_m)+' m'],['Relief',fmt(slope.elevation_relief_m)+' m'],
+     ['Minimum elevation',fmt(slope.elevation_min_m)+' m'],['Maximum elevation',fmt(slope.elevation_max_m)+' m'],
+     ['Aspect',slope.mean_aspect_deg===null?'Flat':fmt(slope.mean_aspect_deg)+'°'],['Valid cells',fmt(slope.valid_pixels)]
+   ].map(([name,value])=><div key={name}><span>{name}</span><strong>{value}</strong></div>)}</div>}
+   {profile&&<div className="terrain-metrics terrain-key-metrics"><div><span>Length</span><strong>{fmt(profile.length_m)} m</strong></div><div><span>Samples</span><strong>{fmt(profile.samples.length)}</strong></div></div>}
+   <button type="button" className="terrain-review-button" onClick={()=>{setResultTab('overview');setFigureView('analysis');setExpanded(true);}}>Review</button>
    {resultActions}
  </section>:null;
  const reviewContent=<div className="terrain-monitor-content">

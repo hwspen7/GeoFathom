@@ -2,7 +2,7 @@
 import {afterEach,expect,it,vi} from 'vitest';
 import {cleanup,fireEvent,render,screen,within} from '@testing-library/react';
 import type {ComponentProps} from 'react';
-import TerrainWorkbench from './TerrainWorkbench';
+import TerrainWorkbench,{TerrainResultPicker} from './TerrainWorkbench';
 import type {PersistedTerrainResult} from './terrainResultStore';
 
 const store=vi.hoisted(()=>({loadTerrainResults:vi.fn()}));
@@ -40,7 +40,7 @@ it('retains a selected scientific export outside the hidden Terrain module',asyn
   const view=render(<div><TerrainWorkbench {...props}/></div>);
   // A single restored run is selected automatically; a selector is unnecessary.
   await within(exportTarget).findByRole('button',{name:'Terrain result JSON'});
-  expect(screen.queryByRole('combobox',{name:'Choose terrain result'})).toBeNull();
+  expect(screen.queryByRole('button',{name:'Choose terrain result'})).toBeNull();
   // This is the actual App transition: Terrain remains mounted but hidden
   // while its export target belongs to the independently visible Export page.
   view.rerender(<div hidden><TerrainWorkbench {...props} active={false}/></div>);
@@ -50,4 +50,21 @@ it('retains a selected scientific export outside the hidden Terrain module',asyn
   expect(urls).toHaveBeenCalledWith(expect.any(Blob));
   expect(names).toEqual(['terrain-elevation.json']);
  }finally{host.remove();}
+});
+
+
+it('pages terrain history eight at a time and selects older results',()=>{
+ const records=Array.from({length:19},(_,i)=>({id:'run-'+i,title:'Result '+i,createdAt:i*1000})) as PersistedTerrainResult[];
+ const select=vi.fn();
+ render(<TerrainResultPicker records={records} selectedId="run-18" onSelect={select}/>);
+ fireEvent.click(screen.getByRole('button',{name:'Choose terrain result'}));
+ const menu=within(screen.getByRole('group',{name:'Terrain result history'}));
+ expect(menu.getAllByRole('button',{name:/^Result /})).toHaveLength(8);
+ fireEvent.click(menu.getByRole('button',{name:'Next result page'}));
+ expect(menu.getAllByRole('button',{name:/^Result /})).toHaveLength(8);
+ fireEvent.click(menu.getByRole('button',{name:'Next result page'}));
+ expect(menu.getAllByRole('button',{name:/^Result /})).toHaveLength(3);
+ fireEvent.click(menu.getByRole('button',{name:/^Result 0 ·/}));
+ expect(select).toHaveBeenCalledWith('run-0');
+ expect(screen.queryByRole('group',{name:'Terrain result history'})).toBeNull();
 });

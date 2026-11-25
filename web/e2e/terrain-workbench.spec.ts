@@ -396,7 +396,7 @@ with tempfile.TemporaryDirectory() as directory:
  await page.getByRole('button',{name:'Browse terrain tools',exact:true}).click();
  await page.getByLabel('Terrain tools',{exact:true}).getByRole('button',{name:'Cross sections',exact:true}).click();
  await page.getByRole('button',{name:'Run terrain operation'}).click();
- await expect(page.getByLabel('Choose terrain result').locator('option:checked')).toContainText('Cross sections');
+ await expect(page.getByRole('button',{name:'Choose terrain result',exact:true})).toContainText('Cross sections');
  await visual();
  await expect(page.getByRole('button',{name:'All sections CSV'})).toBeVisible();
  await closeReview();
@@ -410,21 +410,29 @@ with tempfile.TemporaryDirectory() as directory:
  await page.reload();
  await closeReview();
  await activateWorkspaceModule(page,'Terrain');
- const resultSelect=page.getByLabel('Choose terrain result');
- await expect(resultSelect.locator('option').filter({hasText:'Cross sections'})).toHaveCount(1);
- await expect(resultSelect.locator('option').filter({hasText:'Slope map'})).toHaveCount(1);
- await expect(resultSelect).not.toHaveValue('');
+ const resultSelect=page.getByRole('button',{name:'Choose terrain result',exact:true});
+ await expect(resultSelect).toBeVisible();
+ const pickHistory=async(title:string,choose=true)=>{
+   await resultSelect.click();
+   const menu=page.getByRole('group',{name:'Terrain result history'});
+   const first=menu.getByRole('button',{name:'Previous result page'});
+   while(await first.count()&&await first.isEnabled())await first.click();
+   const item=menu.getByRole('button',{name:new RegExp('^'+title+' · ')});
+   const next=menu.getByRole('button',{name:'Next result page'});
+   while(!await item.count()&&await next.count()&&await next.isEnabled())await next.click();
+   const found=await item.count()>0;
+   if(found&&choose)await item.first().click();else await resultSelect.press('Escape');
+   return found;
+ };
  await expect(page.getByLabel('Results monitor').getByLabel('Terrain results').getByRole('heading')).not.toBeEmpty();
  await expect(page.getByLabel('Results monitor').getByRole('tablist')).toHaveCount(0);
  await expect(map).toHaveAttribute('data-terrain-raster-count','0');
- const crossId=await resultSelect.locator('option').filter({hasText:'Cross sections'}).getAttribute('value');
  await closeReview();
- await resultSelect.selectOption(crossId!);
+ expect(await pickHistory('Cross sections')).toBe(true);
  await visual();
  await expect(page.getByRole('button',{name:'All sections CSV'})).toBeVisible();
- const slopeId=await resultSelect.locator('option').filter({hasText:'Slope map'}).getAttribute('value');
  await closeReview();
- await resultSelect.selectOption(slopeId!);
+ expect(await pickHistory('Slope map')).toBe(true);
  await visual();
  await expect(page.getByAltText('Derived terrain raster')).toBeVisible();
  await outputs();
@@ -441,13 +449,13 @@ with tempfile.TemporaryDirectory() as directory:
   await pages.getByRole('button',{name:'Next',exact:true}).click();
  // Removing a result removes it from IndexedDB as well as React memory.
  await removeSlope.click();
- await expect(resultSelect.locator('option').filter({hasText:'Slope map'})).toHaveCount(0);
  await closeReview();
+ expect(await pickHistory('Slope map',false)).toBe(false);
  await page.reload();
  await closeReview();
  await activateWorkspaceModule(page,'Terrain');
+ expect(await pickHistory('Slope map',false)).toBe(false);
  await outputs();
- await expect(page.getByLabel('Choose terrain result').locator('option').filter({hasText:'Slope map'})).toHaveCount(0);
  // Results from one project must never be visible in a different project.
  const another=await page.request.post(API+'/projects',{data:{name:'Independent terrain project '+Date.now()}});
  expect(another.status()).toBe(201);

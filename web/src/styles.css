@@ -2386,3 +2386,23 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .terrain-review-export select{min-width:0;max-width:55%;flex:1;border:1px solid #cbd8e1;border-radius:4px;padding:6px;color:#294b60;background:#fff}
 .terrain-review-export button{flex:none}
 .terrain-result-dialog .terrain-review-error{padding:0 18px 6px;color:#ab3434}
+
+
+/* Eight history entries per popup page; opening the picker does not reflow the dock. */
+.desktop-gis .gis-results-monitor .terrain-summary-monitor{position:relative;overflow:visible}
+.terrain-history-picker{position:relative;flex:none;min-width:0;z-index:4}
+.terrain-history-picker .terrain-history-trigger{box-sizing:border-box;display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;min-height:35px;text-align:left;background:#f7fafc;border:1px solid #d1dfe8;border-radius:5px;color:#294b60;font:600 11px/1.4 'Segoe UI',system-ui,sans-serif;padding:6px 9px}
+.terrain-history-trigger span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.terrain-history-trigger span:last-child{flex:none}
+.terrain-history-menu{position:absolute;left:0;right:0;top:calc(100% + 4px);background:#fff;border:1px solid #cbdce7;border-radius:5px;box-shadow:0 8px 20px #254d6826;padding:4px;z-index:5}
+.terrain-history-options{display:grid;grid-template-rows:repeat(8,28px);gap:1px}
+.terrain-history-options>button{min-width:0;text-align:left;white-space:nowrap;text-overflow:ellipsis;overflow:hidden;border:0!important;border-radius:3px!important;background:transparent;color:#365b75;font-size:11px;padding:4px 7px}
+.terrain-history-options>button:hover,.terrain-history-options>button[aria-pressed=true]{background:#e9f3f9;color:#175f8a}
+.terrain-history-pagination{display:flex;align-items:center;justify-content:space-between;padding-top:4px;border-top:1px solid #e1e9ee;font-size:11px;color:#657d8f}
+.terrain-history-pagination button{display:grid;place-items:center;padding:3px 8px}
+.terrain-history-pagination button:disabled{opacity:.4}
+.desktop-gis .gis-results-monitor .terrain-summary-monitor .terrain-key-metrics{box-sizing:border-box;border:0;background:transparent;padding:0;margin:0;gap:5px;grid-template-columns:repeat(2,minmax(0,1fr))}
+.desktop-gis .gis-results-monitor .terrain-summary-monitor .terrain-key-metrics>div{padding:7px 8px;gap:3px;border-radius:5px}
+.desktop-gis .gis-results-monitor .terrain-summary-monitor .terrain-key-metrics strong{font-size:16px;font-variant-numeric:tabular-nums}
+.desktop-gis .gis-results-monitor .terrain-summary-monitor>.terrain-review-button{box-sizing:border-box;display:block;width:100%;min-height:32px;flex:none;background:#eaf3f8;border:1px solid #a9c5d7;color:#245b7d;font-weight:650;text-align:center;border-radius:4px;margin:1px 0 0}
+.desktop-gis .gis-results-monitor .terrain-summary-monitor>.terrain-review-button:hover{background:#dcecf6}
