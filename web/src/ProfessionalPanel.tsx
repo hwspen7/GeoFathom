@@ -187,7 +187,7 @@ export default function ProfessionalPanel({
           <button disabled={busy||!projectId} type="submit" aria-label="Filter rows" title="Filter attribute rows"><Search size={12}/> Filter</button></div>
         </form>
         <form className="professional-form" onSubmit={e=>void bulkEdit(e)}>
-          <div className="gis-edit-header"><strong>Edit · {selection.length} selected</strong><button type="submit" disabled={busy||!selection.length} aria-label="Save properties & revisions" title="Save properties and revisions">Save</button></div>
+          <div className="gis-edit-header"><h3 className="gis-edit-heading"><TableProperties size={13} aria-hidden="true"/> Edit <small>· {selection.length} selected</small></h3><button type="submit" disabled={busy||!selection.length} aria-label="Save properties & revisions" title="Save properties and revisions">Save</button></div>
           <div className="area-fields">
             <input aria-label="Attribute property name" placeholder="Property name" maxLength={64}
             value={editField} onChange={e=>setEditField(e.target.value)}/>

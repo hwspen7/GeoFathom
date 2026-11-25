@@ -167,7 +167,7 @@ export default function SurveyTools({
       {toolbarTarget?createPortal(toolbar,toolbarTarget):toolbar}
       {/* Keep high-frequency survey controls visible, like GIS tools. */}
       <section className="survey-flat-group" aria-label="Vertex editing options">
-      <h3 className="survey-flat-heading" title="Drag vertices to reshape, midpoints to insert, or right-click a vertex to remove it.">Vertices</h3>
+      <h3 className="survey-flat-heading" title="Drag vertices to reshape, midpoints to insert, or right-click a vertex to remove it."><Pentagon size={13} aria-hidden="true"/> Vertices</h3>
       <label className="linked-vertex-toggle">
         <input type="checkbox" checked={linked} onChange={e=>onLinked(e.target.checked)} />
         <span title="Preview neighboring feature edits">Linked/shared vertices</span>

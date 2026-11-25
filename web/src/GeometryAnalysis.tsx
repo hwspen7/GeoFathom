@@ -1,4 +1,5 @@
 import {useState,useEffect,useRef} from 'react';
+import {Shapes} from 'lucide-react';
 import {bufferGeometry,compareAreas,applyOverlay,type Measurement} from './api';
 export interface AnalysisFeature {id:string;name:string;geometry:GeoJSON.Geometry}
 export default function GeometryAnalysis({geometry,selectedId,features,connected,onResult}:{geometry:GeoJSON.Geometry|null;selectedId:string|null;
@@ -36,7 +37,7 @@ export default function GeometryAnalysis({geometry,selectedId,features,connected
  return <div className="professional-panel geometry-analysis">
    {!connected&&<small>Reconnect API to run spatial analysis.</small>}
    <section className="analysis-tool-group" aria-label="Geometry processing">
-     <h3 className="analysis-tool-heading">Geometry</h3>
+     <h3 className="analysis-tool-heading"><Shapes size={13} aria-hidden="true"/> Geometry</h3>
      <div className="professional-form">
      <div className="analysis-inline"><label className="analysis-inline-label">Buffer (m)<input aria-label="Buffer distance" type="number" min=".01" step="any" value={distance} onChange={e=>setDistance(e.target.value)}/></label>
      <button disabled={!connected||!geometry||busy} onClick={()=>void run('buffer')}>Create buffer</button></div>

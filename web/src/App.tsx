@@ -142,9 +142,21 @@ export default function App() {
   const [projectActionsTarget,setProjectActionsTarget]=useState<HTMLDivElement|null>(null);
   const [terrainExportTarget,setTerrainExportTarget]=useState<HTMLDivElement|null>(null);
   const [objectTreeTarget,setObjectTreeTarget]=useState<HTMLDivElement|null>(null);
-  const objectCapacity=()=>Math.max(1,Math.min(6,Math.floor((window.innerHeight-650)/28)));
-  const [gisObjectCapacity,setGisObjectCapacity]=useState(objectCapacity);
-  useEffect(()=>{const resize=()=>setGisObjectCapacity(objectCapacity());window.addEventListener('resize',resize);return()=>window.removeEventListener('resize',resize);},[]);
+  // Size the shared object browser against the actual dock, not the browser chrome
+  // or the active module. Reserve enough height for the largest flat tool form.
+  const operationsDock=useRef<HTMLElement|null>(null);
+  const [dockHeight,setDockHeight]=useState(()=>Math.max(0,window.innerHeight-125));
+  const gisObjectCapacity=Math.max(1,Math.min(6,Math.floor((dockHeight-540)/28)));
+  useEffect(()=>{
+    const dock=operationsDock.current;if(!dock)return;
+    const measure=()=>setDockHeight(Math.floor(dock.clientHeight));
+    measure();
+    // Support both browser resize events and changes to workspace geometry.
+    window.addEventListener('resize',measure);
+    const observer=typeof ResizeObserver!=='undefined'?new ResizeObserver(measure):null;
+    observer?.observe(dock);
+    return ()=>{window.removeEventListener('resize',measure);observer?.disconnect();};
+  },[]);
   const [shortcutHelp,setShortcutHelp]=useState(false);
   const [commandOpen,setCommandOpen]=useState(false);
   const [contextMenu,setContextMenu]=useState<{x:number;y:number}|null>(null);
@@ -1791,12 +1803,13 @@ export default function App() {
         </div>
 
         </main>
-        <aside className="gis-inspector gis-operations" data-active-module={activeTool}
+        <aside ref={operationsDock} className="gis-inspector gis-operations" data-active-module={activeTool}
+          data-dock-density={dockHeight<650?'compact':'regular'}
           aria-label="Operations">
           <div className={'sidebar-scroll'+(['tools-services','tools-export'].includes(activeTool)?' data-fixed-operations':'')}
             tabIndex={0} aria-label="Operations scrolling region">
           <section className="workspace-objects" hidden={['tools-services','tools-export'].includes(activeTool)}>
-            <h3 className="gis-static-heading">Objects</h3>
+            <h3 className="gis-static-heading"><Layers3 size={13} aria-hidden="true"/> Objects</h3>
             <div ref={setObjectTreeTarget}/>
           </section>
           <div className="workspace-module-content">

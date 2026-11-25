@@ -90,7 +90,7 @@ export default function SpatialToolsPanel(p:Props){
     <section className="analysis-tool-group" aria-label="Select by location">
       <h3 className="analysis-tool-heading"><MousePointer2 size={13}/> Selection <small>{p.selectedIds.length} selected</small></h3>
       <div className="professional-form">
-        <div className="area-fields">
+        <div className="area-fields analysis-selection-fields">
           <select aria-label="Selection area mode" value={selectionSource}
             onChange={e=>setSelectionSource(e.target.value as typeof selectionSource)}>
             <option value="box">Rectangle</option>
@@ -104,17 +104,16 @@ export default function SpatialToolsPanel(p:Props){
             <option value="touches">Touches</option>
             <option value="crosses">Crosses</option>
           </select>
-        </div>
-        <div className="analysis-inline">{selectionSource==='box'?<button aria-label="Draw selection rectangle"
-          disabled={busy||!p.projectId} onClick={()=>{
+          <button aria-label="Draw selection rectangle" title={p.boxMode?'Drag on map to select area':'Draw selection rectangle'}
+          disabled={busy||!p.projectId||selectionSource!=='box'} onClick={()=>{
             p.onBoxMode(!p.boxMode);if(!p.boxMode)p.onBox(null);
-          }} className={p.boxMode?'active':''}><Square size={14}/>
-          {p.boxMode?'Drag on map':'Draw rectangle'}</button>:null}
-        <label className="linked-vertex-toggle" title="Only select features on visible layers">
-          <input aria-label="Only visible layers" type="checkbox" checked={visible}
-            onChange={e=>setVisible(e.target.checked)}/> Visible only
-        </label></div>
-        <div className="survey-action-bar">
+          }} className={p.boxMode?'active':''} aria-pressed={p.boxMode}><Square size={14}/></button>
+        </div>
+        <div className="analysis-selection-actions">
+          <label className="linked-vertex-toggle" title="Only select features on visible layers">
+            <input aria-label="Only visible layers" type="checkbox" checked={visible}
+              onChange={e=>setVisible(e.target.checked)}/> Visible
+          </label>
           <button aria-label="Select spatial matches" disabled={!p.projectId||busy||!selectedGeometry}
             onClick={()=>void execute(select)}>Select matches</button>
           <button disabled={busy||!p.selectedIds.length} onClick={()=>{
@@ -136,12 +135,24 @@ export default function SpatialToolsPanel(p:Props){
       </div>
     </section>
     <section className="analysis-tool-group" aria-label="PDF print layout">
-      <h3 className="analysis-tool-heading"><Download size={13}/> PDF layout</h3>
-      <form className="professional-form" onSubmit={event=>{
+      <form className="professional-form analysis-print-form" onSubmit={event=>{
         event.preventDefault();void execute(print);
       }}>
-        <input aria-label="PDF map title" placeholder="Map title" value={title} maxLength={120}
+        <div className="analysis-print-heading">
+          <h3 className="analysis-tool-heading"><Download size={13}/> PDF layout</h3>
+          <label className="linked-vertex-toggle" title="Include coordinate grid">
+            <input aria-label="PDF include grid" type="checkbox" checked={grid} onChange={e=>setGrid(e.target.checked)}/> Grid
+          </label>
+          <label className="linked-vertex-toggle" title="Include layer legend">
+            <input aria-label="PDF include legend" type="checkbox" checked={legend} onChange={e=>setLegend(e.target.checked)}/> Legend
+          </label>
+        </div>
+        <div className="analysis-print-title">
+          <input aria-label="PDF map title" placeholder="Map title" value={title} maxLength={120}
             onChange={e=>setTitle(e.target.value)}/>
+          <button aria-label="Export vector PDF" disabled={!p.projectId||busy||!title.trim()}
+            type="submit" title="Export vector PDF with scale, north arrow and selected layout"><Download size={12}/> Export</button>
+        </div>
         <div className="area-fields analysis-print-fields">
           <label title="Paper size">
             <select aria-label="PDF paper" value={paper}
@@ -165,16 +176,6 @@ export default function SpatialToolsPanel(p:Props){
             </select>
           </label>
         </div>
-        <div className="analysis-inline analysis-print-actions"><label className="linked-vertex-toggle">
-          <input aria-label="PDF include grid" type="checkbox" checked={grid}
-            onChange={e=>setGrid(e.target.checked)}/> Grid
-        </label>
-        <label className="linked-vertex-toggle">
-          <input aria-label="PDF include legend" type="checkbox" checked={legend}
-            onChange={e=>setLegend(e.target.checked)}/> Legend
-        </label>
-        <button aria-label="Export vector PDF" disabled={!p.projectId||busy||!title.trim()}
-          type="submit" title="Export vector PDF with scale, north arrow and selected layout"><Download size={12}/> Export</button></div>
       </form>
     </section>
     {notice&&<p className="project-info">{notice}</p>}

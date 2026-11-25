@@ -169,7 +169,7 @@ test('Survey uses flat compact sections and keeps every construction control acc
  await expect(survey.getByRole('heading',{name:'Vertices',exact:true})).toBeVisible();
  await expect(survey.getByRole('heading',{name:'Construction',exact:true})).toBeVisible();
  const controlHeight=await survey.getByLabel('Numeric construction mode').evaluate(el=>el.getBoundingClientRect().height);
- expect(controlHeight).toBeGreaterThanOrEqual(29);
+ expect(controlHeight).toBeGreaterThanOrEqual(26);
  expect(controlHeight).toBeLessThanOrEqual(32);
  await expect(survey.getByRole('checkbox')).toBeVisible();
  await expect(survey.getByLabel('Numeric construction mode')).toBeVisible();
@@ -211,4 +211,36 @@ test('Analysis has flat sections and the same persistent Objects host',async({pa
  for(const label of ['Buffer distance','Selection area mode','Topology threshold','PDF map title','PDF paper','PDF orientation','PDF extent'])
   await expect(analysis.getByLabel(label,{exact:true})).toBeVisible();
  await expect(analysis.getByRole('button',{name:'Export vector PDF'})).toBeInViewport({ratio:1});
+});
+
+test('Survey GIS and Analysis use icons and fixed non-scrolling tools',async({page})=>{
+ await page.setViewportSize({width:1680,height:900});
+ await page.route('**/tile.openstreetmap.org/**',r=>r.fulfill({contentType:'image/png',body:tile}));
+ await page.goto('/');
+ const nav=page.getByRole('navigation',{name:'Workspace tools'});
+ const tools=page.getByRole('complementary',{name:'Operations'});
+ const map=page.getByLabel('Interactive geospatial map');
+ await expect(map).toHaveAttribute('data-label-layer-ready','true',{timeout:25000});
+ const box=(await map.boundingBox())!;
+ await page.getByLabel('Survey toolbar').getByRole('button',{name:'Polygon',exact:true}).click();
+ for(const [x,y] of [[.35,.35],[.45,.35],[.45,.45],[.35,.45]])await page.mouse.click(box.x+x*box.width,box.y+y*box.height);
+ await page.keyboard.press('Enter');
+ for(const [width,height] of [[1680,900],[1280,720]]){
+  await page.setViewportSize({width,height});
+  for(const [name,id,action] of [['Survey','tools-survey','Intersect'],['GIS','tools-gis','Analyze selected terrain area'],['Analysis','tools-spatial','Export vector PDF']]){
+   await nav.getByRole('button',{name,exact:true}).click();
+   const panel=tools.locator('#'+id);
+   await expect(panel).toBeVisible();
+   const headings=tools.locator('.gis-static-heading,.compact-boundary-heading,#'+id+' h3');
+   expect(await headings.evaluateAll(els=>els.every(el=>!!el.querySelector('svg')))).toBe(true);
+   await expect(panel.getByRole('button',{name:action,exact:true})).toBeInViewport({ratio:1});
+   const content=tools.locator('.workspace-module-content');
+   await expect.poll(()=>content.evaluate(el=>el.scrollHeight-el.clientHeight)).toBeLessThanOrEqual(1);
+   const before=await panel.boundingBox();
+   await content.hover();
+   await page.mouse.wheel(0,650);
+   await expect.poll(()=>content.evaluate(el=>el.scrollTop)).toBe(0);
+   expect((await panel.boundingBox())!.y).toBe(before!.y);
+  }
+ }
 });

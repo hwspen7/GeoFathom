@@ -2125,3 +2125,41 @@ button:disabled { opacity: .45; cursor: not-allowed; }
  .analysis-tool-group .professional-form{gap:4px}
  .analysis-tool-group button,.analysis-tool-group input:not([type=checkbox]),.analysis-tool-group select{height:28px;min-height:28px}
 }
+
+/* Shared heading icon rhythm. The three everyday editing modules are fixed
+   workspaces, not scrolling documents. Density follows actual dock height. */
+.desktop-gis .gis-operations .workspace-objects .gis-static-heading,
+.compact-boundary-heading,.gis-edit-heading{display:flex;align-items:center;gap:6px}
+.compact-boundary-heading,.gis-edit-heading{margin:0;font-size:12px;line-height:17px;font-weight:650;color:#3c5b70}
+.gis-edit-heading small{font-weight:500;font-size:10px}
+:is(.gis-static-heading,.compact-boundary-heading,.gis-edit-heading,.survey-flat-heading,.gis-tool-heading,.analysis-tool-heading)>svg{width:13px;height:13px;flex:0 0 13px;color:#526f85;stroke-width:1.7}
+.desktop-gis .gis-operations:is([data-active-module="tools-survey"],[data-active-module="tools-gis"],[data-active-module="tools-spatial"]) .workspace-module-content{overflow:clip;overscroll-behavior:none;overflow-anchor:none}
+.desktop-gis .gis-operations:is([data-active-module="tools-survey"],[data-active-module="tools-gis"],[data-active-module="tools-spatial"])>.sidebar-scroll{overflow:clip!important;overflow-anchor:none}
+.analysis-tool-group .professional-form .analysis-selection-fields{grid-template-columns:minmax(0,1fr) minmax(0,1fr) 30px;align-items:center}
+.analysis-selection-fields button{display:grid;place-items:center;padding:0}
+.analysis-selection-fields button.active{background:#e8f2fa;border-color:#91b9d7}
+.analysis-selection-actions{display:grid;grid-template-columns:auto minmax(0,1fr) minmax(0,1fr);align-items:center;gap:5px}
+.analysis-selection-actions button{font-size:10px;white-space:nowrap;padding:3px 4px}
+.analysis-selection-actions .linked-vertex-toggle,.analysis-print-heading .linked-vertex-toggle{gap:4px;font-size:10px;white-space:nowrap;display:flex;align-items:center}
+.analysis-selection-actions .linked-vertex-toggle input,.analysis-print-heading .linked-vertex-toggle input{margin:0;width:13px;height:13px}
+.analysis-print-heading{display:flex;align-items:center;gap:8px;min-height:17px}
+.analysis-print-heading .analysis-tool-heading{margin:0 auto 0 0;white-space:nowrap}
+.analysis-print-title{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px}
+.analysis-print-title input{width:100%;min-width:0}
+.analysis-print-title button{white-space:nowrap}
+.analysis-tool-group .analysis-print-form{gap:6px}
+.desktop-gis [data-active-module="tools-spatial"] .analysis-tool-group:last-child{border-bottom:0}
+.desktop-gis .gis-operations[data-dock-density="compact"] :is(.survey-flat-group,.gis-tool-group,.analysis-tool-group){padding:5px 0}
+.desktop-gis .gis-operations[data-dock-density="compact"] :is(.survey-flat-heading,.gis-tool-heading,.analysis-tool-heading){margin-bottom:4px}
+.desktop-gis .gis-operations[data-dock-density="compact"] .analysis-print-heading .analysis-tool-heading{margin-bottom:0}
+.desktop-gis .gis-operations[data-dock-density="compact"] :is(.survey-numeric,.survey-overlay,.professional-form,.analysis-print-form){gap:4px}
+.desktop-gis .gis-operations[data-dock-density="compact"] :is(.survey-flat-group,.gis-tool-group,.analysis-tool-group) :is(input:not([type=checkbox]):not([type=file]),select,button){height:26px;min-height:26px;padding-top:2px!important;padding-bottom:2px!important}
+.desktop-gis .gis-operations[data-dock-density="compact"] .gis-file-row .raster-upload{height:26px;min-height:26px;padding-top:2px;padding-bottom:2px}
+.desktop-gis .gis-operations[data-dock-density="compact"] .gis-edit-header{margin-top:2px}
+.desktop-gis .gis-operations[data-dock-density="compact"] .compact-boundary{gap:3px}
+.desktop-gis .gis-operations[data-dock-density="compact"] .compact-boundary-head button,.desktop-gis .gis-operations[data-dock-density="compact"] .compact-boundary-actions button{min-height:22px;padding:2px 4px}
+
+/* Preserve access on very short windows by reducing only the tools, never
+   moving the global object list or introducing an invisible scroll container. */
+.desktop-gis .gis-operations:is([data-active-module="tools-survey"],[data-active-module="tools-gis"],[data-active-module="tools-spatial"])[data-dock-density="compact"] .workspace-module-content>.panel-section:not([hidden]){padding-top:0}
+.desktop-gis .gis-operations .analysis-selection-actions button{min-width:0}
