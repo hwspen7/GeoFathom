@@ -13,19 +13,35 @@ from geometry.measure import GeometryError
 from .engine import analyze_area,elevation_profile
 from .cancellation import TerrainCancelled
 from .catalog import terrain_catalog
+from .compute_resources import task_resources, ResourceBusy
+from dataclasses import asdict
 
 
-async def run_cancelable(request, fn, *args):
+async def run_cancelable(request, fn, *args, budgeted=False):
     # Do not abandon a worker on browser disconnect: request cancellation
     # is observed at the algorithm checkpoints, and the worker is drained.
     cancel=Event()
-    task=asyncio.create_task(run_in_threadpool(fn,*args,cancel=cancel))
+    def execute():
+        if not budgeted:
+            return fn(*args,cancel=cancel)
+        with task_resources(cancel) as limits:
+            if limits.hard_memory:
+                from .isolated_worker import isolated_call
+                result=isolated_call(fn,args,limits,cancel)
+            else:
+                result=fn(*args,cancel=cancel)
+            if isinstance(result,dict):
+                result["compute_resources"]=asdict(limits)
+            return result
+    task=asyncio.create_task(run_in_threadpool(execute))
     try:
         while not task.done():
             await asyncio.wait({task},timeout=.1)
             if not task.done() and await request.is_disconnected():
                 cancel.set()
         return await task
+    except ResourceBusy as error:
+        raise HTTPException(status_code=409,detail=str(error)) from error
     except TerrainCancelled as error:
         raise HTTPException(status_code=499,detail=str(error)) from error
     finally:
@@ -61,7 +77,7 @@ def raster(identifier):
 async def area(request:Request,body:TerrainInput)->dict:
     try:
         return await run_cancelable(request,analyze_area,raster(body.image_id),
-                                       body.geometry,body.vertical_unit,body.gradient_method)
+                                       body.geometry,body.vertical_unit,body.gradient_method,budgeted=True)
     except (GeometryError,RasterError,ValueError) as error:
         raise HTTPException(status_code=422,detail=str(error)) from error
 
@@ -97,7 +113,7 @@ async def prepare_dem_asset(request:Request,body:DEMPrepareInput,
     try:
         paths=[raster(identifier) for identifier in body.image_ids]
         return await run_cancelable(request,prepare_dem,paths,body.mode,
-                                    body.geometry,body.resolution_m,body.sampling)
+                                    body.geometry,body.resolution_m,body.sampling,budgeted=True)
     except (GeometryError,RasterError,ValueError) as error:
         raise HTTPException(status_code=422,detail=str(error)) from error
 
@@ -116,7 +132,7 @@ class AdvancedTerrainInput(BaseModel):
     min_elevation:float=Field(default=-12000,ge=-12000,le=12000)
     max_elevation:float=Field(default=12000,ge=-12000,le=12000)
     max_tri:float=Field(default=100,ge=0,le=100000)
-    stream_cells:int=Field(default=100,ge=1,le=1000000)
+    stream_cells:int=Field(default=100,ge=1,le=8000000)
     azimuth:float=Field(default=315,ge=0,le=360)
     altitude:float=Field(default=45,ge=0,le=90)
     section_spacing:float=Field(default=50,ge=1,le=10000)
@@ -131,7 +147,7 @@ class AdvancedTerrainInput(BaseModel):
     slope_classes:Literal['standard','detailed','broad']='standard'
     mfd_exponent:float=Field(default=1.1,ge=0.5,le=8.0)
     neighborhood_radius:int=Field(default=1,ge=1,le=4)
-    max_distance_m:float=Field(default=0,ge=0,le=10000)
+    max_distance_m:float=Field(default=0,ge=0,le=100000)
     view_azimuth:float=Field(default=0,ge=0,le=360)
     view_width:float=Field(default=360,gt=0,le=360)
     route_model:Literal['surface','distance','gentle']='surface'
@@ -179,7 +195,7 @@ async def mesh_tile(request:Request,body:MeshTileInput):
     from .mesh_tiles import stream_mesh_tile
     try:
         return await run_cancelable(request,stream_mesh_tile,raster(body.image_id),
-            body.geometry,body.level,body.tile_row,body.tile_col,body.tile_cells)
+            body.geometry,body.level,body.tile_row,body.tile_col,body.tile_cells,budgeted=True)
     except (GeometryError,RasterError,ValueError,OverflowError) as error:
         raise HTTPException(status_code=422,detail=str(error)) from error
 
@@ -204,6 +220,30 @@ async def advanced(request:Request,body:AdvancedTerrainInput):
             raster(body.dsm_image_id) if body.dsm_image_id and body.operation in {"visibility","viewshed_multi"} else None,
             body.mesh_lod,body.suitability_model,body.suitability_weights,
             raster(body.external_inflow_image_id) if body.external_inflow_image_id else None,
-            body.design_curvature_east,body.design_curvature_cross,body.design_curvature_north)
+            body.design_curvature_east,body.design_curvature_cross,body.design_curvature_north,budgeted=True)
     except (GeometryError,RasterError,ValueError,OverflowError) as error:
         raise HTTPException(status_code=422,detail=str(error)) from error
+
+@router.get("/products")
+def list_terrain_products():
+    from .products import list_products
+    return list_products()
+
+
+@router.get("/products/{identifier}")
+def download_product(identifier: str):
+    from fastapi.responses import FileResponse
+    from .products import product_path
+    try:
+        return FileResponse(product_path(identifier),media_type="image/tiff",filename="terrain-"+identifier[:12]+".tif")
+    except RasterError as error:raise HTTPException(422,detail=str(error)) from error
+    except FileNotFoundError as error:raise HTTPException(404,detail=str(error)) from error
+
+
+@router.delete("/products/{identifier}")
+def delete_product(identifier: str):
+    from .products import remove
+    try:remove(identifier)
+    except RasterError as error:raise HTTPException(422,detail=str(error)) from error
+    except FileNotFoundError as error:raise HTTPException(404,detail=str(error)) from error
+    return {"deleted":True}

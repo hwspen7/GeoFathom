@@ -31,6 +31,7 @@ from terrain.routes import router as terrain_router
 from terrain.research_routes import router as terrain_research_router
 from terrain.figure_routes import router as terrain_figure_router
 from terrain.studio_routes import router as terrain_studio_router
+from terrain.resource_routes import router as terrain_resource_router
 from vision.routes import router as vision_router
 from geometry.routes import router as geometry_router
 from geometry.edit_routes import router as edit_router
@@ -83,6 +84,7 @@ app.include_router(terrain_router)
 app.include_router(terrain_research_router)
 app.include_router(terrain_figure_router)
 app.include_router(terrain_studio_router)
+app.include_router(terrain_resource_router)
 app.include_router(vision_router)
 
 

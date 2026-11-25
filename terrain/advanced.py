@@ -16,6 +16,7 @@ from .vertical import vertical_datum
 from .professional import SURFACES, surface, d8_directions, D8, raster_product
 from .catalog import ADVANCED_OPERATIONS
 from .hydrology import condition_dem
+from .compute_resources import current_limits, active_limits
 
 def _window(path, geometry, maximum, max_cells=1_000_000, source_kind="dem"):
     measure_geometry(geometry)
@@ -202,8 +203,9 @@ def _visibility(z,valid,origin,affine,observer_height,target_height,cancel=None,
         raise RasterError("Observer and target heights must be 0–1000 meters.")
     if consider_curvature and not (math.isfinite(refraction_coeff) and 0 <= refraction_coeff <= .5):
         raise RasterError("Atmospheric refraction coefficient must be between 0 and 0.5.")
-    if max(z.shape[0]*abs(affine.e),z.shape[1]*abs(affine.a))>10000:
-        raise RasterError("Visibility analysis is limited to a 10 km local extent.")
+    limits=current_limits()
+    if max(z.shape[0]*abs(affine.e),z.shape[1]*abs(affine.a))>limits.viewshed_distance_m:
+        raise RasterError(f"Visibility analysis is limited to a {limits.viewshed_distance_m/1000:g} km local extent under the effective compute budget.")
     # Effective-Earth-radius correction lowers ray samples relative to the
     # observer tangent; no correction is written to the source DEM.
     curvature=(1-refraction_coeff)/(2*6371008.8) if consider_curvature else 0.0
@@ -223,8 +225,8 @@ def _visibility(z,valid,origin,affine,observer_height,target_height,cancel=None,
     known[valid&~scope]=True
     rows,cols=np.nonzero(scope)
     distances=np.maximum(np.abs(rows-r0),np.abs(cols-c0))
-    if int(distances.sum())>100_000_000:
-        raise RasterError("Visibility exceeds 100 million ray samples; reduce the area or use a coarser DEM.")
+    if int(distances.sum())>limits.ray_samples:
+        raise RasterError(f"Visibility exceeds {limits.ray_samples/1_000_000:g} million ray samples; reduce the area or use a coarser DEM.")
     order=np.argsort(distances,kind="stable")
     rows,cols,distances=rows[order],cols[order],distances[order]
     edges=np.flatnonzero(np.r_[True,distances[1:]!=distances[:-1],True])
@@ -317,8 +319,9 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
         raise RasterError("MFD exponent must be between 0.5 and 8.")
     if neighborhood_radius not in (1,2,3,4):
         raise RasterError("Neighborhood radius must be 1–4 cells.")
-    if not math.isfinite(max_distance_m) or not 0<=max_distance_m<=10000:
-        raise RasterError("Viewshed range must be 0–10,000 meters.")
+    limits=current_limits()
+    if not math.isfinite(max_distance_m) or not 0<=max_distance_m<=(limits.viewshed_distance_m if operation in {"visibility","viewshed_multi"} else 100000):
+        raise RasterError(f"Viewshed range must be 0–{limits.viewshed_distance_m:,} meters under the effective compute budget.")
     if not math.isfinite(view_azimuth) or not 0<=view_azimuth<=360:
         raise RasterError("Viewshed azimuth must be 0–360 degrees.")
     if not math.isfinite(view_width) or not 0<view_width<=360:
@@ -353,6 +356,14 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
     extended=operation in simple_large
     maximum=4096 if extended else 512 if operation in {"visibility","viewshed_multi"} else 1024
     max_cells=8_000_000 if extended else 262_144 if operation in {"visibility","viewshed_multi"} else 1_000_000
+    if active_limits() is not None:
+        maximum,max_cells=limits.grid(operation)
+    # Breaching still uses a bounded pit search. Enforce its real ceiling
+    # before opening the full raster rather than after allocation.
+    if fill_sinks and depression_method=="breach" and operation in {"flow_direction","flow_accumulation","flow_accumulation_mfd","streams","stream_order","watershed"}:
+        max_cells=min(max_cells,262_144)
+    if operation=="mesh":
+        max_cells=min(max_cells,8_000_000)
     z,valid,covered,affine,crs,boundary,coverage=_window(path,geometry,maximum,max_cells)
     # Read declared vertical datum metadata independently of numerical
     # heights. Missing metadata remains unknown; never invent NAVD88/EGM96.
@@ -550,8 +561,8 @@ def run_terrain(path,geometry,operation,interval=10.,reference=0.,point=None,obs
         total_steps=sum(
             int(np.maximum(np.abs(rows-r),np.abs(cols-c)).sum())
             for r,c in origins)
-        if total_steps>100_000_000:
-            raise RasterError("Multi-observer visibility exceeds 100 million ray samples; reduce the area.")
+        if total_steps>limits.ray_samples:
+            raise RasterError(f"Multi-observer visibility exceeds {limits.ray_samples/1_000_000:g} million ray samples; reduce the area.")
         cached=None
         if optimize_observers:
             from .coverage_exact import exact_maximum_coverage

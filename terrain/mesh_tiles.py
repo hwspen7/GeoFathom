@@ -17,6 +17,7 @@ from geometry.measure import measure_geometry
 from imagery.raster import RasterError
 from .engine import _check_dem
 from .cancellation import checkpoint
+from .compute_resources import active_limits
 
 
 def stream_mesh_tile(path,geometry,level,tile_row,tile_col,tile_cells=32,cancel=None):
@@ -48,9 +49,11 @@ def stream_mesh_tile(path,geometry,level,tile_row,tile_col,tile_cells=32,cancel=
         except rasterio.errors.WindowError as e:
             raise RasterError("Streaming tile geometry is outside the DEM.") from e
         rows,cols=int(window.height),int(window.width)
-        if (not 2<=rows<=4096 or not 2<=cols<=4096 or
-                rows*cols>8_000_000):
-            raise RasterError("Streaming study grid is outside the supported 8M-cell/4096-axis analysis budget.")
+        limits=active_limits()
+        maximum=limits.slope_cells if limits else 8_000_000
+        side=20000 if limits else 4096
+        if not 2<=rows<=side or not 2<=cols<=side or rows*cols>maximum:
+            raise RasterError(f"Streaming study grid exceeds effective {maximum:,}-cell/{side}-axis budget.")
         stride=level*tile_cells
         row_start=tile_row*stride
         col_start=tile_col*stride
@@ -61,6 +64,8 @@ def stream_mesh_tile(path,geometry,level,tile_row,tile_col,tile_cells=32,cancel=
         checkpoint(cancel)
         part=Window(int(window.col_off)+col_start,int(window.row_off)+row_start,
                     col_end-col_start+1,row_end-row_start+1)
+        if limits and part.width*part.height*96+128*1024**2>limits.memory_bytes:
+            raise RasterError("Mesh tile exceeds the effective memory budget. Choose a finer LOD.")
         samples=src.read(1,window=part,masked=True).astype(np.float64)
         affine=src.window_transform(part)
         covered=geometry_mask([projected],out_shape=samples.shape,

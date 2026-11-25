@@ -110,6 +110,9 @@ GEOFATHOM_API int gf_cpu_runtime_change(void* runtime,const float* a,
 // Optional CUDA runtime: only exported by the CUDA-enabled library.
 #ifdef GEOFATHOM_NATIVE_CUDA
 extern "C" {
+GEOFATHOM_API int gf_cuda_terrain_memory(int device,std::size_t* out) noexcept;
+GEOFATHOM_API int gf_cuda_terrain_gradient(int device,const float* z,const unsigned char* valid,
+    int w,int h,double dx,double dy,int method,std::size_t budget,float* east,float* south,unsigned char* out) noexcept;
 GEOFATHOM_API void* gf_cuda_runtime_create(std::size_t n,int device) noexcept;
 GEOFATHOM_API void gf_cuda_runtime_destroy(void* g) noexcept;
 GEOFATHOM_API int gf_cuda_device_semantic(int device,const void* input,

@@ -12,6 +12,7 @@ import {
 } from './api';
 import MapCanvas, { type FocusPoint } from './MapCanvas';
 import BoundaryEditor from './BoundaryEditor';
+import ComputingResources from './ComputingResources';
 import {loadDisplay,saveDisplay,areaText,distanceText,type AreaUnit} from './displaySettings';
 import {BASEMAPS,BASEMAP_GROUPS,basemapAvailable,customBasemap,defaultCustom,mapTilerImagery,type BasemapId,type CustomBasemap} from './basemaps';
 import {ScratchHistory} from './scratchHistory';
@@ -1200,6 +1201,7 @@ export default function App() {
             <label>Map contrast <select aria-label="Map contrast" value={display.contrast} onChange={e=>setDisplay(old=>({...old,contrast:e.target.value as typeof display.contrast}))}>
               <option value="auto">Automatic</option><option value="light">Light lines</option><option value="dark">Dark lines</option></select></label>
             <label>Selection fill <input aria-label="Selection fill opacity" type="range" min="0" max=".7" step=".02" value={display.fill} onChange={e=>setDisplay(old=>({...old,fill:Number(e.target.value)}))}/></label>
+            <ComputingResources/>
             <div className="section-heading">Imagery sources</div>
             <form className="professional-form" onSubmit={event=>{event.preventDefault();try{setCustom(mapTilerImagery(mapTilerKey));setTileError('');setMapTilerKey('');setMessage('HD imagery connected. Choose Licensed HD under Map type.');}catch(e){setTileError(String(e));}}}>
               <input type="password" autoComplete="off" aria-label="MapTiler browser API key" placeholder="MapTiler key (licensed)" value={mapTilerKey} onChange={e=>setMapTilerKey(e.target.value)}/>
@@ -2104,7 +2106,7 @@ export default function App() {
 
           <section id="tools-spatial-science" hidden={activeTool!=='tools-spatial-science'} className="panel-section">
             <div className="section-heading"><Layers3 size={16}/><span>Spatial Analysis</span></div>
-            <SpatialSciencePanel key={activeProjectId??'no-project'} active={activeTool==='tools-spatial-science'} resultsTarget={resultsTarget} geometry={preview||drawingMode?null:geometry} connected={Boolean(capabilities)} projectId={activeProjectId} layers={projectWorkspace?.layers??[]} assets={rasterLayers.map(l=>l.asset)} terrainProducts={terrainRasters.map(l=>({name:l.title,data:l.raster.geotiff,unit:l.raster.unit??'',band:1}))} onPreview={features=>{if(projectCurrent()){setSpatialResults(features);setSpatialVisible(true);}}} onRasterPreview={layer=>{if(projectCurrent()){setSpatialRaster(layer);setSpatialVisible(true);}}}/>
+            <SpatialSciencePanel key={activeProjectId??'no-project'} active={activeTool==='tools-spatial-science'} resultsTarget={resultsTarget} geometry={preview||drawingMode?null:geometry} connected={Boolean(capabilities)} projectId={activeProjectId} layers={projectWorkspace?.layers??[]} assets={rasterLayers.map(l=>l.asset)} terrainProducts={terrainRasters.map(l=>({name:l.title,data:l.raster.geotiff,product_id:l.raster.product_id,unit:l.raster.unit??'',band:1}))} onPreview={features=>{if(projectCurrent()){setSpatialResults(features);setSpatialVisible(true);}}} onRasterPreview={layer=>{if(projectCurrent()){setSpatialRaster(layer);setSpatialVisible(true);}}}/>
           </section>
 
           <section id="tools-lidar" hidden={activeTool!=='tools-lidar'} className="panel-section">
@@ -2113,11 +2115,11 @@ export default function App() {
           </section>
           <section id="tools-spacetime" hidden={activeTool!=='tools-spacetime'} className="panel-section">
             <div className="section-heading"><Layers3 size={16}/><span>Spatiotemporal Analysis</span></div>
-            <SpacetimePanel key={activeProjectId??'no-project'} active={activeTool==='tools-spacetime'} connected={Boolean(capabilities)} resultsTarget={resultsTarget} assets={rasterLayers.map(l=>l.asset)} derivedRasters={[...terrainRasters,...(spatialRaster?[spatialRaster]:[]),...(remoteRaster?[remoteRaster]:[])].map(l=>({name:l.title,data:l.raster.geotiff,unit:l.raster.unit??''}))} onPreview={layer=>{if(projectCurrent()){setSpacetimeRaster(layer);setSpacetimeVisible(true);}}}/>
+            <SpacetimePanel key={activeProjectId??'no-project'} active={activeTool==='tools-spacetime'} connected={Boolean(capabilities)} resultsTarget={resultsTarget} assets={rasterLayers.map(l=>l.asset)} derivedRasters={[...terrainRasters,...(spatialRaster?[spatialRaster]:[]),...(remoteRaster?[remoteRaster]:[])].map(l=>({name:l.title,data:l.raster.geotiff,product_id:l.raster.product_id,unit:l.raster.unit??''}))} onPreview={layer=>{if(projectCurrent()){setSpacetimeRaster(layer);setSpacetimeVisible(true);}}}/>
           </section>
           <section id="tools-network-science" hidden={activeTool!=='tools-network-science'} className="panel-section">
             <div className="section-heading"><Layers3 size={16}/><span>Network Analysis</span></div>
-            <NetworkSciencePanel key={activeProjectId??'no-project'} active={activeTool==='tools-network-science'} connected={Boolean(capabilities)} resultsTarget={resultsTarget} projectId={activeProjectId} layers={projectWorkspace?.layers??[]} assets={rasterLayers.map(l=>l.asset)} derivedRasters={[...terrainRasters,...(spatialRaster?[spatialRaster]:[]),...(remoteRaster?[remoteRaster]:[]),...(spacetimeRaster?[spacetimeRaster]:[])].map(l=>({name:l.title,data:l.raster.geotiff}))} onPreview={features=>{if(projectCurrent()){setNetworkResults(features);setNetworkVisible(true);}}}/>
+            <NetworkSciencePanel key={activeProjectId??'no-project'} active={activeTool==='tools-network-science'} connected={Boolean(capabilities)} resultsTarget={resultsTarget} projectId={activeProjectId} layers={projectWorkspace?.layers??[]} assets={rasterLayers.map(l=>l.asset)} derivedRasters={[...terrainRasters,...(spatialRaster?[spatialRaster]:[]),...(remoteRaster?[remoteRaster]:[]),...(spacetimeRaster?[spacetimeRaster]:[])].map(l=>({name:l.title,data:l.raster.geotiff,product_id:l.raster.product_id}))} onPreview={features=>{if(projectCurrent()){setNetworkResults(features);setNetworkVisible(true);}}}/>
           </section>
           <section id="tools-remote-sensing" hidden={activeTool!=='tools-remote-sensing'} className="panel-section">
             <div className="section-heading"><Layers3 size={16}/><span>Remote Sensing</span></div>

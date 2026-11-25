@@ -107,6 +107,25 @@ int main(){
         if(gf_cuda_runtime_stats(gpu,stats)||stats[0]<count||stats[0]>n||stats[2]!=stats[0]*15)return 27;
         if(gf_cuda_runtime_trim(gpu)||gf_cuda_runtime_stats(gpu,stats)||stats[0]||stats[2])return 28;
     }
+    // Physical-device parity for both gradient methods, including NoData halo.
+    constexpr int w=67,h=71;
+    std::vector<float> dem(w*h),east(w*h),south(w*h);
+    std::vector<unsigned char> mask(w*h,1),valid(w*h);
+    for(int r=0;r<h;++r)for(int c=0;c<w;++c)dem[r*w+c]=100.f+3.f*c-2.f*r;
+    mask[20*w+20]=0;
+    std::size_t terrain_memory[2]{};
+    if(gf_cuda_terrain_memory(0,terrain_memory)||!terrain_memory[1])return 29;
+    for(int method=0;method<2;++method){
+        if(gf_cuda_terrain_gradient(0,dem.data(),mask.data(),w,h,10.,20.,method,1024*1024,
+                                    east.data(),south.data(),valid.data()))return 30;
+        for(int r=0;r<h;++r)for(int c=0;c<w;++c){
+            const bool expected=r>0&&c>0&&r<h-1&&c<w-1&&!(std::abs(r-20)<=1&&std::abs(c-20)<=1);
+            int i=r*w+c;if(bool(valid[i])!=expected)return 31;
+            if(expected&&(std::abs(east[i]-.3f)>1e-6f||std::abs(south[i]+.1f)>1e-6f))return 32;
+        }
+    }
+    if(gf_cuda_terrain_gradient(0,dem.data(),mask.data(),w,h,10.,20.,0,1,
+                                east.data(),south.data(),valid.data())!=-2)return 33;
     gf_cuda_runtime_destroy(gpu);
     return 0;
 }

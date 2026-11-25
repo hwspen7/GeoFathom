@@ -13,6 +13,7 @@ from rasterio.transform import array_bounds
 from shapely.geometry import LineString, MultiLineString
 from imagery.raster import RasterError
 from .cancellation import checkpoint
+from .compute_resources import current_limits, active_limits
 
 SURFACES = {"elevation", "slope_map", "aspect_map", "hillshade", "tri", "tpi",
             "curvature", "plan_curvature", "profile_curvature", "flow_direction", "flow_accumulation", "flow_accumulation_mfd", "streams", "stream_order",
@@ -119,19 +120,25 @@ def d8_flow(z, valid, dx, dy, cancel=None):
     order=cells[np.argsort(z.ravel()[cells],kind="stable")[::-1]]
     accum=valid.ravel().astype(np.int64)
     flat=dst.ravel()
-    for i,index in enumerate(order):
-        if i%4096==0:checkpoint(cancel)
-        target=flat[index]
-        if target>=0:accum[target]+=accum[index]
+    from .graph_kernels import accumulate_d8_chunk
+    for i in range(0,len(order),4096):
+        checkpoint(cancel)
+        accumulate_d8_chunk(accum,flat,order[i:i+4096])
     return dst,direction,np.where(valid,accum.reshape(z.shape),np.nan)
 
 def least_cost(z,valid,start,end,dx,dy,max_grade,cancel=None,route_model="surface"):
     if route_model not in {"surface","distance","gentle"}:
         raise RasterError("Unsupported route cost model.")
     """Dijkstra on raster cell centres; no diagonal corner cutting through nodata."""
-    if valid.size>262144:raise RasterError("Route grid exceeds 262,144 cells.")
+    limit=current_limits().least_cost_cells
+    if valid.size>limit:raise RasterError(f"Route grid exceeds {limit:,} cells under the effective compute budget.")
     if not math.isfinite(max_grade) or not 0<max_grade<=90:
         raise RasterError("Route slope limit must be in (0, 90] degrees.")
+    if active_limits() is not None and z.size>=65536:
+        from .graph_kernels import exact_route
+        from imagery.store import imagery_dir
+        scratch=imagery_dir()/".terrain-scratch" if z.size>=262144 else None
+        return exact_route(z,valid,start,end,dx,dy,max_grade,route_model,D8,cancel,scratch)
     h,w=z.shape
     dist=np.full(z.shape,np.inf);dist[start]=0
     prev=np.full(z.shape,-1,dtype=np.int64)
@@ -293,24 +300,44 @@ def raster_product(values,operation,affine,crs,cancel=None,
     legend=[{"label":label,"color":color,"cells":int((classes==i).sum())}
             for i,(label,color) in enumerate(zip(labels,colors))]
     height,width=values.shape
-    with MemoryFile() as memory:
-        with memory.open(driver="GTiff",height=height,width=width,count=1,dtype="float32",
+    def write(dst):
+        from rasterio.windows import Window
+        for top in range(0,height,512):
+            checkpoint(cancel)
+            for left in range(0,width,512):
+                h,w=min(512,height-top),min(512,width-left)
+                dst.write(values[top:top+h,left:left+w].astype(np.float32),1,window=Window(left,top,w,h))
+        # Labels are declared provenance, not an assertion of survey
+        # control or absolute vertical accuracy.
+        datum_tags={
+            "TERRAIN_SOURCE_VERTICAL_DATUM":source_datum or "not_declared",
+        }
+        if operation=="dem_difference":
+            datum_tags["TERRAIN_REFERENCE_VERTICAL_DATUM"]=(
+                reference_datum or "not_declared")
+        dst.update_tags(TERRAIN_OPERATION=operation,
+                        TERRAIN_UNIT=("score_0_to_1" if operation=="suitability" and suitability_model=="weighted" else "Shreve_magnitude" if operation=="stream_order" and stream_order_scheme=="shreve" else RASTER_UNITS[operation]),
+                        TERRAIN_NODATA_POLICY="NaN",
+                        TERRAIN_GRID_BASIS="projected_cell_centers",
+                        **datum_tags)
+
+    product_id=None
+    # Keep the established small-product API; large products never enter
+    # the JSON response as base64. Persist the full exact source grid.
+    if active_limits() is not None and values.size>1_000_000:
+        from .products import temporary_product,publish
+        with temporary_product(values.size) as path:
+            with rasterio.open(path,"w",driver="GTiff",height=height,width=width,count=1,dtype="float32",
+                 crs=crs,transform=affine,nodata=float("nan"),compress="deflate",tiled=True,blockxsize=256,blockysize=256) as dst:
+                write(dst)
+            product_id=publish(path,cancel)
+        tif=""
+    else:
+        with MemoryFile() as memory:
+            with memory.open(driver="GTiff",height=height,width=width,count=1,dtype="float32",
                          crs=crs,transform=affine,nodata=float("nan"),compress="deflate") as dst:
-            dst.write(values.astype(np.float32),1)
-            # Labels are declared provenance, not an assertion of survey
-            # control or absolute vertical accuracy.
-            datum_tags={
-                "TERRAIN_SOURCE_VERTICAL_DATUM":source_datum or "not_declared",
-            }
-            if operation=="dem_difference":
-                datum_tags["TERRAIN_REFERENCE_VERTICAL_DATUM"]=(
-                    reference_datum or "not_declared")
-            dst.update_tags(TERRAIN_OPERATION=operation,
-                            TERRAIN_UNIT=("score_0_to_1" if operation=="suitability" and suitability_model=="weighted" else "Shreve_magnitude" if operation=="stream_order" and stream_order_scheme=="shreve" else RASTER_UNITS[operation]),
-                            TERRAIN_NODATA_POLICY="NaN",
-                            TERRAIN_GRID_BASIS="projected_cell_centers",
-                            **datum_tags)
-        tif=base64.b64encode(memory.read()).decode("ascii")
+                write(dst)
+            tif=base64.b64encode(memory.read()).decode("ascii")
     bounds=array_bounds(height,width,affine)
     target,tw,th=calculate_default_transform(crs,"EPSG:3857",width,height,*bounds)
     factor=max(tw,th)/512
@@ -335,7 +362,7 @@ def raster_product(values,operation,affine,crs,cancel=None,
     xs,ys=transform("EPSG:3857","EPSG:4326",[west,east,east,west],[north,north,south,south])
     checkpoint(cancel)
     return {"png":"data:image/png;base64,"+base64.b64encode(sink.getvalue()).decode("ascii"),
-            "geotiff":tif,"corners":[[x,y] for x,y in zip(xs,ys)],"legend":legend,
+            "geotiff":tif,**({"product_id":product_id} if product_id else {}),"corners":[[x,y] for x,y in zip(xs,ys)],"legend":legend,
             "width":width,"height":height,"valid_cells":int(finite.sum()),
             "unit":("score_0_to_1" if operation=="suitability" and suitability_model=="weighted" else "Shreve_magnitude" if operation=="stream_order" and stream_order_scheme=="shreve" else RASTER_UNITS[operation])}
 
@@ -377,6 +404,8 @@ def _derived_surface_tiled(z,valid,dx,dy,operation,max_slope=30.,
         0<=max_slope<=90 and min_elevation<=max_elevation and max_tri>=0
     ):
         raise RasterError("Invalid suitability limits.")
+    if active_limits() is not None:
+        block=min(block,current_limits().tile_size)
     output=np.full(z.shape,np.nan,dtype=np.float64)
     qualified=0
     suitable=0
@@ -485,7 +514,7 @@ def surface(z,valid,affine,crs,operation,reference,point,end_point,max_slope,
         elif operation=="flow_accumulation":values=accum
         elif operation=="stream_order":
             from .multiflow import strahler_orders,shreve_magnitudes
-            if not 1<=stream_cells<=1_000_000:
+            if not 1<=stream_cells<=max(1_000_000,current_limits().global_cells):
                 raise RasterError("Invalid stream accumulation threshold.")
             values=(strahler_orders if stream_order_scheme=="strahler" else shreve_magnitudes)(
                 dst,valid&(accum>=stream_cells),cancel)
@@ -493,7 +522,7 @@ def surface(z,valid,affine,crs,operation,reference,point,end_point,max_slope,
                      "channel_cells":int(np.isfinite(values).sum()),
                      ("max_stream_order" if stream_order_scheme=="strahler" else "max_stream_magnitude"):int(np.nanmax(values))}
         else:
-            if not 1<=stream_cells<=1_000_000:raise RasterError("Invalid stream accumulation threshold.")
+            if not 1<=stream_cells<=max(1_000_000,current_limits().global_cells):raise RasterError("Invalid stream accumulation threshold.")
             values=np.where(valid,(accum>=stream_cells).astype(float),np.nan)
             stream=(values==1).ravel()
             # Trace each edge once; cap the vector output while preserving the full raster.

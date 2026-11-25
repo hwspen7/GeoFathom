@@ -11,6 +11,7 @@ from heapq import heappush, heappop
 import numpy as np
 from imagery.raster import RasterError
 from .cancellation import checkpoint
+from .compute_resources import active_limits
 
 # Counterclockwise from east, in projected metres (array rows increase south).
 _DIR=((0,1),(-1,1),(-1,0),(-1,-1),(0,-1),(1,-1),(1,0),(1,1))
@@ -35,7 +36,8 @@ def dinfinity_accumulation(z,valid,dx,dy,external_inflow=None,cancel=None,compil
     An external source is supplied as nonnegative *cell equivalents* on
     explicitly measured inlet pixels; unknown upstream area is never inferred.
     """
-    z,valid=_validated(z,valid,dx,dy)
+    limits=active_limits()
+    z,valid=_validated(z,valid,dx,dy,limits.global_cells if limits else 1_000_000)
     inflow=np.zeros(z.shape,dtype=np.float64)
     if external_inflow is not None:
         inflow=np.asarray(external_inflow,dtype=np.float64).copy()
@@ -122,7 +124,7 @@ def quadratic_curvature(z,valid,dx,dy,radius=2,kind="curvature",cancel=None,bloc
     avoiding cancellation from high absolute DEM elevations and large metres.
     Incomplete windows are NoData; directional curvature is undefined on flats.
     """
-    z,valid=_validated(z,valid,dx,dy,8_000_000)
+    z,valid=_validated(z,valid,dx,dy,active_limits().surface_cells if active_limits() else 8_000_000)
     if not isinstance(radius,int) or radius not in (1,2,3,4):
         raise RasterError("Quadratic fitting radius must be 1-4 cells.")
     if kind not in ("curvature","plan_curvature","profile_curvature"):
@@ -175,7 +177,7 @@ def design_surface(z,valid,dx,dy,reference,east_grade=0.,north_grade=0.,
     sigmaz is a supplied one-sigma *assumption*, not a calibration claim.
     Independent-error and fully-correlated-error totals are kept separate.
     """
-    z,valid=_validated(z,valid,dx,dy,8_000_000)
+    z,valid=_validated(z,valid,dx,dy,active_limits().surface_cells if active_limits() else 8_000_000)
     params=(reference,east_grade,north_grade,sigma_z,max_grade,
             curvature_east,curvature_cross,curvature_north)
     if not all(map(math.isfinite,params)) or sigma_z<0 or not 0<max_grade<=1:

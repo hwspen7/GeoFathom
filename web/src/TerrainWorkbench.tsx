@@ -1,3 +1,4 @@
+import {downloadTerrainRaster,materializeScientificRaster,type StudioRaster} from './api';
 import {useEffect,useMemo,useRef,useState,type ChangeEvent} from 'react';
 import {createPortal} from 'react-dom';
 import {Mountain} from 'lucide-react';
@@ -115,6 +116,7 @@ export default function TerrainWorkbench(p:Props){
  // Opening Terrain never preselects a calculation.
  const [figureGalleryOpen,setFigureGalleryOpen]=useState(false);
  const [studioOpen,setStudioOpen]=useState(false);
+ const [studioRasters,setStudioRasters]=useState<StudioRaster[]>([]);
  const [researchOpen,setResearchOpen]=useState(false);
  const [researchLayer,setResearchLayer]=useState<TerrainRasterLayer|null>(null);
  const [operation,setOperation]=useState<Operation|null>(null);
@@ -319,13 +321,13 @@ export default function TerrainWorkbench(p:Props){
    (operation!=='suitability'||validNumber(maxSlope,0,90)&&validNumber(minElevation,-12000,12000)&&validNumber(maxElevation,-12000,12000)&&Number(minElevation)<=Number(maxElevation)&&validNumber(maxTri,0,100000)&&
       (suitabilityModel==='binary'||[suitabilitySlopeWeight,suitabilityTriWeight,suitabilityElevationWeight].every(n=>validNumber(n,0,100))&&
         [suitabilitySlopeWeight,suitabilityTriWeight,suitabilityElevationWeight].reduce((sum,w)=>sum+Number(w),0)>0))&&
-   (!['streams','stream_order'].includes(operation??'')||validNumber(streamCells,1,1000000)&&Number.isInteger(Number(streamCells)))&&
+   (!['streams','stream_order'].includes(operation??'')||validNumber(streamCells,1,8000000)&&Number.isInteger(Number(streamCells)))&&
    (operation!=='hillshade'||validNumber(azimuth,0,360)&&validNumber(altitude,0,90))&&
    (!needsPoint||validNumber(lon,-180,180)&&validNumber(lat,-90,90))&&
    (operation!=='flow_accumulation_mfd'||validNumber(mfdExponent,.5,8))&&
    (!['visibility','viewshed_multi'].includes(operation??'')||!considerCurvature||validNumber(refractionCoeff,0,.5))&&
    (!['visibility','viewshed_multi'].includes(operation??'')||validNumber(height,0,1000)&&validNumber(target,0,1000)&&
-     validNumber(viewshedDistance,0,10000)&&validNumber(viewshedAzimuth,0,360)&&validNumber(viewshedWidth,.01,360))&&
+     validNumber(viewshedDistance,0,100000)&&validNumber(viewshedAzimuth,0,360)&&validNumber(viewshedWidth,.01,360))&&
    (!['tri','tpi'].includes(operation??'')||validNumber(neighborhoodRadius,1,4)&&Number.isInteger(Number(neighborhoodRadius)))&&
    (operation!=='mesh'||validNumber(meshSamples,64,512)&&Number.isInteger(Number(meshSamples)));
  const canRun=operation!==null&&p.connected&&resultCacheReady&&verified&&!!correctShape&&!sourceMismatch&&!mapMismatch&&parametersValid;
@@ -437,6 +439,8 @@ export default function TerrainWorkbench(p:Props){
        record.advanced=await advancedTerrain(requestBody,controller.signal);
      }
      if(ticket!==sequence.current||controller.signal.aborted)return;
+     const compute=record.advanced?.compute_resources??record.slope?.compute_resources;
+     if(compute)for(const [key,value] of Object.entries(compute))parameters['compute_'+key]=value;
      // Commit scientific data before reporting a completed run. An immediate
      // reload or project switch must never race a pending cache write.
      let cached=false;
@@ -853,7 +857,7 @@ export default function TerrainWorkbench(p:Props){
 </div>}
        {resultTab==='visual'&&figureView==='analysis'&&result.operation==='aspect_map'&&result.raster&&<AspectRose bins={result.raster.legend}/>}
        {resultTab==='visual'&&figureView==='analysis'&&result.sections&&<SectionPlot sections={result.sections} onHover={p.onHover}/>}
-       {resultTab==='visual'&&figureView==='analysis'&&result.mesh&&<GPUView mesh={result.mesh} fallback={<MeshView mesh={result.mesh}/>}
+       {resultTab==='visual'&&figureView==='analysis'&&result.mesh&&<GPUView mesh={result.mesh} cacheBudget={Math.max(2*1024**2,Math.min(64*1024**2,(result.compute_resources?.gpu_memory_bytes||128*1024**2)/8))} fallback={<MeshView mesh={result.mesh}/>}
            tileSource={selected?{image_id:selected.source.id,geometry:selected.geometry}:undefined}/>}
        {resultTab==='details'&&result.raster&&<details className="terrain-metric-details" aria-label="Terrain class statistics">
          <summary>Class statistics · {result.raster.legend.length} classes</summary>
@@ -894,7 +898,7 @@ export default function TerrainWorkbench(p:Props){
            · Declared vertical datum: {selected?.source.vertical_datum??'Unknown'}</small>
        </details>}
        {resultTab==='details'&&<div className="terrain-output-downloads">
-         {result.raster&&<button onClick={()=>{const a=document.createElement('a');const data=Uint8Array.from(atob(result.raster!.geotiff),c=>c.charCodeAt(0));const url=URL.createObjectURL(new Blob([data],{type:'image/tiff'}));a.href=url;a.download=result.operation+'.tif';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}}>GeoTIFF</button>}
+         {result.raster&&<button onClick={()=>void downloadTerrainRaster(result.raster!,result.operation+'.tif').catch(e=>setError(e instanceof Error?e.message:String(e)))}>GeoTIFF</button>}
          {result.raster&&<button aria-label="Export terrain class CSV" onClick={()=>{
            const csv=terrainClassesCsv(result.raster!.legend,result.cell_area_m2);
            const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
@@ -927,7 +931,7 @@ export default function TerrainWorkbench(p:Props){
 
  </div>;
  return <>
- {studioOpen&&<ScientificFigureStudio source={{name:selected?.title??'Terrain workspace',csv:selected?.profile?studioTableCSV({columns:['distance_m','elevation_m'],rows:selected.profile.samples.map(s=>[s.distance_m,s.elevation_m]),x_label:'',y_label:'',unit:'m'}):selected?.advanced?studioTableCSV({columns:Object.keys(selected.advanced.metrics),rows:[Object.values(selected.advanced.metrics)],x_label:'',y_label:'',unit:''}):undefined,rasters:selected?.advanced?.raster?[{name:selected.title,data:selected.advanced.raster.geotiff,unit:selected.advanced.raster.unit??''}]:[],provenance:selected?{id:selected.id,source:selected.source,geometry:selected.geometry,parameters:selected.parameters}:undefined}} onClose={()=>setStudioOpen(false)}/>}
+ {studioOpen&&<ScientificFigureStudio source={{name:selected?.title??'Terrain workspace',csv:selected?.profile?studioTableCSV({columns:['distance_m','elevation_m'],rows:selected.profile.samples.map(s=>[s.distance_m,s.elevation_m]),x_label:'',y_label:'',unit:'m'}):selected?.advanced?studioTableCSV({columns:Object.keys(selected.advanced.metrics),rows:[Object.values(selected.advanced.metrics)],x_label:'',y_label:'',unit:''}):undefined,rasters:studioRasters,provenance:selected?{id:selected.id,source:selected.source,geometry:selected.geometry,parameters:selected.parameters}:undefined}} onClose={()=>setStudioOpen(false)}/>}
  {figureGalleryOpen&&selected&&<FigureGallery record={selected} projectId={p.projectId} onClose={()=>setFigureGalleryOpen(false)}/>}
  {researchOpen&&<TerrainResearchPanel projectId={p.projectId} record={selected??null} connected={p.connected}
    onClose={()=>setResearchOpen(false)} onLayer={setResearchLayer}/>}
@@ -951,7 +955,7 @@ export default function TerrainWorkbench(p:Props){
        <button className={leftTab==='source'?'terrain-linked-active':''} type="button"
          aria-label="Get DEM" aria-pressed={leftTab==='source'} onClick={()=>setLeftTab('source')}>Get DEM</button>
        <button type="button" aria-label="Research analysis" onClick={()=>setResearchOpen(true)}>Research</button>
-       <button type="button" onClick={()=>setStudioOpen(true)}>Figure studio</button>
+       <button type="button" onClick={()=>{const r=selected?.advanced?.raster;setStudioRasters([]);if(!r){setStudioOpen(true);return;}void materializeScientificRaster({name:selected.title,data:r.geotiff,unit:r.unit??'',product_id:r.product_id}).then(x=>{if(alive.current){setStudioRasters([{name:x.name,data:x.data,unit:x.unit}]);setStudioOpen(true);}}).catch(e=>{if(alive.current)setError(String(e.message??e));});}}>Figure studio</button>
      </div>
      <div className="terrain-linked-row">
        <label className="terrain-linked-select">Analysis
@@ -1149,7 +1153,7 @@ export default function TerrainWorkbench(p:Props){
           <option value="shreve">Shreve · additive magnitude</option>
         </select>
       </label>}
-      {(operation==='streams'||operation==='stream_order')&&<label>Minimum upstream cells<input type="number" min="1" step="1" value={streamCells} onChange={e=>setStreamCells(e.target.value)}/></label>}
+      {(operation==='streams'||operation==='stream_order')&&<label>Minimum upstream cells<input type="number" min="1" max="8000000" step="1" value={streamCells} onChange={e=>setStreamCells(e.target.value)}/></label>}
      {['flow_direction','flow_accumulation','flow_accumulation_mfd','streams','stream_order','watershed'].includes(operation)&&<label className="gis-check"><input aria-label="Condition drainage DEM" type="checkbox" checked={fillSinks} onChange={e=>setFillSinks(e.target.checked)}/> Fill depressions and route flat cells</label>}
      {['flow_direction','flow_accumulation','flow_accumulation_mfd','streams','stream_order','watershed'].includes(operation)&&fillSinks&&<label>Depression conditioning
        <select aria-label="Depression conditioning method" value={depressionMethod} onChange={e=>setDepressionMethod(e.target.value as 'fill'|'breach')}>
@@ -1174,7 +1178,7 @@ export default function TerrainWorkbench(p:Props){
      {['visibility','viewshed_multi'].includes(operation)&&<details className="terrain-method-settings">
         <summary>Viewing sector and range</summary>
         <label>Maximum distance (m, 0 = all)
-          <input aria-label="Viewshed maximum distance" type="number" min="0" max="10000"
+          <input aria-label="Viewshed maximum distance" type="number" min="0" max="100000"
             value={viewshedDistance} onChange={e=>setViewshedDistance(e.target.value)}/>
         </label>
         <div className="area-fields">

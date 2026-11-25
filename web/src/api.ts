@@ -81,9 +81,10 @@ async function rawRequest(path: string, init?: RequestInit): Promise<Response> {
   // Local geometry and project requests must not strand the editor indefinitely.
   const exchange=/\/(vector|package)(?:\/|$)/.test(path);
   const fast=!exchange&&/^\/(measure|edit\/|health|capabilities|projects(?:\/|$))/.test(path);
+  const timeout=/^\/terrain\/(analyze|advanced)$/.test(path)?1_800_000:fast?12000:120000;
   try{
     return await fetch(API_URL+path,{...init,headers:sessionHeaders(init?.headers),
-      signal:init?.signal?AbortSignal.any([init.signal,AbortSignal.timeout(fast?12000:120000)]):AbortSignal.timeout(fast?12000:120000)});
+      signal:init?.signal?AbortSignal.any([init.signal,AbortSignal.timeout(timeout)]):AbortSignal.timeout(timeout)});
   }catch(error){
     if(init?.signal?.aborted)throw new DOMException('Request cancelled','AbortError');
     const detail=error instanceof Error?error.message:String(error);
@@ -584,7 +585,25 @@ export function traceExisting(start:[number,number],end:[number,number],paths:[n
     body:JSON.stringify({start,end,paths,tolerance_m:30}),
   });
 }
+export type TerrainComputePolicy = {
+  mode:'automatic'|'manual';backend?:'auto'|'cpu';gpu_memory_percent?:number;hard_memory?:boolean;memory_percent:number;concurrent_tasks:number;tile_size:128|256|512|1024;
+  slope_cells:number;surface_cells:number;global_cells:number;visibility_cells:number;least_cost_cells:number;
+  viewshed_distance_m:number;ray_samples:number;
+};
+export type TerrainComputeLimits = Omit<TerrainComputePolicy,'mode'|'memory_percent'|'backend'|'gpu_memory_percent'> & {memory_bytes:number;native_slope_cells:number;gpu_memory_bytes?:number};
+export interface TerrainComputeStatus {
+  policy:TerrainComputePolicy;hardware:{total_bytes:number;available_bytes:number;logical_cpus:number;scratch_free_bytes:number;gpu_free_bytes?:number;gpu_total_bytes?:number};
+  effective:TerrainComputeLimits;active_tasks:number;queued_tasks:number;reserved_bytes?:number;scope:string;hard_memory_available?:boolean;terrain_gpu:string;memory_protection:string;
+}
+export function getTerrainComputeResources(signal?:AbortSignal):Promise<TerrainComputeStatus>{
+  return request('/terrain/resources',{signal});
+}
+export function setTerrainComputeResources(policy:TerrainComputePolicy):Promise<TerrainComputeStatus>{
+  return request('/terrain/resources',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(policy)});
+}
+
 export interface TerrainResult {
+  compute_resources?:TerrainComputeLimits;
   elevation_min_m:number;elevation_max_m:number;elevation_mean_m:number;
   elevation_relief_m:number;mean_slope_deg:number;mean_aspect_deg:number|null;
   maximum_slope_deg:number;valid_pixels:number;engine:string;warning:string;
@@ -976,7 +995,7 @@ export async function downloadGISJob(projectId:string,id:string):Promise<void>{
 
 
 export type TerrainOperation='dem_difference'|'contours'|'volume'|'visibility'|'viewshed_multi'|'watershed'|'mesh'|'distribution'|'elevation'|'slope_map'|'aspect_map'|'hillshade'|'tri'|'tpi'|'curvature'|'plan_curvature'|'profile_curvature'|'flow_direction'|'flow_accumulation'|'flow_accumulation_mfd'|'streams'|'stream_order'|'suitability'|'cutfill_map'|'least_cost'|'cross_sections';
-export interface TerrainRaster {png:string;geotiff:string;corners:[[number,number],[number,number],[number,number],[number,number]];legend:{label:string;color:string;cells:number}[];width:number;height:number;valid_cells:number;unit?:string}
+export interface TerrainRaster {png:string;geotiff:string;product_id?:string;corners:[[number,number],[number,number],[number,number],[number,number]];legend:{label:string;color:string;cells:number}[];width:number;height:number;valid_cells:number;unit?:string}
 export interface TerrainRasterLayer {id:string;title:string;raster:TerrainRaster;opacity:number;resampling:'nearest'|'linear'}
 export interface TerrainDistributionBin {lower_m:number;upper_m:number;cells:number;area_m2:number;cumulative_pct:number}
 export interface TerrainLOD {tile_cells:number;levels:number[];transport:string;tiles:Array<{lod_step:number;row_start:number;col_start:number;rows:number;cols:number;bounds_cell:number[];row_indices:number[];col_indices:number[];heights:Array<number|null>}>}
@@ -998,6 +1017,7 @@ export function fetchTerrainMeshTile(body:{
 }
 export interface AdvancedTerrainResult {
   plot_data?:PlotData;
+  compute_resources?:TerrainComputeLimits;
   operation:TerrainOperation;source_crs:string;source_vertical_datum?:string|null;valid_cells:number;missing_cells:number;
   cell_area_m2:number;metrics:Record<string,number>;warning:string;
   algorithm_options?:{gradient_method:string;slope_classes:string;
@@ -1158,6 +1178,26 @@ export function restoreProjectPackage(project:string,file:File,token:string,sign
  return request(exchangePath(project)+'/package/import',{method:'POST',body,signal,headers:{'X-GeoFathom-Local-Import':'1','X-GeoFathom-Admin-Token':token}});
 }
 
+/** Authenticated binary transfer without embedding large rasters in JSON. */
+export async function downloadTerrainRaster(raster:TerrainRaster,filename:string):Promise<void>{
+ let blob:Blob;
+ if(raster.product_id){
+  const response=await rawRequest('/terrain/products/'+encodeURIComponent(raster.product_id));
+  if(!response.ok)throw await responseError(response);
+  blob=await response.blob();
+ }else{
+  const data=Uint8Array.from(atob(raster.geotiff),c=>c.charCodeAt(0));
+  blob=new Blob([data],{type:'image/tiff'});
+ }
+ const url=URL.createObjectURL(blob);
+ const link=document.createElement('a');link.href=url;link.download=filename;link.click();
+ setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+
+export interface TerrainProductList {products:{id:string;bytes:number;modified:number}[];total_bytes:number;limit_bytes:number;limit_files:number}
+export function listTerrainProducts():Promise<TerrainProductList>{return request('/terrain/products');}
+export function deleteTerrainProduct(id:string):Promise<{deleted:boolean}>{return request('/terrain/products/'+encodeURIComponent(id),{method:'DELETE'});}
+
 export interface ResearchExperiment {
  title:string;baseline_name:string;mode:'comparison'|'sensitivity'|'uncertainty';
  base:Record<string,unknown> & {image_id:string;geometry:GeoJSON.Geometry;operation:string};
@@ -1298,4 +1338,22 @@ export function getLidarCatalog(signal?:AbortSignal):Promise<{operations:LidarMe
 export function runLidar(params:Record<string,string>,cloud:File,reference:File|null,signal?:AbortSignal):Promise<LidarResult>{
  const body=new FormData();body.append('cloud',cloud);if(reference)body.append('reference',reference);
  return request('/analysis/lidar/run?'+new URLSearchParams(params),{method:'POST',body,signal});
+}
+
+// Resolve disk-backed terrain products only when a consumer requests the exact raster.
+// Enforce the existing inline scientific input budgets before buffering the response.
+export type ScientificRasterInput = {name:string;data:string;unit?:string;band?:number;product_id?:string};
+export async function materializeScientificRaster<T extends ScientificRasterInput>(r:T,limit=24_000_000,signal?:AbortSignal):Promise<T>{
+ if(!r.product_id){if(!r.data)throw Error('Raster data is unavailable.');return r;}
+ const response=await rawRequest('/terrain/products/'+encodeURIComponent(r.product_id),{signal});
+ if(!response.ok)throw await responseError(response);
+ const size=Number(response.headers.get('Content-Length'));
+ if(size>limit){await response.body?.cancel();throw Error('Exact terrain raster exceeds the inline scientific input limit. Export the GeoTIFF and use a bounded study area or disk workflow.');}
+ const reader=response.body?.getReader();if(!reader)throw Error('Raster response has no readable body.');
+ const chunks:Uint8Array[]=[];let bytes=0;
+ try{for(;;){const {done,value}=await reader.read();if(done)break;bytes+=value.byteLength;if(bytes>limit){await reader.cancel();throw Error('Exact terrain raster exceeds the inline scientific input limit. Export the GeoTIFF and use a bounded study area or disk workflow.');}chunks.push(value);}}finally{reader.releaseLock();}
+ const raw=new Uint8Array(bytes);let offset=0;for(const chunk of chunks){raw.set(chunk,offset);offset+=chunk.byteLength;}
+ const data=await new Promise<string>((resolve,reject)=>{const fr=new FileReader();fr.onerror=()=>reject(Error('Raster encoding failed.'));fr.onload=()=>resolve(String(fr.result).split(',')[1]);fr.readAsDataURL(new Blob([raw],{type:'image/tiff'}));});
+ if(!data)throw Error('Raster product is empty.');
+ return {...r,data};
 }
