@@ -10,6 +10,7 @@ from typing import Literal
 from analysis.science_raster import require
 from storage.snapshots import copy_verified
 from .remote_managed import DiskBand, DiskQuality, result_path
+from .remote_harmonization import BandCorrection,validate_corrections
 
 
 class Acquisition(BaseModel):
@@ -19,13 +20,26 @@ class Acquisition(BaseModel):
     sensor: str = Field(min_length=1, max_length=100)
     bands: dict[str, DiskBand] = Field(min_length=1, max_length=12)
     quality: list[DiskQuality] = Field(default_factory=list, max_length=8)
+    corrections:dict[str,BandCorrection]=Field(default_factory=dict,max_length=12)
+
+
+class RegistrationCheck(BaseModel):
+    model_config=ConfigDict(extra='forbid',allow_inf_nan=False)
+    mask_image_id:UUID
+    role:str=Field(min_length=1,max_length=80)
+    window:tuple[int,int,int,int]=(0,0,256,256)
+    max_shift_pixels:float=Field(default=.5,gt=0,le=2)
+    max_rmse:float=Field(default=.03,gt=0,le=2)
 
 
 class CubeInput(BaseModel):
     model_config = ConfigDict(extra='forbid')
     target_image_id: UUID
     acquisitions: list[Acquisition] = Field(min_length=2, max_length=64)
-    resampling: Literal['nearest', 'bilinear'] = 'bilinear'
+    resampling: Literal['nearest', 'bilinear','area'] = 'bilinear'
+    minimum_coverage:float=Field(default=.8,ge=0,le=1)
+    reference_sensor:str|None=Field(default=None,max_length=100)
+    registration:RegistrationCheck|None=None
     harmonization: str = Field(default='', max_length=4000)
     tile: int = Field(default=256, ge=32, le=1024)
     disk_budget_mb: int = Field(default=8192, ge=64, le=65536)
@@ -40,6 +54,7 @@ def validate(payload):
     require(all(set(a.bands) == roles for a in body.acquisitions), 'All dates require the same spectral roles.')
     require(all(set(q.roles) <= roles for a in body.acquisitions for q in a.quality), 'Unknown quality target role.')
     require(len({a.id for a in body.acquisitions}) == len(body.acquisitions), 'Acquisition IDs must be unique.')
+    validate_corrections(body.model_dump(mode='json')['acquisitions'],body.reference_sensor)
     require(len({a.sensor for a in body.acquisitions}) == 1 or len(body.harmonization.strip()) >= 20,
             'Document cross-sensor harmonization before building this cube.')
     return body
@@ -50,6 +65,7 @@ def run_managed(payload, job_id, progress, check):
     from .remote_cube import build_cube
     body = validate(payload)
     ids = {str(body.target_image_id)}
+    if body.registration:ids.add(str(body.registration.mask_image_id))
     for a in body.acquisitions:
         ids.update(str(b.image_id) for b in a.bands.values())
         ids.update(str(q.image_id) for q in a.quality)
@@ -75,6 +91,9 @@ def run_managed(payload, job_id, progress, check):
                 'bands': {r: spec(b) for r, b in a.bands.items()}, 'quality': [spec(q) for q in a.quality]}
                 for a in body.acquisitions], 'resampling': body.resampling, 'harmonization': body.harmonization,
             'tile': body.tile, 'disk_budget_mb': body.disk_budget_mb}
+        config.update(reference_sensor=body.reference_sensor,minimum_coverage=body.minimum_coverage)
+        if body.registration:
+            reg=body.registration.model_dump(mode='json');reg['mask_path']=snapshots[reg.pop('mask_image_id')];config['registration']=reg
         try:
             receipt = build_cube(config, output, progress, check)
             check()

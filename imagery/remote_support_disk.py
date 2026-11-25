@@ -19,7 +19,7 @@ def _metric(ds):
     crs=CRS.from_user_input(ds.crs)
     return crs.is_projected and all(abs(x.unit_conversion_factor-1)<1e-10 for x in crs.axis_info[:2])
 
-def transfer(source_path,target_path,output,*,mode="mean",minimum_coverage=.8,tile=256,source_band=1,target_band=1,unit="",encoding="metadata",scale=1.,offset=0.):
+def transfer(source_path,target_path,output,*,mode="mean",minimum_coverage=.8,tile=256,source_band=1,target_band=1,unit="",encoding="metadata",scale=1.,offset=0.,use_target_mask=True,check=lambda:None):
     """Exact area support on the target native grid, without full-scene arrays.
 
     The target band supplies a validity mask only. The output uses the source
@@ -51,12 +51,12 @@ def transfer(source_path,target_path,output,*,mode="mean",minimum_coverage=.8,ti
             with rasterio.open(tmp,"w",**profile) as dst:
                 dst.update_tags(TERRAIN_UNIT=physical_unit if mode=="mean" else "fraction",REMOTE_METHOD=kind)
                 for win in windows(dstgrid.width,dstgrid.height,tile):
+                    check()
                     # Compute the source rectangle directly from target boundaries.
                     t=dstgrid.window_transform(win);h,w=int(win.height),int(win.width);a=src.transform
                     c0=max(0,math.floor((t.c-a.c)/a.a));c1=min(src.width,math.ceil((t.c+w*t.a-a.c)/a.a))
                     r0=max(0,math.floor((a.f-t.f)/(-a.e)));r1=min(src.height,math.ceil((a.f-(t.f+h*t.e))/(-a.e)))
-                    mask_values=dstgrid.read(target_band,window=win,masked=True).astype(float).filled(np.nan)
-                    valid=np.isfinite(mask_values)
+                    valid=np.isfinite(dstgrid.read(target_band,window=win,masked=True).astype(float).filled(np.nan)) if use_target_mask else np.ones((h,w),bool)
                     target=SimpleNamespace(values=np.where(valid,1.,np.nan),transform=t,crs=src.crs,is_meter=True)
                     if c1<=c0 or r1<=r0:
                         z=np.where(valid,0.,np.nan) if mode=="coverage" else np.full((h,w),np.nan)
