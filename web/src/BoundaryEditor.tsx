@@ -1,5 +1,5 @@
+import {SectionIcon} from './SectionIcon';
 import {useEffect,useMemo,useState} from 'react';
-import {Pentagon} from 'lucide-react';
 import {verticesOf,type GeometryPath,type Position} from './editing';
 import {studyParcels} from './studyArea';
 import type {Place} from './api';
@@ -36,7 +36,7 @@ export default function BoundaryEditor(p:Props){
  const unchanged=!!active&&value===active.point[0]&&latitude===active.point[1];
  // The compact GIS view keeps every coordinate operation on screen.
  if(p.compact)return <section className="boundary-inspector compact-boundary" aria-label="Boundary vertices">
-   <div className="compact-boundary-head"><h3 className="compact-boundary-heading"><Pentagon size={13} aria-hidden="true"/> Boundary · {nodes.length}</h3><button aria-label="Edit boundary nodes" aria-pressed={p.editing} disabled={p.busy} onClick={p.onToggleEditing}>{p.editing?'Done':'Edit'}</button></div>
+   <div className="compact-boundary-head"><h3 className="compact-boundary-heading"><SectionIcon role="boundary" size={13}/> Boundary · {nodes.length}</h3><button aria-label="Edit boundary nodes" aria-pressed={p.editing} disabled={p.busy} onClick={p.onToggleEditing}>{p.editing?'Done':'Edit'}</button></div>
    {parcelOptions.length>1&&<select aria-label="Study area parcel" value={String(p.selectedParcel)} disabled={p.busy} onChange={e=>p.onChooseParcel(e.target.value==='all'?'all':Number(e.target.value))}><option value="all">All parcels ({parcelOptions.length})</option>{parcelOptions.map(parcel=><option key={parcel.index} value={String(parcel.index)}>Parcel {parcel.index+1} · {parcel.areaKm2.toFixed(3)} km²</option>)}</select>}
    {active&&<><div className="compact-boundary-fields">
      <select aria-label="Boundary node" title="Select boundary vertex" value={nodes.findIndex(node=>same(node.path,active.path))} onChange={e=>{const node=nodes[Number(e.target.value)];if(node)p.onSelectNode(node.path);}}>{nodes.map((_,i)=><option key={i} value={i}>#{i+1}</option>)}</select>

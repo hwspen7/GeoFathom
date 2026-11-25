@@ -1,8 +1,9 @@
+import {SectionIcon} from './SectionIcon';
 /** Shared research workspace chrome. Module navigation and command discovery
  * are independent of GIS/Terrain internals so future workbenches can reuse them.
  */
 import {useEffect,useMemo,useRef,useState,type ReactNode} from 'react';
-import {Search,Layers3,Pencil,Trash2,MapPin,Minus,Shapes,ChevronLeft,ChevronRight,Check,X} from 'lucide-react';
+import {Search,ListFilter,SquarePen,Trash2,MapPin,Minus,Shapes,ChevronLeft,ChevronRight,Check,X} from 'lucide-react';
 
 export interface WorkspaceModule {id:string;label:string;description:string;hint:string}
 export const WORKSPACE_MODULES:readonly WorkspaceModule[]=[
@@ -77,7 +78,7 @@ export function WorkspaceCommandPalette({open,commands,onClose}:{
       <div className="workspace-command-search"><Search size={16}/>
         <input autoFocus type="search" value={query}
           aria-label="Search workspace commands"
-          placeholder="Search tools, actions and modules…"
+          placeholder="Search tools, actions and modules"
           onChange={event=>{setQuery(event.target.value);setIndex(0);}}
           onKeyDown={event=>{
             if(event.key==='Escape'){event.preventDefault();onClose();}
@@ -150,7 +151,7 @@ function ObjectRow({item,selected,disabled,locked,busy,onOpen,onRename,onDelete,
       </button>
       {(onRename||onDelete)&&<div className="workspace-object-actions">
         {onRename&&<button type="button" aria-label="Rename object" title={locked?'Unlock layer to rename':'Rename '+item.name}
-          disabled={locked||busy||working} onClick={()=>{setName(item.name);setError('');setRenaming(true);}}>{compact?<Pencil size={12} aria-hidden="true"/>:'Rename'}</button>}
+          disabled={locked||busy||working} onClick={()=>{setName(item.name);setError('');setRenaming(true);}}>{compact?<SquarePen size={12} aria-hidden="true"/>:'Rename'}</button>}
         {onDelete&&<button type="button" aria-label="Delete object" title={locked?'Unlock layer to delete':'Delete '+item.name}
           disabled={locked||busy||working} onClick={()=>void mutate(onDelete)}>{compact?<Trash2 size={12} aria-hidden="true"/>:'Delete'}</button>}
       </div>}
@@ -168,7 +169,7 @@ function FeatureGroup({name,features,visible,selectedId,onOpen,search,locked=fal
   const [expanded,setExpanded]=useState(true);
   const Group=alwaysOpen?'section':'details';
   return <Group className="workspace-feature-group" {...(alwaysOpen?{}:{open:search||expanded,onToggle:(event:React.SyntheticEvent<HTMLElement>)=>{if(!search)setExpanded((event.currentTarget as HTMLDetailsElement).open);}})}>
-    {alwaysOpen?<h4 className="gis-static-layer-heading"><Layers3 size={13}/>{name}<small>{total}</small></h4>:<summary><Layers3 size={13}/>{name}<small>{total}</small></summary>}
+    {alwaysOpen?<h4 className="gis-static-layer-heading"><SectionIcon role="layerGroup"/>{name}<small>{total}</small></h4>:<summary><SectionIcon role="layerGroup"/>{name}<small>{total}</small></summary>}
     <div className="project-features">
       {features.map(item=><ObjectRow key={item.id} item={item}
         selected={selectedId===item.id} disabled={!visible} locked={locked} busy={busy}
@@ -235,7 +236,7 @@ export function WorkspaceFeatureTree<T extends FeatureItem>({
   const reservedRows=Math.min(pageSize,objectCount);
   return <div className={'workspace-feature-tree'+(alwaysOpen?' compact-object-tree':'')} role="region" aria-label="Project feature tree">
     <div className="workspace-tree-header"><strong>Features</strong><span>{features.length+additionalGroups.reduce((sum,g)=>sum+g.items.length,0)}</span></div>
-    <label className="workspace-tree-filter"><Search size={13}/>
+    <label className="workspace-tree-filter"><ListFilter size={13}/>
       <input aria-label="Filter project features" type="search"
         value={filter} placeholder="Filter name or layer"
         onChange={e=>{setFilter(e.target.value);setPage(0);}}/>

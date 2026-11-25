@@ -1,5 +1,5 @@
+import {SectionIcon} from './SectionIcon';
 import {useEffect,useState} from 'react';
-import {Compass,Layers3,SlidersHorizontal} from 'lucide-react';
 import {getProjectCRS,getProjectGrid,patchLayerStyle,saveGraduatedStyle,
   saveProjectCRS,transformProjectCoordinates,
   type GeoLayer,type GeoWorkspace,type ProjectCRS} from './api';
@@ -113,7 +113,7 @@ export default function CartographyProPanel(p:Props){
 
   return <div className="professional-panel">
     <details>
-      <summary><Layers3 size={14}/> Graduated numeric choropleth</summary>
+      <summary><SectionIcon role="choropleth" size={14}/> Graduated numeric choropleth</summary>
       <div className="professional-form">
         <label>Map layer
           <select aria-label="Graduated map layer" value={layer?.id||''}
@@ -155,7 +155,7 @@ export default function CartographyProPanel(p:Props){
       </div>
     </details>
     <details>
-      <summary><SlidersHorizontal size={14}/> Advanced label placement & callouts</summary>
+      <summary><SectionIcon role="labelPlacement" size={14}/> Advanced label placement & callouts</summary>
       <div className="professional-form">
         <label>Map layer
           <select aria-label="Advanced label layer" value={layer?.id||''}
@@ -271,7 +271,7 @@ export default function CartographyProPanel(p:Props){
       </div>
     </details>
     <details>
-      <summary><Compass size={14}/> Project EPSG coordinates & grid</summary>
+      <summary><SectionIcon role="projection" size={14}/> Project EPSG coordinates & grid</summary>
       <div className="professional-form">
         <label>Project CRS (EPSG)
           <input aria-label="Project EPSG code" value={epsg}

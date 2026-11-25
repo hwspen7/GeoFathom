@@ -1,6 +1,7 @@
+import {SectionIcon} from './SectionIcon';
 import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react';
 import {createPortal} from 'react-dom';
-import { Database, FileDown, FileUp, Mountain, Search, TableProperties } from 'lucide-react';
+import { FileDown, FileUp, Filter } from 'lucide-react';
 import {
   analyzeTerrain, exportVectorFile, importVectorFile, queryAttributes,
   saveAttributes, terrainProfile, type AttributeResult,
@@ -167,7 +168,7 @@ export default function ProfessionalPanel({
   return (
     <div className="professional-panel">
       <section className="gis-tool-group" aria-label="Attribute table">
-        <h3 className="gis-tool-heading"><TableProperties size={14}/> Attribute table · {result?.total ?? 0} features</h3>
+        <h3 className="gis-tool-heading"><SectionIcon role="attributes" size={14}/> Attribute table · {result?.total ?? 0} features</h3>
         <form onSubmit={event=>void submitQuery(event)} className="professional-form">
           <div className="area-fields">
             <select aria-label="Attribute search field" value={field} onChange={e=>setField(e.target.value)}>
@@ -184,10 +185,10 @@ export default function ProfessionalPanel({
           </div>
           <div className="gis-filter-row">{operator!=='exists'&&<input aria-label="Attribute search value" placeholder="Search attributes"
             value={query} onChange={e=>setQuery(e.target.value)}/>}
-          <button disabled={busy||!projectId} type="submit" aria-label="Filter rows" title="Filter attribute rows"><Search size={12}/> Filter</button></div>
+          <button disabled={busy||!projectId} type="submit" aria-label="Filter rows" title="Filter attribute rows"><Filter size={12}/> Filter</button></div>
         </form>
         <form className="professional-form" onSubmit={e=>void bulkEdit(e)}>
-          <div className="gis-edit-header"><h3 className="gis-edit-heading"><TableProperties size={13} aria-hidden="true"/> Edit <small>· {selection.length} selected</small></h3><button type="submit" disabled={busy||!selection.length} aria-label="Save properties & revisions" title="Save properties and revisions">Save</button></div>
+          <div className="gis-edit-header"><h3 className="gis-edit-heading"><SectionIcon role="attributeEdit" size={13}/> Edit <small>· {selection.length} selected</small></h3><button type="submit" disabled={busy||!selection.length} aria-label="Save properties & revisions" title="Save properties and revisions">Save</button></div>
           <div className="area-fields">
             <input aria-label="Attribute property name" placeholder="Property name" maxLength={64}
             value={editField} onChange={e=>setEditField(e.target.value)}/>
@@ -201,7 +202,7 @@ export default function ProfessionalPanel({
         </form>
       </section>
       <section className="gis-tool-group" aria-label="GIS file import / export">
-        <h3 className="gis-tool-heading"><Database size={14}/> Import / Export</h3>
+        <h3 className="gis-tool-heading"><SectionIcon role="exchange" size={14}/> Import / Export</h3>
         <div className="professional-form gis-file-row">
           <label className="raster-upload" title="Import GIS file · up to 100 features · transformed to WGS84"><FileUp size={12}/> Import
             <input aria-label="Import GIS vector file" disabled={busy||!projectId}
@@ -222,7 +223,7 @@ export default function ProfessionalPanel({
         </div>
       </section>
       <section className="gis-tool-group" aria-label="Terrain slope and elevation profile">
-        <div className="gis-terrain-row"><h3 className="gis-tool-heading"><Mountain size={14}/> Terrain</h3>
+        <div className="gis-terrain-row"><h3 className="gis-tool-heading"><SectionIcon role="terrain" size={14}/> Terrain</h3>
         <div className="professional-form">
           <button disabled={!raster||!geometry||busy} aria-label={'Analyze selected '+(geometry?.type==='LineString'?'elevation profile':'terrain area')} title="Requires a projected DEM with elevations in meters" onClick={()=>void analyze()}>
             Analyze selected {geometry?.type==='LineString'?'profile':'area'}

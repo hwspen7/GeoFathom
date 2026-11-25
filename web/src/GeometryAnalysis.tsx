@@ -1,5 +1,5 @@
+import {SectionIcon} from './SectionIcon';
 import {useState,useEffect,useRef} from 'react';
-import {Shapes} from 'lucide-react';
 import {bufferGeometry,compareAreas,applyOverlay,type Measurement} from './api';
 export interface AnalysisFeature {id:string;name:string;geometry:GeoJSON.Geometry}
 export default function GeometryAnalysis({geometry,selectedId,features,connected,onResult}:{geometry:GeoJSON.Geometry|null;selectedId:string|null;
@@ -37,12 +37,12 @@ export default function GeometryAnalysis({geometry,selectedId,features,connected
  return <div className="professional-panel geometry-analysis">
    {!connected&&<small>Reconnect API to run spatial analysis.</small>}
    <section className="analysis-tool-group" aria-label="Geometry processing">
-     <h3 className="analysis-tool-heading"><Shapes size={13} aria-hidden="true"/> Geometry</h3>
+     <h3 className="analysis-tool-heading"><SectionIcon role="geometry" size={13}/> Geometry</h3>
      <div className="professional-form">
      <div className="analysis-inline"><label className="analysis-inline-label">Buffer (m)<input aria-label="Buffer distance" type="number" min=".01" step="any" value={distance} onChange={e=>setDistance(e.target.value)}/></label>
      <button disabled={!connected||!geometry||busy} onClick={()=>void run('buffer')}>Create buffer</button></div>
      <select aria-label="Analysis second feature" value={target} onChange={e=>setTarget(e.target.value)}>
-       <option value="">Compare / combine with…</option>{features.filter(f=>f.id!==selectedId&&polygon(f.geometry)).map(f=><option key={f.id} value={f.id}>{f.name}</option>)}
+       <option value="">Compare / combine with</option>{features.filter(f=>f.id!==selectedId&&polygon(f.geometry)).map(f=><option key={f.id} value={f.id}>{f.name}</option>)}
      </select>
      <div className="survey-action-bar analysis-four-actions">{(['union','intersection','difference','compare'] as const).map(op=>
        <button key={op} disabled={!connected||busy||!polygon(geometry)||!other} onClick={()=>void run(op)}>{op==='difference'?'Subtract':op[0].toUpperCase()+op.slice(1)}</button>)}</div>

@@ -244,3 +244,25 @@ test('Survey GIS and Analysis use icons and fixed non-scrolling tools',async({pa
   }
  }
 });
+
+test('functional section icons are distinct and static choice labels have no ellipses',async({page})=>{
+ await page.setViewportSize({width:1680,height:900});
+ await page.route('**/tile.openstreetmap.org/**',r=>r.fulfill({contentType:'image/png',body:tile}));
+ await page.goto('/');
+ const nav=page.getByRole('navigation',{name:'Workspace tools'});
+ const tools=page.getByRole('complementary',{name:'Operations'});
+ const seen=new Map<string,string>();
+ for(const name of ['Survey','GIS','Analysis','Spatial','Network','Temporal','LiDAR','Sensing','Raster','Mapping','Assistant']){
+  await nav.getByRole('button',{name,exact:true}).click();
+  const icons=await tools.locator('svg[data-section-icon]:visible').evaluateAll(els=>els.map(el=>({role:el.getAttribute('data-section-icon')!,glyph:Array.from(el.classList).find(c=>c.startsWith('lucide-'))??''})));
+  for(const {role,glyph} of icons){
+   expect(glyph).not.toBe('');
+   if(seen.has(glyph))expect(seen.get(glyph)).toBe(role);
+   seen.set(glyph,role);
+  }
+  const labels=await tools.locator('select:visible option').allTextContents();
+  expect(labels.every(label=>!/(?:…|\.{3})\s*$/.test(label))).toBe(true);
+ }
+ await nav.getByRole('button',{name:'Analysis',exact:true}).click();
+ await expect(tools.getByLabel('Analysis second feature').locator('option').first()).toHaveText('Compare / combine with');
+});

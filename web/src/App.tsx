@@ -1,8 +1,9 @@
+import {SectionIcon} from './SectionIcon';
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import {createPortal} from 'react-dom';
 import {
-  ArrowRight, Compass, Globe2, Layers3, MapPin, Maximize2, Minimize2,
-  RotateCcw, Search, Send, Sparkles,
+  ArrowRight, Command, Globe2, Map, Bookmark, Maximize2, Minimize2,
+  RotateCcw, Send,
   Wifi, WifiOff,
 } from 'lucide-react';
 
@@ -1262,7 +1263,7 @@ export default function App() {
         <details className="gis-settings" name="gis-header-menu">
           <summary>Settings</summary>
           <div className="gis-settings-panel">
-            <div className="section-heading">Display</div>
+            <div className="section-heading"><SectionIcon role="display"/><span>Display</span></div>
               <label className="gis-check"><input aria-label="Map dimensions" type="checkbox" checked={showMeasurements} onChange={e=>setShowMeasurements(e.target.checked)}/> Map dimensions</label>
             <label>Area unit <select aria-label="Default area unit" value={areaUnit} onChange={event=>setAreaUnit(event.target.value as typeof areaUnit)}>
               <option value="auto">Automatic</option><option value="m2">m²</option><option value="ha">ha</option><option value="km2">km²</option><option value="mu">亩</option>
@@ -1273,7 +1274,7 @@ export default function App() {
               <option value="auto">Automatic</option><option value="light">Light lines</option><option value="dark">Dark lines</option></select></label>
             <label>Selection fill <input aria-label="Selection fill opacity" type="range" min="0" max=".7" step=".02" value={display.fill} onChange={e=>setDisplay(old=>({...old,fill:Number(e.target.value)}))}/></label>
             <ComputingResources/>
-            <div className="section-heading">Imagery sources</div>
+            <div className="section-heading"><SectionIcon role="imagerySources"/><span>Imagery sources</span></div>
             <form className="professional-form" onSubmit={event=>{event.preventDefault();try{setCustom(mapTilerImagery(mapTilerKey));setTileError('');setMapTilerKey('');setMessage('HD imagery connected. Choose Licensed HD under Map type.');}catch(e){setTileError(String(e));}}}>
               <input type="password" autoComplete="off" aria-label="MapTiler browser API key" placeholder="MapTiler key (licensed)" value={mapTilerKey} onChange={e=>setMapTilerKey(e.target.value)}/>
               <button disabled={!mapTilerKey.trim()}>Connect global HD imagery</button>
@@ -1285,7 +1286,7 @@ export default function App() {
                   try{setCustom(customBasemap(tileURL,tileCredit,tileZoom));setMessage('Custom tiles connected. Select Licensed HD under Map type.');}
                   catch(failure){setTileError(failure instanceof Error?failure.message:'Invalid tile settings.');}
                 }}>
-                  <input aria-label="Licensed XYZ tile URL" placeholder="https://…/{z}/{x}/{y}.jpg" value={tileURL} onChange={e=>setTileURL(e.target.value)} required/>
+                  <input aria-label="Licensed XYZ tile URL" placeholder="https://example.com/{z}/{x}/{y}.jpg" value={tileURL} onChange={e=>setTileURL(e.target.value)} required/>
                   <input aria-label="Imagery attribution" placeholder="Provider attribution" value={tileCredit} onChange={e=>setTileCredit(e.target.value)} required/>
                   <label>Native maximum zoom <input type="number" min="1" max="23" value={tileZoom} onChange={e=>setTileZoom(Number(e.target.value))}/></label>
                   <button type="submit">Connect imagery</button>
@@ -1294,13 +1295,13 @@ export default function App() {
                 </form>
               </details>
 
-            <div className="section-heading">Diagnostics</div>
+            <div className="section-heading"><SectionIcon role="diagnostics"/><span>Diagnostics</span></div>
             <small aria-label="Build revision" className="compact-notice">Frontend revision {import.meta.env.VITE_GEOFATHOM_REVISION}</small>
           </div>
         </details>
         <button className="gis-command-trigger" title="Search actions (Ctrl K)"
           aria-label="Command search" onClick={()=>setCommandOpen(true)}>
-          <Search size={14}/> <span>Commands</span><kbd>Ctrl K</kbd>
+          <Command size={14}/> <span>Commands</span><kbd>Ctrl K</kbd>
         </button>
         <div className="gis-active-project" ref={setProjectToolbarTarget} aria-label="Active workspace"/>
         <details className="gis-header-menu gis-workspace-menu" name="gis-header-menu">
@@ -1328,7 +1329,7 @@ export default function App() {
         </div>
         <div className="gis-survey-commands" ref={setToolbarTarget}/>
         <label className="gis-quick-basemap" aria-label="Basemap picker">
-          <Globe2 size={15} aria-hidden="true"/>
+          <Map size={15} aria-hidden="true"/>
           <select aria-label="Map type" value={basemap}
             title={BASEMAPS.find(item=>item.id===basemap)?.note??mapStatus}
             onChange={event=>setBasemap(event.target.value as BasemapId)}>
@@ -1351,7 +1352,7 @@ export default function App() {
             title={expandedDock==='project'?'Return to workspace':'Open larger workspace'}
             onClick={()=>setExpandedDock(v=>v==='project'?null:'project')}>
             {expandedDock==='project'?<Minimize2 size={14}/>:<Maximize2 size={14}/>}
-          </button>}><Layers3 size={15}/> Workspace</WorkspaceDockHeading>
+          </button>}><SectionIcon role="workspace" size={15}/> Workspace</WorkspaceDockHeading>
           <nav className="gis-drawer-tabs" role="tablist" aria-label="Workspace pages">
             {([['project','Project'],['layers','Layers'],['search','Search']] as const).map(([key,label])=>
               <button key={key} type="button" role="tab" aria-selected={drawerTab===key}
@@ -1359,7 +1360,7 @@ export default function App() {
           </nav>
           <div className="sidebar-scroll">
           <section className="panel-section" hidden={drawerTab!=='project'}>
-            <div className="section-heading"><Layers3 size={16} /><span>Projects</span></div>
+            <div className="section-heading"><SectionIcon role="projects" size={16}/><span>Projects</span></div>
             {!capabilities&&connectionError&&<div className="discovery-error" role="alert">{connectionError} <button onClick={()=>setConnectionRetry(v=>v+1)}>Reconnect</button></div>}
             <ProjectsPanel toolbarTarget={projectToolbarTarget} toolbarActionsTarget={projectActionsTarget} treeTarget={objectTreeTarget}
               interactionBusy={busy||Boolean(drawingMode)} objectPageSize={gisObjectCapacity} objectsAlwaysOpen
@@ -1451,7 +1452,7 @@ export default function App() {
 
 
             <section className="panel-section scratch-layer" hidden={drawerTab!=='layers'}>
-              <div className="section-heading"><Layers3 size={15}/><span>Local drawings · {scratch.length}</span></div>
+              <div className="section-heading"><SectionIcon role="drawings" size={15}/><span>Local drawings · {scratch.length}</span></div>
               {scratchStorageError&&<p className="discovery-error">Browser storage unavailable. Export drawings before closing.</p>}
               {!scratch.length&&<small className="compact-notice">No drawings</small>}
               <div className="scratch-list" aria-label="Local drawings">
@@ -1477,7 +1478,7 @@ export default function App() {
 
             </section>
             <section className="panel-section gis-basemaps" hidden={drawerTab!=='layers'}>
-              <div className="section-heading"><Layers3 size={15}/><span>Map overlays</span></div>
+              <div className="section-heading"><SectionIcon role="overlays" size={15}/><span>Map overlays</span></div>
               {networkResults.length>0&&<label className="gis-check"><input aria-label="Network science result layer" type="checkbox" checked={networkVisible} onChange={e=>setNetworkVisible(e.target.checked)}/> Network results · {networkResults.length}</label>}
               {(spatialResults.length>0||spatialRaster)&&<label className="gis-check"><input aria-label="Spatial science result layer" type="checkbox" checked={spatialVisible} onChange={e=>setSpatialVisible(e.target.checked)}/> Spatial science results · {spatialResults.length+(spatialRaster?1:0)}</label>}
               {spacetimeRaster&&<label className="gis-check"><input aria-label="Spatiotemporal result layer" type="checkbox" checked={spacetimeVisible} onChange={e=>setSpacetimeVisible(e.target.checked)}/> Spatiotemporal result</label>}
@@ -1500,9 +1501,9 @@ export default function App() {
               </div>)}
             </section>
           <section className="panel-section" hidden={drawerTab!=='search'}>
-            <div className="section-heading"><Search size={16} /><span>Find a place</span></div>
+            <div className="section-heading"><SectionIcon role="placeSearch" size={16}/><span>Find a place</span></div>
             <form onSubmit={runSearch} className="search-form">
-              <input aria-label="Search for a place" placeholder="Airport, landmark, city, address…" value={locationInput}
+              <input aria-label="Search for a place" placeholder="Airport, landmark, city, address" value={locationInput}
                 onChange={event => setLocationInput(event.target.value)} maxLength={200} />
               <button aria-label="Search" type="submit" disabled={busy || locationInput.trim().length < 2}>
                 <ArrowRight size={17} />
@@ -1528,7 +1529,7 @@ export default function App() {
 
 
           <section className="panel-section" hidden={drawerTab!=='search'}>
-            <div className="section-heading"><Search size={16} /><span>Find areas by size</span><span className="section-pill">Spatial query</span></div>
+            <div className="section-heading"><SectionIcon role="areaSearch" size={16}/><span>Find areas by size</span><span className="section-pill">Spatial query</span></div>
             <DiscoveryPanel viewport={viewport} busy={busy} onFound={(result: DiscoveryResponse) => {
               setDiscovered(result.results);
               setCandidates(result.results);
@@ -1543,11 +1544,11 @@ export default function App() {
 
           {candidates.length > 0 && (
             <section className="panel-section" hidden={drawerTab!=='search'}>
-              <div className="section-heading"><MapPin size={16} /><span>Search results</span><span className="result-count">{candidates.length}</span></div>
+              <div className="section-heading"><SectionIcon role="searchResults" size={16}/><span>Search results</span><span className="result-count">{candidates.length}</span></div>
               <div className="results">
                 {candidates.slice(candidatePage*candidateSize,(candidatePage+1)*candidateSize).map(place => (
                   <button key={place.id} className={selectedPlace?.id === place.id ? 'result active' : 'result'} onClick={() => { setError(''); void selectPlace(place); }}>
-                    <MapPin size={15} />
+                    <Bookmark size={15} />
                     <span className="result-text"><strong>{place.name}</strong><small>{place.display_name}</small></span>
                     <span className={place.boundary_status === 'mapped' ? 'result-tag mapped' : 'result-tag'}>
                       {place.boundary_status === 'mapped' ? 'Boundary' : 'Point'}
@@ -1780,7 +1781,7 @@ export default function App() {
               aria-expanded={showLegend&&!editing} disabled={editing}
               title={editing?'Finish geometry editing to open the map legend':'Toggle map legend'}
               onClick={()=>setShowLegend(value=>!value)}>
-              <Layers3 size={15}/> Legend
+              <SectionIcon role="legend" size={15}/> Legend
             </button>
             {showLegend&&!editing&&<div className="map-legend-items" aria-label="Map legend">
               {namedLegend.map(item=><div key={item.id} className="map-legend-item" title={item.detail?item.name+' · '+item.detail:item.name}>
@@ -1809,7 +1810,7 @@ export default function App() {
           <div className={'sidebar-scroll'+(['tools-services','tools-export'].includes(activeTool)?' data-fixed-operations':'')}
             tabIndex={0} aria-label="Operations scrolling region">
           <section className="workspace-objects" hidden={['tools-services','tools-export'].includes(activeTool)}>
-            <h3 className="gis-static-heading"><Layers3 size={13} aria-hidden="true"/> Objects</h3>
+            <h3 className="gis-static-heading"><SectionIcon role="objects" size={13}/> Objects</h3>
             <div ref={setObjectTreeTarget}/>
           </section>
           <div className="workspace-module-content">
@@ -1852,7 +1853,7 @@ export default function App() {
               </div>}
             </section>,resultsTarget)}
           {resultsTarget&&!['tools-terrain','tools-spatial-science','tools-remote-sensing','tools-network-science','tools-spacetime','tools-lidar'].includes(activeTool)&&!(['tools-survey','tools-services'].includes(activeTool)&&(networkAreas?.count??0)>1)&&(geometry||measurement||preview)&&createPortal(<section className="panel-section results-summary">
-            <div className="section-heading"><Compass size={16} /><span>Selection</span></div>
+            <div className="section-heading"><SectionIcon role="surveySelection" size={16}/><span>Selection</span></div>
             <div className="analysis-card">
               
               {measurement && !preview && (
@@ -2000,7 +2001,7 @@ export default function App() {
 
 
           <section id="tools-raster" hidden={activeTool!=='tools-raster'} className="panel-section">
-            <div className="section-heading"><Layers3 size={16} /><span>Georeferenced imagery</span></div>
+            <div className="section-heading"><SectionIcon role="imagery" size={16}/><span>Georeferenced imagery</span></div>
             <RasterPanel
               asset={imageLayer} localImport={capabilities?.local_raster_import===true} refreshToken={connectionRetry+refreshToken}
               onSelect={(asset) => {
@@ -2157,24 +2158,24 @@ export default function App() {
           </section>
 
           <section id="tools-spatial-science" hidden={activeTool!=='tools-spatial-science'} className="panel-section">
-            <div className="section-heading"><Layers3 size={16}/><span>Spatial Analysis</span></div>
+            <div className="section-heading"><SectionIcon role="spatial" size={16}/><span>Spatial Analysis</span></div>
             <SpatialSciencePanel key={activeProjectId??'no-project'} active={activeTool==='tools-spatial-science'} resultsTarget={resultsTarget} geometry={preview||drawingMode?null:geometry} connected={Boolean(capabilities)} projectId={activeProjectId} layers={projectWorkspace?.layers??[]} assets={rasterLayers.map(l=>l.asset)} terrainProducts={registrySources(scienceRegistry,'Spatial')} onScientificRaster={r=>publishScience('Spatial',[r])} onPreview={features=>{if(projectCurrent()){setSpatialResults(features);setSpatialVisible(true);}}} onRasterPreview={layer=>{if(projectCurrent()){setSpatialRaster(layer);setSpatialVisible(true);}}}/>
           </section>
 
           <section id="tools-lidar" hidden={activeTool!=='tools-lidar'} className="panel-section">
-            <div className="section-heading"><Layers3 size={16}/><span>3D &amp; LiDAR</span></div>
+            <div className="section-heading"><SectionIcon role="lidar" size={16}/><span>3D &amp; LiDAR</span></div>
             <LidarPanel key={'lidar-'+(activeProjectId??'no-project')} active={activeTool==='tools-lidar'} connected={Boolean(capabilities)} resultsTarget={resultsTarget}/>
           </section>
           <section id="tools-spacetime" hidden={activeTool!=='tools-spacetime'} className="panel-section">
-            <div className="section-heading"><Layers3 size={16}/><span>Spatiotemporal Analysis</span></div>
+            <div className="section-heading"><SectionIcon role="temporal" size={16}/><span>Spatiotemporal Analysis</span></div>
             <SpacetimePanel key={activeProjectId??'no-project'} active={activeTool==='tools-spacetime'} connected={Boolean(capabilities)} resultsTarget={resultsTarget} assets={rasterLayers.map(l=>l.asset)} derivedRasters={registrySources(scienceRegistry,'Temporal')} onScientificRaster={r=>publishScience('Temporal',[r])} onPreview={layer=>{if(projectCurrent()){setSpacetimeRaster(layer);setSpacetimeVisible(true);const xs=layer.raster.corners.map(p=>p[0]),ys=layer.raster.corners.map(p=>p[1]);const west=Math.min(...xs),east=Math.max(...xs),south=Math.min(...ys),north=Math.max(...ys);setFocus({longitude:(west+east)/2,latitude:(south+north)/2,bbox:[west,south,east,north],key:Date.now()});}}}/>
           </section>
           <section id="tools-network-science" hidden={activeTool!=='tools-network-science'} className="panel-section">
-            <div className="section-heading"><Layers3 size={16}/><span>Network Analysis</span></div>
+            <div className="section-heading"><SectionIcon role="network" size={16}/><span>Network Analysis</span></div>
             <NetworkSciencePanel key={activeProjectId??'no-project'} active={activeTool==='tools-network-science'} connected={Boolean(capabilities)} resultsTarget={resultsTarget} projectId={activeProjectId} layers={projectWorkspace?.layers??[]} assets={rasterLayers.map(l=>l.asset)} derivedRasters={scientificRasters} onPreview={features=>{if(projectCurrent()){setNetworkResults(features);setNetworkVisible(true);}}}/>
           </section>
           <section id="tools-remote-sensing" hidden={activeTool!=='tools-remote-sensing'} className="panel-section">
-            <div className="section-heading"><Layers3 size={16}/><span>Remote Sensing</span></div>
+            <div className="section-heading"><SectionIcon role="sensing" size={16}/><span>Remote Sensing</span></div>
             <RemoteSensingPanel key={activeProjectId??'no-project'} projectId={activeProjectId} active={activeTool==='tools-remote-sensing'} connected={Boolean(capabilities)} resultsTarget={resultsTarget} assets={rasterLayers.map(l=>l.asset)} derivedRasters={registrySources(scienceRegistry,'Sensing')} onScientificRaster={r=>publishScience('Sensing',[r])} onPreview={layer=>{if(projectCurrent()){setRemoteRaster(layer);setRemoteVisible(true);}}}/>
           </section>
 
@@ -2216,7 +2217,7 @@ export default function App() {
           </section>
 
           <section id="tools-style" hidden={activeTool!=='tools-style'} className="panel-section">
-            <div className="section-heading"><Layers3 size={16}/><span>Advanced cartography & EPSG</span></div>
+            <div className="section-heading"><SectionIcon role="mapping" size={16}/><span>Advanced cartography & EPSG</span></div>
             <CartographyProPanel
               key={activeProjectId ?? 'no-project'}
               projectId={activeProjectId}
@@ -2282,10 +2283,10 @@ export default function App() {
 
 
           <section id="tools-ai" hidden={activeTool!=='tools-ai'} className="panel-section">
-            <div className="section-heading"><Sparkles size={16} /><span>Ask GeoFathom</span><span className="section-pill">Assistant</span></div>
+            <div className="section-heading"><SectionIcon role="assistant" size={16}/><span>Ask GeoFathom</span><span className="section-pill">Assistant</span></div>
             <ModelControls modelId={modelId} onChange={setModelId} />
             <form onSubmit={runAssistant} className="prompt-form">
-              <textarea aria-label="Ask the geospatial assistant" placeholder="Measure Shanghai Hongqiao Airport's mapped boundary…" value={prompt}
+              <textarea aria-label="Ask the geospatial assistant" placeholder="Measure Shanghai Hongqiao Airport's mapped boundary" value={prompt}
                 onChange={event => setPrompt(event.target.value)} maxLength={500} rows={3} />
               <div className="prompt-footer">
                 <span>{modelUsed === null ? 'Selected model / GIS fallback' : modelUsed ? 'AI parsed the request' : 'GIS fallback interpretation'}</span>

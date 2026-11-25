@@ -1,7 +1,8 @@
+import {SectionIcon} from './SectionIcon';
 import { useState, type FormEvent } from 'react';
 import {createPortal} from 'react-dom';
 import {
-  Check, Circle, Copy, CornerDownRight, Eraser, GitMerge, MapPin, Minus, MousePointer2,
+  Check, Circle, Copy, Eraser, MapPin, Minus, MousePointer2,
   Pencil, Pentagon, Redo2, Route, Ruler, Scissors, Square, Undo2, X, type LucideIcon,
 } from 'lucide-react';
 
@@ -167,14 +168,14 @@ export default function SurveyTools({
       {toolbarTarget?createPortal(toolbar,toolbarTarget):toolbar}
       {/* Keep high-frequency survey controls visible, like GIS tools. */}
       <section className="survey-flat-group" aria-label="Vertex editing options">
-      <h3 className="survey-flat-heading" title="Drag vertices to reshape, midpoints to insert, or right-click a vertex to remove it."><Pentagon size={13} aria-hidden="true"/> Vertices</h3>
+      <h3 className="survey-flat-heading" title="Drag vertices to reshape, midpoints to insert, or right-click a vertex to remove it."><SectionIcon role="vertices" size={13}/> Vertices</h3>
       <label className="linked-vertex-toggle">
         <input type="checkbox" checked={linked} onChange={e=>onLinked(e.target.checked)} />
         <span title="Preview neighboring feature edits">Linked/shared vertices</span>
       </label>
       </section>
       <section className="survey-flat-group" aria-label="Exact coordinates and construction">
-      <h3 className="survey-flat-heading"><CornerDownRight size={13}/> Construction</h3>
+      <h3 className="survey-flat-heading"><SectionIcon role="construction" size={13}/> Construction</h3>
       <form className="survey-numeric" onSubmit={numeric}>
         <select aria-label="Numeric construction mode" value={numericMode} onChange={event => setNumericMode(event.target.value)}>
           <option value="point">Point</option>
@@ -208,11 +209,11 @@ export default function SurveyTools({
       </form>
       </section>
       <section className="survey-flat-group" aria-label="Combine with saved feature">
-      <h3 className="survey-flat-heading"><GitMerge size={13}/> Boolean operations</h3>
+      <h3 className="survey-flat-heading"><SectionIcon role="boolean" size={13}/> Boolean operations</h3>
       <div className="survey-overlay">
         <select aria-label="Boolean operation target" value={reference}
           onChange={event => setReference(event.target.value)}>
-          <option value="">Select feature…</option>
+          <option value="">Select feature</option>
           {saved.filter(feature => feature.id).map(feature =>
             <option key={feature.id} value={feature.id}>{feature.name}</option>)}
         </select>

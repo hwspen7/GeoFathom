@@ -151,7 +151,7 @@ export default function ModelControls({ modelId, onChange }: Props) {
               {item.name}{item.id === catalog?.default_id ? ' (default)' : ''}
             </option>
           ))}
-          {!catalog && <option value="">Loading model directory…</option>}
+          {!catalog && <option value="">Loading model directory</option>}
         </select>
         <button type="button" aria-label="Manage models" title="Manage models" onClick={() => setManaging(value => !value)}>
           <Settings2 size={16} />

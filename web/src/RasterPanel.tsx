@@ -1,5 +1,5 @@
 import { useEffect, useState, type ChangeEvent } from 'react';
-import { FileImage, MousePointer2, UploadCloud } from 'lucide-react';
+import { FileImage, Crosshair, UploadCloud } from 'lucide-react';
 
 import {
   listImagery, searchPublicImagery, uploadImagery, type RasterAsset, type StacItem,
@@ -128,7 +128,7 @@ export default function RasterPanel({
           )}
           <button className={tracing ? 'trace-toggle active' : 'trace-toggle'}
             onClick={() => onTracing(!tracing)}>
-            <MousePointer2 size={15}/>
+            <Crosshair size={15}/>
             {tracing ? 'Click your target on the map' : 'Start automatic outline'}
           </button>
           <small className="compact-notice" title="An image-derived outline is not a surveyed or legal boundary. Regions extending past the analysis window are flagged.">Image-derived outline · review required</small>

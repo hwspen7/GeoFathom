@@ -1,5 +1,6 @@
+import {SectionIcon} from './SectionIcon';
 import {useEffect,useRef,useState} from 'react';
-import {BrainCircuit,Database,Layers3} from 'lucide-react';
+import {Database} from 'lucide-react';
 import ScientificFigureStudio from './ScientificFigureStudio';
 import BuildingResearchPanel from './BuildingResearchPanel';
 import {
@@ -206,7 +207,7 @@ export default function GeoAIAnalysisPanel(p:Props){
 
   return <div className="professional-panel">
     <details>
-      <summary><BrainCircuit size={14}/> GeoAI raster analysis & change detection</summary>
+      <summary><SectionIcon role="geoai" size={14}/> GeoAI raster analysis & change detection</summary>
       <div className="professional-form">
         <p className="project-hint">
           Choose an explicit analysis operation. Spectral indices and change
@@ -394,7 +395,7 @@ export default function GeoAIAnalysisPanel(p:Props){
         {job?.status==='failed'&&<p className="discovery-error">{job.error}</p>}
         {result&&<>
           <div className="raster-details">
-            <Layers3 size={14}/> {result.features.length} candidate regions ·
+            <SectionIcon role="candidates" size={14}/> {result.features.length} candidate regions ·
             {result.valid_pixels} valid pixels
           </div>
           <p className="project-hint">{result.warning}

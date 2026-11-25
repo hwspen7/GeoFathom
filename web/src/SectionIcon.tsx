@@ -1,0 +1,52 @@
+import {ListTree,PanelLeft,FolderKanban,Paintbrush,Layers,MapPinned,Scan,ListChecks,BookOpen,Focus,Image,ChartScatter,Box,CalendarClock,Network,Satellite,Earth,Bot,Waypoints,Spline,CornerDownRight,GitMerge,TableProperties,FilePenLine,ArrowLeftRight,MountainSnow,DraftingCompass,ScanLine,Workflow,FileText,Folder,Layers3,Palette,SlidersHorizontal,Compass,BrainCircuit,Target,Monitor,RadioTower,HeartPulse,Server,DatabaseZap,Timer,type LucideIcon} from 'lucide-react';
+
+// A distinct visual identifier for each functional section in the workspace.
+export const SECTION_ICONS={
+  objects:ListTree,
+  workspace:PanelLeft,
+  projects:FolderKanban,
+  drawings:Paintbrush,
+  overlays:Layers,
+  placeSearch:MapPinned,
+  areaSearch:Scan,
+  searchResults:ListChecks,
+  legend:BookOpen,
+  surveySelection:Focus,
+  imagery:Image,
+  spatial:ChartScatter,
+  lidar:Box,
+  temporal:CalendarClock,
+  network:Network,
+  sensing:Satellite,
+  mapping:Earth,
+  assistant:Bot,
+  vertices:Waypoints,
+  boundary:Spline,
+  construction:CornerDownRight,
+  boolean:GitMerge,
+  attributes:TableProperties,
+  attributeEdit:FilePenLine,
+  exchange:ArrowLeftRight,
+  terrain:MountainSnow,
+  geometry:DraftingCompass,
+  selection:ScanLine,
+  topology:Workflow,
+  pdf:FileText,
+  layerGroup:Folder,
+  layerManager:Layers3,
+  choropleth:Palette,
+  labelPlacement:SlidersHorizontal,
+  projection:Compass,
+  geoai:BrainCircuit,
+  candidates:Target,
+  display:Monitor,
+  imagerySources:RadioTower,
+  diagnostics:HeartPulse,
+  ogcServices:Server,
+  spatialDatabase:DatabaseZap,
+  backgroundJobs:Timer,
+} satisfies Record<string,LucideIcon>;
+export type SectionIconRole=keyof typeof SECTION_ICONS;
+export function SectionIcon({role,size=13}:{role:SectionIconRole;size?:number}){
+ const Icon=SECTION_ICONS[role];return <Icon size={size} aria-hidden="true" data-section-icon={role}/>;
+}

@@ -1,5 +1,6 @@
 import {useEffect,useRef,useState} from 'react';
-import {Database,Globe2,Layers3,RefreshCcw} from 'lucide-react';
+import {RefreshCcw} from 'lucide-react';
+import {SectionIcon} from './SectionIcon';
 import {cancelGISJob,downloadGISJob,downloadExchangeJob,getGISJobs,getOGCSources,getPostGISStatus,
   inspectOGCSource,ogcTileTemplate,queueGISJob,registerOGCSource,
   remoteOGCFeatures,removeOGCSource,saveFeatureBatch,queryPostGIS,
@@ -155,7 +156,7 @@ export default function DataServicesPanel(p:Props){
 
   return <div className="professional-panel">
     <details open={p.view==='sources'?true:undefined} hidden={Boolean(p.view&&p.view!=='sources')}>
-      <summary><Globe2 size={14}/> OGC map & feature services</summary>
+      <summary><SectionIcon role="ogcServices" size={14}/> OGC map & feature services</summary>
       <div className="professional-form">
         <div className="data-choice-buttons">
           <button type="button" aria-pressed={sourceView==='browse'}
@@ -237,7 +238,7 @@ export default function DataServicesPanel(p:Props){
       </div>
     </details>
     <details open={p.view==='database'?true:undefined} hidden={Boolean(p.view&&p.view!=='database')}>
-      <summary><Database size={14}/> Spatial database & indexed viewport</summary>
+      <summary><SectionIcon role="spatialDatabase" size={14}/> Spatial database & indexed viewport</summary>
       <div className="professional-form">
         <p className="project-hint">SQLite R-tree is available without extra
           setup. PostGIS is an optional external indexed mirror, not the
@@ -265,7 +266,7 @@ export default function DataServicesPanel(p:Props){
       </div>
     </details>
     <details open={p.view==='jobs'?true:undefined} hidden={Boolean(p.view&&p.view!=='jobs')}>
-      <summary><Layers3 size={14}/> Persistent background GIS jobs</summary>
+      <summary><SectionIcon role="backgroundJobs" size={14}/> Persistent background GIS jobs</summary>
       <div className="professional-form">
         <select aria-label="Background GIS job type" value={jobKind}
           onChange={event=>setJobKind(event.target.value as GISJobKind)}>

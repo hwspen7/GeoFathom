@@ -1,6 +1,7 @@
+import {SectionIcon} from './SectionIcon';
 import {useState} from 'react';
 import {createPortal} from 'react-dom';
-import {AlertTriangle,Download,MousePointer2,Square} from 'lucide-react';
+import {FileOutput,SquareDashed} from 'lucide-react';
 import {downloadMapPDF,reviewTopology,selectSpatialFeatures,
   type QualityIssue,type SpatialRelation} from './api';
 
@@ -88,7 +89,7 @@ export default function SpatialToolsPanel(p:Props){
   </div>;
   return <div className="professional-panel">
     <section className="analysis-tool-group" aria-label="Select by location">
-      <h3 className="analysis-tool-heading"><MousePointer2 size={13}/> Selection <small>{p.selectedIds.length} selected</small></h3>
+      <h3 className="analysis-tool-heading"><SectionIcon role="selection" size={13}/> Selection <small>{p.selectedIds.length} selected</small></h3>
       <div className="professional-form">
         <div className="area-fields analysis-selection-fields">
           <select aria-label="Selection area mode" value={selectionSource}
@@ -107,7 +108,7 @@ export default function SpatialToolsPanel(p:Props){
           <button aria-label="Draw selection rectangle" title={p.boxMode?'Drag on map to select area':'Draw selection rectangle'}
           disabled={busy||!p.projectId||selectionSource!=='box'} onClick={()=>{
             p.onBoxMode(!p.boxMode);if(!p.boxMode)p.onBox(null);
-          }} className={p.boxMode?'active':''} aria-pressed={p.boxMode}><Square size={14}/></button>
+          }} className={p.boxMode?'active':''} aria-pressed={p.boxMode}><SquareDashed size={14}/></button>
         </div>
         <div className="analysis-selection-actions">
           <label className="linked-vertex-toggle" title="Only select features on visible layers">
@@ -124,7 +125,7 @@ export default function SpatialToolsPanel(p:Props){
       </div>
     </section>
     <section className="analysis-tool-group" aria-label="Topology quality inspection">
-      <h3 className="analysis-tool-heading"><AlertTriangle size={13}/> Topology</h3>
+      <h3 className="analysis-tool-heading"><SectionIcon role="topology" size={13}/> Topology</h3>
       <div className="professional-form analysis-inline">
         <label className="analysis-inline-label" title="Minimum overlap or gap area in square meters">Min. m²
           <input aria-label="Topology threshold" type="number" min="0" step=".01"
@@ -139,7 +140,7 @@ export default function SpatialToolsPanel(p:Props){
         event.preventDefault();void execute(print);
       }}>
         <div className="analysis-print-heading">
-          <h3 className="analysis-tool-heading"><Download size={13}/> PDF layout</h3>
+          <h3 className="analysis-tool-heading"><SectionIcon role="pdf" size={13}/> PDF layout</h3>
           <label className="linked-vertex-toggle" title="Include coordinate grid">
             <input aria-label="PDF include grid" type="checkbox" checked={grid} onChange={e=>setGrid(e.target.checked)}/> Grid
           </label>
@@ -151,7 +152,7 @@ export default function SpatialToolsPanel(p:Props){
           <input aria-label="PDF map title" placeholder="Map title" value={title} maxLength={120}
             onChange={e=>setTitle(e.target.value)}/>
           <button aria-label="Export vector PDF" disabled={!p.projectId||busy||!title.trim()}
-            type="submit" title="Export vector PDF with scale, north arrow and selected layout"><Download size={12}/> Export</button>
+            type="submit" title="Export vector PDF with scale, north arrow and selected layout"><FileOutput size={12}/> Export</button>
         </div>
         <div className="area-fields analysis-print-fields">
           <label title="Paper size">

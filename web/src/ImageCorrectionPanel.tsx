@@ -1,4 +1,4 @@
-import { MousePointerClick, ScanEye, Square, X } from 'lucide-react';
+import { MousePointerClick, ScanEye, Frame, X } from 'lucide-react';
 import type { Position } from './editing';
 
 export type PromptMode='positive'|'negative'|'box'|null;
@@ -32,7 +32,7 @@ export default function ImageCorrectionPanel({
         </button>
         <button disabled={!enabled} className={mode==='box'?'active':''}
           onClick={()=>onMode(mode==='box'?null:'box')}>
-          <Square size={14}/> Box
+          <Frame size={14}/> Box
         </button>
       </div>
       <div className="raster-details">

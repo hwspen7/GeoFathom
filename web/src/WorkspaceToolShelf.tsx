@@ -2,7 +2,7 @@
  * remain in their owning workbench, keeping one source of state.
  */
 import {useState} from 'react';
-import {Search} from 'lucide-react';
+import {SearchCode} from 'lucide-react';
 export interface WorkbenchTool<T extends string> {id:T;title:string}
 export default function WorkspaceToolShelf<T extends string>({
   category,categories,tools,selected,onCategory,onSelect,
@@ -23,7 +23,7 @@ export default function WorkspaceToolShelf<T extends string>({
           {Object.keys(categories).map(name=><option key={name}>{name}</option>)}
         </select>
       </label>
-      <label className="workspace-tool-search"><Search size={13}/>
+      <label className="workspace-tool-search"><SearchCode size={13}/>
         <input aria-label="Find terrain tool" type="search" value={query}
           placeholder="Find tool"
           onChange={event=>setQuery(event.target.value)}/>

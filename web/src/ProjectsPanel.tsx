@@ -1,7 +1,8 @@
+import {SectionIcon} from './SectionIcon';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import {createPortal} from 'react-dom';
 import {
-  Copy, Eye, EyeOff, History, Layers3, Lock,
+  Copy, Eye, EyeOff, History, Lock,
   LockOpen, MapPin, Plus, RotateCcw, Save,
 } from 'lucide-react';
 
@@ -481,7 +482,7 @@ export default function ProjectsPanel({
             {trash.map(item=><div key={item.feature_id} className="survey-action-bar"><span>{item.name}</span>
               <button disabled={busy} onClick={()=>void restoreTrash(item)}>Restore</button></div>)}
           </details>
-          <div className="layer-header"><Layers3 size={14} /> Layers</div>
+          <div className="layer-header"><SectionIcon role="layerManager" size={14}/> Layers</div>
           {selected && !workspace && !error && <p role="status">Loading selected project…</p>}
           {workspace?.layers.map(layer => (
             <div key={layer.id} className="layer-row">
