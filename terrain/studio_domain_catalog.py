@@ -77,6 +77,7 @@ RASTER = (
 ('spatial_mae_tiles','Spatial neighborhood absolute-error surface','Spatial change','raster',''),
 )
 TABLE = (
+('remote_selective_accuracy','Independent selective accuracy','Remote sensing','table','x y z'),
 ('remote_reliability','Held-out probability reliability','Remote sensing','table','x y z'),
 ('remote_roc','Held-out receiver operating characteristic','Remote sensing','table','x y'),
 ('remote_joint_posterior','Joint physical parameter posterior','Remote sensing','table','x y z'),
@@ -171,6 +172,7 @@ OPTIONS = {
 MIN_RASTERS = {**{r[0]:2 for r in RASTER if r[0].startswith('ensemble_') or r[0].startswith('land_transition') or r[0] in ('land_gain_loss','spatial_relative_change','spatial_absolute_change','spatial_z_change','spatial_rmse_tiles','spatial_mae_tiles')},
  **{r[0]:2 for r in RASTER if r[0].startswith('spectral_')},'spectral_rgb':3,'spectral_evi':3,'spectral_angle':2,'spatial_z_change':3}
 NOTES={
+ 'remote_selective_accuracy':'Independent-reference accuracy versus retained support at declared probability thresholds; exploratory if this reference selects the threshold.',
  'remote_reliability':'Held-out bin mean probabilities, positive fractions and counts; symbol size is bin support, not an error bar.',
  'remote_roc':'Actual supplied ROC coordinates; plotted AUC may approximate a decimated curve; exact original AUC belongs to analysis receipt.',
  'remote_joint_posterior':'Actual discrete joint posterior mass, summed for duplicate parameter pairs; no interpolation or fabricated density.',

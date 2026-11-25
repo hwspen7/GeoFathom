@@ -1,7 +1,7 @@
 """Spatially validated portable random forests and full-resolution disk inference.
 
 Models contain numeric JSON trees, never pickle or executable user objects.
-Probabilities and spectral-distance diagnostics are not calibrated confidence.
+Optional spatially isolated temperature calibration remains conditional on sampled support.
 """
 import argparse
 from contextlib import ExitStack
@@ -18,6 +18,7 @@ from rasterio.windows import Window
 from analysis.science_raster import require
 from .remote_band import read_calibrated
 from .remote_kernels import quality_mask
+from .remote_confidence import calibrated_probabilities,fit_temperature,probability_scores,feature_support,support_distance
 from .remote_partitions import sample_partitions
 from .remote_windowed import digest, same_grid, windows
 
@@ -158,29 +159,42 @@ def train(config, output, progress=None, check=lambda:None):
         order=np.lexsort((cols,rows));x=np.concatenate(samples)[order];y=np.concatenate(labels).astype(int)[order]
         rows=np.asarray(rows)[order].tolist();cols=np.asarray(cols)[order].tolist();classes=np.unique(y)
         require(len(x)>=40 and 2<=len(classes)<=32,'Use at least forty samples and 2–32 classes.')
-        p={'trees':64,'max_depth':12,'min_leaf':2,'seed':42,'block_m':1000.,'folds':5,'buffer_blocks':1,**config.get('parameters',{})}
-        require(set(p)=={'trees','max_depth','min_leaf','seed','block_m','folds','buffer_blocks'},'Unknown training parameter.')
+        p={'trees':64,'max_depth':12,'min_leaf':2,'seed':42,'block_m':1000.,'folds':5,'buffer_blocks':1,'calibrate':False,**config.get('parameters',{})}
+        require(set(p)=={'trees','max_depth','min_leaf','seed','block_m','folds','buffer_blocks','calibrate'},'Unknown training parameter.')
         for key,lo,hi in [('trees',16,128),('max_depth',2,16),('min_leaf',1,100),('seed',0,2147483647),('folds',3,10),('buffer_blocks',0,1)]:
             require(type(p[key]) is int and lo<=p[key]<=hi,'Invalid training parameter: '+key)
+        require(type(p['calibrate']) is bool,'Calibration must be explicitly enabled or disabled.')
         require(np.isfinite(p['block_m']) and 1<=p['block_m']<=100000,'Invalid spatial block size.')
         folds,excluded=sample_partitions(np.asarray(rows),np.asarray(cols),grid.transform,p['block_m'],p['folds'],p['buffer_blocks'])
         def estimator():return RandomForestClassifier(n_estimators=p['trees'],max_depth=p['max_depth'],
             min_samples_leaf=p['min_leaf'],class_weight='balanced',random_state=p['seed'],n_jobs=1)
-        oof=np.full((len(x),len(classes)),np.nan);fold_rows=[]
+        oof=np.full((len(x),len(classes)),np.nan);raw_oof=oof.copy();uncalibrated_oof=oof.copy();fold_rows=[]
         for j in range(p['folds']):
             check();hold=folds==j;training=~excluded[j]
             require(all(np.count_nonzero(training&(y==c))>=5 and np.count_nonzero(hold&(y==c))>=1 for c in classes),
                     'Every spatial fold needs five training and one held-out sample per class.')
-            model=estimator().fit(x[training],y[training]);oof[hold]=model.predict_proba(x[hold])
+            model=estimator().fit(x[training],y[training]);raw_oof[hold]=model.predict_proba(x[hold])
+            calibration_fold=(j+1)%p['folds'];calibration=(folds==calibration_fold)&training
+            calibration_training=training&~excluded[calibration_fold];temperature=1.
+            if p['calibrate']:
+                require(all(np.count_nonzero(calibration_training&(y==c))>=5 and np.count_nonzero(calibration&(y==c))>=1 for c in classes),
+                    'Nested spatial calibration needs five fit and one calibration sample per class after both buffers.')
+                inner=estimator().fit(x[calibration_training],y[calibration_training])
+                temperature=fit_temperature(inner.predict_proba(x[calibration]),y[calibration],classes)
+                # The exact same fitted estimator reaches calibration and outer holdout.
+                uncalibrated_oof[hold]=inner.predict_proba(x[hold])
+                oof[hold]=calibrated_probabilities(uncalibrated_oof[hold],temperature)
+            else:oof[hold]=raw_oof[hold];uncalibrated_oof[hold]=raw_oof[hold]
             fold_rows.append({'fold':j,'training_cells':int(training.sum()),'validation_cells':int(hold.sum()),
-                'buffer_excluded':int((~training&~hold).sum()),'accuracy':float(np.mean(classes[np.argmax(oof[hold],axis=1)]==y[hold]))})
+                'buffer_excluded':int((~training&~hold).sum()),'calibration_cells':int(calibration.sum()) if p['calibrate'] else 0,
+                'calibration_fold':calibration_fold if p['calibrate'] else None,'calibration_training_cells':int(calibration_training.sum()) if p['calibrate'] else None,'temperature':temperature,'accuracy':float(np.mean(classes[np.argmax(oof[hold],axis=1)]==y[hold]))})
             if progress:progress(.2+.6*(j+1)/p['folds'])
         require(np.isfinite(oof).all(),'Incomplete spatial out-of-fold predictions.')
         validation=classification_metrics(y,classes[np.argmax(oof,axis=1)],classes)
-        one=np.eye(len(classes))[np.searchsorted(classes,y)]
-        validation.update(multiclass_brier=float(np.mean(np.sum((oof-one)**2,axis=1))),
-            log_loss=float(-np.mean(np.log(np.clip(oof[np.arange(len(y)),np.searchsorted(classes,y)],1e-15,1)))),
-            folds=fold_rows,scheme='buffered_recursive_spatial_blocks',parameters=p)
+        validation.update(**probability_scores(oof,y,classes),raw_probability_scores=probability_scores(uncalibrated_oof,y,classes),
+            folds=fold_rows,scheme='buffered_recursive_spatial_blocks',parameters=p,
+            calibration_scope='Outer holdout excluded from inner calibration and its estimator; final temperature fitted from raw spatial OOF predictions.')
+        temperature=fit_temperature(raw_oof,y,classes) if p['calibrate'] else 1.
         check();model=estimator().fit(x,y)
         mean=x.mean(axis=0);cov=np.atleast_2d(np.cov(x,rowvar=False));scale=max(float(np.trace(cov)/len(mean)),1e-12)
         covariance=.95*cov+.05*scale*np.eye(len(mean))
@@ -191,7 +205,8 @@ def train(config, output, progress=None, check=lambda:None):
             'training_label_sha256':digest(config['labels']['path']),
             'training_grid':{'crs':str(grid.crs),'transform':list(grid.transform)[:6],'shape':[grid.height,grid.width]},
             'training_samples':{'rows':rows,'cols':cols},'training_mean':mean.tolist(),'training_covariance':covariance.tolist(),
-            'sklearn_version':sklearn.__version__,'probability_interpretation':'Uncalibrated forest vote probabilities; spectral distance is descriptive, not calibrated OOD probability.'}
+            'feature_support':feature_support(x),'probability_calibration':{'method':'spatial_oof_temperature' if p['calibrate'] else 'identity','temperature':temperature},
+            'sklearn_version':sklearn.__version__,'probability_interpretation':('Spatial-OOF temperature-calibrated probabilities, conditional on training domain.' if p['calibrate'] else 'Uncalibrated forest vote probabilities.')+' Standardized training distance is descriptive, not an OOD probability.'}
         # Enforce serialization budgets and verify portable inference against the fitted estimator.
         compiled=compile_forest(artifact)
         require(np.allclose(forest_probabilities(compiled,x[:256]),model.predict_proba(x[:256]),atol=1e-12,rtol=0),'Portable model disagrees with trained estimator.')
@@ -204,7 +219,7 @@ def train(config, output, progress=None, check=lambda:None):
             os.link(name,output)
         finally:Path(name).unlink(missing_ok=True)
         return {'schema':artifact['schema'],'sha256':digest(output),'features':artifact['features'],
-            'classes':classes.tolist(),'validation':validation,'source_sha256':identities,
+            'classes':classes.tolist(),'validation':validation,'source_sha256':identities,'probability_calibration':artifact['probability_calibration'],
             'interpretation':'Saved numeric forest refitted on all labels; accuracy comes only from spatial OOF predictions.'}
 
 
@@ -214,14 +229,14 @@ def predict(config, output, progress=None, check=lambda:None):
     output=Path(output).resolve();require(output.parent.is_dir() and not output.exists(),'Choose a new prediction output.')
     tile=config.get('tile',256);require(type(tile) is int and 32<=tile<=512,'Prediction tile must be 32–512.')
     minimum=config.get('minimum_probability',0.);require(np.isfinite(minimum) and 0<=minimum<=1,'Invalid abstention probability threshold.')
+    maximum_distance=config.get('maximum_training_distance');require(maximum_distance is None or np.isfinite(maximum_distance) and maximum_distance>0,'Invalid training distance rejection threshold.')
     require(set(config['features'])=={f['role'] for f in model['features']},'Bind exactly the trained feature roles.')
     ordered={f['role']:config['features'][f['role']] for f in model['features']}
     classes=np.asarray(model['classes']);k=len(classes);temp=None
     with ExitStack() as stack:
         inputs=Inputs(stack,ordered,config.get('quality',[]));grid=inputs.grid
         require(all(inputs.bands[f['role']][2:]==(f['quantity'],f['unit']) for f in model['features']), 'Prediction feature quantities/units differ from training.')
-        mean=np.asarray(model['training_mean']);cov=np.asarray(model['training_covariance']);whiten=np.linalg.cholesky(cov)
-        require(mean.shape==(len(ordered),) and cov.shape==(len(ordered),len(ordered)),'Invalid training feature covariance.')
+        support=model.get('feature_support');sums=np.zeros(len(ordered));outside=np.zeros(len(ordered),dtype=np.int64);distance_exceeded=0
         band_names=['class','maximum_probability','entropy_bits','training_spectral_distance',*['probability_class_'+str(c) for c in classes]]
         count=accepted=0;total=((grid.width+tile-1)//tile)*((grid.height+tile-1)//tile)
         try:
@@ -235,10 +250,13 @@ def predict(config, output, progress=None, check=lambda:None):
                     check();values=inputs.read(window);valid=np.isfinite(values).all(axis=0)
                     result=np.full((k+4,int(window.height),int(window.width)),np.nan)
                     if valid.any():
-                        x=values[:,valid].T;prob=forest_probabilities(compiled,x);maximum=prob.max(axis=1)
+                        x=values[:,valid].T;prob=calibrated_probabilities(forest_probabilities(compiled,x),model.get('probability_calibration',{}).get('temperature',1));maximum=prob.max(axis=1)
                         entropy=-np.sum(np.where(prob>0,prob*np.log2(np.maximum(prob,1e-300)),0),axis=1)
-                        distance=np.linalg.norm(np.linalg.solve(whiten,(x-mean).T),axis=0)
-                        label=classes[np.argmax(prob,axis=1)].astype(float);label[maximum<minimum]=np.nan
+                        distance=support_distance(x,model)
+                        if support:
+                            sums+=x.sum(axis=0);outside+=((x<np.asarray(support['lower']))|(x>np.asarray(support['upper']))).sum(axis=0)
+                            distance_exceeded+=int((distance>support['distance_p95']).sum())
+                        label=classes[np.argmax(prob,axis=1)].astype(float);label[(maximum<minimum)|((distance>maximum_distance) if maximum_distance is not None else False)]=np.nan
                         result[:,valid]=np.vstack((label,maximum,entropy,distance,prob.T))
                         count+=len(x);accepted+=int(np.isfinite(label).sum())
                     dst.write(result,window=window)
@@ -250,6 +268,10 @@ def predict(config, output, progress=None, check=lambda:None):
                 'band_layout':{name:i+1 for i,name in enumerate(band_names)},'valid_cells':count,'classified_cells':accepted,
                 'abstained_cells':count-accepted,'minimum_probability':minimum,'sha256':digest(temp),
                 'crs':str(grid.crs),'transform':list(grid.transform)[:6],'shape':[grid.height,grid.width],
+                'probability_calibration':model.get('probability_calibration',{'method':'identity','temperature':1}),
+                'maximum_training_distance':maximum_distance,'domain_diagnostics':{'outside_marginal_support_fraction':dict(zip(ordered,(outside/count).tolist())),
+                    'mean_shift_training_sd':dict(zip(ordered,((sums/count-np.asarray(support['mean']))/np.asarray(support['scale'])).tolist())),
+                    'beyond_training_distance_p95_fraction':distance_exceeded/count,'scope':support['scope']} if support else None,
                 'interpretation':model['probability_interpretation']}
             os.link(temp,output)
             return receipt

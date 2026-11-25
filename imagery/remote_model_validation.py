@@ -61,6 +61,7 @@ def evaluate(config,output,progress=None,check=lambda:None):
         require(np.isfinite(tx).all() and np.isfinite(ty).all(),'Training geometry cannot be transformed into the evaluation CRS.')
         tree=cKDTree(np.column_stack((tx,ty)))
         blocks={};matrix=np.zeros((k,k),dtype=np.int64);bins=np.zeros((10,3));brier=loss=0.
+        thresholds=np.array([0.,.5,.6,.7,.8,.9,.95,.99]);selective=np.zeros((len(thresholds),3),dtype=np.int64)
         total_reference=excluded=paired=unclassified=0;total_windows=((prediction.width+tile-1)//tile)*((prediction.height+tile-1)//tile)
         try:
             fd,name=tempfile.mkstemp(prefix='.evaluation-'+output.stem+'-',suffix='.tif',dir=output.parent);os.close(fd);staged=Path(name)
@@ -80,7 +81,14 @@ def evaluate(config,output,progress=None,check=lambda:None):
                         keep=distance>buffer_m+1e-8;excluded+=int((~keep).sum());valid[valid]=keep
                     label=prediction.read(1,window=window,masked=True).astype(float).filled(np.nan)
                     probability=prediction.read(list(range(5,k+5)),window=window,masked=True).filled(np.nan)
-                    good=valid&np.isfinite(label)&np.isfinite(probability).all(axis=0)
+                    complete=valid&np.isfinite(probability).all(axis=0)
+                    if complete.any():
+                        probabilities=probability[:,complete].T
+                        require(np.all((probabilities>=0)&(probabilities<=1)) and np.allclose(probabilities.sum(axis=1),1,atol=1e-8),'Invalid probability bands.')
+                        confidence=probabilities.max(axis=1);correct=classes[np.argmax(probabilities,axis=1)]==truth[complete]
+                        for j,threshold in enumerate(thresholds):
+                            accepted=confidence>=threshold;selective[j]+=[len(correct),int(accepted.sum()),int(correct[accepted].sum())]
+                    good=complete&np.isfinite(label)
                     unclassified+=int((valid&~good).sum());error=np.full(truth.shape,np.nan)
                     if good.any():
                         require(np.isin(label[good],classes).all(),'Prediction contains unknown class IDs.')
@@ -116,6 +124,9 @@ def evaluate(config,output,progress=None,check=lambda:None):
                 support=reference_counts.tolist(),confusion_matrix_reference_rows=matrix.tolist(),cells=paired,
                 reference_cells=total_reference,training_excluded_cells=excluded,unclassified_reference_cells=unclassified,
                 coverage=paired/(total_reference-excluded),multiclass_brier=brier/paired,log_loss=loss/paired,
+                selective_accuracy=[{'minimum_probability':float(t),'available_cells':int(n),'accepted_cells':int(a),
+                    'coverage':float(a/n) if n else 0.,'accuracy':float(c/a) if a else None} for t,(n,a,c) in zip(thresholds,selective)],
+                selective_scope='Probability-only thresholds on independent complete reference support, including current abstentions; threshold selection on this reference is exploratory.',
                 reliability=reliability,ece=sum(abs(p-o)*n for p,o,n in reliability)/paired,
                 block_m=block_m,training_buffer_m=buffer_m,occupied_blocks=len(blocks),interval95=intervals,
                 replicates=replicates,seed=seed)

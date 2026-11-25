@@ -40,7 +40,7 @@ def render_table_domain(kind,req,fig,ax,table,parameter,meta,palette,cmap,rows):
     def integer(v,limit):
         require(float(v).is_integer() and 1<=v<=limit,'Choose an integer parameter within the data length.');return int(v)
     color=palette[0]
-    if kind in {'remote_reliability','remote_roc','remote_joint_posterior','remote_posterior_marginal','remote_anchor_quantiles'}:
+    if kind in {'remote_selective_accuracy','remote_reliability','remote_roc','remote_joint_posterior','remote_posterior_marginal','remote_anchor_quantiles'}:
         from .studio_remote_figures import render_remote
         return render_remote(kind,req,fig,ax,meta,palette,cmap,rows)
     if kind in {'spatial_null_distribution','spatial_directional_lag','spatial_sample_design','spatial_oof_agreement','spatial_zonal_coverage'}:

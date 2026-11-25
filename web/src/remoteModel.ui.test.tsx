@@ -16,5 +16,5 @@ it('trains with selected label imagery and explicit buffered spatial validation'
  await user.clear(screen.getByLabelText('Validation block width (m)'));await user.type(screen.getByLabelText('Validation block width (m)'),'40');
  await user.click(screen.getByRole('button',{name:'Train and save random forest'}));
  await waitFor(()=>expect(onJob).toHaveBeenCalledWith({id:'trained'}));
- expect(queueRemoteModelJob).toHaveBeenCalledWith('project',expect.objectContaining({labels:{image_id:'labels',band:1},parameters:{block_m:40,folds:5,buffer_blocks:1},features:{red:expect.objectContaining({image_id:'red-image',band:2})}}),true);
+ expect(queueRemoteModelJob).toHaveBeenCalledWith('project',expect.objectContaining({labels:{image_id:'labels',band:1},parameters:{block_m:40,folds:5,buffer_blocks:1,calibrate:true},features:{red:expect.objectContaining({image_id:'red-image',band:2})}}),true);
 });

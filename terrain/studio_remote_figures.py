@@ -3,6 +3,14 @@ import numpy as np
 from .studio_publication import require,numeric_rows
 
 def render_remote(kind,req,fig,ax,meta,palette,cmap,rows):
+    if kind=='remote_selective_accuracy':
+        a,_=rows([req.x,req.y,req.z]);x,y,n=a
+        require(np.all((x>=0)&(x<=1)&(y>=0)&(y<=1)) and np.all(n>0) and np.all(n==np.floor(n)),'Selective accuracy requires coverage, accuracy and accepted cell counts.')
+        order=np.argsort(x);x,y,n=x[order],y[order],n[order]
+        ax.plot(x,y,color=palette[0]);ax.scatter(x,y,s=20+100*n/n.max(),color=palette[0])
+        ax.set(xlim=(0,1),ylim=(0,1),xlabel='Independent reference coverage',ylabel='Accuracy among accepted cells')
+        meta['threshold_points']=len(x)
+        return numeric_rows([req.x,req.y,req.z],x,y,n)
     if kind=='remote_reliability':
         a,_=rows([req.x,req.y,req.z]);x,y,n=a
         require(np.all((x>=0)&(x<=1)&(y>=0)&(y<=1)) and np.all(n>0) and np.all(n==np.floor(n)),'Reliability requires probabilities and positive integer bin counts.')

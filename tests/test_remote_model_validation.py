@@ -30,6 +30,13 @@ def test_external_reference_error_map_and_probability_diagnostics(tmp_path):
     np.testing.assert_array_equal(m['confusion_matrix_reference_rows'],expected)
     assert m['overall_accuracy']==pytest.approx(1-240/3840)
     assert m['training_excluded_cells']==0 and m['coverage']==1
+    with rasterio.open(prediction) as ds:
+        confidence=ds.read(2);predicted=ds.read(1)
+    for point in m['selective_accuracy']:
+        accepted=confidence>=point['minimum_probability']
+        assert point['accepted_cells']==int(accepted.sum())
+        assert point['coverage']==pytest.approx(accepted.mean())
+        if accepted.any():assert point['accuracy']==pytest.approx((predicted[accepted]==reference[accepted]).mean())
     assert sum(r[2] for r in m['reliability'])==3840 and m['multiclass_brier']>0
     with rasterio.open(out) as ds:np.testing.assert_array_equal(ds.read(1),reference!=truth)
     assert all(np.isfinite(v).all() for v in m['interval95'].values())

@@ -20,6 +20,7 @@ class ModelBand(DiskBand):
 
 class TrainingParameters(BaseModel):
     model_config=ConfigDict(extra='forbid',allow_inf_nan=False)
+    calibrate:bool=False
     trees:int=Field(default=64,ge=16,le=128)
     max_depth:int=Field(default=12,ge=2,le=16)
     min_leaf:int=Field(default=2,ge=1,le=100)
@@ -34,6 +35,7 @@ class PredictInput(BaseModel):
     model_job_id:UUID
     features:dict[str,ModelBand]=Field(min_length=1,max_length=16)
     quality:list[DiskQuality]=Field(default_factory=list,max_length=16)
+    maximum_training_distance:float|None=Field(default=None,gt=0,le=1000000)
     minimum_probability:float=Field(default=0,ge=0,le=1)
     tile:int=Field(default=256,ge=32,le=512)
     snapshot_mb:int=Field(default=1024,ge=64,le=8192)
@@ -89,7 +91,7 @@ def snapshot_config(body,job_id,check):
         config={'features':{r:spec(b) for r,b in body.features.items()},'quality':[spec(q) for q in body.quality],
                 'tile':body.tile,'source_names':{p:uid for uid,p in paths.items()}}
         if isinstance(body,TrainInput):config.update(labels=spec(body.labels),parameters=body.parameters.model_dump())
-        else:config['minimum_probability']=body.minimum_probability
+        else:config.update(minimum_probability=body.minimum_probability,maximum_training_distance=body.maximum_training_distance)
         yield config,Path(folder)
 
 
