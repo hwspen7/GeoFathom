@@ -143,6 +143,9 @@ export default function App() {
   const [terrainExportTarget,setTerrainExportTarget]=useState<HTMLDivElement|null>(null);
   const [objectTreeTarget,setObjectTreeTarget]=useState<HTMLDivElement|null>(null);
   const [objectsOpen,setObjectsOpen]=useState(true);
+  const objectCapacity=()=>Math.max(1,Math.min(6,Math.floor((window.innerHeight-580)/28)));
+  const [gisObjectCapacity,setGisObjectCapacity]=useState(objectCapacity);
+  useEffect(()=>{const resize=()=>setGisObjectCapacity(objectCapacity());window.addEventListener('resize',resize);return()=>window.removeEventListener('resize',resize);},[]);
   const [shortcutHelp,setShortcutHelp]=useState(false);
   const [commandOpen,setCommandOpen]=useState(false);
   const [contextMenu,setContextMenu]=useState<{x:number;y:number}|null>(null);
@@ -1303,7 +1306,7 @@ export default function App() {
             <div className="section-heading"><Layers3 size={16} /><span>Projects</span></div>
             {!capabilities&&connectionError&&<div className="discovery-error" role="alert">{connectionError} <button onClick={()=>setConnectionRetry(v=>v+1)}>Reconnect</button></div>}
             <ProjectsPanel toolbarTarget={projectToolbarTarget} toolbarActionsTarget={projectActionsTarget} treeTarget={objectTreeTarget}
-              interactionBusy={busy||Boolean(drawingMode)} objectPageSize={3} objectsAlwaysOpen={gisFlat}
+              interactionBusy={busy||Boolean(drawingMode)} objectPageSize={gisFlat?gisObjectCapacity:3} objectsAlwaysOpen={gisFlat}
               onObjectMutation={(id,feature)=>{
                 // Search/attribute results may lie outside the workspace's
                 // first page. Update their owner as well, avoiding ghost
@@ -1769,8 +1772,8 @@ export default function App() {
               onClick={()=>setObjectsOpen(false)}>Back to terrain tools</button>}
             <div ref={setObjectTreeTarget}/>
             {geometry&&<GeometryContainer className="geometry-edit-controls">
-              {gisFlat?<h4 className="gis-static-heading">Geometry / vertices</h4>:<summary>Geometry / vertices</summary>}
-              <BoundaryEditor geometry={geometry} sourcePlace={selectedPlace} selectedParcel={selectedParcel}
+              {!gisFlat&&<summary>Geometry / vertices</summary>}
+              <BoundaryEditor compact={gisFlat} geometry={geometry} sourcePlace={selectedPlace} selectedParcel={selectedParcel}
                 onChooseParcel={value=>void chooseSelectedParcel(value)}
                 editing={editing&&!moving&&!edgeMoving} busy={busy} selectedNode={selectedBoundaryNode}
                 onSelectNode={setSelectedBoundaryNode}
@@ -2046,7 +2049,6 @@ export default function App() {
 
 
           <section id="tools-gis" hidden={activeTool!=='tools-gis'} className="panel-section">
-            <div className="section-heading"><Layers3 size={16}/><span>Professional GIS tools</span></div>
             <ProfessionalPanel
               resultsTarget={resultsTarget} active={activeTool==='tools-gis'}
               key={activeProjectId ?? 'no-project'}

@@ -80,6 +80,17 @@ describe('shared research workbench chrome',()=>{
   expect(screen.getByRole('button',{name:'Parcel 0'})).toBeDefined();
   expect(screen.queryByRole('button',{name:'Parcel 7'})).toBeNull();
  });
+ it('renders six compact objects across layers and pages the remaining object',()=>{
+  const features=Array.from({length:7},(_,i)=>({id:String(i),name:'Compact '+i,layer_id:String(i)}));
+  const layers=features.map(f=>({id:f.layer_id,name:'Layer '+f.id,visible:true}));
+  const {container}=render(<WorkspaceFeatureTree layers={layers} features={features} selectedId={null} pageSize={6} alwaysOpen onOpen={vi.fn()} onRename={vi.fn()} onDelete={vi.fn()}/>);
+  expect(container.querySelectorAll('.compact-object-row')).toHaveLength(6);
+  expect(container.querySelectorAll('details,.workspace-object-type')).toHaveLength(0);
+  expect(screen.getAllByRole('button',{name:'Rename object'})).toHaveLength(6);
+  fireEvent.click(screen.getByRole('button',{name:'Next objects'}));
+  expect(container.querySelectorAll('.compact-object-row')).toHaveLength(1);
+  expect(screen.getByRole('button',{name:'Compact 6'})).toBeDefined();
+ });
  it('bounds the entire object list across many layers and searches beyond the current page',()=>{
   const open=vi.fn();
   const layers=Array.from({length:4},(_,i)=>({id:String(i),name:'Layer '+i,visible:true}));

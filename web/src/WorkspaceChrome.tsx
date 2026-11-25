@@ -2,7 +2,7 @@
  * are independent of GIS/Terrain internals so future workbenches can reuse them.
  */
 import {useEffect,useMemo,useState,type ReactNode} from 'react';
-import {Search,Layers3} from 'lucide-react';
+import {Search,Layers3,Pencil,Trash2,MapPin,Minus,Shapes} from 'lucide-react';
 
 export interface WorkspaceModule {id:string;label:string;description:string;hint:string}
 export const WORKSPACE_MODULES:readonly WorkspaceModule[]=[
@@ -115,9 +115,9 @@ export interface WorkspaceObjectGroup {
   onRename?:(id:string,name:string)=>Promise<void>;
   onDelete?:(id:string)=>Promise<void>;
 }
-function ObjectRow({item,selected,disabled,locked,busy,onOpen,onRename,onDelete}:{
+function ObjectRow({item,selected,disabled,locked,busy,onOpen,onRename,onDelete,compact=false,layerName}:{
   item:FeatureItem;selected:boolean;disabled:boolean;locked:boolean;busy:boolean;
-  onOpen:()=>void;onRename?:(name:string)=>Promise<void>;onDelete?:()=>Promise<void>;
+  onOpen:()=>void;onRename?:(name:string)=>Promise<void>;onDelete?:()=>Promise<void>;compact?:boolean;layerName?:string;
 }){
   const [renaming,setRenaming]=useState(false),[name,setName]=useState(item.name);
   const [working,setWorking]=useState(false),[error,setError]=useState('');
@@ -128,7 +128,8 @@ function ObjectRow({item,selected,disabled,locked,busy,onOpen,onRename,onDelete}
     catch(cause){setError(cause instanceof Error?cause.message:'Object action failed.');}
     finally{setWorking(false);}
   }
-  return <div className={'workspace-object-row'+(selected?' is-selected':'')}
+  const GeometryIcon=item.geometry?.type.includes('Point')?MapPin:item.geometry?.type.includes('Line')?Minus:Shapes;
+  return <div className={'workspace-object-row'+(selected?' is-selected':'')+(compact?' compact-object-row':'')}
     role="group" aria-label={'Object '+item.name} data-object-id={item.id}>
     {renaming?<form className="workspace-object-rename" onSubmit={event=>{
       event.preventDefault();if(name.trim()&&onRename)void mutate(()=>onRename(name.trim()));
@@ -142,15 +143,16 @@ function ObjectRow({item,selected,disabled,locked,busy,onOpen,onRename,onDelete}
     </form>:<>
       <button type="button" className="workspace-object-select" disabled={disabled||busy||working}
         aria-label={item.name} aria-pressed={selected} onClick={onOpen}
-        title={disabled?'Layer hidden':item.name}>
-        <span>{item.name}{item.geometry&&<small className="workspace-object-type">{item.geometry.type}</small>}</span>
+        title={disabled?'Layer hidden':[item.name,item.geometry?.type,layerName].filter(Boolean).join(' · ')}>
+        {compact&&<GeometryIcon size={12} aria-hidden="true"/>}
+        <span>{item.name}{!compact&&item.geometry&&<small className="workspace-object-type">{item.geometry.type}</small>}</span>
         {item.revision!==undefined&&<small title="Revision">r{item.revision}</small>}
       </button>
       {(onRename||onDelete)&&<div className="workspace-object-actions">
         {onRename&&<button type="button" aria-label="Rename object" title={locked?'Unlock layer to rename':'Rename '+item.name}
-          disabled={locked||busy||working} onClick={()=>{setName(item.name);setError('');setRenaming(true);}}>Rename</button>}
+          disabled={locked||busy||working} onClick={()=>{setName(item.name);setError('');setRenaming(true);}}>{compact?<Pencil size={12} aria-hidden="true"/>:'Rename'}</button>}
         {onDelete&&<button type="button" aria-label="Delete object" title={locked?'Unlock layer to delete':'Delete '+item.name}
-          disabled={locked||busy||working} onClick={()=>void mutate(onDelete)}>Delete</button>}
+          disabled={locked||busy||working} onClick={()=>void mutate(onDelete)}>{compact?<Trash2 size={12} aria-hidden="true"/>:'Delete'}</button>}
       </div>}
     </>}
     {error&&<small role="alert" className="workspace-object-error">{error}</small>}
@@ -210,8 +212,8 @@ export function WorkspaceFeatureTree<T extends FeatureItem>({
   const rows=[...groups.flatMap(g=>g.items.map(item=>({key:g.id+':'+item.id,selected:item.id===selectedId}))),
     ...extras.flatMap(g=>g.items.map(item=>({key:g.id+':'+item.id,selected:item.id===g.selectedId})))];
   const selectedKey=rows.find(row=>row.selected)?.key??null;
-  const pages:string[][]=[[]];
-  for(const group of [...groups,...extras]){
+  const pages:string[][]=alwaysOpen?Array.from({length:Math.max(1,Math.ceil(rows.length/pageSize))},(_,i)=>rows.slice(i*pageSize,(i+1)*pageSize).map(r=>r.key)):[[]];
+  if(!alwaysOpen)for(const group of [...groups,...extras]){
     for(let start=0;start<group.items.length;start+=pageSize){
       const chunk=group.items.slice(start,start+pageSize).map(item=>group.id+':'+item.id);
       // Keep a small layer together: freshly split siblings must be visible
@@ -227,14 +229,17 @@ export function WorkspaceFeatureTree<T extends FeatureItem>({
   useEffect(()=>{
     setPage(selectedPage>=0?selectedPage:0);
   },[selectedKey,selectedPage,filter,pageSize]);
-  return <div className="workspace-feature-tree" role="region" aria-label="Project feature tree">
+  return <div className={'workspace-feature-tree'+(alwaysOpen?' compact-object-tree':'')} role="region" aria-label="Project feature tree">
     <div className="workspace-tree-header"><strong>Features</strong><span>{features.length+additionalGroups.reduce((sum,g)=>sum+g.items.length,0)}</span></div>
     <label className="workspace-tree-filter"><Search size={13}/>
       <input aria-label="Filter project features" type="search"
         value={filter} placeholder="Filter name or layer"
         onChange={e=>{setFilter(e.target.value);setPage(0);}}/>
     </label>
-    {groups.filter(g=>g.items.some(item=>paged.has(g.id+':'+item.id))).map(g=><FeatureGroup key={g.id} name={g.name} alwaysOpen={alwaysOpen}
+    {alwaysOpen?<div className="compact-object-list">
+      {groups.flatMap(g=>g.items.filter(item=>paged.has(g.id+':'+item.id)).map(item=><ObjectRow key={g.id+':'+item.id} item={item} compact layerName={g.name} selected={selectedId===item.id} disabled={!g.visible} locked={g.locked} busy={busy} onOpen={()=>onOpen(item)} onRename={onRename?name=>onRename(item,name):undefined} onDelete={onDelete?()=>onDelete(item):undefined}/>))}
+      {extras.flatMap(g=>g.items.filter(item=>paged.has(g.id+':'+item.id)).map(item=><ObjectRow key={g.id+':'+item.id} item={item} compact layerName={g.name} selected={g.selectedId===item.id} disabled={false} locked={false} busy={busy} onOpen={()=>g.onOpen(item.id)} onRename={g.onRename?name=>g.onRename!(item.id,name):undefined} onDelete={g.onDelete?()=>g.onDelete!(item.id):undefined}/>))}
+    </div>:<>{groups.filter(g=>g.items.some(item=>paged.has(g.id+':'+item.id))).map(g=><FeatureGroup key={g.id} name={g.name} alwaysOpen={alwaysOpen}
       features={g.items.filter(item=>paged.has(g.id+':'+item.id))} total={g.items.length}
       visible={g.visible} search={Boolean(lowered)}
       selectedId={selectedId} locked={g.locked} busy={busy}
@@ -244,7 +249,7 @@ export function WorkspaceFeatureTree<T extends FeatureItem>({
     {extras.filter(g=>g.items.some(item=>paged.has(g.id+':'+item.id))).map(g=><FeatureGroup key={g.id} name={g.name} alwaysOpen={alwaysOpen}
       features={g.items.filter(item=>paged.has(g.id+':'+item.id))} total={g.items.length} visible
       selectedId={g.selectedId} search={Boolean(lowered)} busy={busy}
-      onOpen={g.onOpen} onRename={g.onRename} onDelete={g.onDelete}/>)}
+      onOpen={g.onOpen} onRename={g.onRename} onDelete={g.onDelete}/>)}</>}
     {pages.length>1&&<div className="workspace-object-pager">
       <button type="button" aria-label="Previous objects" disabled={currentPage===0} onClick={()=>setPage(currentPage-1)}>Previous</button>
       <span>{offset+1}–{offset+paged.size} / {rows.length}</span>

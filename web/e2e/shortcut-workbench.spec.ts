@@ -93,4 +93,20 @@ test('GIS tools and object browser stay open without collapsible sections',async
  await nav.getByRole('button',{name:'GIS',exact:true}).click();
  await expect(tools.getByLabel('Attribute search field')).toBeVisible();
  await expect(tools.getByLabel('Filter project features')).toBeVisible();
+ const map=page.getByLabel('Interactive geospatial map');
+ await expect(map).toHaveAttribute('data-label-layer-ready','true',{timeout:25000});
+ const box=(await map.boundingBox())!;
+ await page.getByLabel('Survey toolbar').getByRole('button',{name:'Polygon',exact:true}).click();
+ for(const [x,y] of [[.35,.35],[.45,.35],[.45,.45],[.35,.45]])await page.mouse.click(box.x+x*box.width,box.y+y*box.height);
+ await page.keyboard.press('Enter');
+ await expect(tools.getByLabel('Boundary longitude')).toBeVisible();
+ await expect(tools.locator('.compact-object-row')).toHaveCount(1);
+ for(const [width,height] of [[1680,900],[1280,720]]){
+  await page.setViewportSize({width,height});
+  await expect(tools.getByRole('button',{name:/Analyze selected/})).toBeInViewport({ratio:1});
+  await expect(tools.getByLabel('GIS export format')).toBeInViewport({ratio:1});
+  await expect(tools.getByLabel('Boundary longitude')).toBeInViewport({ratio:1});
+  const region=tools.getByLabel('Operations scrolling region');
+  await expect.poll(()=>region.evaluate(e=>e.scrollHeight-e.clientHeight)).toBeLessThanOrEqual(1);
+ }
 });

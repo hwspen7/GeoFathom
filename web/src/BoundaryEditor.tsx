@@ -5,6 +5,7 @@ import type {Place} from './api';
 
 interface Props{
  geometry:GeoJSON.Geometry|null;
+ compact?:boolean;
  sourcePlace:Place|null;
  selectedParcel:number|'all';
  onChooseParcel:(index:number|'all')=>void;
@@ -32,6 +33,16 @@ export default function BoundaryEditor(p:Props){
  const valid=lon.trim()!==''&&lat.trim()!==''&&Number.isFinite(value)&&Number.isFinite(latitude)&&
              value>=-180&&value<=180&&latitude>=-85&&latitude<=85;
  const unchanged=!!active&&value===active.point[0]&&latitude===active.point[1];
+ // The compact GIS view keeps every coordinate operation on screen.
+ if(p.compact)return <section className="boundary-inspector compact-boundary" aria-label="Boundary vertices">
+   <div className="compact-boundary-head"><strong>Vertices · {nodes.length}</strong><button aria-label="Edit boundary nodes" aria-pressed={p.editing} disabled={p.busy} onClick={p.onToggleEditing}>{p.editing?'Done':'Edit'}</button></div>
+   {parcelOptions.length>1&&<select aria-label="Study area parcel" value={String(p.selectedParcel)} disabled={p.busy} onChange={e=>p.onChooseParcel(e.target.value==='all'?'all':Number(e.target.value))}><option value="all">All parcels ({parcelOptions.length})</option>{parcelOptions.map(parcel=><option key={parcel.index} value={String(parcel.index)}>Parcel {parcel.index+1} · {parcel.areaKm2.toFixed(3)} km²</option>)}</select>}
+   {active&&<><div className="compact-boundary-fields">
+     <select aria-label="Boundary node" title="Select boundary vertex" value={nodes.findIndex(node=>same(node.path,active.path))} onChange={e=>{const node=nodes[Number(e.target.value)];if(node)p.onSelectNode(node.path);}}>{nodes.map((node,i)=><option key={i} value={i}>#{i+1}</option>)}</select>
+     <input type="number" aria-label="Boundary longitude" title="Longitude (WGS84)" step="any" min="-180" max="180" value={lon} onChange={e=>setLon(e.target.value)}/>
+     <input type="number" aria-label="Boundary latitude" title="Latitude (WGS84)" step="any" min="-85" max="85" value={lat} onChange={e=>setLat(e.target.value)}/>
+   </div><div className="compact-boundary-actions"><button disabled={p.busy||!valid||unchanged} onClick={()=>{if(valid)p.onMoveNode(active.path,[value,latitude]);}} title="Apply WGS84 coordinates">Apply coordinates</button><button disabled={p.busy||!p.editing||nodes.length<4} aria-label="Remove boundary node" title="Remove selected vertex" onClick={()=>p.onRemoveNode(active.path)}>Remove node</button></div></>}
+ </section>;
  return <section className="boundary-inspector" aria-label="Boundary vertices">
    <div className="section-heading">
      <span>Boundary · {nodes.length.toLocaleString()} nodes</span>

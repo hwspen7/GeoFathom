@@ -181,30 +181,29 @@ export default function ProfessionalPanel({
               <option value="exists">Exists</option>
             </select>
           </div>
-          {operator!=='exists'&&<input aria-label="Attribute search value" placeholder="Search attributes"
+          <div className="gis-filter-row">{operator!=='exists'&&<input aria-label="Attribute search value" placeholder="Search attributes"
             value={query} onChange={e=>setQuery(e.target.value)}/>}
-          <button disabled={busy||!projectId} type="submit"><Search size={14}/> Filter rows</button>
+          <button disabled={busy||!projectId} type="submit" aria-label="Filter rows" title="Filter attribute rows"><Search size={12}/> Filter</button></div>
         </form>
         <form className="professional-form" onSubmit={e=>void bulkEdit(e)}>
-          <strong>Edit {selection.length} selected features</strong>
-          <input aria-label="Attribute property name" placeholder="Property name" maxLength={64}
-            value={editField} onChange={e=>setEditField(e.target.value)}/>
+          <div className="gis-edit-header"><strong>Edit · {selection.length} selected</strong><button type="submit" disabled={busy||!selection.length} aria-label="Save properties & revisions" title="Save properties and revisions">Save</button></div>
           <div className="area-fields">
+            <input aria-label="Attribute property name" placeholder="Property name" maxLength={64}
+            value={editField} onChange={e=>setEditField(e.target.value)}/>
             <select aria-label="Attribute value type" value={editType}
               onChange={e=>setEditType(e.target.value as typeof editType)}>
               <option value="text">Text</option><option value="number">Number</option><option value="boolean">Boolean</option>
             </select>
-            <input aria-label="New attribute value" placeholder="New value" value={editValue}
-              onChange={e=>setEditValue(e.target.value)}/>
           </div>
-          <button type="submit" disabled={busy||!selection.length}>Save properties & revisions</button>
+          <input aria-label="New attribute value" placeholder="New value" value={editValue}
+              onChange={e=>setEditValue(e.target.value)}/>
           <p className="project-hint">Changes are atomic, versioned, and rejected on locked layers.</p>
         </form>
       </section>
       <section className="gis-tool-group" aria-label="GIS file import / export">
         <h3 className="gis-tool-heading"><Database size={14}/> GIS file import / export</h3>
-        <div className="professional-form">
-          <label className="raster-upload"><FileUp size={14}/> Import GIS file
+        <div className="professional-form gis-file-row">
+          <label className="raster-upload" title="Import GIS file"><FileUp size={12}/> Import
             <input aria-label="Import GIS vector file" disabled={busy||!projectId}
               type="file" accept=".geojson,.gpkg,.kml,.gpx,.zip"
               onChange={e=>void upload(e)}/>
@@ -217,21 +216,21 @@ export default function ProfessionalPanel({
               <option value="shapefile">Shapefile ZIP</option>
             </select>
             <button disabled={!projectId||busy} onClick={()=>void exportFile()}>
-              <FileDown size={14}/> Export
+              <FileDown size={12}/> Export
             </button>
           </div>
           <p className="project-hint">Import up to 100 features per file. Source coordinate systems are transformed to WGS84. GPX export is limited to points and lines.</p>
         </div>
       </section>
       <section className="gis-tool-group" aria-label="Terrain slope and elevation profile">
-        <h3 className="gis-tool-heading"><Mountain size={14}/> Terrain slope & elevation profile</h3>
+        <div className="gis-terrain-row"><h3 className="gis-tool-heading"><Mountain size={14}/> Terrain</h3>
         <div className="professional-form">
-          <button disabled={!raster||!geometry||busy} onClick={()=>void analyze()}>
-            Analyze selected {geometry?.type==='LineString'?'elevation profile':'terrain area'}
+          <button disabled={!raster||!geometry||busy} aria-label={'Analyze selected '+(geometry?.type==='LineString'?'elevation profile':'terrain area')} onClick={()=>void analyze()}>
+            Analyze selected {geometry?.type==='LineString'?'profile':'area'}
           </button>
           <p className="project-hint">Requires a meter-based projected DEM GeoTIFF, with meter elevations in its first band. Satellite RGB imagery is not a DEM.</p>
 
-        </div>
+        </div></div>
       </section>
       {notice&&<p className="project-info">{notice}</p>}
       {error&&<p className="discovery-error">{error}</p>}
