@@ -38,9 +38,9 @@ it('retains a selected scientific export outside the hidden Terrain module',asyn
  });
  try{
   const view=render(<div><TerrainWorkbench {...props}/></div>);
-  const result=await screen.findByRole('combobox',{name:'Choose terrain result'});
-  fireEvent.change(result,{target:{value:'run-1'}});
+  // A single restored run is selected automatically; a selector is unnecessary.
   await within(exportTarget).findByRole('button',{name:'Terrain result JSON'});
+  expect(screen.queryByRole('combobox',{name:'Choose terrain result'})).toBeNull();
   // This is the actual App transition: Terrain remains mounted but hidden
   // while its export target belongs to the independently visible Export page.
   view.rerender(<div hidden><TerrainWorkbench {...props} active={false}/></div>);

@@ -989,7 +989,7 @@ export default function TerrainWorkbench(p:Props){
            onChange={e=>{
              const value=e.target.value as Operation|'';
              setOperation(value||null);setLive(false);setPickEnd(false);
-             setLeftTab(value?(dem?'setup':'source'):'tools');
+             setLeftTab(value?'setup':'tools');
            }}>
            <option value="">Choose an analysis</option>
            {modes.map(item=><option key={item.id} value={item.id}>{item.title}</option>)}
@@ -1052,7 +1052,7 @@ export default function TerrainWorkbench(p:Props){
       setCategory(name);setOperation(null);setLive(false);setPickEnd(false);
     }} onSelect={value=>{
       setOperation(value);
-      if(value)setLeftTab(dem?'setup':'source');
+      if(value)setLeftTab('setup');
       else setLive(false);
     }}/>
    </section>
@@ -1066,6 +1066,7 @@ export default function TerrainWorkbench(p:Props){
        {!lineOperation&&<button disabled={!dem} aria-pressed={p.extentMode} onClick={p.onUseExtent}>DEM extent</button>}
        {p.extentMode&&<button onClick={p.onUseSelection}>Use selection</button>}
      </div>
+     {!dem&&<button type="button" className="terrain-fetch-primary" onClick={()=>setLeftTab('source')}>Acquire elevation data</button>}
      <small className="compact-notice">{correctShape?(lineOperation?'✓ Independent profile line':p.extentMode?'✓ DEM footprint':'✓ Geometry selected'):lineOperation?'Draw profile line':'Select study area'}</small>
      {operation==='contours'&&<label>Interval (m)<input aria-label="Contour interval" type="number" min=".01" step="any" value={interval} onChange={e=>setInterval(e.target.value)}/></label>}
      {operation==='dem_difference'&&<label>Reference DEM<select aria-label="Reference comparison DEM" value={comparisonId} onChange={e=>setComparisonId(e.target.value)}><option value="">Select second DEM</option>{assets.filter(a=>a.bands===1&&a.id!==dem?.id).map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>}

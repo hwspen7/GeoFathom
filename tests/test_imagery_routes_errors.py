@@ -136,3 +136,28 @@ def test_loopback_local_import_requires_header_and_safe_origin(monkeypatch):
         "file":("local.tif",b"synthetic","image/tiff")},
         headers={"X-GeoFathom-Local-Import":"1","Origin":"https://unapproved.example"})
     assert forbidden.status_code==403
+
+
+def test_desktop_dem_fetch_with_model_admin_configured(monkeypatch):
+    from terrain import routes as terrain_routes
+    monkeypatch.setenv("GEOFATHOM_AUTH_MODE", "local")
+    monkeypatch.setenv("GEOFATHOM_LOCAL_RASTER_IMPORT", "1")
+    monkeypatch.setenv("GEOFATHOM_MODEL_ADMIN_TOKEN", "protected")
+    calls = []
+
+    async def fake_fetch(request, fn, bbox, resolution):
+        calls.append((bbox, resolution))
+        return {"requested_bbox": bbox, "resolution_m": resolution}
+
+    monkeypatch.setattr(terrain_routes, "run_cancelable", fake_fetch)
+    body = {"bbox": [120.406, 36.065, 120.427, 36.078], "resolution_m": 30}
+    headers = {"X-GeoFathom-Local-Import": "1", "Origin": "http://127.0.0.1:5173"}
+    response = client.post("/imagery/dem/fetch", json=body, headers=headers)
+    assert response.status_code == 201, response.text
+    assert response.json()["requested_bbox"] == body["bbox"]
+    assert calls == [(tuple(body["bbox"]), 30)]
+    forbidden = client.post("/imagery/dem/fetch", json=body, headers={
+        **headers, "Origin": "https://untrusted.example"
+    })
+    assert forbidden.status_code == 403
+    assert len(calls) == 1

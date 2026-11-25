@@ -1,6 +1,5 @@
 """Compose independent geospatial, discovery and AI services."""
 
-import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
