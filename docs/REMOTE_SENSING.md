@@ -1,5 +1,16 @@
 # Remote Sensing scientific computing
 
+## Physical validation on native QA support
+
+Inline analysis, common-grid preparation, disk operators, optical cubes and
+saved-model reads decode native QA before physical-value checks. Excluded
+cloud/detector values are missing observations rather than invalid reflectance
+measurements. Native calibration metadata is still validated even if every cell
+is excluded. A target reference contributes geometry without validating its
+unmasked science pixels. The mandatory five-path regression places an extreme
+value in a QA-excluded first pixel; every path retains clear measurements and
+still rejects that same extreme value if its QA exclusion is removed.
+
 ## Verified experiment recipes
 
 All new managed scientific raster, cube, training, prediction and reference

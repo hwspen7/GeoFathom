@@ -104,10 +104,12 @@ def build_cube(config, output, progress=None, check=lambda: None):
                                count=1, crs=ds.crs, transform=ds.transform) as dst:
                 for window in windows(ds.width, ds.height, tile):
                     check()
-                    values, _, scale, offset = read_calibrated(ds, binding, 'reflectance', window)
+                    valid=None
                     for q, qa in masks:
                         z = qa.read(q.get('band', 1), window=window, masked=True).filled(np.nan)
-                        values[quality_mask(z, q['scheme']) != 1] = np.nan
+                        clear=quality_mask(z,q['scheme'])==1
+                        valid=clear if valid is None else valid&clear
+                    values, _, scale, offset = read_calibrated(ds, binding, 'reflectance', window,validity=valid)
                     dst.write(values, 1, window=window)
             view = stack.enter_context(WarpedVRT(stack.enter_context(rasterio.open(prepared)),
                 crs=target.crs, transform=target.transform, width=target.width, height=target.height,

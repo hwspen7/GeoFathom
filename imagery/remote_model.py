@@ -40,7 +40,7 @@ class Inputs:
             binding = SimpleNamespace(band=spec.get('band', 1), encoding=spec.get('encoding', 'metadata'),
                 scale=spec.get('scale', 1), offset=spec.get('offset', 0), unit=spec.get('unit', ''))
             require(binding.encoding in ('metadata', 'raw', 'custom', 'landsat_sr'), 'Unknown model calibration.')
-            _, unit, _, _ = read_calibrated(ds, binding, quantity, Window(0,0,1,1))
+            _, unit, _, _ = read_calibrated(ds, binding, quantity, Window(0,0,0,0))
             if path not in self.hashes:self.hashes[path]=digest(path)
             return ds, binding, quantity, unit
         for r, spec in features.items():
@@ -54,10 +54,12 @@ class Inputs:
             self.quality.append((q, band({**q, 'encoding':'raw'}, 'class')))
 
     def read(self, window):
-        values = {r: read_calibrated(ds,b,q,window)[0] for r,(ds,b,q,_) in self.bands.items()}
+        masks={}
         for spec,(ds,b,q,_) in self.quality:
             clear = quality_mask(read_calibrated(ds,b,q,window)[0],spec['scheme']) == 1
-            for r in spec.get('roles') or self.roles: values[r][~clear] = np.nan
+            for r in spec.get('roles') or self.roles:
+                masks[r]=clear.copy() if r not in masks else masks[r]&clear
+        values = {r: read_calibrated(ds,b,q,window,validity=masks.get(r))[0] for r,(ds,b,q,_) in self.bands.items()}
         return np.stack(list(values.values()))
 
     def unchanged(self):

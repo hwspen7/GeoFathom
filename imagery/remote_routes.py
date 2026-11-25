@@ -92,13 +92,14 @@ def prepare_bands(body:PrepareInput):
     except (ValueError,TypeError,OverflowError,RuntimeError,OSError,RasterioError) as e:
         raise HTTPException(422,detail=str(e)) from e
 
-def read_band(source,binding,quantity,raw,sha):
+def read_band(source,binding,quantity,raw,sha,validity=None):
     with MemoryFile(raw) as mem,mem.open() as ds:
         require(ds.driver=='GTiff' and ds.crs,'Use georeferenced GeoTIFF sources.')
         require(1<=binding.band<=ds.count,'Selected band is outside the raster band count.')
         a=ds.transform;require(a.b==0 and a.d==0 and a.a>0 and a.e<0,'Explicitly align north-up raster grids first.')
         require(ds.width*ds.height<=2_000_000,'Raster exceeds two million cell limit.')
-        b=binding.band;z,unit,scale,offset=read_calibrated(ds,binding,quantity)
+        if validity is not None:require(validity.shape==(ds.height,ds.width),'All bands and QA rasters must be explicitly aligned to the same grid.')
+        b=binding.band;z,unit,scale,offset=read_calibrated(ds,binding,quantity,validity=validity)
         g=Grid(source.name,z,a,ds.crs,unit,sha,b,ds.count,scale,offset)
         return g
 
@@ -129,22 +130,33 @@ def execute(body):
     grids={};provenance={};first=None;cells=0
     aligning=method.id in {'align_continuous','align_categorical','align_area_mean','align_area_coverage','align_overlap_mean','align_overlap_coverage'}
     if aligning:require(not body.quality,'Apply QA before or after explicit alignment, not during reprojection.')
-    def load(binding,quantity,allow_mismatch=False):
+    quality_inputs=[];native_masks={}
+    for q in body.quality:
+        require(set(q.roles)<=set(roles),'Unknown quality mask target role.')
+        require(q.source<len(raw),'Source index does not exist.')
+        g=read_band(body.sources[q.source],Binding(source=q.source,band=q.band,encoding='raw'),'class',raw[q.source],hashes[q.source])
+        cells+=g.values.size;require(cells<=8_000_000,'Combined decoded cell budget exceeded.')
+        mask=quality_mask(g.values,q.scheme)==1
+        for name in q.roles or list(roles):
+            if name in native_masks:
+                require(native_masks[name].shape==mask.shape,'All bands and QA rasters must be explicitly aligned to the same grid.')
+                native_masks[name]&=mask
+            else:native_masks[name]=mask.copy()
+        quality_inputs.append((q,g,mask))
+    def load(binding,quantity,allow_mismatch=False,validity=None):
         nonlocal first,cells
         i=binding.source;require(i<len(raw),'Source index does not exist.')
-        g=read_band(body.sources[i],binding,quantity,raw[i],hashes[i])
+        g=read_band(body.sources[i],binding,quantity,raw[i],hashes[i],validity)
         cells+=g.values.size;require(cells<=8_000_000,'Combined decoded cell budget exceeded.')
         if first is None:first=g
         elif not allow_mismatch:require(g.crs==first.crs and g.transform==first.transform and g.values.shape==first.values.shape,'All bands and QA rasters must be explicitly aligned to the same grid.')
         return g
     for name,quantity in roles.items():
-        b=body.bindings[name];g=load(b,quantity,aligning and name=='source');grids[name]=g
+        b=body.bindings[name];g=load(b,quantity,aligning and name=='source',native_masks.get(name));grids[name]=g
         provenance[name]={'source':g.name,'sha256':g.sha256,'band':g.band,'quantity':quantity,'unit':g.unit,'scale':g.scale,'offset':g.offset,'encoding':b.encoding,'crs':str(g.crs),'shape':list(g.values.shape),'transform':list(g.transform)[:6]}
     quality=[]
-    for q in body.quality:
-        require(set(q.roles)<=set(roles),'Unknown quality mask target role.')
-        g=load(Binding(source=q.source,band=q.band,encoding='raw'),'class')
-        mask=quality_mask(g.values,q.scheme)==1
+    for q,g,mask in quality_inputs:
+        require(g.crs==first.crs and g.transform==first.transform and g.values.shape==first.values.shape,'All bands and QA rasters must be explicitly aligned to the same grid.')
         targets=q.roles or list(roles)
         for name in targets:grids[name].values[~mask]=np.nan
         quality.append({'sha256':g.sha256,'band':g.band,'scheme':q.scheme,'roles':targets,'retained_mask_cells':int(mask.sum())})

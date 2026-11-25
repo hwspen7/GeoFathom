@@ -13,6 +13,7 @@ rewritten.
 | Classification | Saved numeric random forests, spatial OOF evaluation, full-resolution deployment and descriptive probability/entropy/domain diagnostics | Independent scikit-learn equivalence, tile-invariant training artifact, project isolation and late-cancellation cleanup |
 | Reference inference | Independent-reference error maps, training-location exclusion, probability diagnostics and spatial-cluster intervals | Independent confusion matrix and bootstrap oracle; PNG/SVG rendering from actual metrics |
 | Reproducibility | Verified execution receipts, exportable recipes, checked repeats and explicit algorithm-version changes | Exact repeated raster hash; input-change rejection before and after scheduling; isolated worker replay |
+| QA support correction | Apply native QA before physical-value validation across inline, disk, preparation, cube and model paths | Extreme excluded first-pixel oracle in all five paths; same value rejected without its QA exclusion |
 
 ## Scientific acceptance scope
 

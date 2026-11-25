@@ -71,8 +71,8 @@ def process(operation,bindings,output,parameters=None,quality=(),tile=512,progre
             require(encoding in {'metadata','raw','landsat_sr','landsat_st','custom'},'Unknown encoding.')
             binding=SimpleNamespace(band=b,encoding=encoding,scale=float(spec.get('scale',1)),offset=float(spec.get('offset',0)),unit=spec.get('unit',''))
             require(math.isfinite(binding.scale) and binding.scale>0 and math.isfinite(binding.offset),'Invalid calibration.')
-            # Validate metadata using one native pixel, before opening output.
-            _,unit,scale,offset=read_calibrated(ds,binding,quantity,Window(0,0,1,1))
+            # Validate metadata without screening a science pixel before its QA.
+            _,unit,scale,offset=read_calibrated(ds,binding,quantity,Window(0,0,0,0))
             return ds,binding,quantity,unit,scale,offset,str(path)
         for role,quantity in roles:
             item=open_band(bindings[role],quantity);bands[role]=item
@@ -102,11 +102,14 @@ def process(operation,bindings,output,parameters=None,quality=(),tile=512,progre
                     r1=min(first.height,int(window.row_off+window.height)+halo)
                     c1=min(first.width,int(window.col_off+window.width)+halo)
                     expanded=Window(c0,r0,c1-c0,r1-r0)
-                    v={role:read_calibrated(ds,binding,quantity,expanded)[0] for role,(ds,binding,quantity,_,_,_,_) in bands.items()}
+                    native_masks={}
                     for (ds,binding,quantity,_,_,_,_),scheme,roles in mask_inputs:
                         q=read_calibrated(ds,binding,quantity,expanded)[0]
                         mask=quality_mask(q,scheme)==1
-                        for role in roles:v[role][~mask]=np.nan
+                        for role in roles:
+                            if role in native_masks:native_masks[role]&=mask
+                            else:native_masks[role]=mask.copy()
+                    v={role:read_calibrated(ds,binding,quantity,expanded,validity=native_masks.get(role))[0] for role,(ds,binding,quantity,_,_,_,_) in bands.items()}
                     common=np.logical_and.reduce([np.isfinite(z) for z in v.values()])
                     z=compute(operation,v,params,times)
                     if operation not in SERIES_IDS and operation not in QUALITY_IDS:z[~common]=np.nan

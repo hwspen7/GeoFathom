@@ -3,9 +3,13 @@ import math
 import numpy as np
 from analysis.science_raster import require
 
-def read_calibrated(ds,binding,quantity,window=None):
+def read_calibrated(ds,binding,quantity,window=None,validity=None):
     require(1<=binding.band<=ds.count,'Selected band is outside the raster band count.')
     b=binding.band;z=ds.read(b,window=window,masked=True).astype(float).filled(np.nan)
+    if validity is not None:
+        require(validity.shape==z.shape and validity.dtype==bool,'Native QA validity must match the science window.')
+        # Excluded detector/cloud pixels are not physical observations to validate.
+        z[~validity]=np.nan
     native_scale=float(ds.scales[b-1]);native_offset=float(ds.offsets[b-1])
     require(math.isfinite(native_scale) and math.isfinite(native_offset),'Invalid band calibration metadata.')
     tag=ds.tags(b).get('TERRAIN_UNIT') or ds.units[b-1] or ds.tags().get('TERRAIN_UNIT') or ''
