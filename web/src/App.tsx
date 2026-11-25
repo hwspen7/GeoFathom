@@ -1853,20 +1853,24 @@ export default function App() {
                   onClick={()=>setNetworkPage(v=>v+1)}>Next</button>
               </div>}
             </section>,resultsTarget)}
-          {resultsTarget&&!['tools-terrain','tools-spatial-science','tools-remote-sensing','tools-network-science','tools-spacetime','tools-lidar'].includes(activeTool)&&!(['tools-survey','tools-services'].includes(activeTool)&&(networkAreas?.count??0)>1)&&(geometry||measurement||preview)&&createPortal(<section className="panel-section results-summary">
-            <div className="section-heading"><SectionIcon role="surveySelection" size={16}/><span>Selection</span></div>
-            <div className="analysis-card">
+          {resultsTarget&&!['tools-terrain','tools-spatial-science','tools-remote-sensing','tools-network-science','tools-spacetime','tools-lidar'].includes(activeTool)&&!(['tools-survey','tools-services'].includes(activeTool)&&(networkAreas?.count??0)>1)&&(geometry||measurement||preview)&&createPortal(<section className="panel-section results-summary measurement-results" aria-label="Measurement results">
+            <div className="section-heading measurement-heading"><SectionIcon role="surveySelection" size={14}/><span>Selection</span><small>{geometry?.type==='MultiPolygon'?'Multi polygon':geometry?.type==='MultiLineString'?'Multi line':geometry?.type??''}</small></div>
+            {geometry&&!preview&&<div className="measurement-object-name">{scratch.find(f=>f.id===scratchId)?.name??projectWorkspace?.features.find(f=>f.id===selectedFeatureId)?.name??pagedFeatures.find(f=>f.id===selectedFeatureId)?.name??selectedPlace?.name??'Selected geometry'}</div>}
+            <div className="analysis-card measurement-card">
               
               {measurement && !preview && (
                 <>
-                  <div className="metric">
-                    <span>{measurement.area_m2 !== null ? 'Geographic area' : 'Distance'}</span>
+                  <div className="measurement-metric-grid">
+                  <div className="metric measurement-primary">
+                    <span>{measurement.area_m2 !== null ? 'Geographic area' : measurement.length_m!==null?'Distance':'Location'}</span>
                     <strong>{measurement.area_m2 !== null
                       ? areaText(measurement.area_m2,areaUnit)
                       : measurement.length_m !== null ? distanceText(measurement.length_m,display.distance) : 'Location only'}</strong>
                   </div>
-                  {measurement.perimeter_m !== null && <div className="metric secondary"><span>Perimeter</span><strong>{distanceText(measurement.perimeter_m,display.distance)}</strong></div>}
-                  <span className="analysis-measurement-method" title={measurement.method} aria-label="Measurement method">{measurement.method}</span>
+                  {measurement.perimeter_m !== null && <div className="metric secondary measurement-perimeter"><span>Perimeter</span><strong>{distanceText(measurement.perimeter_m,display.distance)}</strong></div>}
+                  </div>
+                  {geometry?.type==='Point'&&<div className="measurement-coordinate-grid"><div><span>Longitude</span><strong>{number(geometry.coordinates[0],6)}°</strong></div><div><span>Latitude</span><strong>{number(geometry.coordinates[1],6)}°</strong></div></div>}
+                  <div className="measurement-provenance"><span>Method</span><span className="analysis-measurement-method" title={measurement.method} aria-label="Measurement method">{measurement.method}</span></div>
                   {measurement.method===OFFLINE_METHOD&&<button onClick={()=>{if(geometry)void commitGeometry(geometry,'Exact measurement updated.');}}>Validate exact measurement</button>}
                 </>
               )}
@@ -1885,7 +1889,7 @@ export default function App() {
               })()}
               {geometry && ['Polygon','MultiPolygon','LineString','MultiLineString'].includes(geometry.type) && (
                 <details className="edge-measurements">
-                  <summary>Edge lengths · {previewEdgeLengths(geometry).total} segments</summary>
+                  <summary><span>Edge lengths</span><small>{previewEdgeLengths(geometry).total} segments</small></summary>
                   <div>
                     {previewEdgeLengths(geometry).edges.map((edge, index) =>
                       <div key={index}><span>{edge.label}</span><strong>{!preview&&measurement?.method!==OFFLINE_METHOD&&measurement?.edge_lengths_m?.[index]!==undefined?'':'~ '}{number(!preview?(measurement?.edge_lengths_m?.[index]??edge.length_m):edge.length_m,2)} m</strong></div>)}
@@ -1893,7 +1897,7 @@ export default function App() {
                   <small className="compact-notice" title="Live spherical preview. Final area and perimeter use the WGS84 ellipsoid.">~ estimated · WGS84 after validation</small>
                 </details>
               )}
-              {selectedPlace && <p className="data-source">Data: {selectedPlace.source} · {geometry&&['Polygon','MultiPolygon','LineString','MultiLineString'].includes(geometry.type) ? 'Mapped outline':'Coordinates only · use DEM extent or draw a study area'}</p>}
+              {selectedPlace && <div className="measurement-provenance measurement-source"><span>Source</span><span title={selectedPlace.source}>{selectedPlace.source}<small>{geometry&&['Polygon','MultiPolygon','LineString','MultiLineString'].includes(geometry.type)?'Mapped outline':'Coordinates only'}</small></span></div>}
 
             </div>
           </section>,resultsTarget)}

@@ -2284,3 +2284,56 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .desktop-gis .gis-operations .terrain-page-row .terrain-flat-heading{border-top:0;padding-top:4px}
 .desktop-gis .gis-operations .terrain-linked-controls .terrain-secondary-actions button{height:30px;min-height:30px}
 .desktop-gis .terrain-summary-monitor .terrain-key-metrics>div{min-width:0;overflow-wrap:anywhere}
+
+
+/* Shared object browser and measurement inspector: compact, consistent
+   typography without changing the fixed dock height or object capacity. */
+.desktop-gis .gis-operations .workspace-objects{padding:0 0 6px;margin:0 0 5px;border-bottom:1px solid #d9e4eb}
+.desktop-gis .gis-operations .workspace-objects .gis-static-heading{font-size:12px;line-height:17px;padding:1px 0 5px;color:#304d62}
+.compact-object-tree .workspace-tree-filter{height:27px;gap:5px;border:1px solid #d3dfe7;border-radius:4px;padding:3px 6px;margin:0 0 4px;background:#fff}
+.compact-object-tree .workspace-tree-filter:focus-within{border-color:#8db0c7;box-shadow:0 0 0 1px #8db0c722}
+.compact-object-tree .workspace-tree-filter>svg{flex:none;color:#6c8497}
+.compact-object-tree .workspace-tree-filter input{flex:1;min-width:0;line-height:19px;font-size:11px;color:#304d62}
+.workspace-object-count{flex:none;min-width:19px;padding-left:5px;border-left:1px solid #dce6ed;text-align:right;font-size:10px;font-variant-numeric:tabular-nums;color:#738a9b}
+.desktop-gis .gis-operations .compact-object-list{gap:2px;grid-auto-rows:minmax(26px,auto)}
+.desktop-gis .gis-operations .compact-object-row{box-sizing:border-box;min-height:26px;border:1px solid transparent;border-radius:4px;background:transparent}
+.desktop-gis .gis-operations .compact-object-row:hover{background:#edf3f7}
+.desktop-gis .gis-operations .compact-object-row.is-selected{border-color:#b6cfdf;background:#e5f0f7;box-shadow:inset 2px 0 #397d9e}
+.compact-object-row .workspace-object-select{gap:6px;min-height:24px;padding:1px 5px 1px 6px;font-weight:500;color:#344f62}
+.compact-object-row.is-selected .workspace-object-select{font-weight:650;color:#204e6b}
+.compact-object-row .workspace-object-select>.workspace-object-symbol{display:grid;place-items:center;flex:0 0 17px;width:17px;height:18px;overflow:visible;color:#64859b}
+.compact-object-row.is-selected .workspace-object-symbol{color:#286b8d}
+.compact-object-row .workspace-object-actions{gap:2px;padding:0 3px 0 0}
+.compact-object-row .workspace-object-actions button{width:22px;height:22px;border-radius:3px}
+.compact-object-row .workspace-object-actions button:disabled{opacity:.4}
+.compact-object-row .workspace-object-actions button:last-child:not(:disabled):hover{background:#f7e9e9;color:#aa4545}
+.compact-object-row .workspace-object-select:focus-visible,.compact-object-row .workspace-object-actions button:focus-visible{outline:1px solid #367d9e;outline-offset:-1px}
+.compact-object-tree .workspace-tree-empty{display:flex;align-items:center;min-height:26px;box-sizing:border-box;padding:4px 7px;margin:0;color:#8497a5;font-size:11px}
+.desktop-gis .gis-results-monitor .measurement-results{padding:4px 0!important;min-width:0}
+.desktop-gis .measurement-heading{display:flex;gap:6px;align-items:center;padding:0 0 7px;border-bottom:1px solid #dce6ed}
+.desktop-gis .measurement-heading>small{margin-left:auto;font-size:10px;font-weight:500;color:#748999;white-space:nowrap}
+.desktop-gis .measurement-object-name{font-size:13px;font-weight:650;line-height:17px;color:#2e4c61;overflow-wrap:anywhere;margin:8px 0}
+.desktop-gis .measurement-card{display:flex;flex-direction:column;gap:8px;margin:0}
+.desktop-gis .measurement-metric-grid{display:grid;gap:5px;min-width:0}
+.desktop-gis .gis-results-monitor .measurement-card .metric{border:1px solid #dce6ed;border-radius:5px;margin:0;padding:9px 10px;background:#f7fafc;gap:5px}
+.desktop-gis .gis-results-monitor .measurement-card .metric>span{font-size:11px;color:#657d8f}
+.desktop-gis .gis-results-monitor .measurement-card .metric strong{font:650 22px/1.15 'Segoe UI',system-ui,sans-serif;color:#24506b;letter-spacing:-.35px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.desktop-gis .gis-results-monitor .measurement-card .metric.secondary{display:flex;flex-direction:row;align-items:center;gap:8px;background:#fff;padding:8px 10px}
+.desktop-gis .gis-results-monitor .measurement-card .metric.secondary strong{font-size:16px;letter-spacing:0;text-align:right}
+.desktop-gis .measurement-coordinate-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.desktop-gis .measurement-coordinate-grid>div{display:grid;gap:3px;padding:7px;border:1px solid #dce6ed;border-radius:4px;min-width:0}
+.desktop-gis .measurement-coordinate-grid span{font-size:10px;color:#657d8f}
+.desktop-gis .measurement-coordinate-grid strong{font-size:12px;font-variant-numeric:tabular-nums;color:#24506b;overflow-wrap:anywhere}
+.desktop-gis .measurement-provenance{display:grid;grid-template-columns:46px minmax(0,1fr);align-items:baseline;gap:6px;font-size:10px;color:#6b8293;line-height:1.4;padding:2px 1px}
+.desktop-gis .measurement-provenance>span:last-child{min-width:0;white-space:normal;overflow-wrap:anywhere;color:#4c677c}
+.desktop-gis .measurement-provenance small{display:block;color:#8599a7;font-size:10px;margin-top:2px}
+.desktop-gis .measurement-card .edge-measurements{margin:0;border:1px solid #dce6ed;padding:7px 8px;border-radius:5px;background:#fff}
+.desktop-gis .measurement-card .edge-measurements summary{font-size:11px;font-weight:600;color:#365b75;min-height:18px}
+.desktop-gis .measurement-card .edge-measurements summary>small{float:right;color:#748b9b;font-size:10px;font-weight:500}
+.desktop-gis .measurement-card .edge-measurements>div{gap:0;margin-top:6px;border-top:1px solid #e3ebf0;max-height:160px}
+.desktop-gis .measurement-card .edge-measurements>div>div{padding:5px 3px;border-bottom:1px solid #edf1f4;font-size:11px}
+.desktop-gis .measurement-card .edge-measurements strong{font-variant-numeric:tabular-nums}
+.desktop-gis .measurement-card .edge-measurements>small{display:none}
+.desktop-gis .measurement-card .edge-measurements[open]>small{display:block;margin-top:5px}
+.desktop-gis .measurement-source{border-top:1px solid #e2eaf0;padding-top:8px}
+.desktop-gis .data-network-results .data-network-result-row{border:1px solid #dce6ed;border-radius:4px;padding:7px 9px;margin:5px 0;font-variant-numeric:tabular-nums}

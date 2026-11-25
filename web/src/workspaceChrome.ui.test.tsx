@@ -103,6 +103,15 @@ describe('shared research workbench chrome',()=>{
   expect(screen.getByRole('button',{name:'Previous objects'}).hasAttribute('disabled')).toBe(true);
   expect(screen.getByRole('button',{name:'Next objects'}).hasAttribute('disabled')).toBe(true);
  });
+ it('shares compact object counts and empty states across workspaces',()=>{
+  const features=[{id:'a',name:'Parcel',layer_id:'study',geometry:{type:'Polygon' as const,coordinates:[[[0,0],[1,0],[1,1],[0,0]]]}}];
+  render(<WorkspaceFeatureTree layers={[{id:'study',name:'Study',visible:true}]} features={features} selectedId="a" alwaysOpen onOpen={vi.fn()}/>);
+  expect(screen.getByLabelText('Object count').textContent).toBe('1');
+  expect(screen.getByRole('group',{name:'Object Parcel'}).getAttribute('data-geometry-type')).toBe('Polygon');
+  fireEvent.change(screen.getByRole('searchbox',{name:'Filter project features'}),{target:{value:'missing'}});
+  expect(screen.getByLabelText('Object count').textContent).toBe('0/1');
+  expect(screen.getByRole('status').textContent).toBe('No matching objects');
+ });
  it('bounds the entire object list across many layers and searches beyond the current page',()=>{
   const open=vi.fn();
   const layers=Array.from({length:4},(_,i)=>({id:String(i),name:'Layer '+i,visible:true}));

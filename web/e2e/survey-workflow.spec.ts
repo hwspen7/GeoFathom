@@ -38,6 +38,13 @@ async function points(page:Page){
 for(const width of [1100,1280,1600])test(`drawing exits and error recovery stay on screen at ${width}px`,async({page},testInfo)=>{
  await page.setViewportSize({width,height:760});
  const {toolbar,map}=await setup(page);
+ await expect(page.getByLabel('Object count')).toBeVisible();
+ const inspector=page.getByRole('region',{name:'Measurement results'});
+ await expect(inspector).toBeVisible();
+ await expect(inspector.locator('.measurement-object-name')).toHaveText('厦门岛');
+ await expect(inspector.locator('.measurement-primary strong')).toBeVisible();
+ await expect(inspector.locator('.measurement-perimeter strong')).toBeVisible();
+ await expect(inspector.locator('.edge-measurements summary')).toContainText('segments');
  await page.screenshot({path:testInfo.outputPath('survey-objects-'+width+'.png')});
  // The map ends above the dedicated status row; dock footers do not overlap it.
  const chrome=await toolbar.boundingBox();

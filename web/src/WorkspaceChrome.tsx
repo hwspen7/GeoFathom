@@ -3,7 +3,7 @@ import {SectionIcon} from './SectionIcon';
  * are independent of GIS/Terrain internals so future workbenches can reuse them.
  */
 import {useEffect,useMemo,useRef,useState,type ReactNode} from 'react';
-import {Search,ListFilter,SquarePen,Trash2,MapPin,Minus,Shapes,ChevronLeft,ChevronRight,Check,X} from 'lucide-react';
+import {Search,ListFilter,SquarePen,Trash2,MapPin,Minus,Shapes,Pentagon,ChevronLeft,ChevronRight,Check,X} from 'lucide-react';
 
 export interface WorkspaceModule {id:string;label:string;description:string;hint:string}
 export const WORKSPACE_MODULES:readonly WorkspaceModule[]=[
@@ -129,9 +129,9 @@ function ObjectRow({item,selected,disabled,locked,busy,onOpen,onRename,onDelete,
     catch(cause){setError(cause instanceof Error?cause.message:'Object action failed.');}
     finally{setWorking(false);}
   }
-  const GeometryIcon=item.geometry?.type.includes('Point')?MapPin:item.geometry?.type.includes('Line')?Minus:Shapes;
+  const GeometryIcon=item.geometry?.type.includes('Point')?MapPin:item.geometry?.type.includes('Line')?Minus:item.geometry?.type==='Polygon'?Pentagon:Shapes;
   return <div className={'workspace-object-row'+(selected?' is-selected':'')+(compact?' compact-object-row':'')}
-    role="group" aria-label={'Object '+item.name} data-object-id={item.id}>
+    role="group" aria-label={'Object '+item.name} data-object-id={item.id} data-geometry-type={item.geometry?.type??'unknown'} data-object-locked={locked}>
     {renaming?<form className="workspace-object-rename" onSubmit={event=>{
       event.preventDefault();if(name.trim()&&onRename)void mutate(()=>onRename(name.trim()));
     }} onKeyDown={event=>{
@@ -145,7 +145,7 @@ function ObjectRow({item,selected,disabled,locked,busy,onOpen,onRename,onDelete,
       <button type="button" className="workspace-object-select" disabled={disabled||busy||working}
         aria-label={item.name} aria-pressed={selected} onClick={onOpen}
         title={disabled?'Layer hidden':[item.name,item.geometry?.type,layerName].filter(Boolean).join(' · ')}>
-        {compact&&<GeometryIcon size={12} aria-hidden="true"/>}
+        {compact&&<span className="workspace-object-symbol"><GeometryIcon size={13} aria-hidden="true"/></span>}
         <span>{item.name}{!compact&&item.geometry&&<small className="workspace-object-type">{item.geometry.type}</small>}</span>
         {item.revision!==undefined&&<small title="Revision">r{item.revision}</small>}
       </button>
@@ -238,13 +238,14 @@ export function WorkspaceFeatureTree<T extends FeatureItem>({
     <div className="workspace-tree-header"><strong>Features</strong><span>{features.length+additionalGroups.reduce((sum,g)=>sum+g.items.length,0)}</span></div>
     <label className="workspace-tree-filter"><ListFilter size={13}/>
       <input aria-label="Filter project features" type="search"
-        value={filter} placeholder="Filter name or layer"
+        value={filter} placeholder="Search objects"
         onChange={e=>{setFilter(e.target.value);setPage(0);}}/>
+      {alwaysOpen&&<span className="workspace-object-count" aria-label="Object count" title={lowered?rows.length+' matching objects':objectCount+' objects'}>{lowered?rows.length+'/'+objectCount:objectCount}</span>}
     </label>
     {alwaysOpen?<div className="compact-object-list" style={{minHeight:reservedRows?reservedRows*28-2:0}}>
       {groups.flatMap(g=>g.items.filter(item=>paged.has(g.id+':'+item.id)).map(item=><ObjectRow key={g.id+':'+item.id} item={item} compact layerName={g.name} selected={selectedId===item.id} disabled={!g.visible} locked={g.locked} busy={busy} onOpen={()=>onOpen(item)} onRename={onRename?name=>onRename(item,name):undefined} onDelete={onDelete?()=>onDelete(item):undefined}/>))}
       {extras.flatMap(g=>g.items.filter(item=>paged.has(g.id+':'+item.id)).map(item=><ObjectRow key={g.id+':'+item.id} item={item} compact layerName={g.name} selected={g.selectedId===item.id} disabled={false} locked={false} busy={busy} onOpen={()=>g.onOpen(item.id)} onRename={g.onRename?name=>g.onRename!(item.id,name):undefined} onDelete={g.onDelete?()=>g.onDelete!(item.id):undefined}/>))}
-      {!rows.length&&<small className="workspace-tree-empty">{lowered?'No matching features':'No saved features yet.'}</small>}
+      {!rows.length&&<small className="workspace-tree-empty" role="status">{lowered?'No matching objects':'No objects'}</small>}
     </div>:<>{groups.filter(g=>g.items.some(item=>paged.has(g.id+':'+item.id))).map(g=><FeatureGroup key={g.id} name={g.name} alwaysOpen={alwaysOpen}
       features={g.items.filter(item=>paged.has(g.id+':'+item.id))} total={g.items.length}
       visible={g.visible} search={Boolean(lowered)}
