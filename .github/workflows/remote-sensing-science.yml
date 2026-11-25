@@ -2,7 +2,7 @@ name: Remote sensing scientific reference gate
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, develop, research-core, feature/remote-sensing-research]
   pull_request:
     branches: [main, develop]
   workflow_dispatch:

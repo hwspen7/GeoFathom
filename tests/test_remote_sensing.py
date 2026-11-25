@@ -13,6 +13,7 @@ from rasterio.transform import from_origin
 from core.main import app
 from imagery.remote_catalog import BY_ID,WINDOWED_IDS,WINDOWED_CUBES
 from imagery.remote_routes import RemoteInput,execute
+from imagery.remote_partitions import spatial_partitions
 from terrain.studio_data import FigureInputError
 
 CRS='EPSG:32617'
@@ -32,6 +33,44 @@ def source(arrays,name='scene',aff=AFF,scales=None,offsets=None,unit=None):
     return {'name':name,'data':base64.b64encode(raw).decode()}
 
 def constant(x):return np.full((3,4),x,dtype=float)
+
+
+def test_spatial_buffer_geographic_separation():
+    # Independent pairwise block-distance oracle, including diagonal neighbors.
+    shape=(48,80);row,col=np.indices(shape)
+    x=np.floor((AFF.c+(col+.5)*10)/40).astype(int)
+    y=np.floor((AFF.f-(row+.5)*10)/40).astype(int)
+    for count in range(3,11):
+        fold,excluded=spatial_partitions(shape,AFF,40,count,1)
+        np.testing.assert_array_equal(fold,spatial_partitions(shape,AFF,40,count,0)[0])
+        for j in range(count):
+            hold=np.unique(np.column_stack((x[fold==j],y[fold==j])),axis=0)
+            all_blocks=np.column_stack((x.ravel(),y.ravel()))
+            oracle=np.min(np.max(abs(all_blocks[:,None,:]-hold[None,:,:]),axis=2),axis=1)<=1
+            np.testing.assert_array_equal(excluded[j],oracle.reshape(shape))
+            assert (~excluded[j]).any() and np.all(excluded[j][fold==j])
+
+
+@pytest.mark.parametrize('kind',['spatial_rf_cv','spatial_svm_cv','spatial_lda_cv',
+    'spatial_nested_svm','spatial_lda','cloud_probability_model','cloud_calibrated_probability'])
+def test_buffered_spatial_models(kind):
+    rng=np.random.default_rng(47);row,col=np.indices((48,80));labels=1+row%3
+    a={r:.15+.25*(labels-1)+rng.normal(0,.01,labels.shape)
+       for r in ('blue','green','red','nir','swir1','swir2')}
+    # Sparse labels keep the nested model within its explicit sample budget.
+    a['training']=np.where(col%2==0,labels,0)
+    p={'block_m':40,'folds':5,'buffer_blocks':1}
+    if kind=='spatial_rf_cv':p['trees']=32
+    if kind.startswith('cloud_'):p['iterations']=40
+    result=run(kind,a,p);metrics=result['receipt']['metrics']
+    assert np.isfinite(grid(result)).all()
+    if kind=='spatial_lda':
+        assert metrics['overall_accuracy']==1 and metrics['excluded_labeled_cells']>0
+    elif kind.startswith('cloud_'):
+        assert metrics['oof_cells']==1920
+        assert metrics.get('oof_accuracy',metrics.get('roc_auc'))>.98
+    else:
+        assert metrics['oof_cells']==1920 and metrics['oof_overall_accuracy']==1
 
 def run(kind,arrays,params=None,**kwargs):
     names=[r for r,_ in BY_ID[kind].roles]
@@ -366,7 +405,7 @@ def test_research_depth_reference(kind):
         a={r:np.where(labels==1,.2,.8)+rng.normal(0,.01,labels.shape) for r in ('blue','green','red','nir')};a['training']=labels
         result=run(kind,a,{'block_m':40,'folds':5,'heldout_fold':0})
         np.testing.assert_array_equal(grid(result),labels)
-        m=result['receipt']['metrics'];hold=((col//4+2*(row//4))%5)==0
+        m=result['receipt']['metrics'];hold=spatial_partitions(row.shape,AFF,40,5)[0]==0
         assert m['heldout_cells']==int(hold.sum()) and m['training_cells']==int((~hold).sum())
         assert m['overall_accuracy']==1
         # Changed held-out labels must not change the trained map.
@@ -613,7 +652,7 @@ def test_nested_spatial_reference(kind):
     assert sum(row[2] for row in result['rows'])==576
     np.testing.assert_array_equal(grid(result),labels)
     # Corrupt only one outer fold: its hyperparameter selection must not change.
-    hold=((col//4+2*(row//4))%5)==0
+    hold=spatial_partitions(row.shape,AFF,40,5)[0]==0
     a['training']=np.where(hold,3-labels,labels)
     changed=run(kind,a,params)
     assert changed['rows'][0][3:5]==result['rows'][0][3:5]
@@ -1082,7 +1121,7 @@ def test_joint_research_reference(kind):
         assert all(q[1]+q[2]+q[3]==900 for q in r['rows'])
         assert all(0<=q<=1 for q in grid(r).ravel())
         # Outer labels can affect scores, not the temperature learned for that fold.
-        hold=(col//4+2*(row//4))%5==0
+        hold=spatial_partitions(row.shape,AFF,40,5)[0]==0
         a['training']=np.where(hold,1+label%3,label)
         changed=run(kind,a,{'block_m':40,'iterations':40})
         assert changed['rows'][0][4]==pytest.approx(r['rows'][0][4])

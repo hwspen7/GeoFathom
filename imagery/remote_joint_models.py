@@ -2,6 +2,7 @@
 import numpy as np
 from scipy.special import logsumexp
 from analysis.science_raster import require
+from .remote_partitions import spatial_partitions
 from .remote_advanced_models import support_fusion
 
 def joint_retrieval(v,library,p,kind):
@@ -70,15 +71,9 @@ def calibrated_cloud(v,grid,p,kind):
     valid=np.isfinite(a).all(axis=0);labeled=valid&np.isfinite(labels)&(labels>0)
     require(grid.is_meter and 90<=labeled.sum()<=12000 and valid.sum()<=300000,'Use projected metre grid, 90–12,000 labels and bounded scene.')
     require(np.array_equal(np.unique(labels[labeled]),[1,2,3]),'Require labels 1 clear, 2 cloud, 3 shadow.')
-    row,col=np.indices(valid.shape);bx=np.floor((col+.5)*grid.transform.a/p['block_m']).astype(int);by=np.floor((row+.5)*abs(grid.transform.e)/p['block_m']).astype(int)
-    folds=p['folds'];fold=(bx+2*by)%folds
+    folds=p['folds'];fold,exclusions=spatial_partitions(valid.shape,grid.transform,p['block_m'],folds,p['buffer_blocks'])
     require(folds>=4,'Calibration requires at least four spatial folds.')
-    def excluded(j):
-        bad=fold==j
-        if p['buffer_blocks']:
-            for dx in (-1,0,1):
-                for dy in (-1,0,1):bad|=(bx+dx+2*(by+dy))%folds==j
-        return bad
+    def excluded(j):return exclusions[j]
     def fit(train):
         require(all(np.count_nonzero(train&(labels==c))>=10 for c in (1,2,3)),'Insufficient model training support per class.')
         return HistGradientBoostingClassifier(max_iter=p['iterations'],max_leaf_nodes=p['leaves'],min_samples_leaf=5,l2_regularization=1,early_stopping=False,random_state=42).fit(a[:,train].T,labels[train])
@@ -118,7 +113,7 @@ def calibrated_cloud(v,grid,p,kind):
         ids=np.unique(np.linspace(0,len(fpr)-1,1024).astype(int));rf,rt=fpr[ids],tpr[ids]
     else:rf,rt=fpr,tpr
     return out,['fold','training_cells','calibration_cells','validation_cells','temperature','raw_log_loss','calibrated_log_loss'],rows,{
-        'oof_cells':len(y),'final_temperature':final_temp,'oof_raw_log_loss':loss(raw,y),'oof_calibrated_log_loss':loss(prob,y),
+        'partition':'recursive_spatial_blocks','buffer_blocks':p['buffer_blocks'],'oof_cells':len(y),'final_temperature':final_temp,'oof_raw_log_loss':loss(raw,y),'oof_calibrated_log_loss':loss(prob,y),
         'oof_confusion_matrix':confusion_matrix(y,np.argmax(prob,axis=1),labels=[0,1,2]).tolist(),
         'reliability':rel,'ece':float(sum(abs(a-b)*n for a,b,n in rel)/len(y)),
         'binary_brier':float(np.mean((score-truth)**2)),'roc_auc':float(auc(fpr,tpr)),'roc':np.column_stack((rf,rt)).tolist(),

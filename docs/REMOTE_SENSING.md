@@ -1,5 +1,22 @@
 # Remote Sensing scientific computing
 
+## Spatial validation partition correction
+
+All spatial classifiers, nested SVM tuning and cloud probability/calibration
+models use the same deterministic recursive spatial block partition. Blocks
+are anchored to projected coordinates and assigned before reading class labels.
+An optional one-block buffer excludes actual neighboring blocks, including
+diagonals, around the held-out region. The same exclusion applies to inner
+tuning/calibration partitions. This replaces the repeating modulo assignment,
+whose one-block dilation excluded every training fold for 3–7 folds.
+
+The mandatory gate includes an independent pairwise block-distance oracle for
+3–10 folds and end-to-end buffered runs of all seven model families. Small
+regions or sparse classes can still legitimately lack training support; they
+fail explicitly rather than disabling the requested buffer. Spatial holdout
+scores remain conditional on the region, block size and supplied labels and
+do not establish external-site accuracy.
+
 Remote Sensing is an independent workspace module, with typed HTTP catalog and execution endpoints, map preview, publication figure sources, CSV/GeoTIFF output, and SHA-256 provenance. It shares the spatial scientific product and Scientific Figure Studio contract without changing the Terrain or Spatial Analysis algorithms.
 
 ## Method scope

@@ -1,6 +1,7 @@
 """Analysis-ready polarimetry, kernel BRDF, spatial fusion and cloud inference."""
 import numpy as np
 from analysis.science_raster import require
+from .remote_partitions import spatial_partitions
 
 def dualpol(v,kind):
     a,b,r,i=(v[k] for k in ('c11','c22','c12_real','c12_imag'))
@@ -87,15 +88,12 @@ def cloud_model(v,grid,p,kind):
     require(grid.is_meter,'Cloud spatial validation requires a projected metre grid.')
     require(60<=labeled.sum()<=20000 and valid.sum()<=500000,'Cloud model requires 60–20,000 labels and bounded complete pixels.')
     classes=np.unique(label[labeled]);require(np.array_equal(classes,[1,2,3]),'Training labels must include 1=clear, 2=cloud and 3=shadow; zero=unlabeled.')
-    row,col=np.indices(valid.shape);bx=np.floor((col+.5)*grid.transform.a/p['block_m']).astype(np.int64);by=np.floor((row+.5)*abs(grid.transform.e)/p['block_m']).astype(np.int64)
-    fold=(bx+2*by)%p['folds'];mat=np.zeros((3,3),int);brier=0.;loss=0.;count=0;rows=[]
+    fold,excluded=spatial_partitions(valid.shape,grid.transform,p['block_m'],p['folds'],p['buffer_blocks'])
+    mat=np.zeros((3,3),int);brier=0.;loss=0.;count=0;rows=[]
     def estimator():return HistGradientBoostingClassifier(max_iter=p['iterations'],max_leaf_nodes=p['leaves'],min_samples_leaf=5,l2_regularization=1,early_stopping=False,random_state=42)
     with threadpool_limits(limits=1):
         for j in range(p['folds']):
-            hold=labeled&(fold==j);train=labeled&~hold
-            if p['buffer_blocks']:
-                for dx in (-1,0,1):
-                    for dy in (-1,0,1):train&=((bx+dx+2*(by+dy))%p['folds']!=j)
+            hold=labeled&(fold==j);train=labeled&~excluded[j]
             require(all(np.count_nonzero(train&(label==c))>=10 and np.count_nonzero(hold&(label==c))>=2 for c in classes),'Each cloud fold needs ten training and two validation observations per class.')
             model=estimator();model.fit(stack[:,train].T,label[train]);prob=model.predict_proba(stack[:,hold].T)
             truth=label[hold].astype(int);one=np.eye(3)[truth-1];n=len(truth);pred=classes[np.argmax(prob,axis=1)]
@@ -109,6 +107,6 @@ def cloud_model(v,grid,p,kind):
             prob=model.predict_proba(x[i:i+8192]);z[i:i+len(prob)]=prob[:,1 if kind=='cloud_probability_model' else 2]
         out[valid]=z
     return out,['fold','training_cells','validation_cells','brier','log_loss','accuracy'],rows,{
-        'oof_cells':count,'oof_multiclass_brier':brier/count,'oof_log_loss':loss/count,'oof_confusion_matrix':mat.tolist(),
+        'partition':'recursive_spatial_blocks','buffer_blocks':p['buffer_blocks'],'oof_cells':count,'oof_multiclass_brier':brier/count,'oof_log_loss':loss/count,'oof_confusion_matrix':mat.tolist(),
         'oof_accuracy':float(np.trace(mat)/count),'sklearn_version':sklearn.__version__,
         'interpretation':'User-trained supervised multiclass gradient boosting with spatial OOF probability diagnostics. Training sample priors and representativeness determine probabilities; not Fmask, s2cloudless or externally calibrated cloud probability.'}

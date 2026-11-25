@@ -1,6 +1,7 @@
 """Physical retrieval, covariance inference and spatial validation."""
 import numpy as np
 from analysis.science_raster import require
+from .remote_partitions import spatial_partitions
 
 def surface_temperature(v,p):
     l,e,t,u,d=(v[k] for k in ('radiance','emissivity','transmittance','upwelling','downwelling'))
@@ -57,16 +58,9 @@ def spatial_classifier(v,grid,p):
     stack=np.stack([v[k] for k in ('blue','green','red','nir')])
     labels=v['training'];valid=np.isfinite(stack).all(axis=0);labeled=valid&np.isfinite(labels)&(labels>0)
     require(grid.is_meter,'Spatial validation requires a projected metre grid.')
-    row,col=np.indices(valid.shape);bx=np.floor((col+.5)*grid.transform.a/p['block_m']).astype(np.int64)
-    by=np.floor((row+.5)*abs(grid.transform.e)/p['block_m']).astype(np.int64)
-    fold=(bx+2*by)%p['folds'];hold=labeled&(fold==p['heldout_fold']);train=labeled&~hold
     require(p['heldout_fold']<p['folds'],'Held-out fold must be below fold count.')
-    if p['buffer_blocks']:
-        forbidden=np.zeros(valid.shape,bool)
-        for dx in range(-p['buffer_blocks'],p['buffer_blocks']+1):
-            for dy in range(-p['buffer_blocks'],p['buffer_blocks']+1):
-                forbidden|=((bx+dx+2*(by+dy))%p['folds']==p['heldout_fold'])
-        train&=~forbidden
+    fold,excluded=spatial_partitions(valid.shape,grid.transform,p['block_m'],p['folds'],p['buffer_blocks'])
+    hold=labeled&(fold==p['heldout_fold']);train=labeled&~excluded[p['heldout_fold']]
     classes=np.unique(labels[labeled]);require(2<=len(classes)<=32,'Use 2–32 labeled classes.')
     x=stack[:,train].T;y=labels[train];means=[];scatter=np.zeros((4,4))
     for c in classes:
@@ -86,7 +80,7 @@ def spatial_classifier(v,grid,p):
     headers,rows,metrics=agreement(pred[hold],labels[hold])
     metrics.update(training_cells=int(train.sum()),heldout_cells=int(hold.sum()),excluded_labeled_cells=int((labeled&~train&~hold).sum()),
                    block_m=p['block_m'],heldout_fold=p['heldout_fold'],folds=p['folds'],buffer_blocks=p['buffer_blocks'],
-                   class_prior='equal',covariance_condition=float(np.linalg.cond(cov)),
+                   partition='recursive_spatial_blocks',class_prior='equal',covariance_condition=float(np.linalg.cond(cov)),
                    interpretation='Held-out spatial block agreement; not independent external-site accuracy. Output uses training-only model.')
     return pred,headers,rows,metrics
 

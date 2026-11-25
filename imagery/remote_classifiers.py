@@ -1,6 +1,7 @@
 """Spatially blocked classification using established scikit-learn estimators."""
 import numpy as np
 from analysis.science_raster import require
+from .remote_partitions import spatial_partitions
 
 def blocked_classifier(v,grid,p,kind):
     from sklearn.ensemble import RandomForestClassifier
@@ -15,9 +16,8 @@ def blocked_classifier(v,grid,p,kind):
     require(grid.is_meter,'Spatial cross-validation requires a projected metre grid.')
     require(20<=labeled.sum()<=10000 and valid.sum()<=500000,'Use 20–10,000 labeled and at most 500,000 complete cells.')
     if kind=='spatial_svm_cv':require(labeled.sum()<=4000 and valid.sum()<=100000,'RBF SVM exceeds work budget.')
-    row,col=np.indices(valid.shape);bx=np.floor((col+.5)*grid.transform.a/p['block_m']).astype(np.int64)
-    by=np.floor((row+.5)*abs(grid.transform.e)/p['block_m']).astype(np.int64)
-    folds=p['folds'];fold=(bx+2*by)%folds;classes=np.unique(labels[labeled])
+    folds=p['folds'];fold,excluded=spatial_partitions(valid.shape,grid.transform,p['block_m'],folds,p['buffer_blocks'])
+    classes=np.unique(labels[labeled])
     require(2<=len(classes)<=32,'Use 2–32 labeled classes.')
     if kind=='spatial_rf_cv':require(int(valid.sum())*p['trees']<=25_000_000,'Forest inference exceeds work budget.')
     def estimator():
@@ -29,13 +29,7 @@ def blocked_classifier(v,grid,p,kind):
         return LinearDiscriminantAnalysis(solver='lsqr',shrinkage=p['shrinkage'],priors=np.full(len(classes),1/len(classes)))
     oof=np.full(valid.shape,np.nan);rows=[];mat=np.zeros((len(classes),len(classes)),dtype=np.int64)
     for j in range(folds):
-        hold=labeled&(fold==j);train=labeled&~hold
-        if p['buffer_blocks']:
-            forbidden=np.zeros(valid.shape,bool)
-            for dx in range(-p['buffer_blocks'],p['buffer_blocks']+1):
-                for dy in range(-p['buffer_blocks'],p['buffer_blocks']+1):
-                    forbidden|=((bx+dx+2*(by+dy))%folds==j)
-            train&=~forbidden
+        hold=labeled&(fold==j);train=labeled&~excluded[j]
         require(not np.any(train&hold),'Spatial partition overlap.')
         require(all(np.count_nonzero(train&(labels==c))>=5 and np.count_nonzero(hold&(labels==c))>=1 for c in classes),
                 'Each spatial fold needs five training and one validation cell per class; adjust block size or labels.')
@@ -57,7 +51,7 @@ def blocked_classifier(v,grid,p,kind):
              'oof_confusion_matrix_reference_rows':mat.tolist(),'oof_cells':n,'oof_overall_accuracy':oa,
              'oof_balanced_accuracy':float(recall.mean()),'oof_macro_f1':float(f1.mean()),
              'oof_kappa':(oa-expected)/(1-expected) if expected<1 else None,
-             'oof_precision':precision.tolist(),'oof_recall':recall.tolist(),'folds':folds,'block_m':p['block_m'],
+             'oof_precision':precision.tolist(),'oof_recall':recall.tolist(),'folds':folds,'partition':'recursive_spatial_blocks','block_m':p['block_m'],
              'buffer_blocks':p['buffer_blocks'],'interpretation':'OOF metrics from fixed hyperparameters and spatial blocks; final map refits all labels. Not nested tuning or external-site validation.'}
     if kind=='spatial_rf_cv':metrics['final_impurity_feature_importance']=model.feature_importances_.tolist()
     return out,['fold','training_cells','validation_cells','buffer_excluded','accuracy','balanced_accuracy'],rows,metrics
@@ -74,18 +68,10 @@ def nested_svm(v,grid,p):
     valid=np.isfinite(stack).all(axis=0);labeled=valid&np.isfinite(labels)&(labels>0)
     require(grid.is_meter,'Spatial nested validation requires a projected metre grid.')
     require(40<=labeled.sum()<=3000 and valid.sum()<=100000,'Nested SVM requires 40–3,000 labels and at most 100,000 complete cells.')
-    row,col=np.indices(valid.shape);bx=np.floor((col+.5)*grid.transform.a/p['block_m']).astype(np.int64)
-    by=np.floor((row+.5)*abs(grid.transform.e)/p['block_m']).astype(np.int64)
-    folds=p['folds'];fold=(bx+2*by)%folds;classes=np.unique(labels[labeled])
+    folds=p['folds'];fold,excluded=spatial_partitions(valid.shape,grid.transform,p['block_m'],folds,p['buffer_blocks'])
+    classes=np.unique(labels[labeled])
     require(2<=len(classes)<=32,'Use 2–32 labeled classes.')
-    # Disjoint block folds and exclusion buffers are established before any fit.
-    excluded=[]
-    for j in range(folds):
-        bad=fold==j
-        if p['buffer_blocks']:
-            for dx in (-1,0,1):
-                for dy in (-1,0,1):bad|=((bx+dx+2*(by+dy))%folds==j)
-        excluded.append(bad)
+    # All inner and outer fits share label-independent spatial buffers.
     def build(c):return make_pipeline(StandardScaler(),SVC(C=c,gamma=p['gamma'],class_weight='balanced',cache_size=128))
     candidates=[p['c']/10,p['c'],p['c']*10]
     def check(train,hold):
@@ -119,5 +105,5 @@ def nested_svm(v,grid,p):
     return out,['fold','training_cells','validation_cells','selected_c','inner_balanced_accuracy','accuracy','balanced_accuracy'],rows,{
         'classes':classes.astype(int).tolist(),'oof_confusion_matrix_reference_rows':mat.tolist(),'oof_cells':n,
         'oof_overall_accuracy':float(diag.sum()/n),'oof_balanced_accuracy':float(recall.mean()),'oof_macro_f1':float(f1.mean()),
-        'candidate_c':candidates,'final_selected_c':best,'final_inner_scores':scores,'sklearn_version':sklearn.__version__,
+        'partition':'recursive_spatial_blocks','buffer_blocks':p['buffer_blocks'],'candidate_c':candidates,'final_selected_c':best,'final_inner_scores':scores,'sklearn_version':sklearn.__version__,
         'interpretation':'Outer folds evaluate independently tuned models. Final model tuned on all spatial folds then refit; no external-site accuracy claim.'}
