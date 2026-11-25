@@ -1862,15 +1862,14 @@ export default function App() {
                 <>
                   <div className="measurement-metric-grid">
                   <div className="metric measurement-primary">
-                    <span>{measurement.area_m2 !== null ? 'Geographic area' : measurement.length_m!==null?'Distance':'Location'}</span>
-                    <strong>{measurement.area_m2 !== null
+                    <span>{measurement.area_m2 !== null ? 'Area' : measurement.length_m!==null?'Distance':'Location'}</span>
+                    <strong>{measurement.method===OFFLINE_METHOD&&measurement.area_m2!==null?'~ ':measurement.method===OFFLINE_METHOD&&measurement.length_m!==null?'~ ':''}{measurement.area_m2 !== null
                       ? areaText(measurement.area_m2,areaUnit)
                       : measurement.length_m !== null ? distanceText(measurement.length_m,display.distance) : 'Location only'}</strong>
                   </div>
-                  {measurement.perimeter_m !== null && <div className="metric secondary measurement-perimeter"><span>Perimeter</span><strong>{distanceText(measurement.perimeter_m,display.distance)}</strong></div>}
+                  {measurement.perimeter_m !== null && <div className="metric secondary measurement-perimeter"><span>Perimeter</span><strong>{measurement.method===OFFLINE_METHOD?'~ ':''}{distanceText(measurement.perimeter_m,display.distance)}</strong></div>}
                   </div>
                   {geometry?.type==='Point'&&<div className="measurement-coordinate-grid"><div><span>Longitude</span><strong>{number(geometry.coordinates[0],6)}°</strong></div><div><span>Latitude</span><strong>{number(geometry.coordinates[1],6)}°</strong></div></div>}
-                  <div className="measurement-provenance"><span>Method</span><span className="analysis-measurement-method" title={measurement.method} aria-label="Measurement method">{measurement.method}</span></div>
                   {measurement.method===OFFLINE_METHOD&&<button onClick={()=>{if(geometry)void commitGeometry(geometry,'Exact measurement updated.');}}>Validate exact measurement</button>}
                 </>
               )}
@@ -1880,7 +1879,7 @@ export default function App() {
                 );
                 return temporary ? (
                   <div className="metric preview">
-                    <span>Live estimate · final accuracy after Finish</span>
+                    <span>Live estimate</span>
                     <strong>{temporary.area_m2 !== null
                       ? number(temporary.area_m2, 2) + ' m²'
                       : number(temporary.length_m ?? 0, 2) + ' m'}</strong>
@@ -1894,10 +1893,8 @@ export default function App() {
                     {previewEdgeLengths(geometry).edges.map((edge, index) =>
                       <div key={index}><span>{edge.label}</span><strong>{!preview&&measurement?.method!==OFFLINE_METHOD&&measurement?.edge_lengths_m?.[index]!==undefined?'':'~ '}{number(!preview?(measurement?.edge_lengths_m?.[index]??edge.length_m):edge.length_m,2)} m</strong></div>)}
                   </div>
-                  <small className="compact-notice" title="Live spherical preview. Final area and perimeter use the WGS84 ellipsoid.">~ estimated · WGS84 after validation</small>
                 </details>
               )}
-              {selectedPlace && <div className="measurement-provenance measurement-source"><span>Source</span><span title={selectedPlace.source}>{selectedPlace.source}<small>{geometry&&['Polygon','MultiPolygon','LineString','MultiLineString'].includes(geometry.type)?'Mapped outline':'Coordinates only'}</small></span></div>}
 
             </div>
           </section>,resultsTarget)}

@@ -44,6 +44,14 @@ for(const width of [1100,1280,1600])test(`drawing exits and error recovery stay 
  await expect(inspector.locator('.measurement-object-name')).toHaveText('厦门岛');
  await expect(inspector.locator('.measurement-primary strong')).toBeVisible();
  await expect(inspector.locator('.measurement-perimeter strong')).toBeVisible();
+ await expect(inspector.getByText('Method',{exact:true})).toHaveCount(0);
+ await expect(inspector.getByText('Source',{exact:true})).toHaveCount(0);
+ const styles=await inspector.locator('.measurement-metric-grid .metric').evaluateAll(nodes=>nodes.map(node=>{
+   const card=getComputedStyle(node),value=getComputedStyle(node.querySelector('strong')!);
+   return [card.flexDirection,card.alignItems,card.backgroundColor,card.padding,value.fontSize,value.fontWeight];
+ }));
+ expect(styles).toHaveLength(2);
+ expect(styles[0]).toEqual(styles[1]);
  await expect(inspector.locator('.edge-measurements summary')).toContainText('segments');
  await page.screenshot({path:testInfo.outputPath('survey-objects-'+width+'.png')});
  // The map ends above the dedicated status row; dock footers do not overlap it.

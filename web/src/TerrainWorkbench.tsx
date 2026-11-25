@@ -681,7 +681,7 @@ export default function TerrainWorkbench(p:Props){
      </select>
    </div>}
    <h3 className="terrain-flat-heading"><SectionIcon role="terrainResult"/> {selected.title}</h3>
-   <small className="terrain-summary-source" title={selected.source.name}>{inputsChanged?'Previous result':selected.source.name}</small>
+   {inputsChanged&&<small className="terrain-summary-source">Previous result</small>}
    {result?.raster?.png&&<img className="terrain-overview-preview" src={result.raster.png} alt="Terrain overview preview"/>}
    {profile&&<div aria-hidden={expanded} style={{visibility:expanded?'hidden':'visible'}}><ProfilePlot samples={profile.samples} length={profile.length_m} onHover={p.onHover} mapIndex={p.profileMapIndex??null}/></div>}
    {result&&<div className="terrain-metrics terrain-key-metrics">{featuredMetrics.slice(0,3).map(([key,value])=><div key={key}><span>{names[key]??key.replaceAll('_',' ')}</span><strong>{fmt(value)} {units[key]??(['product_min','product_max','product_mean','product_std','product_p10','product_p50','product_p90'].includes(key)?result.raster?.unit??'':'')}</strong></div>)}</div>}
