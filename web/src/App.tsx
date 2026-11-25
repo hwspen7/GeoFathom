@@ -177,7 +177,7 @@ export default function App() {
   // Fixed-size workbench docks: map takes all remaining viewport width.
   // No draggable splitters, scrolling side panels, or stored widths.
   // Exceptional long controls open as an expanded workspace, not as a scrolling sidebar.
-  const [expandedDock,setExpandedDock]=useState<'operations'|'project'|null>(null);
+  const [expandedDock,setExpandedDock]=useState<'project'|null>(null);
   useEffect(()=>{
     if(!expandedDock)return;
     const onKey=(event:KeyboardEvent)=>{if(event.key==='Escape')setExpandedDock(null);};
@@ -1751,15 +1751,10 @@ export default function App() {
         </div>
 
         </main>
-        <aside className={'gis-inspector gis-operations'+(expandedDock==='operations'?' workspace-dock-expanded':'')}
+        <aside className="gis-inspector gis-operations" data-active-module={activeTool}
           data-object-browser={activeTool==='tools-terrain'&&objectsOpen?'true':'false'}
           aria-label="Operations">
-          <WorkspaceDockHeading actions={<button className="workspace-dock-expand-button"
-            aria-label={expandedDock==='operations'?'Close full operations view':'Open full operations view'}
-            title={expandedDock==='operations'?'Return to workspace':'Open larger workspace'}
-            onClick={()=>setExpandedDock(v=>v==='operations'?null:'operations')}>
-            {expandedDock==='operations'?<Minimize2 size={14}/>:<Maximize2 size={14}/>}
-          </button>}><Compass size={15}/> Tools</WorkspaceDockHeading>
+          <WorkspaceDockHeading><Compass size={15}/> Tools</WorkspaceDockHeading>
           <div className={'sidebar-scroll'+(['tools-services','tools-export'].includes(activeTool)?' data-fixed-operations':'')}
             tabIndex={0} aria-label="Operations scrolling region">
           <details className="workspace-objects" hidden={['tools-services','tools-export'].includes(activeTool)}

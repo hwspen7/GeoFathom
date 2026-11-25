@@ -44,7 +44,7 @@ with tempfile.TemporaryDirectory(dir=root) as temporary:
   const response=await page.request.post('http://127.0.0.1:8000/projects',{data:{name:'Building research browser '+Date.now()}});
   const project=(await response.json()).id;expect(response.status()).toBe(201);
   await page.goto('/');await page.getByLabel('Active project').selectOption(project);
-  await activateWorkspaceModule(page,'Raster',true);
+  await activateWorkspaceModule(page,'Raster');
   await page.getByText('GeoAI raster analysis & change detection').click();
   await page.getByLabel('GeoAI analysis operation').selectOption('building_extraction');
   await page.getByLabel('GeoAI administration token').fill(process.env.GEOFATHOM_MODEL_ADMIN_TOKEN||'building-browser-admin');

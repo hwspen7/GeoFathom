@@ -15,7 +15,7 @@ test('batch imports 620 rows and exports full CSV and GDAL datasets beyond the U
  const created=await request.post('/api/projects',{data:{name:'Exchange '+Date.now()}});expect(created.ok()).toBeTruthy();
  const project=await created.json();
  await page.goto('/');await page.getByLabel('Active project',{exact:true}).selectOption(project.id);
- await activateWorkspaceModule(page,'Data',true);
+ await activateWorkspaceModule(page,'Data');
  await page.getByRole('button',{name:'Import',exact:true}).click();
  await page.getByRole('button',{name:'Advanced import',exact:true}).click();
  await page.getByLabel('Batch dataset files').setInputFiles({name:'stations.geojson',mimeType:'application/geo+json',buffer:Buffer.from(JSON.stringify(points(620)))});
@@ -57,7 +57,7 @@ test('batch imports 620 rows and exports full CSV and GDAL datasets beyond the U
 test('CSV configuration maps coordinates and types and reports an invalid row',async({page,request})=>{
  const project=await (await request.post('/api/projects',{data:{name:'CSV '+Date.now()}})).json();
  await page.goto('/');await page.getByLabel('Active project',{exact:true}).selectOption(project.id);
- await activateWorkspaceModule(page,'Data',true);await page.getByRole('button',{name:'Import',exact:true}).click();
+ await activateWorkspaceModule(page,'Data');await page.getByRole('button',{name:'Import',exact:true}).click();
  await page.getByRole('button',{name:'Advanced import',exact:true}).click();
  await page.getByLabel('Batch dataset files').setInputFiles({name:'sites.csv',mimeType:'text/csv',buffer:Buffer.from('x,y,name,count\n-83,40,Valid,12\nbad,40,Invalid,4\n')});
  await expect(page.getByLabel('Source layers')).toContainText('2 features');
@@ -83,7 +83,7 @@ test('portable project ZIP is restored through Data into an empty project',async
  expect(imported.status()).toBe(201);
  const empty=await (await request.post('/api/projects',{data:{name:'Restore '+Date.now()}})).json();
  await page.goto('/');await page.getByLabel('Active project',{exact:true}).selectOption(project.id);
- await activateWorkspaceModule(page,'Export',true);await page.getByLabel('Export format',{exact:true}).selectOption('package');
+ await activateWorkspaceModule(page,'Export');await page.getByLabel('Export format',{exact:true}).selectOption('package');
  const event=page.waitForEvent('download');await page.getByRole('button',{name:'Export PACKAGE',exact:true}).click();
  const pkg=await downloaded(await event);expect(pkg.subarray(0,2).toString()).toBe('PK');
  await page.getByLabel('Active project',{exact:true}).selectOption(empty.id);

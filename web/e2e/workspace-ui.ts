@@ -4,14 +4,13 @@
 import {expect,type Page} from '@playwright/test';
 
 /** Follow the rendered navigation at both desktop and compact widths. */
-export async function activateWorkspaceModule(page:Page,name:string,expanded=false){
+export async function activateWorkspaceModule(page:Page,name:string){
  const navigation=page.getByRole('navigation',{name:'Workspace tools'});
  await expect(navigation).toBeVisible();
  const compact=navigation.getByLabel('Workspace module',{exact:true});
  if(await compact.isVisible())await compact.selectOption({label:name});
  else await navigation.getByRole('button',{name,exact:true}).click();
  await expectWorkspaceModule(page,name);
- if(expanded)await page.getByRole('button',{name:'Open full operations view',exact:true}).click();
 }
 
 export async function expectWorkspaceModule(page:Page,name:string){

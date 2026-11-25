@@ -67,7 +67,7 @@ test('delayed authoritative geometry validation cannot publish after project swi
   await expect(select.locator('option[value="'+first+'"]')).toHaveCount(1);
   await select.selectOption(first);
   await expectWorkspaceModule(page,'Survey');
-  await activateWorkspaceModule(page,'Survey',true);
+  await activateWorkspaceModule(page,'Survey');
   let release!:()=>void;
   const gate=new Promise<void>(resolve=>{release=resolve;});
   let requested!:()=>void;
@@ -87,7 +87,6 @@ test('delayed authoritative geometry validation cannot publish after project swi
     await page.getByLabel('Opposite latitude').fill('20.01');
     await page.getByRole('button',{name:'Apply exact geometry'}).click();
     await received;
-    await page.getByRole('button',{name:'Close full operations view',exact:true}).click();
     await select.selectOption(second);
     await expect(select).toHaveValue(second);
     await openFileMenu(page);
