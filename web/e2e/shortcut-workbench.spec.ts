@@ -165,6 +165,12 @@ test('Survey uses flat compact sections and keeps every construction control acc
  await page.getByRole('navigation',{name:'Workspace tools'}).getByRole('button',{name:'Survey',exact:true}).click();
  const survey=page.locator('#tools-survey');
  await expect(survey.locator('details,summary')).toHaveCount(0);
+ await expect(survey.locator('.survey-workflow-hint,.survey-vertex-help,.survey-main-heading')).toHaveCount(0);
+ await expect(survey.getByRole('heading',{name:'Vertices',exact:true})).toBeVisible();
+ await expect(survey.getByRole('heading',{name:'Construction',exact:true})).toBeVisible();
+ const controlHeight=await survey.getByLabel('Numeric construction mode').evaluate(el=>el.getBoundingClientRect().height);
+ expect(controlHeight).toBeGreaterThanOrEqual(29);
+ expect(controlHeight).toBeLessThanOrEqual(32);
  await expect(survey.getByRole('checkbox')).toBeVisible();
  await expect(survey.getByLabel('Numeric construction mode')).toBeVisible();
  await expect(survey.getByRole('button',{name:'Apply exact geometry'})).toBeInViewport({ratio:1});

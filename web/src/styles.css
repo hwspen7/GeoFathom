@@ -2060,19 +2060,17 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .desktop-gis .gis-operations[data-active-module="tools-survey"]>.sidebar-scroll{padding:6px 10px 7px}
 .desktop-gis [data-active-module="tools-survey"] #tools-survey{padding:0;margin:0;border:0}
 .desktop-gis [data-active-module="tools-survey"] .survey-tools{gap:0}
-.survey-flat-heading{display:flex;align-items:center;gap:5px;font-size:11px;line-height:15px;font-weight:650;color:#3c5b70;margin:0 0 4px}
-.survey-main-heading{margin:0 0 2px}
-.survey-flat-group{padding:5px 0;margin:0;border:0;border-bottom:1px solid #dce5eb;background:transparent}
+/* Use moderate vertical rhythm rather than compressed controls or prose. */
+.survey-flat-heading{display:flex;align-items:center;gap:6px;font-size:12px;line-height:17px;font-weight:650;color:#3c5b70;margin:0 0 7px}
+.survey-flat-group{padding:9px 0;margin:0;border:0;border-bottom:1px solid #dce5eb;background:transparent}
 .survey-flat-group:last-of-type{border-bottom:0}
-.desktop-gis .survey-workflow-hint{font-size:10px;line-height:14px;margin:0 0 3px}
-.survey-flat-group .linked-vertex-toggle{min-height:22px;margin:0;padding:0;gap:5px;font-size:11px}
-.survey-flat-group .linked-vertex-toggle input{width:13px;height:13px;margin:0;flex:none}
-.survey-vertex-help{display:block;font-size:9px;line-height:12px;color:#61798b;margin:2px 0 0}
-.survey-flat-group .survey-numeric,.survey-flat-group .survey-overlay{display:grid;gap:4px;padding:0;margin:0;border:0;background:transparent}
-.survey-flat-group .area-fields{gap:4px;margin:0}
-.survey-flat-group .survey-numeric input,.survey-flat-group .survey-numeric select,.survey-flat-group .survey-overlay select{box-sizing:border-box;width:100%;min-width:0;min-height:25px;height:25px;font-size:11px;padding:3px 5px}
-.survey-flat-group button{min-height:25px;height:25px;padding:3px 5px!important;font-size:11px}
-.survey-flat-group .survey-action-bar{gap:4px}
+.survey-flat-group .linked-vertex-toggle{min-height:26px;margin:0;padding:0;gap:6px;font-size:11px}
+.survey-flat-group .linked-vertex-toggle input{width:14px;height:14px;margin:0;flex:none}
+.survey-flat-group .survey-numeric,.survey-flat-group .survey-overlay{display:grid;gap:6px;padding:0;margin:0;border:0;background:transparent}
+.survey-flat-group .area-fields{gap:6px;margin:0}
+.survey-flat-group .survey-numeric input,.survey-flat-group .survey-numeric select,.survey-flat-group .survey-overlay select{box-sizing:border-box;width:100%;min-width:0;min-height:30px;height:30px;font-size:11px;padding:4px 7px;border-radius:4px}
+.survey-flat-group button{min-height:30px;height:30px;padding:4px 7px!important;font-size:11px;border-radius:4px}
+.survey-flat-group .survey-action-bar{gap:6px}
 .desktop-gis [data-active-module="tools-survey"] .geometry-edit-controls{margin:4px 0 0;padding:0;border:0}
 .desktop-gis [data-active-module="tools-survey"] .compact-boundary{margin:0;padding:4px 0 0;border:0;border-top:1px solid #dce5eb;gap:4px}
 /* Rename stays in the existing object row, without native browser buttons. */

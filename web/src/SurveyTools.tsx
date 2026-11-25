@@ -165,18 +165,16 @@ export default function SurveyTools({
   return (
     <div className="survey-tools">
       {toolbarTarget?createPortal(toolbar,toolbarTarget):toolbar}
-      <p className="survey-workflow-hint">Draw or select · Enter to finish · Esc to cancel.</p>
       {/* Keep high-frequency survey controls visible, like GIS tools. */}
       <section className="survey-flat-group" aria-label="Vertex editing options">
-      <h3 className="survey-flat-heading">Vertex editing options</h3>
+      <h3 className="survey-flat-heading" title="Drag vertices to reshape, midpoints to insert, or right-click a vertex to remove it.">Vertices</h3>
       <label className="linked-vertex-toggle">
         <input type="checkbox" checked={linked} onChange={e=>onLinked(e.target.checked)} />
         <span title="Preview neighboring feature edits">Linked/shared vertices</span>
       </label>
-      <small className="survey-vertex-help" title="Drag white corner handles to reshape. Drag blue midpoints to insert. Right-click a corner to remove it. Use Move to drag the whole feature.">Drag vertices · Midpoint inserts · Right-click removes</small>
       </section>
       <section className="survey-flat-group" aria-label="Exact coordinates and construction">
-      <h3 className="survey-flat-heading"><CornerDownRight size={13}/> Exact construction</h3>
+      <h3 className="survey-flat-heading"><CornerDownRight size={13}/> Construction</h3>
       <form className="survey-numeric" onSubmit={numeric}>
         <select aria-label="Numeric construction mode" value={numericMode} onChange={event => setNumericMode(event.target.value)}>
           <option value="point">Point</option>
@@ -214,7 +212,7 @@ export default function SurveyTools({
       <div className="survey-overlay">
         <select aria-label="Boolean operation target" value={reference}
           onChange={event => setReference(event.target.value)}>
-          <option value="">Choose another feature…</option>
+          <option value="">Select feature…</option>
           {saved.filter(feature => feature.id).map(feature =>
             <option key={feature.id} value={feature.id}>{feature.name}</option>)}
         </select>

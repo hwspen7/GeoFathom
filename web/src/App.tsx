@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent, type SyntheticEve
 import {createPortal} from 'react-dom';
 import {
   ArrowRight, Compass, Globe2, Layers3, MapPin, Maximize2, Minimize2,
-  Pencil, RotateCcw, Search, Send, Sparkles,
+  RotateCcw, Search, Send, Sparkles,
   Wifi, WifiOff,
 } from 'lucide-react';
 
@@ -1896,7 +1896,6 @@ export default function App() {
           </section>,resultsTarget)}
 
           <section id="tools-survey" hidden={activeTool!=='tools-survey'} className="panel-section">
-            <h3 className="survey-flat-heading survey-main-heading">Survey & geometry editor</h3>
             <SurveyTools
               // The survey commands belong to the global toolbar, not the active module.
               toolbarTarget={toolbarTarget} busy={busy} locked={selectedLocked}
