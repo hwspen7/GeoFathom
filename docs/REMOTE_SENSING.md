@@ -1,5 +1,26 @@
 # Remote Sensing scientific computing
 
+## Common-grid preparation and scene discovery
+
+The workbench searches the approved public Sentinel-2 catalog by WGS84 region
+and date range and filters the returned page by known scene cloud cover. This
+is a bounded catalog page, not an exhaustive cloud-free scene search. Native
+crop import also binds SCL as QA. The **Prepare aligned bands** action calibrates
+each selected scientific band, decodes and nearest-aligns QA to that band's
+native grid, screens native pixels, then resamples to the explicitly chosen
+reference geometry. Categorical bands always use nearest neighbor. Cloudy
+science values therefore cannot contaminate neighboring clear pixels through
+bilinear interpolation. The prepared physical bands replace the active
+bindings without applying calibration twice; per-band missingness is retained.
+
+`POST /analysis/remote-sensing/prepare` accepts sources, bindings, declared
+quantities, quality, target, target_quantity and nearest/bilinear resampling.
+It returns GeoTIFF bands, a common-support mask and a deterministic receipt
+with input/output hashes, physical calibration, QA order and per-band support.
+It is bounded to 12 million decoded cells and 48 MB encoded output. This stage
+does not infer atmospheric parameters, remove clouds by reconstruction, or
+claim that different sensors have been radiometrically harmonized.
+
 ## Spatial validation partition correction
 
 All spatial classifiers, nested SVM tuning and cloud probability/calibration

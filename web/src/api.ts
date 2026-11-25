@@ -374,11 +374,12 @@ export interface StacSearchResult {
 export function searchPublicImagery(
   bbox: [number, number, number, number],
   collection = 'sentinel-2-l2a',
+  dates?:{start_date?:string;end_date?:string},
 ): Promise<StacSearchResult> {
   return request<StacSearchResult>('/imagery/catalog/search', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ bbox, collection, limit: 8 }),
+    body: JSON.stringify({ bbox, collection, limit: 8, ...dates }),
   });
 }
 
@@ -1300,6 +1301,11 @@ export interface RemoteMethod {id:string;group:string;title:string;roles:Array<{
 export interface RemoteInput {operation:string;sources:RemoteSource[];bindings:Record<string,RemoteBinding>;quality:RemoteQuality[];parameters:Record<string,number>;times?:number[];library?:number[][]}
 export function getRemoteCatalog(signal?:AbortSignal):Promise<{operations:RemoteMethod[];operation_count:number}>{return request('/analysis/remote-sensing/catalog',{signal});}
 export function runRemoteScience(body:RemoteInput,signal?:AbortSignal):Promise<SpatialScienceResult>{return request('/analysis/remote-sensing/run',{method:'POST',signal,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});}
+
+export interface PreparedRemoteBands {bands:Array<StudioRaster&{role:string;sha256:string}>;common_mask:StudioRaster;receipt:Record<string,unknown>}
+export function prepareRemoteBands(body:{sources:RemoteSource[];bindings:Record<string,RemoteBinding>;quantities:Record<string,string>;quality:RemoteQuality[];target:RemoteBinding;target_quantity:string;resampling:'nearest'|'bilinear'},signal?:AbortSignal):Promise<PreparedRemoteBands>{
+ return request('/analysis/remote-sensing/prepare',{method:'POST',signal,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+}
 
 export function queueRemoteDiskJob(projectId:string,payload:Record<string,unknown>):Promise<GISJob>{
  return request('/projects/'+encodeURIComponent(projectId)+'/jobs',{method:'POST',headers:{'Content-Type':'application/json','X-GeoFathom-Local-Import':'1'},body:JSON.stringify({kind:'remote_windowed',payload})});

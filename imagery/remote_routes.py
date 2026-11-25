@@ -70,6 +70,28 @@ class RemoteInput(BaseModel):
     times:list[float]=Field(default_factory=list,max_length=64)
     library:list[tuple[float,...]]=Field(default_factory=list,max_length=2048)
 
+
+PrepareQuantity=Literal['reflectance','numeric','class','kelvin','power','db','radiance',
+    'emissivity','transmittance','fraction','slope','aspect','nonnegative','wrapped_phase',
+    'positive_gain','radiance_sd','fraction_sd','signed_power','distance_m','distance_sd_m']
+
+class PrepareInput(BaseModel):
+    model_config=ConfigDict(extra='forbid',allow_inf_nan=False)
+    sources:list[Source]=Field(min_length=1,max_length=64)
+    bindings:dict[str,Binding]=Field(min_length=1,max_length=16)
+    quantities:dict[str,PrepareQuantity]=Field(min_length=1,max_length=16)
+    quality:list[Quality]=Field(default_factory=list,max_length=16)
+    target:Binding
+    target_quantity:PrepareQuantity='reflectance'
+    resampling:Literal['nearest','bilinear']='bilinear'
+
+@router.post('/prepare')
+def prepare_bands(body:PrepareInput):
+    from .remote_preprocess import prepare
+    try:return prepare(body)
+    except (ValueError,TypeError,OverflowError,RuntimeError,OSError,RasterioError) as e:
+        raise HTTPException(422,detail=str(e)) from e
+
 def read_band(source,binding,quantity,raw,sha):
     with MemoryFile(raw) as mem,mem.open() as ds:
         require(ds.driver=='GTiff' and ds.crs,'Use georeferenced GeoTIFF sources.')

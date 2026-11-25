@@ -15,6 +15,11 @@ test('remote sensing maps two calibrated bands and exports actual NDVI',async({p
  await dialog.getByLabel('nir source',{exact:true}).selectOption('0');
  await dialog.getByLabel('red source',{exact:true}).selectOption('0');
  await dialog.getByLabel('red band',{exact:true}).fill('2');
+ const prepared=page.waitForResponse(r=>r.url().endsWith('/analysis/remote-sensing/prepare'));
+ await dialog.getByRole('button',{name:'Prepare aligned bands',exact:true}).click();
+ const preparation=await prepared;expect(preparation.ok()).toBeTruthy();
+ expect((await preparation.json()).receipt.common_valid_cells).toBe(4);
+ await expect(dialog.getByRole('status')).toHaveText('Prepared bands are selected for analysis.');
  const response=page.waitForResponse(r=>r.url().endsWith('/analysis/remote-sensing/run')&&r.request().method()==='POST');
  await dialog.getByRole('button',{name:'Run remote sensing',exact:true}).click();
  const result=await response;expect(result.ok()).toBeTruthy();

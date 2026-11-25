@@ -13,6 +13,29 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  remote-workbench:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install locked application dependencies
+        run: |
+          python -m pip install -c requirements/linux.lock -e ".[dev]"
+          cd web
+          npm ci --no-audit --no-fund
+          npx playwright install --with-deps chromium
+      - name: Verify remote sensing build and browser workflow
+        working-directory: web
+        run: |
+          npm run build
+          npm test
+          npx playwright test e2e/remote-sensing.spec.ts --workers=1
   remote-sensing-reference:
     runs-on: ubuntu-24.04
     timeout-minutes: 15

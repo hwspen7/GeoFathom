@@ -51,6 +51,45 @@ def test_spatial_buffer_geographic_separation():
             assert (~excluded[j]).any() and np.all(excluded[j][fold==j])
 
 
+def test_preparation_masks_native_pixels_before_alignment():
+    from imagery.remote_routes import PrepareInput
+    from imagery.remote_preprocess import prepare
+    fine=source(np.full((4,4),.2))
+    coarse=source([[6000,16000],[6000,6000]],aff=from_origin(500000,4500000,20,20),scales=[.0001])
+    qa=source([[4,9],[4,4]],aff=from_origin(500000,4500000,20,20))
+    spec={'sources':[fine,coarse,qa],'bindings':{'red':{'source':0},'nir':{'source':1}},
+          'quantities':{'red':'reflectance','nir':'reflectance'},'target':{'source':0},
+          'quality':[{'source':2,'scheme':'sentinel_clear','roles':['nir']}], 'resampling':'bilinear'}
+    result=prepare(PrepareInput(**spec));bands={b['role']:b for b in result['bands']}
+    with MemoryFile(base64.b64decode(bands['nir']['data'])) as m,m.open() as ds:
+        z=ds.read(1);assert ds.shape==(4,4) and ds.transform==AFF
+        # A cloudy value of 1.6 cannot contaminate neighboring clear reflectance.
+        np.testing.assert_allclose(z[np.isfinite(z)],.6,atol=1e-12)
+        assert np.isnan(z).any()
+    receipt=result['receipt'];assert receipt['quality_order']=='native_screen_then_reproject'
+    assert receipt['bands']['nir']['scale']==.0001
+    assert receipt['sha256']==prepare(PrepareInput(**spec))['receipt']['sha256']
+    runbody=RemoteInput(operation='ndvi',sources=[{'name':b['name'],'data':b['data']} for b in result['bands']],
+        bindings={b['role']:{'source':i,'encoding':'raw'} for i,b in enumerate(result['bands'])})
+    ndvi=grid(execute(runbody));np.testing.assert_allclose(ndvi[np.isfinite(ndvi)],.5)
+    with TestClient(app) as client:
+        assert client.post('/analysis/remote-sensing/prepare',json=spec).status_code==200
+        spec['quality'][0]['roles']=['missing']
+        assert client.post('/analysis/remote-sensing/prepare',json=spec).status_code==422
+
+
+def test_preparation_preserves_categories_and_rejects_nonoverlap():
+    from imagery.remote_routes import PrepareInput
+    from imagery.remote_preprocess import prepare
+    sources=[source(np.full((4,4),.2)),source([[1,2],[3,4]],aff=from_origin(500000,4500000,20,20))]
+    body=PrepareInput(sources=sources,bindings={'labels':{'source':1}},quantities={'labels':'class'},target={'source':0})
+    result=prepare(body)
+    with MemoryFile(base64.b64decode(result['bands'][0]['data'])) as m,m.open() as ds:
+        np.testing.assert_array_equal(ds.read(1),np.repeat(np.repeat([[1,2],[3,4]],2,axis=0),2,axis=1))
+    body.sources[1]=type(body.sources[0])(**source([[1,2],[3,4]],aff=from_origin(600000,4600000,20,20)))
+    with pytest.raises(FigureInputError,match='No valid prepared'):prepare(body)
+
+
 @pytest.mark.parametrize('kind',['spatial_rf_cv','spatial_svm_cv','spatial_lda_cv',
     'spatial_nested_svm','spatial_lda','cloud_probability_model','cloud_calibrated_probability'])
 def test_buffered_spatial_models(kind):
