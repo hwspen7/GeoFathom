@@ -1758,7 +1758,6 @@ export default function App() {
         <aside className="gis-inspector gis-operations" data-active-module={activeTool}
           data-object-browser={activeTool==='tools-terrain'&&objectsOpen?'true':'false'}
           aria-label="Operations">
-          <WorkspaceDockHeading><Compass size={15}/> Tools</WorkspaceDockHeading>
           <div className={'sidebar-scroll'+(['tools-services','tools-export'].includes(activeTool)?' data-fixed-operations':'')}
             tabIndex={0} aria-label="Operations scrolling region">
           <ObjectsContainer className="workspace-objects" hidden={['tools-services','tools-export'].includes(activeTool)}
@@ -2265,7 +2264,6 @@ export default function App() {
           <div className="workspace-fixed-footer" ref={setOperationsFooterTarget}/>
         </aside>
         <aside className="gis-results-monitor" aria-label="Results monitor">
-          <WorkspaceDockHeading><Layers3 size={15}/> Results</WorkspaceDockHeading>
           <div className="sidebar-scroll" ref={setResultsTarget} tabIndex={0} aria-label="Results scrolling region">
             {!measurement&&activeTool==='tools-survey'&&<div className="workspace-monitor-empty">No selection</div>}
           </div>

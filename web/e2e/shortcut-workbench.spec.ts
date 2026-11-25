@@ -48,6 +48,13 @@ test('global survey toolbar persists across all research modules',async({page})=
  for(const module of ['GIS','Analysis','Terrain','Spatial','Network','Temporal','LiDAR','Sensing','Raster','Mapping','Data','Export','Assistant','Survey']){
   await navigation.getByRole('button',{name:module,exact:true}).click();
   await expect(navigation.getByRole('button',{name:module,exact:true})).toHaveAttribute('aria-pressed','true');
+  // Fixed side panels start directly with their content, without title bars.
+  for(const panel of [page.getByLabel('Operations',{exact:true}),page.getByLabel('Results monitor',{exact:true})]){
+   await expect(panel.locator(':scope > .workspace-dock-heading')).toHaveCount(0);
+   await expect(panel.locator(':scope > .sidebar-scroll')).toBeVisible();
+   const top=await panel.evaluate(el=>el.firstElementChild===el.querySelector(':scope > .sidebar-scroll'));
+   expect(top).toBe(true);
+  }
   for(const name of names){
    const tool=toolbar.getByRole('button',{name,exact:true});
    await expect(tool).toHaveCount(1);
