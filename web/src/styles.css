@@ -1974,3 +1974,9 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .temporal-monitor-chart .temporal-figure{flex:1 1 0;min-height:0;display:flex;flex-direction:column;padding:3px;gap:2px;overflow:hidden}
 .temporal-monitor-chart .temporal-figure img{flex:1 1 0;min-height:0;width:100%;height:0;max-height:none;object-fit:contain}.temporal-monitor-chart .temporal-figure small{flex:none;font-size:9px;line-height:1.2}
 .temporal-monitor-footer{flex:none;display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:4px}.temporal-monitor-footer button{min-width:0;padding:5px 3px;border:1px solid #cbd8e1;border-radius:4px;background:white;color:#294b60;font:11px system-ui,sans-serif;cursor:pointer}.temporal-monitor-footer button:hover{background:#eaf3f8}
+
+/* Terrain review uses the shared Overview / Figures / Data vocabulary. */
+.terrain-result-dialog .terrain-result-tabs{display:flex;gap:6px;border-bottom:1px solid #dbe5eb;padding:6px 0;margin:0 0 8px}
+.terrain-result-dialog .terrain-result-tabs button{padding:6px 12px;border:1px solid #cbd8e1;border-radius:4px;background:white;color:#294b60;font:inherit}
+.terrain-result-dialog .terrain-result-tabs button[aria-pressed=true]{background:#e9f3f9;color:#175f8a;border-color:#83b4d0}
+.desktop-gis .gis-results-monitor .terrain-overview-preview{max-height:clamp(100px,21vh,195px);object-fit:contain}

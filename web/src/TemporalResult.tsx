@@ -88,8 +88,8 @@ export function TemporalMonitor({result,title,onDetails,onMap,onExport}:{result:
   <div className="temporal-monitor-plots">
    {p&&<section className="temporal-monitor-map"><h4>Spatial distribution</h4><div className="temporal-monitor-image"><img alt="Temporal result overview" src={p.png.startsWith('data:')?p.png:'data:image/png;base64,'+p.png}/></div>{scale&&<TemporalScale scale={scale} unit={unit}/>}</section>}
    {selected&&<section className="temporal-monitor-chart"><label><span>Scientific figure</span><select aria-label="Result scientific figure" value={charts.indexOf(selected)} onChange={e=>setIndex(Number(e.target.value))}>{charts.map((f,i)=><option key={i} value={i}>{f.title}</option>)}</select></label><TemporalFigure result={result} figure={selected}/></section>}
-   {!p&&!selected&&<p>{result.rows.length} result records available in Details.</p>}
+   {!p&&!selected&&<p>{result.rows.length} result records available in Review.</p>}
   </div>
-  <footer className="temporal-monitor-footer"><button onClick={onDetails} title="Review time-series results">Details</button>{p&&result.raster&&<button onClick={onMap}>Map</button>}{result.raster&&<button onClick={()=>onExport('raster')}>GeoTIFF</button>}<button onClick={()=>onExport('csv')}>CSV</button></footer>
+  <footer className="temporal-monitor-footer"><button onClick={onDetails} title="Review time-series results">Review</button>{p&&result.raster&&<button onClick={onMap}>Map</button>}{result.raster&&<button onClick={()=>onExport('raster')}>GeoTIFF</button>}<button onClick={()=>onExport('csv')}>CSV</button></footer>
  </section>;
 }

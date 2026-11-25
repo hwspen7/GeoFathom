@@ -1,4 +1,5 @@
 import {downloadTerrainRaster,materializeScientificRaster,type StudioRaster} from './api';
+import {terrainSource,type ScienceRaster} from './scienceRegistry';
 import {useEffect,useMemo,useRef,useState,type ChangeEvent} from 'react';
 import {createPortal} from 'react-dom';
 import {Mountain} from 'lucide-react';
@@ -109,7 +110,7 @@ interface Props{
  onFetchTarget?:(bbox:TerrainBBox|null)=>void;
  onFitSelectedArea?:()=>void;
  extentMode:boolean;onUseSelection:()=>void;
- onHover:(point:Position|null)=>void;onPreview:(g:GeoJSON.Feature[])=>void;onRasterPreview?:(layers:TerrainRasterLayer[])=>void;onSaved:()=>void;
+ onHover:(point:Position|null)=>void;onPreview:(g:GeoJSON.Feature[])=>void;onRasterPreview?:(layers:TerrainRasterLayer[])=>void;onScientificRasters?:(products:ScienceRaster[])=>void;onSaved:()=>void;
  onProfileSamples?:(samples:ProfileResult['samples'])=>void;profileMapIndex?:number|null;
 }
 export default function TerrainWorkbench(p:Props){
@@ -362,6 +363,8 @@ export default function TerrainWorkbench(p:Props){
  // Changing the download target aborts the old request rather than selecting stale data.
  useEffect(()=>()=>{fetchAbort.current?.abort();},[fetchKey]);
  useEffect(()=>()=>{latest.current.onFetchTarget?.(null);},[]);
+ // Publish every retained raster, including hidden results and restored history.
+ useEffect(()=>{latest.current.onScientificRasters?.([...records.flatMap(r=>r.advanced?.raster?[terrainSource({id:r.id,title:r.title,raster:r.advanced.raster,opacity:r.opacity,resampling:r.resampling})]:[]),...(researchLayer?[terrainSource(researchLayer)]:[])]);},[records,researchLayer]);
  // Published result layers are independent from the currently selected input.
  useEffect(()=>{latest.current.onPreview(records.filter(r=>r.visible).flatMap(r=>r.advanced?.features??[]));latest.current.onRasterPreview?.([...records.flatMap(r=>r.visible&&r.advanced?.raster?[{id:r.id,title:r.title,raster:r.advanced.raster,opacity:r.opacity,resampling:r.resampling}]:[]),...(researchLayer?[researchLayer]:[])]);},[records,researchLayer]);
  useEffect(()=>{
@@ -626,6 +629,7 @@ export default function TerrainWorkbench(p:Props){
    window.setTimeout(()=>URL.revokeObjectURL(url),1000);
  }
  const resultActions=(result||slope||profile)&&selected?<div className="terrain-result-footer" aria-label="Terrain result actions">
+   <button type="button" onClick={()=>{setResultTab('visual');setExpanded(true);}}>Review</button>
    {result?.features.length? <button disabled={!p.projectId||busy||selected.saved||result.features.length>512}
      title={result.features.length>512?'Export GeoJSON for large contour outputs':'Save terrain features'}
      onClick={()=>void save()}>{selected.saved?'Saved to project':'Save terrain features'}</button>:null}
@@ -714,7 +718,8 @@ export default function TerrainWorkbench(p:Props){
    </section>}
    {(result||slope||profile)&&<ResultPane expanded={expanded} onClose={()=>setExpanded(false)}>
      <div id="terrain-result-content" role="tabpanel" aria-label={resultTab[0].toUpperCase()+resultTab.slice(1)+' terrain result'} className="terrain-tab-content">
-     <div className="section-heading">{selected?.title} <span>{resultTab==='visual'&&selected&&<button type="button" onClick={()=>{setExpanded(false);setFigureGalleryOpen(true);}}>Figure library</button>}<button onClick={()=>{if(expanded)setExpanded(false);else{setResultTab('visual');setExpanded(true);}}}>{expanded?'Close expanded':'Expand'}</button></span></div>
+     <div className="section-heading">{selected?.title} <span>{resultTab==='visual'&&selected&&<button type="button" onClick={()=>{setExpanded(false);setFigureGalleryOpen(true);}}>Figure library</button>}{expanded&&<button onClick={()=>setExpanded(false)}>Close review</button>}</span></div>
+     {expanded&&<nav className="terrain-result-tabs" aria-label="Terrain review views">{([['overview','Overview'],['visual','Figures'],['details','Data']] as const).map(([key,label])=><button type="button" key={key} aria-pressed={resultTab===key} onClick={()=>setResultTab(key)}>{label}</button>)}</nav>}
      {resultTab==='visual'&&researchFigures.length>0&&<nav className="terrain-figure-tabs" aria-label="Research figures">
        <button type="button" aria-pressed={figureView==='analysis'} onClick={()=>setFigureView('analysis')}>Analysis</button>
        {researchFigures.map(item=><button type="button" key={item.id} aria-pressed={figureView===item.id}
@@ -789,7 +794,7 @@ export default function TerrainWorkbench(p:Props){
        {resultTab==='visual'&&figureView==='analysis'&&<MetricBars label="Slope (degrees)" max={90} values={[{name:'Mean',value:slope.mean_slope_deg,color:'#3977aa'},{name:'Maximum',value:slope.maximum_slope_deg,color:'#d18b31'}]}/>}
        {resultTab==='details'&&<small className="compact-notice" title={slope.warning}>{slope.valid_pixels} valid cells · {slope.engine}</small>}
      </>}
-     {resultTab==='visual'&&figureView==='analysis'&&profile&&<ProfilePlot samples={profile.samples} length={profile.length_m} onHover={p.onHover} mapIndex={p.profileMapIndex??null}/>}
+     {(resultTab==='overview'||resultTab==='visual'&&figureView==='analysis')&&profile&&<ProfilePlot samples={profile.samples} length={profile.length_m} onHover={p.onHover} mapIndex={p.profileMapIndex??null}/>}
      {resultTab==='overview'&&selected&&<div className="terrain-overview-context">
        <span>{selected.source.name}</span>
        <span>{new Date(selected.createdAt).toLocaleString()}</span>

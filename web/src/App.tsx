@@ -25,6 +25,7 @@ import SurveyTools from './SurveyTools';
 import {sketchAddError,sketchFinishError,closedLineAsPolygon} from './sketch';
 import ProfessionalPanel from './ProfessionalPanel';
 import TerrainWorkbench from './TerrainWorkbench';
+import {registrySources,type ScienceRegistry,type ScienceRaster,type ScienceModule} from './scienceRegistry';
 import {WorkspaceModuleBar,WorkspaceCommandPalette,WorkspaceDockHeading,
   WORKSPACE_MODULES,type WorkspaceCommand} from './WorkspaceChrome';
 import GeometryAnalysis from './GeometryAnalysis';
@@ -148,6 +149,7 @@ export default function App() {
   const [activeTool,setActiveTool]=useState('tools-survey');
   const [terrainFeatures,setTerrainFeatures]=useState<GeoJSON.Feature[]>([]);
   const [terrainRasters,setTerrainRasters]=useState<TerrainRasterLayer[]>([]);
+  const [scienceRegistry,setScienceRegistry]=useState<ScienceRegistry>({});
   const [terrainFetchTarget,setTerrainFetchTarget]=useState<[number,number,number,number]|null>(null);
   // A profile line is an independent analysis input, never the selected airport polygon.
   const [terrainProfileLine,setTerrainProfileLine]=useState<GeoJSON.LineString|null>(null);
@@ -263,6 +265,11 @@ export default function App() {
   // Even switching A -> B -> A must invalidate old A callbacks.
   const projectCurrent = () => projectEpoch.current === renderEpoch &&
     projectIdentity.current === activeProjectId;
+  // Register exact scientific products independently of map visibility.
+  function publishScience(module:ScienceModule,products:ScienceRaster[]){
+    if(projectCurrent())setScienceRegistry(old=>({...old,[module]:products}));
+  }
+  const scientificRasters=useMemo(()=>registrySources(scienceRegistry),[scienceRegistry]);
   const featureIdentity = useRef<string | null>(null);
   const [historyPulse, setHistoryPulse] = useState(0);
 
@@ -1334,7 +1341,7 @@ export default function App() {
                 scratchScope.current=id;scratchHistory.current=new ScratchHistory(next);setScratchState(next);
                 setPins({scope:id,places:readPinnedPlaces(id)});
                 projectEpoch.current++;projectIdentity.current=null;geometrySequence.current++;
-                setProjectWorkspace(null);setActiveProjectId(null);clearWorkspace();
+                setScienceRegistry({});setProjectWorkspace(null);setActiveProjectId(null);clearWorkspace();
                 setExtentMode(false);setExtentGeometry(null);
                 if(carry)selectScratch(carry,false);
                 else if(unbound&&geometry&&measurement){
@@ -1346,6 +1353,7 @@ export default function App() {
                 if(projectIdentity.current!==id){
                   projectIdentity.current=id;
                   projectEpoch.current++;
+                  setScienceRegistry({});
                   geometrySequence.current++;setBusy(false);setTerrainPicking(false);setTerrainOrigin(null);setTerrainHover(null);setExtentMode(false);setExtentGeometry(null);
                   // Keep an explicitly unsaved draft when creating a project,
                   // but never carry a saved feature or its undo stack across
@@ -2105,12 +2113,13 @@ export default function App() {
               onProfileSamples={samples=>{setTerrainProfileSamples(samples);setTerrainProfileMapIndex(null);}}
               onPreview={value=>{if(projectCurrent())setTerrainFeatures(value);}}
               onRasterPreview={value=>{if(projectCurrent())setTerrainRasters(value);}}
+              onScientificRasters={products=>publishScience('Terrain',products)}
               onSaved={()=>{if(projectCurrent())setRefreshToken(v=>v+1);}}/>
           </section>
 
           <section id="tools-spatial-science" hidden={activeTool!=='tools-spatial-science'} className="panel-section">
             <div className="section-heading"><Layers3 size={16}/><span>Spatial Analysis</span></div>
-            <SpatialSciencePanel key={activeProjectId??'no-project'} active={activeTool==='tools-spatial-science'} resultsTarget={resultsTarget} geometry={preview||drawingMode?null:geometry} connected={Boolean(capabilities)} projectId={activeProjectId} layers={projectWorkspace?.layers??[]} assets={rasterLayers.map(l=>l.asset)} terrainProducts={terrainRasters.map(l=>({name:l.title,data:l.raster.geotiff,product_id:l.raster.product_id,unit:l.raster.unit??'',band:1}))} onPreview={features=>{if(projectCurrent()){setSpatialResults(features);setSpatialVisible(true);}}} onRasterPreview={layer=>{if(projectCurrent()){setSpatialRaster(layer);setSpatialVisible(true);}}}/>
+            <SpatialSciencePanel key={activeProjectId??'no-project'} active={activeTool==='tools-spatial-science'} resultsTarget={resultsTarget} geometry={preview||drawingMode?null:geometry} connected={Boolean(capabilities)} projectId={activeProjectId} layers={projectWorkspace?.layers??[]} assets={rasterLayers.map(l=>l.asset)} terrainProducts={registrySources(scienceRegistry,'Spatial')} onScientificRaster={r=>publishScience('Spatial',[r])} onPreview={features=>{if(projectCurrent()){setSpatialResults(features);setSpatialVisible(true);}}} onRasterPreview={layer=>{if(projectCurrent()){setSpatialRaster(layer);setSpatialVisible(true);}}}/>
           </section>
 
           <section id="tools-lidar" hidden={activeTool!=='tools-lidar'} className="panel-section">
@@ -2119,15 +2128,15 @@ export default function App() {
           </section>
           <section id="tools-spacetime" hidden={activeTool!=='tools-spacetime'} className="panel-section">
             <div className="section-heading"><Layers3 size={16}/><span>Spatiotemporal Analysis</span></div>
-            <SpacetimePanel key={activeProjectId??'no-project'} active={activeTool==='tools-spacetime'} connected={Boolean(capabilities)} resultsTarget={resultsTarget} assets={rasterLayers.map(l=>l.asset)} derivedRasters={[...terrainRasters,...(spatialRaster?[spatialRaster]:[]),...(remoteRaster?[remoteRaster]:[])].map(l=>({name:l.title,data:l.raster.geotiff,product_id:l.raster.product_id,unit:l.raster.unit??''}))} onPreview={layer=>{if(projectCurrent()){setSpacetimeRaster(layer);setSpacetimeVisible(true);const xs=layer.raster.corners.map(p=>p[0]),ys=layer.raster.corners.map(p=>p[1]);const west=Math.min(...xs),east=Math.max(...xs),south=Math.min(...ys),north=Math.max(...ys);setFocus({longitude:(west+east)/2,latitude:(south+north)/2,bbox:[west,south,east,north],key:Date.now()});}}}/>
+            <SpacetimePanel key={activeProjectId??'no-project'} active={activeTool==='tools-spacetime'} connected={Boolean(capabilities)} resultsTarget={resultsTarget} assets={rasterLayers.map(l=>l.asset)} derivedRasters={registrySources(scienceRegistry,'Temporal')} onScientificRaster={r=>publishScience('Temporal',[r])} onPreview={layer=>{if(projectCurrent()){setSpacetimeRaster(layer);setSpacetimeVisible(true);const xs=layer.raster.corners.map(p=>p[0]),ys=layer.raster.corners.map(p=>p[1]);const west=Math.min(...xs),east=Math.max(...xs),south=Math.min(...ys),north=Math.max(...ys);setFocus({longitude:(west+east)/2,latitude:(south+north)/2,bbox:[west,south,east,north],key:Date.now()});}}}/>
           </section>
           <section id="tools-network-science" hidden={activeTool!=='tools-network-science'} className="panel-section">
             <div className="section-heading"><Layers3 size={16}/><span>Network Analysis</span></div>
-            <NetworkSciencePanel key={activeProjectId??'no-project'} active={activeTool==='tools-network-science'} connected={Boolean(capabilities)} resultsTarget={resultsTarget} projectId={activeProjectId} layers={projectWorkspace?.layers??[]} assets={rasterLayers.map(l=>l.asset)} derivedRasters={[...terrainRasters,...(spatialRaster?[spatialRaster]:[]),...(remoteRaster?[remoteRaster]:[]),...(spacetimeRaster?[spacetimeRaster]:[])].map(l=>({name:l.title,data:l.raster.geotiff,product_id:l.raster.product_id}))} onPreview={features=>{if(projectCurrent()){setNetworkResults(features);setNetworkVisible(true);}}}/>
+            <NetworkSciencePanel key={activeProjectId??'no-project'} active={activeTool==='tools-network-science'} connected={Boolean(capabilities)} resultsTarget={resultsTarget} projectId={activeProjectId} layers={projectWorkspace?.layers??[]} assets={rasterLayers.map(l=>l.asset)} derivedRasters={scientificRasters} onPreview={features=>{if(projectCurrent()){setNetworkResults(features);setNetworkVisible(true);}}}/>
           </section>
           <section id="tools-remote-sensing" hidden={activeTool!=='tools-remote-sensing'} className="panel-section">
             <div className="section-heading"><Layers3 size={16}/><span>Remote Sensing</span></div>
-            <RemoteSensingPanel key={activeProjectId??'no-project'} projectId={activeProjectId} active={activeTool==='tools-remote-sensing'} connected={Boolean(capabilities)} resultsTarget={resultsTarget} assets={rasterLayers.map(l=>l.asset)} onPreview={layer=>{if(projectCurrent()){setRemoteRaster(layer);setRemoteVisible(true);}}}/>
+            <RemoteSensingPanel key={activeProjectId??'no-project'} projectId={activeProjectId} active={activeTool==='tools-remote-sensing'} connected={Boolean(capabilities)} resultsTarget={resultsTarget} assets={rasterLayers.map(l=>l.asset)} derivedRasters={registrySources(scienceRegistry,'Sensing')} onScientificRaster={r=>publishScience('Sensing',[r])} onPreview={layer=>{if(projectCurrent()){setRemoteRaster(layer);setRemoteVisible(true);}}}/>
           </section>
 
           <section id="tools-spatial" hidden={activeTool!=='tools-spatial'} className="panel-section">
@@ -2228,7 +2237,7 @@ export default function App() {
               selected={geometry} measurement={measurement}
               selectedProperties={selectedSaved?{...selectedSaved.properties,name:selectedSaved.name,source:selectedSaved.source}:scratch.find(f=>f.id===scratchId)?.properties}
               scratch={scratch} faces={networkAreas?.faces??[]}
-              terrainRasters={terrainRasters} viewport={viewport}
+              terrainRasters={terrainRasters} scientificRasters={scientificRasters} viewport={viewport}
               rasterSources={rasterLayers.map(l=>({id:l.asset.id,kind:l.kind}))}/>
             <div className="gis-terrain-export-action export-specialized-actions"
               ref={setTerrainExportTarget}/>

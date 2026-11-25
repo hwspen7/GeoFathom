@@ -1,9 +1,10 @@
 import {useEffect,useRef,useState} from 'react';
-import {downloadMapPDF,downloadDatasetExport,preflightDatasetExport,startDatasetExport,
+import {downloadTerrainRaster,downloadMapPDF,downloadDatasetExport,preflightDatasetExport,startDatasetExport,
  getGISJob,cancelGISJob,downloadExchangeJob,downloadProjectPackage,
  type DatasetExportOptions,type ExportPreflight,type GISJob,
  type GeoWorkspace,type Measurement,type NetworkFace,type TerrainRasterLayer} from './api';
 import type {ScratchFeature} from './scratch';
+import {terrainSource,type ScienceRaster} from './scienceRegistry';
 
 type ExportScope='selection'|'local'|'areas'|'project'|'layer'|'viewport';
 type ExportFormat='geojson'|'gpkg'|'kml'|'gpx'|'shapefile'|'csv'|'report'|'pdf'|'geotiff'|'package';
@@ -12,7 +13,7 @@ interface Props{
  selectedProperties?:Record<string,unknown>;
  measurement:Measurement|null;scratch:ScratchFeature[];faces:NetworkFace[];
  rasterSources?:Array<{id:string;kind:'image'|'dem'}>;
- terrainRasters:TerrainRasterLayer[];viewport:[number,number,number,number]|null;
+ terrainRasters:TerrainRasterLayer[];scientificRasters?:ScienceRaster[];viewport:[number,number,number,number]|null;
 }
 const fileSave=(filename:string,blob:Blob)=>{
  const url=URL.createObjectURL(blob);
@@ -55,7 +56,9 @@ export default function ExportWorkbench(p:Props){
  const [extent,setExtent]=useState<'all'|'viewport'>('all');
  const [grid,setGrid]=useState(true);
  const [legend,setLegend]=useState(true);
- const [rasterIndex,setRasterIndex]=useState(0);
+ const [rasterId,setRasterId]=useState('');
+ const products=p.scientificRasters??p.terrainRasters.map(terrainSource);
+ const selectedProduct=products.find(r=>r.id===rasterId)??products[0];
  const [busy,setBusy]=useState(false),[jobStarting,setJobStarting]=useState(false);
  const [message,setMessage]=useState('');
  const [error,setError]=useState('');
@@ -102,7 +105,7 @@ export default function ExportWorkbench(p:Props){
    ...(scope==='layer'?{layer_ids:[layer]}:{}),...(scope==='viewport'&&p.viewport?{viewport:p.viewport}:{}),
    ...(!savedScope?{collection:collectionFromScope(scope,p)}:{})};
  }
- const canExport=format==='package'?Boolean(p.projectId):format==='geotiff'?p.terrainRasters.length>0:
+ const canExport=format==='package'?Boolean(p.projectId):format==='geotiff'?Boolean(selectedProduct):
   format==='pdf'?Boolean(p.projectId&&title.trim()&&(extent!=='viewport'||p.viewport)):
   savedScope?Boolean(p.projectId&&count&&(scope!=='layer'||layer)&&(scope!=='viewport'||p.viewport)):
   Boolean(count&&(p.projectId||['geojson','csv','report'].includes(format)));
@@ -113,11 +116,10 @@ export default function ExportWorkbench(p:Props){
    if(format==='package'){
     await downloadProjectPackage(p.projectId!,includeRasters?p.rasterSources??[]:[],abort.current.signal);
    }else if(format==='geotiff'){
-    const raster=p.terrainRasters[rasterIndex];
-    if(!raster?.raster.geotiff)throw Error('No georeferenced raster result selected.');
-    const bytes=Uint8Array.from(atob(raster.raster.geotiff),c=>c.charCodeAt(0));
-    fileSave('geofathom-'+raster.title.replace(/[^a-z0-9_-]/gi,'-')+'.tif',
-      new Blob([Uint8Array.from(bytes)],{type:'image/tiff'}));
+    if(!selectedProduct)throw Error('No georeferenced raster result selected.');
+    // Export the exact product, including disk-backed terrain rasters.
+    await downloadTerrainRaster({geotiff:selectedProduct.data,product_id:selectedProduct.product_id},
+      'geofathom-'+selectedProduct.name.replace(/[^a-z0-9_-]/gi,'-')+'.tif',abort.current.signal);
    }else if(format==='pdf'){
     if(!p.projectId)throw Error('Open a project for a printable map.');
     await downloadMapPDF(p.projectId,{
@@ -243,9 +245,10 @@ export default function ExportWorkbench(p:Props){
    <label><input type="checkbox" aria-label="Include source GeoTIFFs" checked={includeRasters} onChange={e=>setIncludeRasters(e.target.checked)}/> Include loaded source GeoTIFFs ({p.rasterSources?.length??0})</label>
   </>}
   {format==='geotiff'&&<label>Raster result
-   <select aria-label="GeoTIFF result" value={rasterIndex}
-    onChange={e=>setRasterIndex(Number(e.target.value))}>
-    {p.terrainRasters.map((r,i)=><option value={i} key={r.id}>{r.title}</option>)}
+   <select aria-label="GeoTIFF result" value={selectedProduct?.id??''}
+    onChange={e=>setRasterId(e.target.value)}>
+    {!products.length&&<option value="">No scientific raster</option>}
+    {products.map(r=><option value={r.id} key={r.id}>{r.module} · {r.name}</option>)}
    </select>
   </label>}
   {format==='pdf'&&<div className="export-layout-options">

@@ -45,10 +45,17 @@ test('dated multiband cube produces real trend raster and export',async({page})=
  const inline=monitor.getByAltText('Observed spatial median and interquartile range');
  await expect(inline).toBeVisible({timeout:30000});
  await expect.poll(()=>inline.evaluate((node:HTMLImageElement)=>node.complete&&node.naturalWidth>0)).toBe(true);
- await expect(monitor.getByRole('button',{name:'Details',exact:true})).toBeInViewport();
+ await expect(monitor.getByRole('button',{name:'Review',exact:true})).toBeInViewport();
  await monitor.getByLabel('Result scientific figure').selectOption({label:'Observed cube coverage by date'});
  await expect(monitor.getByAltText('Observed cube coverage by date')).toBeVisible({timeout:30000});
  await expect(monitor.getByRole('button',{name:'CSV',exact:true})).toBeInViewport();
+ // The shared scientific product remains available independently of map visibility.
+ await activateWorkspaceModule(page,'Sensing');
+ await page.getByRole('button',{name:'Open Remote Sensing'}).click();
+ const source=page.getByLabel('Current scientific raster');
+ await expect(source.locator('option').filter({hasText:'Temporal · OLS slope'})).toHaveCount(1);
+ await page.keyboard.press('Escape');
+ await activateWorkspaceModule(page,'Temporal');
  await openProjectDrawer(page,'layers');
  await expect(page.getByLabel('Spatiotemporal result layer')).toBeVisible();
  await expect(page.getByLabel('Spatiotemporal result layer')).toBeChecked();

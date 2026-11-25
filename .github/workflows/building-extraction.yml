@@ -36,7 +36,7 @@ jobs:
       - run: npx playwright install --with-deps chromium
         working-directory: web
       - name: Real browser inference, map preview, save, figures and downloads
-        run: npx playwright test e2e/building-extraction.spec.ts e2e/building-research.spec.ts e2e/geoai.spec.ts e2e/shortcut-workbench.spec.ts e2e/spacetime-science.spec.ts --workers=1
+        run: npx playwright test e2e/building-extraction.spec.ts e2e/building-research.spec.ts e2e/geoai.spec.ts e2e/shortcut-workbench.spec.ts e2e/spacetime-science.spec.ts e2e/terrain-workbench.spec.ts --workers=1
         working-directory: web
       - uses: actions/upload-artifact@v4
         if: always()

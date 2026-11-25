@@ -1210,16 +1210,17 @@ export function restoreProjectPackage(project:string,file:File,token:string,sign
 }
 
 /** Authenticated binary transfer without embedding large rasters in JSON. */
-export async function downloadTerrainRaster(raster:TerrainRaster,filename:string):Promise<void>{
+export async function downloadTerrainRaster(raster:Pick<TerrainRaster,'geotiff'|'product_id'>,filename:string,signal?:AbortSignal):Promise<void>{
  let blob:Blob;
  if(raster.product_id){
-  const response=await rawRequest('/terrain/products/'+encodeURIComponent(raster.product_id));
+  const response=await rawRequest('/terrain/products/'+encodeURIComponent(raster.product_id),{signal});
   if(!response.ok)throw await responseError(response);
   blob=await response.blob();
  }else{
   const data=Uint8Array.from(atob(raster.geotiff),c=>c.charCodeAt(0));
   blob=new Blob([data],{type:'image/tiff'});
  }
+ if(signal?.aborted)throw new DOMException('Export cancelled','AbortError');
  const url=URL.createObjectURL(blob);
  const link=document.createElement('a');link.href=url;link.download=filename;link.click();
  setTimeout(()=>URL.revokeObjectURL(url),1000);

@@ -79,8 +79,8 @@ with tempfile.TemporaryDirectory() as directory:
  };
  const outputs=()=>page.getByRole('tab',{name:'Data',exact:true}).click();
  const details=()=>page.getByRole('tab',{name:'Data',exact:true}).click();
- // Survey commands must not remain in the global toolbar while Terrain runs.
- await expect(page.getByLabel('Survey toolbar').getByRole('button',{name:'Polygon',exact:true})).toHaveCount(0);
+ // The global drawing toolbar persists when Terrain is active.
+ await expect(page.getByLabel('Survey toolbar').getByRole('button',{name:'Polygon',exact:true})).toBeVisible();
  // Repeated module activation must preserve the fixed Tools panel and active analysis.
  await activateWorkspaceModule(page,'Terrain');
  await expect(page.getByRole('complementary',{name:'Operations'})).toBeVisible();
@@ -110,9 +110,12 @@ with tempfile.TemporaryDirectory() as directory:
  await page.getByRole('button',{name:'Hypsometry',exact:true}).click();
  await expect(page.getByRole('img',{name:'Hypsometric curve'})).toBeVisible();
  await page.getByRole('button',{name:'Analysis',exact:true}).click();
- await page.getByRole('button',{name:'Expand',exact:true}).click();
- const dialogue=page.getByRole('dialog',{name:'Expanded terrain result'});
+ await page.getByRole('button',{name:'Review',exact:true}).click();
+ const dialogue=page.getByRole('dialog',{name:'Terrain result review'});
  await expect(dialogue).toBeVisible();
+ await dialogue.getByRole('navigation',{name:'Terrain review views'}).getByRole('button',{name:'Overview',exact:true}).click();
+ await expect(dialogue.getByRole('button',{name:'Overview',exact:true})).toHaveAttribute('aria-pressed','true');
+ await dialogue.getByRole('navigation',{name:'Terrain review views'}).getByRole('button',{name:'Figures',exact:true}).click();
  const svgDownload=page.waitForEvent('download');await dialogue.getByRole('button',{name:'SVG',exact:true}).click();
  expect((await svgDownload).suggestedFilename()).toBe('terrain-chart.svg');
  for(const [format,header] of [['PNG','89504e470d0a1a0a'],['PDF','255044462d312e34']] as const){
@@ -120,7 +123,7 @@ with tempfile.TemporaryDirectory() as directory:
    const file=await event;expect(file.suggestedFilename()).toBe('terrain-chart.'+format.toLowerCase());
    expect(readFileSync((await file.path())!).subarray(0,8).toString('hex')).toBe(header);
  }
- await dialogue.getByRole('button',{name:'Close expanded',exact:true}).click();
+ await dialogue.getByRole('button',{name:'Close review',exact:true}).click();
  await page.getByRole('button',{name:'Browse terrain tools',exact:true}).click();
  await page.getByLabel('Terrain tool group').selectOption('Surface');
  await page.getByRole('button',{name:'Browse terrain tools',exact:true}).click();
@@ -185,6 +188,14 @@ with tempfile.TemporaryDirectory() as directory:
  await previousSlope.check();
  await expect(map).toHaveAttribute('data-terrain-raster-count','2');
  await previousSlope.uncheck();
+ await expect(map).toHaveAttribute('data-terrain-raster-count','1');
+ // Hiding a map layer does not remove the native product from other workbenches.
+ await activateWorkspaceModule(page,'Temporal');
+ await page.getByRole('button',{name:'Open Spatiotemporal Analysis'}).click();
+ const temporal=page.getByRole('dialog',{name:'Spatiotemporal science workbench'});
+ await expect(temporal.getByLabel('Current scientific raster').locator('option').filter({hasText:'Slope map'})).toHaveCount(1);
+ await temporal.getByRole('button',{name:'Close',exact:true}).click();
+ await activateWorkspaceModule(page,'Terrain');
  await expect(map).toHaveAttribute('data-terrain-raster-count','1');
  await page.getByRole('button',{name:'Browse terrain tools',exact:true}).click();
  await page.getByLabel('Terrain tool group').selectOption('Quick');
