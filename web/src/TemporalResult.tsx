@@ -15,11 +15,17 @@ export function TemporalScale({scale,unit}:{scale:RasterDisplayScale;unit:string
 function figureInput(result:SpatialScienceResult,figure:SpatialFigureSource):StudioInput{
  return {recipe:figure.recipe,csv:figure.csv??'',rasters:figure.raster&&result.raster?[{name:result.raster.name,data:result.raster.data,unit:result.raster.unit,band:1}]:[],x:'',y:'',z:'',group:'',low:'',high:'',columns:[],title:figure.title,x_label:'',y_label:'',parameter:null,maximize_x:false,maximize_y:false,palette:'color',font:'sans',font_size:10,grid:true,width_mm:175,height_mm:100,dpi:120,format:'png',...figure.bindings,...(figure.raster&&isTrend(result.operation)?{map_style:'diverging' as const}:{})};
 }
+const completedFigures=new WeakMap<SpatialScienceResult,Map<SpatialFigureSource,StudioOutput>>();
 function TemporalFigure({result,figure}:{result:SpatialScienceResult;figure:SpatialFigureSource}){
  const [output,setOutput]=useState<StudioOutput|null>(null),[error,setError]=useState('');
  useEffect(()=>{
-  const ac=new AbortController();setOutput(null);setError('');
-  renderStudio(figureInput(result,figure),ac.signal).then(v=>{if(!ac.signal.aborted)setOutput(v);}).catch(e=>{if(!ac.signal.aborted)setError(String(e.message??e));});
+  const ac=new AbortController();setError('');
+  // Reuse completed figures when moving between the full workbench and the dock.
+  const cache=completedFigures.get(result)??new Map<SpatialFigureSource,StudioOutput>();
+  completedFigures.set(result,cache);
+  const previous=cache.get(figure);setOutput(previous??null);
+  if(previous)return ()=>ac.abort();
+  renderStudio(figureInput(result,figure),ac.signal).then(v=>{if(!ac.signal.aborted){cache.set(figure,v);setOutput(v);}}).catch(e=>{if(!ac.signal.aborted)setError(String(e.message??e));});
   return ()=>ac.abort();
  },[result,figure]);
  return <section className="temporal-figure" aria-label="Inline scientific figure">
@@ -57,4 +63,33 @@ export default function TemporalResult({result,title,onMap,onStudio,onExport}:{r
   {tab==='figures'&&<section><label>Scientific figure<select aria-label="Scientific figure" value={selected} onChange={e=>setSelected(Number(e.target.value))}>{figures.map((f,i)=><option value={i} key={i}>{f.title}</option>)}</select></label>{selectedFigure&&<><TemporalFigure result={result} figure={selectedFigure}/><button onClick={()=>onStudio(selectedFigure)}>Edit / export figure</button></>}</section>}
   {tab==='data'&&<><h3>Model diagnostics</h3><table><tbody>{metrics.map(([k,v])=><tr key={k}><th>{k.replaceAll('_',' ')}</th><td>{typeof v==='number'?temporalNumber(v):String(v)}</td></tr>)}</tbody></table><h3>Result table</h3><div className="temporal-data-table"><table><thead><tr>{result.columns.map(c=><th key={c}>{c}</th>)}</tr></thead><tbody>{result.rows.slice(0,200).map((row,i)=><tr key={i}>{row.map((v,j)=><td key={j}>{v===null?'NoData':typeof v==='number'?temporalNumber(v):v}</td>)}</tr>)}</tbody></table></div><small>{Math.min(200,result.rows.length)} / {result.rows.length} records · complete CSV available</small></>}
  </div>;
+}
+
+function timeLabel(result:SpatialScienceResult,value:unknown){
+ return typeof value==='number'&&result.receipt.time_origin==='1970-01-01 UTC'?new Date(value*86400000).toISOString().slice(0,10):String(value);
+}
+/** Fixed-height monitor: spatial result plus an interchangeable scientific chart.
+ * All figure recipes remain reachable without opening the modal or scrolling. */
+export function TemporalMonitor({result,title,onDetails,onMap,onExport}:{result:SpatialScienceResult;title:string;onDetails:()=>void;onMap:()=>void;onExport:(kind:'raster'|'csv')=>void}){
+ const p=result.preview,summary=result.raster?.summary,figures=result.figures??[];
+ const charts=figures.filter(f=>!f.raster||!p);
+ const preferred=charts.findIndex(f=>f.title==='Observed spatial median and interquartile range');
+ const [index,setIndex]=useState(preferred>=0?preferred:0);
+ const selected=charts[index]??charts[0];
+ const unit=result.raster?.unit??String(result.receipt.unit??'');
+ const scale=p?.scale??(p?{minimum:p.minimum,maximum:p.maximum,colors:['#440154','#21918c','#fde725'],signed:false}:undefined);
+ const times=Array.isArray(result.receipt.times)?result.receipt.times:[];
+ const forecastTime=result.receipt.metrics.forecast_time;
+ const values=[['Min',summary?.minimum??p?.minimum],['Median',summary?.quantiles.find(q=>q[0]===.5)?.[1]],['Max',summary?.maximum??p?.maximum]] as const;
+ return <section className="temporal-monitor" aria-label="Temporal results">
+  <div className="temporal-monitor-head"><h3 title={title}>{title}</h3><small>{times.length} acquisitions{times.length?' · '+timeLabel(result,times[0])+' – '+timeLabel(result,times[times.length-1]):''}</small>
+  {typeof forecastTime==='number'&&result.operation.startsWith('forecast_')&&<strong className="temporal-target">Forecast: {timeLabel(result,forecastTime)}</strong>}</div>
+  {values.some(([,v])=>v!==undefined)&&<div className="temporal-monitor-metrics">{values.map(([name,v])=><div key={name}><small>{name}</small><strong>{v===undefined?'—':temporalNumber(v)}</strong></div>)}</div>}
+  <div className="temporal-monitor-plots">
+   {p&&<section className="temporal-monitor-map"><h4>Spatial distribution</h4><div className="temporal-monitor-image"><img alt="Temporal result overview" src={p.png.startsWith('data:')?p.png:'data:image/png;base64,'+p.png}/></div>{scale&&<TemporalScale scale={scale} unit={unit}/>}</section>}
+   {selected&&<section className="temporal-monitor-chart"><label><span>Scientific figure</span><select aria-label="Result scientific figure" value={charts.indexOf(selected)} onChange={e=>setIndex(Number(e.target.value))}>{charts.map((f,i)=><option key={i} value={i}>{f.title}</option>)}</select></label><TemporalFigure result={result} figure={selected}/></section>}
+   {!p&&!selected&&<p>{result.rows.length} result records available in Details.</p>}
+  </div>
+  <footer className="temporal-monitor-footer"><button onClick={onDetails} title="Review time-series results">Details</button>{p&&result.raster&&<button onClick={onMap}>Map</button>}{result.raster&&<button onClick={()=>onExport('raster')}>GeoTIFF</button>}<button onClick={()=>onExport('csv')}>CSV</button></footer>
+ </section>;
 }

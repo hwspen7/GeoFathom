@@ -39,6 +39,15 @@ test('dated multiband cube produces real trend raster and export',async({page})=
  const download=page.waitForEvent('download');await d.getByRole('button',{name:'GeoTIFF',exact:true}).click();expect((await download).suggestedFilename()).toBe('series_slope.tif');
  await d.getByRole('button',{name:'Show space-time raster on map'}).click();await expect(d).not.toBeVisible();
  await expect(page.getByLabel('Interactive geospatial map')).toHaveAttribute('data-terrain-raster-count','1');
+ const monitor=page.getByRole('region',{name:'Temporal results'});
+ await expect(monitor.getByAltText('Temporal result overview')).toBeVisible();
+ const inline=monitor.getByAltText('Observed spatial median and interquartile range');
+ await expect(inline).toBeVisible({timeout:30000});
+ await expect.poll(()=>inline.evaluate((node:HTMLImageElement)=>node.complete&&node.naturalWidth>0)).toBe(true);
+ await expect(monitor.getByRole('button',{name:'Details',exact:true})).toBeInViewport();
+ await monitor.getByLabel('Result scientific figure').selectOption({label:'Observed cube coverage by date'});
+ await expect(monitor.getByAltText('Observed cube coverage by date')).toBeVisible({timeout:30000});
+ await expect(monitor.getByRole('button',{name:'CSV',exact:true})).toBeInViewport();
  await openProjectDrawer(page,'layers');
  await expect(page.getByLabel('Spatiotemporal result layer')).toBeVisible();
  await expect(page.getByLabel('Spatiotemporal result layer')).toBeChecked();
