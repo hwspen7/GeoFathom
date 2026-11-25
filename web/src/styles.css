@@ -182,6 +182,10 @@ button:disabled { opacity: .45; cursor: not-allowed; }
   border-radius: 9px; background: #fff; color: #45627f; font-size: 10px;
   font-weight: 650; transition: background .15s,border-color .15s;
 }
+/* Keep disabled tool hints available without changing the native disabled state. */
+.survey-mode-item{display:flex;min-width:0}
+.survey-mode-item>button{width:100%}
+.survey-mode-item>button:disabled{pointer-events:none}
 .survey-mode-grid button.active {
   background: #e9f2ff; border-color: #6d9dde; color: #1e5aa8;
 }

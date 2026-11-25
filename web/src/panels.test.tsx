@@ -121,6 +121,31 @@ describe('survey controls',()=>{
     expect(p.onSnapping).toHaveBeenCalledWith(false);expect(p.onLinked).toHaveBeenCalledWith(true);
     expect(p.onUndo).toHaveBeenCalledOnce();expect(p.onRedo).toHaveBeenCalledOnce();expect(p.onDuplicate).toHaveBeenCalledOnce();
   });
+  it('uses distinct drawing icons, short captions and contextual hover hints',()=>{
+    const p=props();
+    const {rerender}=render(<SurveyTools {...p}/>);
+    const names=['Point','Polygon','Line','Rectangle','Circle','Cut hole','Split line','Trace network'];
+    const buttons=names.map(name=>screen.getByRole('button',{name,exact:true}));
+    // Lucide supplies a named class for each icon; all eight must differ.
+    const icons=buttons.map(button=>Array.from(button.querySelector('svg')!.classList)
+      .find(name=>name.startsWith('lucide-')));
+    expect(icons.every(Boolean)).toBe(true);
+    expect(new Set(icons).size).toBe(names.length);
+    expect(buttons.map(button=>button.textContent)).toEqual(['Point','Polygon','Line','Rectangle','Circle','Hole','Split','Trace']);
+    expect(buttons[0].getAttribute('title')).toBe('Draw point (P)');
+    expect(buttons[5].parentElement?.getAttribute('title')).toBe('Select a polygon first');
+    expect(buttons[7].parentElement?.getAttribute('title')).toBe('Save a vector line first');
+    rerender(<SurveyTools {...p} geometry={polygon} locked/>);
+    expect(screen.getByRole('button',{name:'Split line'}).getAttribute('title')).toBe('Unlock the selected layer');
+    rerender(<SurveyTools {...p} geometry={polygon} saved={[{id:'network',name:'Network',
+      geometry:{type:'LineString',coordinates:[[10,20],[11,21]]}} as WorkspaceFeature]}/>);
+    expect(screen.getByRole('button',{name:'Split line'}).getAttribute('title')).toBe('Split polygon by line');
+    expect(screen.getByRole('button',{name:'Trace network'}).getAttribute('title')).toBe('Trace saved network');
+    const snap=screen.getByRole('button',{name:'Snap ON'});
+    expect(snap.getAttribute('aria-pressed')).toBe('true');
+    expect(snap.textContent).toBe('Snap');
+    for(const name of ['Undo','Redo','Copy'])expect(screen.getByRole('button',{name}).getAttribute('title')).toBeTruthy();
+  });
   it('preserves exact numerical coordinates and overlay identity',()=>{
     const p=props();
     render(<SurveyTools {...p} geometry={polygon} saved={[{id:'reference',name:'Parcel'} as WorkspaceFeature]}/>);

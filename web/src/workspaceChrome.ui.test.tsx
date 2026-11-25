@@ -2,8 +2,19 @@
 import {describe,it,expect,vi,afterEach} from 'vitest';
 import {render,fireEvent,screen,cleanup,within,waitFor} from '@testing-library/react';
 afterEach(cleanup);
-import {WorkspaceCommandPalette,WorkspaceFeatureTree,type WorkspaceCommand} from './WorkspaceChrome';
+import {WorkspaceCommandPalette,WorkspaceFeatureTree,WorkspaceModuleBar,WORKSPACE_MODULES,type WorkspaceCommand} from './WorkspaceChrome';
 describe('shared research workbench chrome',()=>{
+ it('preserves single-word navigation and exposes concise module hints',()=>{
+  const activate=vi.fn();
+  render(<WorkspaceModuleBar active="tools-raster" open onActivate={activate}/>);
+  for(const module of WORKSPACE_MODULES){
+   const button=screen.getByRole('button',{name:module.label,exact:true});
+   expect(button.getAttribute('title')).toBe(module.hint);
+  }
+  expect(screen.getByRole('combobox',{name:'Workspace module'}).getAttribute('title')).toBe('Raster and AI extraction');
+  fireEvent.click(screen.getByRole('button',{name:'Terrain',exact:true}));
+  expect(activate).toHaveBeenCalledWith('tools-terrain');
+ });
  it('searches and invokes commands without invoking disabled actions',()=>{
   const perform=vi.fn(),close=vi.fn();
   const commands:WorkspaceCommand[]=[

@@ -1,8 +1,8 @@
 import { useState, type FormEvent } from 'react';
 import {createPortal} from 'react-dom';
 import {
-  Check, Circle, Copy, CornerDownRight, Eraser, GitMerge, MousePointer2,
-  Pencil, Redo2, Ruler, Scissors, Undo2, X,
+  Check, Circle, Copy, CornerDownRight, Eraser, GitMerge, MapPin, Minus, MousePointer2,
+  Pencil, Pentagon, Redo2, Route, Ruler, Scissors, Square, Undo2, X, type LucideIcon,
 } from 'lucide-react';
 
 import type { ShapeMode, Position } from './editing';
@@ -42,15 +42,20 @@ interface Props {
   sketchError?:string|null;
 }
 
-const buttonModes: Array<{ mode: Exclude<ShapeMode, null>; title: string }> = [
-  { mode: 'point', title: 'Point' },
-  { mode: 'polygon', title: 'Polygon' },
-  { mode: 'line', title: 'Line' },
-  { mode: 'rectangle', title: 'Rectangle' },
-  { mode: 'circle', title: 'Circle' },
-  { mode: 'hole', title: 'Cut hole' },
-  { mode: 'split', title: 'Split line' },
-  { mode: 'trace-along', title: 'Trace network' },
+// Keep the accessible operation names stable while giving each compact tool
+// a distinct icon, a one-word caption, and a short hover description.
+const buttonModes: Array<{
+  mode: Exclude<ShapeMode, null>; title: string; caption: string;
+  hint: string; icon: LucideIcon;
+}> = [
+  { mode: 'point', title: 'Point', caption: 'Point', hint: 'Draw point (P)', icon: MapPin },
+  { mode: 'polygon', title: 'Polygon', caption: 'Polygon', hint: 'Draw polygon (G)', icon: Pentagon },
+  { mode: 'line', title: 'Line', caption: 'Line', hint: 'Draw line (L)', icon: Minus },
+  { mode: 'rectangle', title: 'Rectangle', caption: 'Rectangle', hint: 'Draw rectangle (R)', icon: Square },
+  { mode: 'circle', title: 'Circle', caption: 'Circle', hint: 'Draw circle (C)', icon: Circle },
+  { mode: 'hole', title: 'Cut hole', caption: 'Hole', hint: 'Cut polygon hole', icon: Eraser },
+  { mode: 'split', title: 'Split line', caption: 'Split', hint: 'Split polygon by line', icon: Scissors },
+  { mode: 'trace-along', title: 'Trace network', caption: 'Trace', hint: 'Trace saved network', icon: Route },
 ];
 
 export default function SurveyTools({
@@ -88,61 +93,43 @@ export default function SurveyTools({
 
   const traceReady=saved.some(feature=>
     feature.geometry?.type==='LineString'||feature.geometry?.type==='MultiLineString');
-  const modeName=buttonModes.find(item=>item.mode===mode)?.title;
+  const modeName=buttonModes.find(item=>item.mode===mode)?.caption;
+  const polygonReady=geometry?.type==='Polygon'||geometry?.type==='MultiPolygon';
+  function renderMode(item:typeof buttonModes[number]){
+    const polygonOnly=item.mode==='hole'||item.mode==='split';
+    const blocked=busy&&mode!==item.mode?'Wait for current operation':
+      item.mode==='trace-along'&&!traceReady?'Save a vector line first':
+      polygonOnly&&locked?'Unlock the selected layer':
+      polygonOnly&&!polygonReady?'Select a polygon first':null;
+    const hint=blocked??item.hint;
+    const Icon=item.icon;
+    // A wrapper also exposes the explanation when the native button is disabled.
+    return <span className="survey-mode-item" key={item.mode} title={hint}>
+      <button type="button" className={mode===item.mode?'active':''}
+        aria-label={item.title} title={hint} aria-pressed={mode===item.mode}
+        onClick={()=>mode===item.mode?onCancel():onStart(item.mode)}
+        disabled={blocked!==null}>
+        <Icon size={15} aria-hidden="true"/>
+        <span className="survey-button-caption">{item.caption}</span>
+      </button>
+    </span>;
+  }
   const toolbar=<div className={'survey-command-bar'+(mode?' is-drawing':'')}>
       <div className="survey-mode-grid" role="group" aria-label="Draw and reshape tools">
         <div className="survey-mode-family survey-primary-modes" role="group" aria-label="Drawing tools">
-          {buttonModes.slice(0,5).map(item => (
-          <button key={item.mode} className={mode === item.mode ? 'active' : ''}
-            aria-label={item.title}
-            title={item.mode==='trace-along'&&!traceReady?
-              'Save a vector line in the active project before tracing.':
-              ['hole','split'].includes(item.mode)&&(!geometry||!['Polygon','MultiPolygon'].includes(geometry.type))?
-                'Select an editable polygon first.':
-                'Draw '+item.title.toLowerCase()+
-                (({point:' (P)',polygon:' (G)',line:' (L)',rectangle:' (R)',circle:' (C)'} as Partial<Record<Exclude<ShapeMode,null>,string>>)[item.mode]??'')}
-            aria-pressed={mode===item.mode} onClick={() => mode===item.mode?onCancel():onStart(item.mode)}
-            disabled={(busy&&mode!==item.mode)||(item.mode==='trace-along'&&!traceReady)||
-              (['hole','split'].includes(item.mode)&&
-                (locked||(geometry?.type!=='Polygon'&&geometry?.type!=='MultiPolygon')))}>
-            {item.mode === 'circle' ? <Circle size={15}/> :
-             item.mode === 'line' ? <Ruler size={15}/> :
-             item.mode === 'split' || item.mode === 'trace-along' ? <Scissors size={15}/> :
-             item.mode === 'hole' ? <Eraser size={15}/> : <Pencil size={15}/>}
-            <span className="survey-button-caption">{item.title}</span>
-          </button>
-        ))}
+          {buttonModes.slice(0,5).map(renderMode)}
         </div>
         <div className="survey-mode-family survey-topology-tools" role="group" aria-label="Topology tools">
-          {buttonModes.slice(5).map(item => (
-          <button key={item.mode} className={mode === item.mode ? 'active' : ''}
-            aria-label={item.title}
-            title={item.mode==='trace-along'&&!traceReady?
-              'Save a vector line in the active project before tracing.':
-              ['hole','split'].includes(item.mode)&&(!geometry||!['Polygon','MultiPolygon'].includes(geometry.type))?
-                'Select an editable polygon first.':
-                'Draw '+item.title.toLowerCase()+
-                (({point:' (P)',polygon:' (G)',line:' (L)',rectangle:' (R)',circle:' (C)'} as Partial<Record<Exclude<ShapeMode,null>,string>>)[item.mode]??'')}
-            aria-pressed={mode===item.mode} onClick={() => mode===item.mode?onCancel():onStart(item.mode)}
-            disabled={(busy&&mode!==item.mode)||(item.mode==='trace-along'&&!traceReady)||
-              (['hole','split'].includes(item.mode)&&
-                (locked||(geometry?.type!=='Polygon'&&geometry?.type!=='MultiPolygon')))}>
-            {item.mode === 'circle' ? <Circle size={15}/> :
-             item.mode === 'line' ? <Ruler size={15}/> :
-             item.mode === 'split' || item.mode === 'trace-along' ? <Scissors size={15}/> :
-             item.mode === 'hole' ? <Eraser size={15}/> : <Pencil size={15}/>}
-            <span className="survey-button-caption">{item.title}</span>
-          </button>
-        ))}
+          {buttonModes.slice(5).map(renderMode)}
         </div>
       </div>
       {mode && (
         <div className="survey-action-bar survey-sketch-session" role="group" aria-label="Active drawing">
           <strong>{modeName}</strong><span>{points.length} pts</span>
           <button title="Undo last sketch point (Backspace)" aria-label="Undo last sketch point"
-            disabled={!points.length||busy} onClick={onUndoPoint}><Undo2 size={14}/> Undo point</button>
+            disabled={!points.length||busy} onClick={onUndoPoint}><Undo2 size={14}/> Undo</button>
           <button title="Cancel" aria-label="Cancel drawing" className="survey-cancel-button" onClick={onCancel}><X size={14}/> Cancel <kbd>Esc</kbd></button>
-          <button className="finish-button" aria-label="Finish" title="Finish (Enter / F2; double-click, right-click, or click the first polygon vertex)"
+          <button className="finish-button" aria-label="Finish" title="Finish drawing (Enter / F2)"
             disabled={busy||points.length<(mode==='point'?1:['polygon','hole'].includes(mode)?3:2)}
             onClick={onFinish}><Check size={14}/> Finish <kbd>Enter</kbd></button>
         </div>
@@ -156,27 +143,29 @@ export default function SurveyTools({
       {!mode&&<div className="survey-idle-actions">
       <div className="survey-action-bar" role="group" aria-label="Edit selected object">
         {editing&&<button className="finish-button" aria-label="Finish geometry editing"
-          title="Finish geometry editing (Enter / Esc)" onClick={()=>onEdit(false,false)}><Check size={14}/> Done editing</button>}
+          title="Finish geometry editing (Enter / Esc)" onClick={()=>onEdit(false,false)}><Check size={14}/> Done</button>}
         <button title="Edit vertices (E)" disabled={!geometry||locked||busy||Boolean(mode)} className={editing && !moving && !edgeMoving ? 'active' : ''}
           onClick={() => onEdit(!editing || moving || edgeMoving, false)}><Pencil size={14}/> Vertices</button>
         <button title="Move whole shape (M)" disabled={!geometry||locked||busy||Boolean(mode)} className={moving ? 'active' : ''}
           onClick={() => onEdit(!moving, !moving)}><MousePointer2 size={14}/> Move</button>
-        {onEdgeMove&&<button title="Drag a segment midpoint to move both endpoints (B)" disabled={!geometry||locked||busy||Boolean(mode)||geometry.type==='Point'} className={edgeMoving?'active':''}
+        {onEdgeMove&&<button title="Move segment endpoints (B)" disabled={!geometry||locked||busy||Boolean(mode)||geometry.type==='Point'} className={edgeMoving?'active':''}
           onClick={()=>onEdgeMove(!edgeMoving)}><Ruler size={14}/> Edge</button>}
-        <button title="Snap to nearby vertices" className={snapping ? 'active' : ''}
-          onClick={() => onSnapping(!snapping)}>Snap {snapping ? 'ON' : 'OFF'}</button>
+        <button title={snapping?'Disable vertex snapping (S)':'Enable vertex snapping (S)'}
+          aria-label={snapping?'Snap ON':'Snap OFF'} aria-pressed={snapping}
+          className={snapping ? 'active' : ''}
+          onClick={() => onSnapping(!snapping)}>Snap</button>
       </div>
       <div className="survey-action-bar">
-        <button disabled={!canUndo||busy} onClick={onUndo}><Undo2 size={14}/> Undo</button>
-        <button disabled={!canRedo||busy} onClick={onRedo}><Redo2 size={14}/> Redo</button>
-        <button disabled={!geometry||busy||Boolean(mode)} onClick={onDuplicate}><Copy size={14}/> Copy</button>
+        <button title="Undo last edit" disabled={!canUndo||busy} onClick={onUndo}><Undo2 size={14}/> Undo</button>
+        <button title="Redo last edit" disabled={!canRedo||busy} onClick={onRedo}><Redo2 size={14}/> Redo</button>
+        <button title="Duplicate selected geometry" disabled={!geometry||busy||Boolean(mode)} onClick={onDuplicate}><Copy size={14}/> Copy</button>
       </div>
       </div>}
     </div>;
   return (
     <div className="survey-tools">
       {toolbarTarget?createPortal(toolbar,toolbarTarget):toolbar}
-      <p className="survey-workflow-hint">Choose a drawing tool above, or select an object to edit it. Finish with Enter; cancel with Esc.</p>
+      <p className="survey-workflow-hint">Draw or select · Enter to finish · Esc to cancel.</p>
       <details className="survey-options">
       <summary>Vertex editing options</summary>
       <label className="linked-vertex-toggle">

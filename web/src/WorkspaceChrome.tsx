@@ -4,22 +4,22 @@
 import {useEffect,useMemo,useState,type ReactNode} from 'react';
 import {Search,Layers3} from 'lucide-react';
 
-export interface WorkspaceModule {id:string;label:string;description:string}
+export interface WorkspaceModule {id:string;label:string;description:string;hint:string}
 export const WORKSPACE_MODULES:readonly WorkspaceModule[]=[
-  {id:'tools-survey',label:'Survey',description:'Sketch and edit geometry'},
-  {id:'tools-gis',label:'GIS',description:'Geospatial operations'},
-  {id:'tools-spatial',label:'Analysis',description:'Spatial processing'},
-  {id:'tools-terrain',label:'Terrain',description:'Elevation and hydrology'},
-  {id:'tools-spatial-science',label:'Spatial',description:'Spatial scientific computing and research figures'},
-  {id:'tools-network-science',label:'Network',description:'Network analysis, accessibility and raster exposure research'},
-  {id:'tools-spacetime',label:'Temporal',description:'Spatiotemporal analysis of raster cubes, trends, dependence and prediction'},
-  {id:'tools-lidar',label:'LiDAR',description:'3D and LiDAR point-cloud research'},
-  {id:'tools-remote-sensing',label:'Sensing',description:'Remote sensing: calibrated spectral, thermal, radar and temporal research'},
-  {id:'tools-raster',label:'Raster',description:'Imagery, raster analysis and AI extraction'},
-  {id:'tools-style',label:'Mapping',description:'Cartography: map layout and labels'},
-  {id:'tools-services',label:'Data',description:'Import, manage, polygonize and connect GIS datasets'},
-  {id:'tools-export',label:'Export',description:'Vector files, map PDFs, GeoTIFFs and research reports'},
-  {id:'tools-ai',label:'Assistant',description:'Local assistant'},
+  {id:'tools-survey',label:'Survey',description:'Sketch and edit geometry',hint:'Draw and edit geometry'},
+  {id:'tools-gis',label:'GIS',description:'Geospatial operations',hint:'Geospatial operations'},
+  {id:'tools-spatial',label:'Analysis',description:'Spatial processing',hint:'Spatial processing'},
+  {id:'tools-terrain',label:'Terrain',description:'Elevation and hydrology',hint:'Elevation and hydrology'},
+  {id:'tools-spatial-science',label:'Spatial',description:'Spatial scientific computing and research figures',hint:'Spatial research and figures'},
+  {id:'tools-network-science',label:'Network',description:'Network analysis, accessibility and raster exposure research',hint:'Networks and accessibility'},
+  {id:'tools-spacetime',label:'Temporal',description:'Spatiotemporal analysis of raster cubes, trends, dependence and prediction',hint:'Space-time trends and prediction'},
+  {id:'tools-lidar',label:'LiDAR',description:'3D and LiDAR point-cloud research',hint:'3D point-cloud research'},
+  {id:'tools-remote-sensing',label:'Sensing',description:'Remote sensing: calibrated spectral, thermal, radar and temporal research',hint:'Spectral, thermal and radar'},
+  {id:'tools-raster',label:'Raster',description:'Imagery, raster analysis and AI extraction',hint:'Raster and AI extraction'},
+  {id:'tools-style',label:'Mapping',description:'Cartography: map layout and labels',hint:'Map layout and labels'},
+  {id:'tools-services',label:'Data',description:'Import, manage, polygonize and connect GIS datasets',hint:'Import and manage datasets'},
+  {id:'tools-export',label:'Export',description:'Vector files, map PDFs, GeoTIFFs and research reports',hint:'Export files and reports'},
+  {id:'tools-ai',label:'Assistant',description:'Local assistant',hint:'Local AI assistant'},
 ];
 
 export interface WorkspaceCommand {
@@ -45,10 +45,11 @@ export function WorkspaceModuleBar({active,open,onActivate}:{
         <button key={module.id} type="button"
           aria-controls={module.id}
           aria-pressed={open&&active===module.id}
-          title={module.description}
+          title={module.hint}
           onClick={()=>onActivate(module.id)}>{module.label}</button>)}
     </div>
     <select className="workspace-module-compact" aria-label="Workspace module"
+      title={WORKSPACE_MODULES.find(module=>module.id===active)?.hint??'Choose workspace module'}
       value={active} onChange={event=>onActivate(event.target.value)}>
       {WORKSPACE_MODULES.map(module=><option key={module.id} value={module.id}>{module.label}</option>)}
     </select>

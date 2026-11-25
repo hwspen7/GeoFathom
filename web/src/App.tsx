@@ -1252,8 +1252,8 @@ export default function App() {
       <div className="gis-toolbar" aria-label="Survey toolbar">
         <div className="gis-navigation-tools">
           <button aria-label="Pan and select" title="Pan and select (V / Esc)" onClick={stopInteraction}>Pan</button>
-          <button disabled={!measurement||!!preview} title="Zoom to selected geometry (F)" onClick={fitSelection}>Fit selection</button>
-          <button disabled={!geometry} onClick={deselect} title="Clear selection without deleting saved features"><RotateCcw size={14}/> Deselect</button>
+          <button aria-label="Fit selection" disabled={!measurement||!!preview} title="Fit selection (F)" onClick={fitSelection}>Fit</button>
+          <button disabled={!geometry} onClick={deselect} title="Clear selection; keep saved features"><RotateCcw size={14}/> Deselect</button>
         </div>
         <div className="gis-survey-commands" ref={setToolbarTarget}/>
         <label className="gis-quick-basemap" aria-label="Basemap picker">
