@@ -299,6 +299,9 @@ See [GeoAI data and model validation](docs/GEOAI.md).
 For native-resolution AI building candidates, editable geographic footprints,
 probability/mask GeoTIFFs and scientific figures, see
 [Building extraction setup and measured public-data results](docs/BUILDING_EXTRACTION.md).
+Frozen cross-city datasets, local model adaptation, model/instance evaluation,
+learning figures and CPU/CUDA acceptance are described in
+[Building model research](docs/BUILDING_RESEARCH.md).
 
 ## Compute runtime qualification
 

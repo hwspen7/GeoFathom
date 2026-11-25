@@ -8,6 +8,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import time
 from uuid import UUID
+from typing import Literal
 
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field
@@ -19,7 +20,7 @@ from rasterio.windows import Window
 from geometry.measure import measure_geometry
 from imagery.raster import RasterError, _check
 from imagery.store import file_sha256
-from .semantic import _manifest, _predict_tile
+from .semantic import _manifest, _predict_tile, predict_building_heads
 from .tiles import context_tiles
 from .tiled import TilePlan, _tile_bands, _disk_features, _check_scratch
 from .runtime import tensor_budget_mb
@@ -38,6 +39,9 @@ class BuildingInput(BaseModel):
     memory_mb: int = Field(default=64, ge=16, le=512)
     aoi: dict | None = None
     full_resolution: bool = True
+    instance_mode: Literal["connected", "watershed"] = "connected"
+    seed_distance: int = Field(default=6, ge=1, le=64)
+    boundary_weight: float = Field(default=1., ge=0, le=4, allow_inf_nan=False)
 
 
 def validate(payload):
@@ -153,9 +157,11 @@ def extract_buildings(path, options, output_dir, progress=None, cancelled=None):
             import shutil
             quota_mb = int(os.getenv("GEOFATHOM_BUILDING_ARTIFACT_MB", "512"))
             quota = quota_mb * 1024**2
-            if not 16 <= quota_mb <= 4096 or width * height * 5 + 8 * 1024**2 > quota:
+            # Watershed may retain two auxiliary fields and a 32-bit instance grid.
+            bytes_per_pixel = 17 if options.instance_mode == "watershed" else 5
+            if not 16 <= quota_mb <= 4096 or width * height * bytes_per_pixel + 8 * 1024**2 > quota:
                 raise RasterError("Building artifact budget is insufficient for this study area.")
-            if shutil.disk_usage(stage).free < width * height * 5 + 32 * 1024**2:
+            if shutil.disk_usage(stage).free < width * height * bytes_per_pixel + 32 * 1024**2:
                 raise RasterError("Insufficient disk space for building outputs.")
             profile = dict(driver="GTiff", width=width, height=height, count=1,
                            crs=src.crs, transform=affine, tiled=True,
@@ -171,6 +177,12 @@ def extract_buildings(path, options, output_dir, progress=None, cancelled=None):
                     **profile, dtype="uint8", nodata=255))
                 probability = stack.enter_context(rasterio.open(stage / "probability.tif", "w",
                     **profile, dtype="float32", nodata=-1.))
+                auxiliary = {}
+                if options.instance_mode == "watershed":
+                    for name in ("boundary", "distance"):
+                        if config.get(name+"_channel") is not None:
+                            auxiliary[name] = stack.enter_context(rasterio.open(stage / (name+".tif"), "w",
+                                **profile, dtype="float32", nodata=-9999.))
                 for number, tile in enumerate(context_tiles(width, height, plan.tile_size, halo)):
                     tick(.8 * number / tile_count)
                     # Context comes from the original scene even when the AOI crops its
@@ -192,11 +204,14 @@ def extract_buildings(path, options, output_dir, progress=None, cancelled=None):
                     normalized = (np.nan_to_num(raw, nan=0., posinf=0., neginf=0.) /
                                   config["input_scale"] - mean) / std
                     tensor = np.pad(normalized, pad, mode="edge")[None].astype(np.float32)
-                    labels, confidence = _predict_tile(tensor, config, device)
-                    if labels.shape != (plan.tile_size, plan.tile_size):
-                        raise RasterError("Building model output grid does not match its input.")
-                    # Max-class probability is converted back into building probability.
-                    scores = np.where(labels == 1, confidence, 1 - confidence)[tile.crop]
+                    if options.instance_mode == "watershed":
+                        heads = predict_building_heads(tensor, config, device)
+                        scores = heads["probability"][tile.crop]
+                    else:
+                        labels, confidence = _predict_tile(tensor, config, device)
+                        if labels.shape != (plan.tile_size, plan.tile_size):
+                            raise RasterError("Building model output grid does not match its input.")
+                        scores = np.where(labels == 1, confidence, 1 - confidence)[tile.crop]
                     core_valid = valid[halo-y:halo-y+int(tile.core.height),
                                        halo-x:halo-x+int(tile.core.width)].copy()
                     if roi is not None:
@@ -209,13 +224,26 @@ def extract_buildings(path, options, output_dir, progress=None, cancelled=None):
                                1, window=tile.core)
                     probability.write(np.where(core_valid, scores, -1).astype(np.float32),
                                       1, window=tile.core)
+                    for name, target in auxiliary.items():
+                        target.write(np.where(core_valid, heads[name][tile.crop], -9999).astype(np.float32),
+                                     1, window=tile.core)
                     valid_pixels += int(core_valid.sum())
                     foreground_pixels += int(positive.sum())
             if not valid_pixels:
                 raise RasterError("The study area contains no valid source pixels.")
             for name in ("mask.tif", "probability.tif"):
                 _check_scratch(stage / name, quota)
-            features, truncated = _disk_features(stage / "mask.tif", {1: "building"},
+            vector_source, classes, instance_summary = stage / "mask.tif", {1: "building"}, None
+            if options.instance_mode == "watershed":
+                from .building_instances import instance_raster, InstanceClasses
+                vector_source = stage / "instances.tif"
+                instance_summary = instance_raster(stage / "mask.tif", stage / "probability.tif", vector_source,
+                    boundary_path=stage / "boundary.tif" if "boundary" in auxiliary else None,
+                    distance_path=stage / "distance.tif" if "distance" in auxiliary else None,
+                    seed_distance=options.seed_distance, boundary_weight=options.boundary_weight,
+                    memory_mb=options.memory_mb, progress=lambda _: tick(.84))
+                classes = InstanceClasses()
+            features, truncated = _disk_features(vector_source, classes,
                 options.max_features, options.minimum_pixels, progress=lambda _: tick(.85))
             retained = []
             with rasterio.open(stage / "probability.tif") as probability:
@@ -225,6 +253,9 @@ def extract_buildings(path, options, output_dir, progress=None, cancelled=None):
                     if measurement["area_m2"] < options.minimum_area_m2:
                         continue
                     props = feature["properties"]
+                    if instance_summary is not None:
+                        props["instance_id"] = props["class_id"]
+                        props["class_id"] = 1
                     props.update({"image_id": options.image_id, "model_id": options.model_id,
                         "provider": "onnxruntime", "method": "building_extraction",
                         "probability_threshold": options.probability_threshold,
@@ -232,7 +263,8 @@ def extract_buildings(path, options, output_dir, progress=None, cancelled=None):
                         "confidence_calibrated": False,
                         "perimeter_m": measurement["perimeter_m"],
                         "compactness": 4 * math.pi * measurement["area_m2"] / measurement["perimeter_m"]**2,
-                        "instance_status": "connected_region_may_contain_touching_buildings"})
+                        "instance_status": "watershed_estimate_requires_review" if instance_summary else
+                                           "connected_region_may_contain_touching_buildings"})
                     feature["id"] = f"building-{len(retained)+1}"
                     retained.append(feature)
             result = {"type": "FeatureCollection", "features": retained,
@@ -243,6 +275,7 @@ def extract_buildings(path, options, output_dir, progress=None, cancelled=None):
                 "valid_pixels": valid_pixels, "classified_pixels": foreground_pixels,
                 "tile_count": tile_count, "context_halo": halo, "truncated": truncated,
                 "confidence_calibrated": False, "parameters": options.model_dump(),
+                "instance_separation": instance_summary,
                 "summary": {"candidate_count": len(retained),
                     "total_area_m2": sum(f["properties"]["area_m2"] for f in retained),
                     "foreground_fraction": foreground_pixels / valid_pixels},
@@ -262,9 +295,11 @@ def extract_buildings(path, options, output_dir, progress=None, cancelled=None):
                 writer.writerow([feature["id"], *(feature["properties"][key] for key in fields[1:])])
         _figure(retained, stage / "areas.png")
         _figure(retained, stage / "areas.svg")
+        names = ["mask.tif", "probability.tif", "footprints.geojson", "footprints.csv", "areas.png", "areas.svg"]
+        if instance_summary is not None:
+            names.extend(["instances.tif", *(name+".tif" for name in auxiliary)])
         result["artifacts"] = {name: {"sha256": file_sha256(stage / name),
-            "size_bytes": (stage / name).stat().st_size} for name in (
-                "mask.tif", "probability.tif", "footprints.geojson", "footprints.csv", "areas.png", "areas.svg")}
+            "size_bytes": (stage / name).stat().st_size} for name in names}
         if sum(v["size_bytes"] for v in result["artifacts"].values()) > quota:
             raise RasterError("Building outputs exceed the configured artifact budget.")
         tick(1.)

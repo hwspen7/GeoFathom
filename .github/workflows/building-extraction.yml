@@ -5,7 +5,7 @@ on:
     branches: [feature/ai-building-extraction]
   pull_request:
     branches: [main]
-    paths: ['vision/**', 'jobs/**', 'storage/snapshots.py', 'tests/test_building_extraction.py', 'web/src/GeoAIAnalysisPanel.tsx', 'web/e2e/building-extraction.spec.ts', '.github/workflows/building-extraction.yml']
+    paths: ['vision/**', 'jobs/**', 'storage/snapshots.py', 'tests/test_building*.py', 'pyproject.toml', 'scripts/building*.py', 'web/src/GeoAIAnalysisPanel.tsx', 'web/src/BuildingResearchPanel.tsx', 'web/src/api.ts', 'web/e2e/building-*.spec.ts', '.github/workflows/building-extraction.yml']
   workflow_dispatch:
 
 jobs:
@@ -20,8 +20,12 @@ jobs:
         with:
           python-version: '3.11'
       - run: python -m pip install -c requirements/linux.lock -e ".[dev,vision]" "onnx>=1.16,<2"
+      - name: Install CPU-only building training runtime
+        run: |
+          python -m pip install "torch==2.9.1+cpu" "torchvision==0.24.1+cpu" --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install -e ".[building-training]"
       - name: Native-grid, ONNX, snapshot and worker regressions
-        run: python -m pytest -q tests/test_building_extraction.py tests/test_geoai.py tests/test_tiled_raster.py tests/test_context_tiles.py tests/test_dynamic_inference.py tests/test_weighted_model_pool.py tests/test_job_leases.py tests/test_background_jobs.py tests/test_input_snapshots.py tests/test_isolation.py tests/test_vision_runtime.py
+        run: python -m pytest -q tests/test_building_extraction.py tests/test_building_instances.py tests/test_building_research.py tests/test_geoai.py tests/test_tiled_raster.py tests/test_context_tiles.py tests/test_dynamic_inference.py tests/test_weighted_model_pool.py tests/test_job_leases.py tests/test_background_jobs.py tests/test_input_snapshots.py tests/test_isolation.py tests/test_vision_runtime.py
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -32,7 +36,7 @@ jobs:
       - run: npx playwright install --with-deps chromium
         working-directory: web
       - name: Real browser inference, map preview, save, figures and downloads
-        run: npx playwright test e2e/building-extraction.spec.ts e2e/geoai.spec.ts --workers=1
+        run: npx playwright test e2e/building-extraction.spec.ts e2e/building-research.spec.ts e2e/geoai.spec.ts --workers=1
         working-directory: web
       - uses: actions/upload-artifact@v4
         if: always()

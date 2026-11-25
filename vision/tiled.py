@@ -68,6 +68,12 @@ def _check_scratch(path, quota_bytes):
 
 def _transitions(labels):
     # Bound highly fragmented checkerboard-like masks before raster polygonization.
+    if labels.dtype == np.int32:
+        # Instance identifiers exceed uint8; compare full IDs without lossy casting.
+        if labels.ndim != 2 or not 0 < labels.size <= 16_777_216:
+            raise RasterError("Instance grid exceeds the boundary-count allowance.")
+        return int(np.count_nonzero(labels[:, 1:] != labels[:, :-1]) +
+                   np.count_nonzero(labels[1:, :] != labels[:-1, :]))
     return count_transitions(labels)
 
 
@@ -144,7 +150,10 @@ def _disk_features(path, classes, max_features=MAX_RESULTS, min_pixels=9,
                          src.transform.b * src.transform.d)
         if not pixel_area or not math.isfinite(pixel_area):
             raise RasterError("Raster transform cannot be polygonized.")
-        for geom, category in shapes(band, mask=band,
+        # Rasterio accepts uint8 masks only. Int32 instance backgrounds are
+        # discarded by the class lookup, without allocating a full-image mask.
+        polygon_mask = band if src.dtypes[0] == "uint8" else None
+        for geom, category in shapes(band, mask=polygon_mask,
                                      connectivity=4, transform=src.transform):
             count += 1
             if progress is not None and count % 32 == 0:

@@ -46,6 +46,7 @@ with tempfile.TemporaryDirectory(dir=root) as temp:
   await page.getByText('GeoAI raster analysis & change detection').click();
   await page.getByLabel('GeoAI analysis operation').selectOption('building_extraction');
   await page.getByLabel('Local ONNX vision model').selectOption('browser-buildings');
+  await page.getByLabel('Building instance separation').selectOption('connected');
   await page.getByLabel('GeoAI administration token').fill(process.env.GEOFATHOM_MODEL_ADMIN_TOKEN||'building-browser-admin');
   await page.getByRole('button',{name:'Run georeferenced analysis'}).click();
   await expect(page.getByLabel('Building extraction summary')).toContainText('1 building candidates',{timeout:45000});

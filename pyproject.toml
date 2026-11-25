@@ -19,7 +19,9 @@ dependencies = [
 lidar = ["laspy[lazrs]>=2.5,<3", "scikit-image>=0.24,<1"]
 dev = ["pytest>=8,<10", "pytest-asyncio>=0.24,<2", "pytest-cov>=7,<8", "coverage>=7.10.6,<8", "pypdf>=5,<8"]
 postgis = ["psycopg[binary]>=3.2,<4"]
-vision = ["onnxruntime>=1.18,<2"]
+vision = ["onnxruntime>=1.18,<2", "scikit-image>=0.24,<1"]
+building-study = ["pyarrow>=16,<30"]
+building-training = ["torch>=2.5,<3", "torchvision>=0.20,<1", "segmentation-models-pytorch>=0.5,<0.6", "safetensors>=0.4,<1", "onnx>=1.16,<2"]
 
 [tool.setuptools.packages.find]
 include = ["core*", "geometry*", "places*", "intelligence*", "analysis*", "storage*", "imagery*", "vision*", "terrain*", "cartography*", "services*", "jobs*"]

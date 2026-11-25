@@ -34,6 +34,7 @@ from terrain.figure_routes import router as terrain_figure_router
 from terrain.studio_routes import router as terrain_studio_router
 from terrain.resource_routes import router as terrain_resource_router
 from vision.routes import router as vision_router
+from vision.research_routes import router as building_research_router
 from geometry.routes import router as geometry_router
 from geometry.edit_routes import router as edit_router
 from geometry.topology import native_available
@@ -88,6 +89,7 @@ app.include_router(terrain_figure_router)
 app.include_router(terrain_studio_router)
 app.include_router(terrain_resource_router)
 app.include_router(vision_router)
+app.include_router(building_research_router)
 
 
 @app.get("/health")

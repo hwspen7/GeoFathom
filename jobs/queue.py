@@ -23,7 +23,7 @@ from .leases import (PROCESS_ID,LEASE_SECONDS,ensure_lease_schema,
     recover_expired,claim,heartbeat,is_owner,release_slot)
 
 KINDS={"vector_import","vector_export","topology_qa","spatial_select","export_geojson","postgis_sync",
-       "rebuild_index","spectral_index","spectral_change","semantic_segmentation","building_extraction",
+       "rebuild_index","spectral_index","spectral_change","semantic_segmentation","building_extraction","building_train","building_compare",
        "stac_ndvi","remote_windowed","remote_cube","remote_model_train","remote_model_predict","remote_model_evaluate","remote_experiment"}
 _POOL=ThreadPoolExecutor(max_workers=2,thread_name_prefix="geofathom-gis")
 _LOCK=Lock()
@@ -148,6 +148,9 @@ def queue_job(project_id,kind,payload,reproduction=None):
     if kind=="building_extraction":
         from vision.buildings import validate
         payload=validate(payload).model_dump(mode="json")
+    if kind in {"building_train","building_compare"}:
+        from vision.building_research_inputs import validate_research
+        payload=validate_research(kind,payload)
     if kind=="remote_windowed":
         from imagery.remote_managed import validate
         payload=validate(payload).model_dump(mode="json")
@@ -262,6 +265,9 @@ def cancel_job(project_id,job_id):
 
 
 def _execute(kind,project_id,payload):
+    if kind in {"building_train","building_compare"}:
+        from vision.building_research_store import run_managed
+        return run_managed(kind,payload,_ACTIVE_JOB.get(),_progress,check_cancelled)
     if kind=="building_extraction":
         # Keep building artifacts local while sharing the immutable input capture contract.
         from storage.snapshots import analysis_snapshot
@@ -483,7 +489,7 @@ def _worker(uid,path):
             owner_token=_ACTIVE_OWNER.set(owner)
             try:
                 if (kind in {"spectral_index","spectral_change",
-                             "semantic_segmentation","building_extraction","stac_ndvi","remote_windowed","remote_cube","remote_model_train","remote_model_predict","remote_model_evaluate","remote_experiment"}
+                             "semantic_segmentation","building_extraction","building_train","building_compare","stac_ndvi","remote_windowed","remote_cube","remote_model_train","remote_model_predict","remote_model_evaluate","remote_experiment"}
                         and (((payload.get("full_resolution") is True or kind in {"remote_windowed","remote_cube","remote_model_train","remote_model_predict","remote_model_evaluate","remote_experiment"})
                              and os.getenv("GEOFATHOM_RASTER_ISOLATE","1")=="1")
                              or os.getenv("GEOFATHOM_WORKER_MEMORY_MB","0")!="0")):
@@ -552,6 +558,13 @@ def _worker(uid,path):
                 with _connect() as c:
                     release_slot(c,owner)
                     row=c.execute('SELECT kind,status FROM gis_jobs WHERE id=?',(uid,)).fetchone()
+                    if row and row['kind'] in {'building_train','building_compare'} and row['status']!='completed':
+                        import shutil
+                        from vision.building_research_store import result_directory
+                        target=result_directory(uid)
+                        shutil.rmtree(target,ignore_errors=True)
+                        for directory in target.parent.glob('.'+uid+'-*'):
+                            shutil.rmtree(directory,ignore_errors=True)
                     if row and row['kind']=='building_extraction' and row['status']!='completed':
                         import shutil
                         from vision.buildings import artifact_directory

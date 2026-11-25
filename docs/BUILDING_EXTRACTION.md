@@ -22,8 +22,8 @@ weights automatically.
 
 The model uses RGB bands 1/2/3 in the 0–255 encoding, HOT mean/std normalization,
 256-pixel inference tiles and 32-pixel context halos. Its three output channels
-are mask logit, boundary logit and distance, not three competing classes. Only the
-mask channel receives sigmoid decoding in this implementation. The existing
+are mask logit, boundary logit and distance, not three competing classes. The mask and boundary channels receive sigmoid decoding; distance receives
+tanh decoding for optional instance separation. The existing
 multi-class semantic interface remains available.
 
 Use the existing `GEOFATHOM_VISION_MODELS_DIR` to select a model directory. CPU is
@@ -69,10 +69,10 @@ own project and completed task.
   -1 in the probability raster. Valid background is 0. Holes are preserved.
 - Areas and perimeters use the existing WGS84 ellipsoidal measurement engine.
   Mean probabilities are model scores, not calibrated accuracy estimates.
-- Connected foreground regions are candidate roof/footprint regions. Touching
-  buildings may merge. This version does not claim instance segmentation or
-  verified ground-level building footprints. No automatic rectangularization or
-  hole filling is applied.
+- Connected foreground regions remain the default candidates; touching buildings
+  may merge. An explicit experimental boundary/distance watershed option produces
+  instance candidates and auxiliary rasters. It can oversegment and requires
+  review. No automatic rectangularization or hole filling is applied.
 - Vector results are bounded to the largest 100 regions, with explicit truncation
   metadata. Area and minimum-pixel filters affect retained vector candidates;
   the mask and raw foreground-pixel count retain the thresholded prediction.
@@ -117,8 +117,9 @@ These are integration-smoke measurements, not a model quality pass. The small
 sample includes many empty chips. The upstream post-processing search included
 HOT train/test chips, so this dataset cannot establish untouched external
 generalization. Recall is insufficient for reliable automatic building
-inventories. Independent labeled regions, model comparison and local adaptation
-remain necessary before making a research accuracy claim.
+inventories. The subsequent city-disjoint study, model comparison and local adaptation are
+recorded in [Building model research](BUILDING_RESEARCH.md); its limited results
+remain below automatic inventory qualification.
 
 The numerical test graph verifies ONNX transport, seams, holes, AOIs and nodata.
 It is never counted as evidence of actual building recognition accuracy.
@@ -136,3 +137,6 @@ It is never counted as evidence of actual building recognition accuracy.
   Labels: OpenStreetMap contributors, ODbL-1.0. Dataset curation: HOT.
 - The model card declares CC-BY-4.0 and notes a separate DINOv3 backbone license.
   The model and backbone licenses must be retained with redistributed weights.
+
+See [Building model research](BUILDING_RESEARCH.md) for frozen dataset import,
+training, model comparison, instance outputs, learning figures and GPU acceptance.

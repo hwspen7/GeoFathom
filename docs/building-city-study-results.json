@@ -1,0 +1,1297 @@
+{
+  "schema": "geofathom-building-comparison-1",
+  "dataset_fingerprint": "3562257ab197b1f9e6541515a96b48c6d0aafb4160c0063080120ad8cdb01bd4",
+  "counts": {
+    "train": 48,
+    "validation": 8,
+    "test": 16
+  },
+  "regions": {
+    "train": [
+      "austin",
+      "vienna"
+    ],
+    "validation": [
+      "chicago"
+    ],
+    "test": [
+      "kitsap",
+      "tyrol-w"
+    ]
+  },
+  "selection": {
+    "dataset_fingerprint": "3562257ab197b1f9e6541515a96b48c6d0aafb4160c0063080120ad8cdb01bd4",
+    "models": [
+      {
+        "id": "hotosm-dinov3s-buildings",
+        "model_sha256": "9a28e28403accc06c70a3104aedb31eca50401ed23c8ba4314b26357c25e9043",
+        "manifest_sha256": "e52fd783cef7a4841b2661dc42f39f22c3da5fdb94ba76dcdb72c4636a589e0a"
+      },
+      {
+        "id": "whu-unetplusplus-efficientnet-b4",
+        "model_sha256": "03e2412421472a304a3f34cdeff4981de224ecd86499cc2d961f7392ab93ca0d",
+        "manifest_sha256": "3c1547b4c5d65d4f15ba9b0286c1cfe5d1ab5dd10e42a3c5bb65b6bb2f195392"
+      },
+      {
+        "id": "city-adapted-unetplusplus",
+        "model_sha256": "f177ac82aa5bc42e21b37f9e223ef5d91086925057a154a5795d14ade0ef2472",
+        "manifest_sha256": "a012f000df2c9d708f2fe4c485f5cd5738b6508a8b48c6c16ee8474e2db146fd"
+      }
+    ],
+    "parameters": {
+      "hotosm-dinov3s-buildings": {
+        "probability_threshold": 0.25,
+        "instance_mode": "watershed",
+        "seed_distance": 4
+      },
+      "whu-unetplusplus-efficientnet-b4": {
+        "probability_threshold": 0.25,
+        "instance_mode": "watershed",
+        "seed_distance": 8
+      },
+      "city-adapted-unetplusplus": {
+        "probability_threshold": 0.45,
+        "instance_mode": "watershed",
+        "seed_distance": 4
+      }
+    },
+    "selected_model_by_validation": "hotosm-dinov3s-buildings",
+    "threshold_candidates": [
+      0.25,
+      0.35,
+      0.45,
+      0.5,
+      0.55,
+      0.65,
+      0.75
+    ],
+    "selection_rule": "validation building pixel F1; object F1 only breaks model ties and selects postprocessing",
+    "test_used_for_selection": false,
+    "sha256": "c779edbc81d46a993d167b1a3dc1ebc55e24db74f554ed65aa2a81fdfac71828"
+  },
+  "seconds": 278.784,
+  "model_ranking_source": "validation only",
+  "independence": "City-disjoint for this study; candidate pretraining corpora must be audited separately.",
+  "qualification": "Small public-data study, not a universal accuracy guarantee; inspect regional failures and source bias.",
+  "validation": {
+    "hotosm-dinov3s-buildings": {
+      "threshold_search": [
+        {
+          "threshold": 0.25,
+          "building_f1": 0.7654547311443598
+        },
+        {
+          "threshold": 0.35,
+          "building_f1": 0.7572046833442856
+        },
+        {
+          "threshold": 0.45,
+          "building_f1": 0.7446135837887994
+        },
+        {
+          "threshold": 0.5,
+          "building_f1": 0.7364357640726349
+        },
+        {
+          "threshold": 0.55,
+          "building_f1": 0.7271234341214147
+        },
+        {
+          "threshold": 0.65,
+          "building_f1": 0.7041299453849802
+        },
+        {
+          "threshold": 0.75,
+          "building_f1": 0.6657538284732888
+        }
+      ],
+      "selected": {
+        "instance_mode": "watershed",
+        "seed_distance": 4,
+        "aggregate": {
+          "confusion_matrix": [
+            [
+              1371869,
+              170281
+            ],
+            [
+              105305,
+              449697
+            ]
+          ],
+          "classes": [
+            {
+              "name": "background",
+              "support": 1542150,
+              "predicted": 1477174,
+              "iou": 0.8327201653459427,
+              "precision": 0.9287118511427902,
+              "recall": 0.8895820769704633,
+              "f1": 0.9087259267306191
+            },
+            {
+              "name": "building",
+              "support": 555002,
+              "predicted": 619978,
+              "iou": 0.6200296987520734,
+              "precision": 0.725343479929933,
+              "recall": 0.810261945002,
+              "f1": 0.7654547311443598
+            }
+          ],
+          "overall_accuracy": 0.8685903549194336,
+          "mean_iou_present_classes": 0.726374932049008,
+          "valid_pixels": 2097152,
+          "absent_class_policy": "Excluded from mean IoU, reported as zero per class",
+          "objects_50": {
+            "true_positive": 65,
+            "false_positive": 174,
+            "false_negative": 314,
+            "precision": 0.2719665271966527,
+            "recall": 0.17150395778364116,
+            "f1": 0.21035598705501618
+          },
+          "objects_75": {
+            "true_positive": 17,
+            "false_positive": 222,
+            "false_negative": 362,
+            "precision": 0.07112970711297072,
+            "recall": 0.044854881266490766,
+            "f1": 0.05501618122977346
+          },
+          "brier_score": 0.09923768514526399,
+          "ece": 0.07113303233919692,
+          "boundary_f1_image_mean": 0.39700743576624803
+        }
+      }
+    },
+    "whu-unetplusplus-efficientnet-b4": {
+      "threshold_search": [
+        {
+          "threshold": 0.25,
+          "building_f1": 0.6545101858731501
+        },
+        {
+          "threshold": 0.35,
+          "building_f1": 0.6477466777875075
+        },
+        {
+          "threshold": 0.45,
+          "building_f1": 0.6415439837035207
+        },
+        {
+          "threshold": 0.5,
+          "building_f1": 0.6382663152709255
+        },
+        {
+          "threshold": 0.55,
+          "building_f1": 0.6348324603850121
+        },
+        {
+          "threshold": 0.65,
+          "building_f1": 0.6268893152434087
+        },
+        {
+          "threshold": 0.75,
+          "building_f1": 0.6172084223429248
+        }
+      ],
+      "selected": {
+        "instance_mode": "watershed",
+        "seed_distance": 8,
+        "aggregate": {
+          "confusion_matrix": [
+            [
+              1438896,
+              103254
+            ],
+            [
+              234795,
+              320207
+            ]
+          ],
+          "classes": [
+            {
+              "name": "background",
+              "support": 1542150,
+              "predicted": 1673691,
+              "iou": 0.80975832116357,
+              "precision": 0.8597142483289927,
+              "recall": 0.9330454235969263,
+              "f1": 0.8948800640330165
+            },
+            {
+              "name": "building",
+              "support": 555002,
+              "predicted": 423461,
+              "iou": 0.4864475219367541,
+              "precision": 0.7561664474414409,
+              "recall": 0.576947470459566,
+              "f1": 0.6545101858731501
+            }
+          ],
+          "overall_accuracy": 0.8388056755065918,
+          "mean_iou_present_classes": 0.6481029215501621,
+          "valid_pixels": 2097152,
+          "absent_class_policy": "Excluded from mean IoU, reported as zero per class",
+          "objects_50": {
+            "true_positive": 90,
+            "false_positive": 334,
+            "false_negative": 289,
+            "precision": 0.21226415094339623,
+            "recall": 0.23746701846965698,
+            "f1": 0.22415940224159403
+          },
+          "objects_75": {
+            "true_positive": 38,
+            "false_positive": 386,
+            "false_negative": 341,
+            "precision": 0.08962264150943396,
+            "recall": 0.10026385224274406,
+            "f1": 0.09464508094645081
+          },
+          "brier_score": 0.14716837971023797,
+          "ece": 0.14117015927792936,
+          "boundary_f1_image_mean": 0.39481445990449027
+        }
+      }
+    },
+    "city-adapted-unetplusplus": {
+      "threshold_search": [
+        {
+          "threshold": 0.25,
+          "building_f1": 0.5904782572619405
+        },
+        {
+          "threshold": 0.35,
+          "building_f1": 0.6465158640230972
+        },
+        {
+          "threshold": 0.45,
+          "building_f1": 0.6790148874921857
+        },
+        {
+          "threshold": 0.5,
+          "building_f1": 0.672360328473009
+        },
+        {
+          "threshold": 0.55,
+          "building_f1": 0.664913183638946
+        },
+        {
+          "threshold": 0.65,
+          "building_f1": 0.6512355003041677
+        },
+        {
+          "threshold": 0.75,
+          "building_f1": 0.6368687825218845
+        }
+      ],
+      "selected": {
+        "instance_mode": "watershed",
+        "seed_distance": 4,
+        "aggregate": {
+          "confusion_matrix": [
+            [
+              1391384,
+              150766
+            ],
+            [
+              192222,
+              362780
+            ]
+          ],
+          "classes": [
+            {
+              "name": "background",
+              "support": 1542150,
+              "predicted": 1583606,
+              "iou": 0.8022408110832048,
+              "precision": 0.8786175349171448,
+              "recall": 0.9022364880199721,
+              "f1": 0.8902703857882701
+            },
+            {
+              "name": "building",
+              "support": 555002,
+              "predicted": 513546,
+              "iou": 0.5140216048333164,
+              "precision": 0.7064216253266504,
+              "recall": 0.6536553021430553,
+              "f1": 0.6790148874921857
+            }
+          ],
+          "overall_accuracy": 0.8364505767822266,
+          "mean_iou_present_classes": 0.6581312079582606,
+          "valid_pixels": 2097152,
+          "absent_class_policy": "Excluded from mean IoU, reported as zero per class",
+          "objects_50": {
+            "true_positive": 141,
+            "false_positive": 621,
+            "false_negative": 238,
+            "precision": 0.18503937007874016,
+            "recall": 0.3720316622691293,
+            "f1": 0.24715162138475022
+          },
+          "objects_75": {
+            "true_positive": 36,
+            "false_positive": 726,
+            "false_negative": 343,
+            "precision": 0.047244094488188976,
+            "recall": 0.09498680738786279,
+            "f1": 0.06310254163014899
+          },
+          "brier_score": 0.13520002919659524,
+          "ece": 0.12185470260449494,
+          "boundary_f1_image_mean": 0.3678064969050137
+        }
+      }
+    }
+  },
+  "test": {
+    "hotosm-dinov3s-buildings": {
+      "aggregate": {
+        "confusion_matrix": [
+          [
+            3988291,
+            36226
+          ],
+          [
+            39609,
+            130178
+          ]
+        ],
+        "classes": [
+          {
+            "name": "background",
+            "support": 4024517,
+            "predicted": 4027900,
+            "iou": 0.9813403915134521,
+            "precision": 0.9901663397800342,
+            "recall": 0.9909986713933623,
+            "f1": 0.9905823307461599
+          },
+          {
+            "name": "building",
+            "support": 169787,
+            "predicted": 166404,
+            "iou": 0.6318921621451074,
+            "precision": 0.7823009062282157,
+            "recall": 0.766713588201688,
+            "f1": 0.7744288217114675
+          }
+        ],
+        "overall_accuracy": 0.981919527053833,
+        "mean_iou_present_classes": 0.8066162768292797,
+        "valid_pixels": 4194304,
+        "absent_class_policy": "Excluded from mean IoU, reported as zero per class",
+        "objects_50": {
+          "true_positive": 53,
+          "false_positive": 93,
+          "false_negative": 30,
+          "precision": 0.363013698630137,
+          "recall": 0.6385542168674698,
+          "f1": 0.462882096069869
+        },
+        "objects_75": {
+          "true_positive": 19,
+          "false_positive": 127,
+          "false_negative": 64,
+          "precision": 0.13013698630136986,
+          "recall": 0.2289156626506024,
+          "f1": 0.16593886462882096
+        },
+        "brier_score": 0.014607047374784236,
+        "ece": 0.014161407944620848,
+        "boundary_f1_image_mean": 0.3860235025885562
+      },
+      "by_region": {
+        "kitsap": {
+          "confusion_matrix": [
+            [
+              1974391,
+              29008
+            ],
+            [
+              15309,
+              78444
+            ]
+          ],
+          "classes": [
+            {
+              "name": "background",
+              "support": 2003399,
+              "predicted": 1989700,
+              "iou": 0.9780468497672768,
+              "precision": 0.9923058752575765,
+              "recall": 0.9855206077271677,
+              "f1": 0.9889016024896954
+            },
+            {
+              "name": "building",
+              "support": 93753,
+              "predicted": 107452,
+              "iou": 0.6389977272912407,
+              "precision": 0.7300375981833749,
+              "recall": 0.8367092253047902,
+              "f1": 0.7797420541239035
+            }
+          ],
+          "overall_accuracy": 0.9788680076599121,
+          "mean_iou_present_classes": 0.8085222885292588,
+          "valid_pixels": 2097152,
+          "absent_class_policy": "Excluded from mean IoU, reported as zero per class",
+          "objects_50": {
+            "true_positive": 42,
+            "false_positive": 65,
+            "false_negative": 19,
+            "precision": 0.3925233644859813,
+            "recall": 0.6885245901639344,
+            "f1": 0.5
+          },
+          "objects_75": {
+            "true_positive": 12,
+            "false_positive": 95,
+            "false_negative": 49,
+            "precision": 0.11214953271028037,
+            "recall": 0.19672131147540983,
+            "f1": 0.14285714285714285
+          },
+          "brier_score": 0.016172690196341856,
+          "ece": 0.013861745485464582,
+          "boundary_f1_image_mean": 0.4160133946552056
+        },
+        "tyrol-w": {
+          "confusion_matrix": [
+            [
+              2013900,
+              7218
+            ],
+            [
+              24300,
+              51734
+            ]
+          ],
+          "classes": [
+            {
+              "name": "background",
+              "support": 2021118,
+              "predicted": 2038200,
+              "iou": 0.9845909246911878,
+              "precision": 0.9880777156314395,
+              "recall": 0.9964287092589349,
+              "f1": 0.9922356415535811
+            },
+            {
+              "name": "building",
+              "support": 76034,
+              "predicted": 58952,
+              "iou": 0.6214145005525393,
+              "precision": 0.8775614058895372,
+              "recall": 0.6804061340979035,
+              "f1": 0.7665091194642408
+            }
+          ],
+          "overall_accuracy": 0.9849710464477539,
+          "mean_iou_present_classes": 0.8030027126218635,
+          "valid_pixels": 2097152,
+          "absent_class_policy": "Excluded from mean IoU, reported as zero per class",
+          "objects_50": {
+            "true_positive": 11,
+            "false_positive": 28,
+            "false_negative": 11,
+            "precision": 0.28205128205128205,
+            "recall": 0.5,
+            "f1": 0.36065573770491804
+          },
+          "objects_75": {
+            "true_positive": 7,
+            "false_positive": 32,
+            "false_negative": 15,
+            "precision": 0.1794871794871795,
+            "recall": 0.3181818181818182,
+            "f1": 0.22950819672131148
+          },
+          "brier_score": 0.013041404553226617,
+          "ece": 0.014461070403777115,
+          "boundary_f1_image_mean": 0.35603361052190685
+        }
+      }
+    },
+    "whu-unetplusplus-efficientnet-b4": {
+      "aggregate": {
+        "confusion_matrix": [
+          [
+            4015434,
+            9083
+          ],
+          [
+            133591,
+            36196
+          ]
+        ],
+        "classes": [
+          {
+            "name": "background",
+            "support": 4024517,
+            "predicted": 4149025,
+            "iou": 0.9656877599138839,
+            "precision": 0.9678018329607558,
+            "recall": 0.9977430832072519,
+            "f1": 0.9825444097552811
+          },
+          {
+            "name": "building",
+            "support": 169787,
+            "predicted": 45279,
+            "iou": 0.20235925532509644,
+            "precision": 0.799399280019435,
+            "recall": 0.2131847550165796,
+            "f1": 0.3366036472524713
+          }
+        ],
+        "overall_accuracy": 0.9659838676452637,
+        "mean_iou_present_classes": 0.5840235076194902,
+        "valid_pixels": 4194304,
+        "absent_class_policy": "Excluded from mean IoU, reported as zero per class",
+        "objects_50": {
+          "true_positive": 7,
+          "false_positive": 85,
+          "false_negative": 76,
+          "precision": 0.07608695652173914,
+          "recall": 0.08433734939759036,
+          "f1": 0.08
+        },
+        "objects_75": {
+          "true_positive": 2,
+          "false_positive": 90,
+          "false_negative": 81,
+          "precision": 0.021739130434782608,
+          "recall": 0.024096385542168676,
+          "f1": 0.022857142857142857
+        },
+        "brier_score": 0.03317667387192564,
+        "ece": 0.032769406627097326,
+        "boundary_f1_image_mean": 0.14563750189515595
+      },
+      "by_region": {
+        "kitsap": {
+          "confusion_matrix": [
+            [
+              1999179,
+              4220
+            ],
+            [
+              78080,
+              15673
+            ]
+          ],
+          "classes": [
+            {
+              "name": "background",
+              "support": 2003399,
+              "predicted": 2077259,
+              "iou": 0.9604608069550545,
+              "precision": 0.9624120054360097,
+              "recall": 0.9978935798610262,
+              "f1": 0.9798316840078243
+            },
+            {
+              "name": "building",
+              "support": 93753,
+              "predicted": 19893,
+              "iou": 0.15997264552478743,
+              "precision": 0.7878650781681998,
+              "recall": 0.1671733171205188,
+              "f1": 0.2758214103444028
+            }
+          ],
+          "overall_accuracy": 0.9607563018798828,
+          "mean_iou_present_classes": 0.560216726239921,
+          "valid_pixels": 2097152,
+          "absent_class_policy": "Excluded from mean IoU, reported as zero per class",
+          "objects_50": {
+            "true_positive": 4,
+            "false_positive": 49,
+            "false_negative": 57,
+            "precision": 0.07547169811320754,
+            "recall": 0.06557377049180328,
+            "f1": 0.07017543859649122
+          },
+          "objects_75": {
+            "true_positive": 1,
+            "false_positive": 52,
+            "false_negative": 60,
+            "precision": 0.018867924528301886,
+            "recall": 0.01639344262295082,
+            "f1": 0.017543859649122806
+          },
+          "brier_score": 0.03846314825518319,
+          "ece": 0.038096032333579416,
+          "boundary_f1_image_mean": 0.12076140357601492
+        },
+        "tyrol-w": {
+          "confusion_matrix": [
+            [
+              2016255,
+              4863
+            ],
+            [
+              55511,
+              20523
+            ]
+          ],
+          "classes": [
+            {
+              "name": "background",
+              "support": 2021118,
+              "predicted": 2071766,
+              "iou": 0.9709269205043366,
+              "precision": 0.9732059508651073,
+              "recall": 0.9975939059471045,
+              "f1": 0.9852490322227553
+            },
+            {
+              "name": "building",
+              "support": 76034,
+              "predicted": 25386,
+              "iou": 0.2536929676007763,
+              "precision": 0.808437721578823,
+              "recall": 0.26991872057237554,
+              "f1": 0.40471307434431075
+            }
+          ],
+          "overall_accuracy": 0.9712114334106445,
+          "mean_iou_present_classes": 0.6123099440525565,
+          "valid_pixels": 2097152,
+          "absent_class_policy": "Excluded from mean IoU, reported as zero per class",
+          "objects_50": {
+            "true_positive": 3,
+            "false_positive": 36,
+            "false_negative": 19,
+            "precision": 0.07692307692307693,
+            "recall": 0.13636363636363635,
+            "f1": 0.09836065573770492
+          },
+          "objects_75": {
+            "true_positive": 1,
+            "false_positive": 38,
+            "false_negative": 21,
+            "precision": 0.02564102564102564,
+            "recall": 0.045454545454545456,
+            "f1": 0.03278688524590164
+          },
+          "brier_score": 0.02789019948866809,
+          "ece": 0.027442780920615244,
+          "boundary_f1_image_mean": 0.170513600214297
+        }
+      }
+    },
+    "city-adapted-unetplusplus": {
+      "aggregate": {
+        "confusion_matrix": [
+          [
+            3981626,
+            42891
+          ],
+          [
+            114729,
+            55058
+          ]
+        ],
+        "classes": [
+          {
+            "name": "background",
+            "support": 4024517,
+            "predicted": 4096355,
+            "iou": 0.9619206009983461,
+            "precision": 0.9719924176493493,
+            "recall": 0.9893425720403218,
+            "f1": 0.9805907542933814
+          },
+          {
+            "name": "building",
+            "support": 169787,
+            "predicted": 97949,
+            "iou": 0.2588796208352533,
+            "precision": 0.5621088525661313,
+            "recall": 0.32427688810097355,
+            "f1": 0.41128574416589475
+          }
+        ],
+        "overall_accuracy": 0.9624204635620117,
+        "mean_iou_present_classes": 0.6104001109167997,
+        "valid_pixels": 4194304,
+        "absent_class_policy": "Excluded from mean IoU, reported as zero per class",
+        "objects_50": {
+          "true_positive": 7,
+          "false_positive": 617,
+          "false_negative": 76,
+          "precision": 0.011217948717948718,
+          "recall": 0.08433734939759036,
+          "f1": 0.019801980198019802
+        },
+        "objects_75": {
+          "true_positive": 1,
+          "false_positive": 623,
+          "false_negative": 82,
+          "precision": 0.0016025641025641025,
+          "recall": 0.012048192771084338,
+          "f1": 0.002828854314002829
+        },
+        "brier_score": 0.04907948688522684,
+        "ece": 0.10461677778624212,
+        "boundary_f1_image_mean": 0.12546617588142048
+      },
+      "by_region": {
+        "kitsap": {
+          "confusion_matrix": [
+            [
+              1981519,
+              21880
+            ],
+            [
+              67684,
+              26069
+            ]
+          ],
+          "classes": [
+            {
+              "name": "background",
+              "support": 2003399,
+              "predicted": 2049203,
+              "iou": 0.9567549924363243,
+              "precision": 0.9669705734375755,
+              "recall": 0.989078560985605,
+              "f1": 0.9778996309037996
+            },
+            {
+              "name": "building",
+              "support": 93753,
+              "predicted": 47949,
+              "iou": 0.2254460231940709,
+              "precision": 0.5436818286095644,
+              "recall": 0.27806043539940056,
+              "f1": 0.3679411723193745
+            }
+          ],
+          "overall_accuracy": 0.9572925567626953,
+          "mean_iou_present_classes": 0.5911005078151976,
+          "valid_pixels": 2097152,
+          "absent_class_policy": "Excluded from mean IoU, reported as zero per class",
+          "objects_50": {
+            "true_positive": 5,
+            "false_positive": 422,
+            "false_negative": 56,
+            "precision": 0.0117096018735363,
+            "recall": 0.08196721311475409,
+            "f1": 0.020491803278688523
+          },
+          "objects_75": {
+            "true_positive": 0,
+            "false_positive": 427,
+            "false_negative": 61,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
+          },
+          "brier_score": 0.0454818493266603,
+          "ece": 0.07976267450015406,
+          "boundary_f1_image_mean": 0.12101242827821676
+        },
+        "tyrol-w": {
+          "confusion_matrix": [
+            [
+              2000107,
+              21011
+            ],
+            [
+              47045,
+              28989
+            ]
+          ],
+          "classes": [
+            {
+              "name": "background",
+              "support": 2021118,
+              "predicted": 2047152,
+              "iou": 0.9670935027848385,
+              "precision": 0.9770192931448177,
+              "recall": 0.9896042685286064,
+              "f1": 0.9832715134442895
+            },
+            {
+              "name": "building",
+              "support": 76034,
+              "predicted": 50000,
+              "iou": 0.2987170900097893,
+              "precision": 0.57978,
+              "recall": 0.3812636452113528,
+              "f1": 0.4600187251059238
+            }
+          ],
+          "overall_accuracy": 0.9675483703613281,
+          "mean_iou_present_classes": 0.6329052963973139,
+          "valid_pixels": 2097152,
+          "absent_class_policy": "Excluded from mean IoU, reported as zero per class",
+          "objects_50": {
+            "true_positive": 2,
+            "false_positive": 195,
+            "false_negative": 20,
+            "precision": 0.01015228426395939,
+            "recall": 0.09090909090909091,
+            "f1": 0.0182648401826484
+          },
+          "objects_75": {
+            "true_positive": 1,
+            "false_positive": 196,
+            "false_negative": 21,
+            "precision": 0.005076142131979695,
+            "recall": 0.045454545454545456,
+            "f1": 0.0091324200913242
+          },
+          "brier_score": 0.05267712444379338,
+          "ece": 0.12947088107233018,
+          "boundary_f1_image_mean": 0.1299199234846242
+        }
+      }
+    }
+  },
+  "legacy_diagnostic": {
+    "dataset_fingerprint": "3562257ab197b1f9e6541515a96b48c6d0aafb4160c0063080120ad8cdb01bd4",
+    "model_id": "hotosm-dinov3s-buildings",
+    "parameters": {
+      "probability_threshold": 0.5,
+      "instance_mode": "connected",
+      "seed_distance": 6
+    },
+    "aggregate": {
+      "confusion_matrix": [
+        [
+          3999875,
+          24642
+        ],
+        [
+          48194,
+          121593
+        ]
+      ],
+      "classes": [
+        {
+          "name": "background",
+          "support": 4024517,
+          "predicted": 4048069,
+          "iou": 0.9821160892584816,
+          "precision": 0.9880945705223898,
+          "recall": 0.9938770292186615,
+          "f1": 0.9909773646264036
+        },
+        {
+          "name": "building",
+          "support": 169787,
+          "predicted": 146235,
+          "iou": 0.6253851020166745,
+          "precision": 0.8314904092727459,
+          "recall": 0.7161502352948106,
+          "f1": 0.7695223750245235
+        }
+      ],
+      "overall_accuracy": 0.9826345443725586,
+      "mean_iou_present_classes": 0.8037505956375781,
+      "valid_pixels": 4194304,
+      "absent_class_policy": "Excluded from mean IoU, reported as zero per class",
+      "objects_50": {
+        "true_positive": 54,
+        "false_positive": 59,
+        "false_negative": 29,
+        "precision": 0.4778761061946903,
+        "recall": 0.6506024096385542,
+        "f1": 0.5510204081632653
+      },
+      "objects_75": {
+        "true_positive": 22,
+        "false_positive": 91,
+        "false_negative": 61,
+        "precision": 0.19469026548672566,
+        "recall": 0.26506024096385544,
+        "f1": 0.22448979591836735
+      },
+      "brier_score": 0.014607047374784236,
+      "ece": 0.014161407944620848,
+      "boundary_f1_image_mean": 0.40069762898577027
+    },
+    "note": "Fixed legacy operating point, not selected or tuned on the test data. This is a secondary diagnostic; primary model ranking remains validation-only."
+  },
+  "training": {
+    "building-city-adaptation": {
+      "dataset_fingerprint": "3562257ab197b1f9e6541515a96b48c6d0aafb4160c0063080120ad8cdb01bd4",
+      "counts": {
+        "train": 48,
+        "validation": 8,
+        "test": 16
+      },
+      "regions": {
+        "train": [
+          "austin",
+          "vienna"
+        ],
+        "validation": [
+          "chicago"
+        ],
+        "test": [
+          "kitsap",
+          "tyrol-w"
+        ]
+      },
+      "parameters": {
+        "initial_model_id": "whu-unetplusplus-efficientnet-b4",
+        "mode": "head",
+        "epochs": 12,
+        "batch_size": 4,
+        "learning_rate": 0.001,
+        "seed": 731,
+        "device": "cpu",
+        "cache_mb": 2048,
+        "max_samples": 256
+      },
+      "history": [
+        {
+          "epoch": 0,
+          "training_loss": null,
+          "validation_loss": 2.4963523149490356
+        },
+        {
+          "epoch": 1,
+          "training_loss": 3.2926163574059806,
+          "validation_loss": 2.2676928639411926
+        },
+        {
+          "epoch": 2,
+          "training_loss": 2.97688361008962,
+          "validation_loss": 2.106230854988098
+        },
+        {
+          "epoch": 3,
+          "training_loss": 2.7240310311317444,
+          "validation_loss": 1.949083924293518
+        },
+        {
+          "epoch": 4,
+          "training_loss": 2.4823086261749268,
+          "validation_loss": 1.7936761975288391
+        },
+        {
+          "epoch": 5,
+          "training_loss": 2.204662655790647,
+          "validation_loss": 1.64735609292984
+        },
+        {
+          "epoch": 6,
+          "training_loss": 1.9733431835969288,
+          "validation_loss": 1.5154078602790833
+        },
+        {
+          "epoch": 7,
+          "training_loss": 1.7353756427764893,
+          "validation_loss": 1.3863206803798676
+        },
+        {
+          "epoch": 8,
+          "training_loss": 1.5343626042207081,
+          "validation_loss": 1.2863056063652039
+        },
+        {
+          "epoch": 9,
+          "training_loss": 1.3681755910317104,
+          "validation_loss": 1.2295369803905487
+        },
+        {
+          "epoch": 10,
+          "training_loss": 1.28837754825751,
+          "validation_loss": 1.2104903757572174
+        },
+        {
+          "epoch": 11,
+          "training_loss": 1.2232383042573929,
+          "validation_loss": 1.2049586176872253
+        },
+        {
+          "epoch": 12,
+          "training_loss": 1.2088921268781025,
+          "validation_loss": 1.2032268941402435
+        }
+      ],
+      "best_epoch": 12,
+      "initial_validation_loss": 2.4963523149490356,
+      "selected_validation_loss": 1.2032268941402435,
+      "validation_improved": true,
+      "test_used_for_training": false,
+      "trainable_parameters": 435,
+      "torch_version": "2.9.1+cpu",
+      "device": "cpu",
+      "onnx_parity": {
+        "maximum_absolute_logit_error": 0.0015583038330078125,
+        "maximum_probability_error": 0.0003860592842102051,
+        "maximum_signed_distance_error": 0.00026545673608779907,
+        "mask_disagreement_fraction": 9.1552734375e-05,
+        "limits": {
+          "probability_error": 0.001,
+          "signed_distance_error": 0.01,
+          "mask_disagreement_fraction": 0.001
+        },
+        "passed": true,
+        "criterion": "deployed probability/partition parity; raw logits are diagnostic"
+      },
+      "seconds": 54.534,
+      "cache_bytes": 1115684864,
+      "model_sha256": "f177ac82aa5bc42e21b37f9e223ef5d91086925057a154a5795d14ade0ef2472",
+      "checkpoint_sha256": "49952301949fb914fc1b8b7884aaec41991dd0d496d3cc6097ae074bec9ccda4",
+      "note": "Loss improvement is not test accuracy; frozen holdout comparison is required before qualification."
+    },
+    "building-city-decoder-adaptation": {
+      "dataset_fingerprint": "3562257ab197b1f9e6541515a96b48c6d0aafb4160c0063080120ad8cdb01bd4",
+      "counts": {
+        "train": 48,
+        "validation": 8,
+        "test": 16
+      },
+      "regions": {
+        "train": [
+          "austin",
+          "vienna"
+        ],
+        "validation": [
+          "chicago"
+        ],
+        "test": [
+          "kitsap",
+          "tyrol-w"
+        ]
+      },
+      "parameters": {
+        "initial_model_id": "whu-unetplusplus-efficientnet-b4",
+        "mode": "decoder",
+        "epochs": 3,
+        "batch_size": 1,
+        "learning_rate": 0.0001,
+        "seed": 731,
+        "device": "cpu",
+        "cache_mb": 2048,
+        "max_samples": 256
+      },
+      "history": [
+        {
+          "epoch": 0,
+          "training_loss": null,
+          "validation_loss": 2.515000071376562
+        },
+        {
+          "epoch": 1,
+          "training_loss": 1.3433467485010624,
+          "validation_loss": 1.345192663371563
+        },
+        {
+          "epoch": 2,
+          "training_loss": 0.9200322714944681,
+          "validation_loss": 0.9212943911552429
+        },
+        {
+          "epoch": 3,
+          "training_loss": 0.701204516304036,
+          "validation_loss": 0.9971211329102516
+        }
+      ],
+      "best_epoch": 2,
+      "initial_validation_loss": 2.515000071376562,
+      "selected_validation_loss": 0.9212943911552429,
+      "validation_improved": true,
+      "test_used_for_training": false,
+      "trainable_parameters": 3264787,
+      "torch_version": "2.9.1+cpu",
+      "device": "cpu",
+      "onnx_parity": {
+        "maximum_absolute_logit_error": 0.0015232563018798828,
+        "maximum_probability_error": 0.00024463236331939697,
+        "maximum_signed_distance_error": 7.354468107223511e-05,
+        "mask_disagreement_fraction": 7.2479248046875e-05,
+        "limits": {
+          "probability_error": 0.001,
+          "signed_distance_error": 0.01,
+          "mask_disagreement_fraction": 0.001
+        },
+        "passed": true,
+        "criterion": "deployed probability/partition parity; raw logits are diagnostic"
+      },
+      "seconds": 197.628,
+      "cache_bytes": 352321536,
+      "model_sha256": "abd7ec3f0386875aad360bd4e083756fb3833b5d97070b6a12a3439746359283",
+      "checkpoint_sha256": "9dcd948bfd9ae8fa9c2aac8d6d96f4fe8725d5d319dee8f643206c6f3d3ca33a",
+      "note": "Loss improvement is not test accuracy; frozen holdout comparison is required before qualification."
+    }
+  },
+  "limitations": [
+    "Only 16 test chips and 83 labeled objects; uncertainty and geographic coverage remain limited.",
+    "City-disjoint relative to this study; all upstream pretraining-corpus overlap has not been independently audited.",
+    "Pixel-only source metadata: no geographic footprint area is reported.",
+    "Learned watershed was validation-selected but generalized worse for object F1 than the legacy fixed operating point.",
+    "Decoder adaptation was run after the primary test report; only a subsequent validation-only comparison is permitted in this record.",
+    "No CUDA provider/device is available in this execution host."
+  ],
+  "decoder_validation_only": {
+    "selection": {
+      "dataset_fingerprint": "3562257ab197b1f9e6541515a96b48c6d0aafb4160c0063080120ad8cdb01bd4",
+      "models": [
+        {
+          "id": "hotosm-dinov3s-buildings",
+          "model_sha256": "9a28e28403accc06c70a3104aedb31eca50401ed23c8ba4314b26357c25e9043",
+          "manifest_sha256": "e52fd783cef7a4841b2661dc42f39f22c3da5fdb94ba76dcdb72c4636a589e0a"
+        },
+        {
+          "id": "city-decoder-unetplusplus",
+          "model_sha256": "abd7ec3f0386875aad360bd4e083756fb3833b5d97070b6a12a3439746359283",
+          "manifest_sha256": "d4b0f311710aabfad453c4e830fc412a49ddfe1b43f9fd8973ad6722eb78c9b1"
+        }
+      ],
+      "parameters": {
+        "hotosm-dinov3s-buildings": {
+          "probability_threshold": 0.25,
+          "instance_mode": "watershed",
+          "seed_distance": 4
+        },
+        "city-decoder-unetplusplus": {
+          "probability_threshold": 0.25,
+          "instance_mode": "watershed",
+          "seed_distance": 4
+        }
+      },
+      "selected_model_by_validation": "city-decoder-unetplusplus",
+      "threshold_candidates": [
+        0.25,
+        0.35,
+        0.45,
+        0.5,
+        0.55,
+        0.65,
+        0.75
+      ],
+      "selection_rule": "validation building pixel F1; object F1 only breaks model ties and selects postprocessing",
+      "test_used_for_selection": false,
+      "sha256": "8266e2bb52c9ff4de4b0dfeed944f4e9646778297fda6eaf19e0038a049fe4d0"
+    },
+    "validation": {
+      "hotosm-dinov3s-buildings": {
+        "confusion_matrix": [
+          [
+            1371869,
+            170281
+          ],
+          [
+            105305,
+            449697
+          ]
+        ],
+        "classes": [
+          {
+            "name": "background",
+            "support": 1542150,
+            "predicted": 1477174,
+            "iou": 0.8327201653459427,
+            "precision": 0.9287118511427902,
+            "recall": 0.8895820769704633,
+            "f1": 0.9087259267306191
+          },
+          {
+            "name": "building",
+            "support": 555002,
+            "predicted": 619978,
+            "iou": 0.6200296987520734,
+            "precision": 0.725343479929933,
+            "recall": 0.810261945002,
+            "f1": 0.7654547311443598
+          }
+        ],
+        "overall_accuracy": 0.8685903549194336,
+        "mean_iou_present_classes": 0.726374932049008,
+        "valid_pixels": 2097152,
+        "absent_class_policy": "Excluded from mean IoU, reported as zero per class",
+        "objects_50": {
+          "true_positive": 65,
+          "false_positive": 174,
+          "false_negative": 314,
+          "precision": 0.2719665271966527,
+          "recall": 0.17150395778364116,
+          "f1": 0.21035598705501618
+        },
+        "objects_75": {
+          "true_positive": 17,
+          "false_positive": 222,
+          "false_negative": 362,
+          "precision": 0.07112970711297072,
+          "recall": 0.044854881266490766,
+          "f1": 0.05501618122977346
+        },
+        "brier_score": 0.09923768514526399,
+        "ece": 0.07113303233919692,
+        "ece_aggregation": "valid-pixel-weighted mean of per-image ECE; not pooled calibration bins",
+        "boundary_f1_image_mean": 0.39700743576624803
+      },
+      "city-decoder-unetplusplus": {
+        "confusion_matrix": [
+          [
+            1355667,
+            186483
+          ],
+          [
+            91329,
+            463673
+          ]
+        ],
+        "classes": [
+          {
+            "name": "background",
+            "support": 1542150,
+            "predicted": 1446996,
+            "iou": 0.8299261882154592,
+            "precision": 0.9368837232445701,
+            "recall": 0.8790759653730182,
+            "f1": 0.9070597421470882
+          },
+          {
+            "name": "building",
+            "support": 555002,
+            "predicted": 650156,
+            "iou": 0.6253302494318833,
+            "precision": 0.7131719156633177,
+            "recall": 0.835443836238428,
+            "f1": 0.76948084815435
+          }
+        ],
+        "overall_accuracy": 0.8675289154052734,
+        "mean_iou_present_classes": 0.7276282188236712,
+        "valid_pixels": 2097152,
+        "absent_class_policy": "Excluded from mean IoU, reported as zero per class",
+        "objects_50": {
+          "true_positive": 75,
+          "false_positive": 265,
+          "false_negative": 304,
+          "precision": 0.22058823529411764,
+          "recall": 0.19788918205804748,
+          "f1": 0.2086230876216968
+        },
+        "objects_75": {
+          "true_positive": 24,
+          "false_positive": 316,
+          "false_negative": 355,
+          "precision": 0.07058823529411765,
+          "recall": 0.0633245382585752,
+          "f1": 0.06675938803894298
+        },
+        "brier_score": 0.09493177919762974,
+        "ece": 0.0688433110257276,
+        "ece_aggregation": "valid-pixel-weighted mean of per-image ECE; not pooled calibration bins",
+        "boundary_f1_image_mean": 0.38921394862174086
+      }
+    },
+    "test_evaluated": false
+  }
+}

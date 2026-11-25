@@ -1,0 +1,154 @@
+{
+  "input": {
+    "recipe": "grouped_bar",
+    "vector_geojson": null,
+    "vector_attribute": "",
+    "vector_epsg": 4326,
+    "csv": "model,Pixel F1,Object F1 at IoU 0.5\r\nHOT DINOv3,0.7744288217114675,0.462882096069869\r\nWHU UNet++,0.3366036472524713,0.08\r\nWHU head adaptation,0.41128574416589475,0.019801980198019802\r\n",
+    "rasters": [],
+    "x": "model",
+    "y": "",
+    "z": "",
+    "group": "",
+    "low": "",
+    "high": "",
+    "columns": [
+      "Pixel F1",
+      "Object F1 at IoU 0.5"
+    ],
+    "title": "City-disjoint building study: 16 test chips",
+    "x_label": "",
+    "y_label": "F1 score",
+    "parameter": null,
+    "maximize_x": false,
+    "maximize_y": false,
+    "palette": "color",
+    "font": "sans",
+    "font_size": 10,
+    "grid": true,
+    "width_mm": 180.0,
+    "height_mm": 115.0,
+    "dpi": 300,
+    "format": "png",
+    "variogram_model": "none",
+    "variogram_view": "fit",
+    "kriging_max_distance_m": 500,
+    "kriging_neighbors": 24,
+    "spectral_mode": "angle",
+    "endmember_csv": "",
+    "endmember_index": 1,
+    "hydrology_mode": "observed",
+    "training_fraction": 0.7,
+    "model_validation": "recorded",
+    "block_size_m": 100,
+    "validation_buffer_m": 0,
+    "validation_folds": 5,
+    "ridge_penalty": 1,
+    "point_mode": "planar",
+    "voxel_size": 10,
+    "export_grid": false,
+    "spatial_inference": "statistic",
+    "permutations": 199,
+    "random_seed": 42,
+    "alpha": 0.05,
+    "response_style": "surface",
+    "contour_levels": 12,
+    "show_values": true,
+    "show_points": true,
+    "optimum": "none",
+    "profile_style": "series",
+    "map_style": "continuous",
+    "map_columns": null,
+    "map_common_mask": false,
+    "map_min": null,
+    "map_max": null,
+    "class_breaks": [],
+    "sequential_cmap": "default",
+    "map_decoration": "grid",
+    "line_width": 1.3,
+    "legend_position": "best"
+  },
+  "render": {
+    "recipe": "grouped_bar",
+    "method_note": "",
+    "input_count": 3,
+    "used_count": 3,
+    "raster_sources": [],
+    "family": "Statistics",
+    "source_type": "table",
+    "required_fields": [
+      "x",
+      "columns"
+    ],
+    "software": {
+      "numpy": "2.3.5",
+      "matplotlib": "3.10.8"
+    },
+    "y_label": "F1 score",
+    "omitted_count": 0,
+    "plot_table_rows": 3,
+    "layout": {
+      "canvas_pixels": [
+        708,
+        452
+      ],
+      "axes_bounds_normalized": [
+        [
+          0.006,
+          0.009,
+          0.995,
+          0.945
+        ]
+      ],
+      "potentially_clipped_axes": [],
+      "clipped_tick_text": [
+        {
+          "axis": 1,
+          "text": "0.9"
+        }
+      ],
+      "tick_overlaps": [],
+      "layout_check": "canvas and tick bounding-box preflight; visual review still required",
+      "preflight_passed": false,
+      "layout_attempts": [
+        {
+          "font_factor": 1.0,
+          "layout_warnings": [],
+          "collapsed_axes": false,
+          "unresolved": true
+        },
+        {
+          "font_factor": 0.9,
+          "layout_warnings": [],
+          "collapsed_axes": false,
+          "unresolved": true
+        },
+        {
+          "font_factor": 0.8,
+          "layout_warnings": [],
+          "collapsed_axes": false,
+          "unresolved": true
+        },
+        {
+          "font_factor": 0.7,
+          "layout_warnings": [],
+          "collapsed_axes": false,
+          "unresolved": true
+        }
+      ],
+      "typography_factor": 0.7,
+      "layout_frozen": true
+    },
+    "publication": {
+      "width_mm": 180.0,
+      "height_mm": 115.0,
+      "export_dpi": 300,
+      "format": "png",
+      "font_size_pt": 10,
+      "line_width_pt": 1.3,
+      "palette": "color"
+    }
+  },
+  "dataset_fingerprint": "3562257ab197b1f9e6541515a96b48c6d0aafb4160c0063080120ad8cdb01bd4",
+  "selection_sha256": "c779edbc81d46a993d167b1a3dc1ebc55e24db74f554ed65aa2a81fdfac71828"
+}

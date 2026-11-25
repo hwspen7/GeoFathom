@@ -12,6 +12,8 @@
   "output_type": "binary_logits",
   "output_channels": 3,
   "output_channel": 0,
+  "boundary_channel": 1,
+  "distance_channel": 2,
   "description": "HOT DINOv3 ViT-S/16 + UperNet; VHR RGB building mask. Auxiliary boundary/distance channels are not land-cover classes.",
   "source": "https://huggingface.co/hotosm/dinov3s-buildings",
   "revision": "f7254545dfbbf10a40594d5a5fb62136902000ae",

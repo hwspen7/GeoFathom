@@ -13,7 +13,7 @@ router=APIRouter(prefix="/projects",tags=["background-jobs"])
 class SubmitJob(BaseModel):
     kind:Literal["topology_qa","spatial_select","export_geojson",
                  "postgis_sync","rebuild_index","spectral_index",
-                 "spectral_change","semantic_segmentation","building_extraction","stac_ndvi","remote_windowed","remote_cube","remote_model_train","remote_model_predict","remote_model_evaluate","remote_experiment"]
+                 "spectral_change","semantic_segmentation","building_extraction","building_train","building_compare","stac_ndvi","remote_windowed","remote_cube","remote_model_train","remote_model_predict","remote_model_evaluate","remote_experiment"]
     payload:dict[str,Any]=Field(default_factory=dict)
 
 class RepeatScientificJob(BaseModel):
@@ -49,7 +49,7 @@ def submit(project_id:str,body:SubmitJob,request:Request,
         from imagery.routes import require_raster_import
         require_raster_import(request,token)
     if body.kind in {"postgis_sync","rebuild_index","spectral_index",
-                     "spectral_change","semantic_segmentation","building_extraction","stac_ndvi"}:
+                     "spectral_change","semantic_segmentation","building_extraction","building_train","building_compare","stac_ndvi"}:
         try:require_admin(token)
         except PermissionError as error:
             raise HTTPException(status_code=403,detail=str(error)) from error
@@ -75,6 +75,19 @@ def cancel(project_id:str,job_id:str):
 def download_result(project_id:str,job_id:str,asset:str="footprints.geojson"):
     try:
         job=get_job(project_id,job_id)
+        if job['kind'] in {'building_train','building_compare'} and job['status']=='completed':
+            from vision.building_research_store import result_directory
+            from imagery.store import file_sha256
+            artifacts=job['result'].get('artifacts',{})
+            # The default research download is the complete reproducible bundle.
+            selected='research.zip' if asset=='footprints.geojson' else asset
+            if selected not in artifacts:
+                raise StorageError('Building research output not found.')
+            path=result_directory(job_id)/selected
+            if path.is_symlink() or not path.is_file() or file_sha256(path)!=artifacts[selected]['sha256']:
+                raise StorageError('Building research output is missing or changed.')
+            media='application/zip' if path.suffix=='.zip' else 'application/json' if path.suffix=='.json' else 'application/octet-stream'
+            return FileResponse(path,media_type=media,filename=selected,headers={'Cache-Control':'no-store'})
         if job['kind']=='building_extraction' and job['status']=='completed':
             from vision.buildings import artifact_directory
             from imagery.store import file_sha256

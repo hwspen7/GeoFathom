@@ -58,12 +58,21 @@ def _manifest(identifier):
     output_type = info.get("output_type", "logits")
     output_channels = info.get("output_channels", len(classes) if isinstance(classes, list) else 0)
     output_channel = info.get("output_channel", 0)
+    # Optional auxiliary heads have explicit roles and never imply extra classes.
+    boundary_channel = info.get("boundary_channel")
+    distance_channel = info.get("distance_channel")
     task = info.get("task", "semantic_segmentation")
     if (output_type not in ("logits", "binary_logits", "binary_probability")
             or type(output_channels) is not int or not 1 <= output_channels <= 32
             or type(output_channel) is not int or not 0 <= output_channel < output_channels
             or task not in ("semantic_segmentation", "building_extraction")):
         raise RasterError("Invalid model task or output head contract.")
+    head_indices = [output_channel]
+    for index in (boundary_channel, distance_channel):
+        if index is not None:
+            if type(index) is not int or not 0 <= index < output_channels or index in head_indices:
+                raise RasterError("Auxiliary model heads must have distinct valid channels.")
+            head_indices.append(index)
     mean = info.get("mean", [0] * len(bands) if isinstance(bands,list) else [])
     std = info.get("std", [1] * len(bands) if isinstance(bands,list) else [])
     if (not isinstance(classes, list) or not 2 <= len(classes) <= 32 or
@@ -98,6 +107,9 @@ def _manifest(identifier):
         "description": str(info.get("description", ""))[:180],
         "task": task, "output_type": output_type,
         "output_channels": output_channels, "output_channel": output_channel,
+        "boundary_channel": boundary_channel, "distance_channel": distance_channel,
+        "architecture": info.get("architecture") if info.get("architecture") in (
+            "unetplusplus_efficientnet_b4", "compact_unet") else None,
         "runtime": "onnxruntime", "model_path": weights,
     }
 
@@ -110,7 +122,10 @@ def models():
         for file in sorted(root.glob("*.onnx"))[:30]:
             try:
                 meta = _manifest(file.stem)
-                entries.append({k: v for k, v in meta.items() if k != "model_path"})
+                item = {k: v for k, v in meta.items() if k != "model_path"}
+                checkpoint = root / (meta["id"] + ".safetensors")
+                item["trainable"] = bool(meta.get("architecture") and checkpoint.is_file() and not checkpoint.is_symlink())
+                entries.append(item)
             except RasterError:
                 continue
     return {"models": entries, "runtime_available": available,
@@ -164,7 +179,7 @@ def _session(path, modified_ns, device):
     return session
 
 
-def _predict_batch(tensor, config, device):
+def _predict_batch(tensor, config, device, *, return_heads=False):
     path = config["model_path"]
     size = config["tile_size"]
     classes = len(config["classes"])
@@ -185,7 +200,7 @@ def _predict_batch(tensor, config, device):
     overhead=(gpu_arena_budget_mb() if device=="cuda" else 128)*1024**2
     device_id=int(os.getenv("GEOFATHOM_CUDA_DEVICE_ID","0")) if device=="cuda" else 0
     # The native decoder handles competing logits; binary auxiliary heads use host decoding.
-    gpu_decode=(device=="cuda" and config.get("output_type", "logits")=="logits"
+    gpu_decode=(not return_heads and device=="cuda" and config.get("output_type", "logits")=="logits"
                 and os.getenv("GEOFATHOM_VISION_DEVICE_POSTPROCESS","0")=="1")
     strict=device=="cuda" and os.getenv("GEOFATHOM_VISION_STRICT_CUDA","0")=="1"
     key=(str(path.resolve()),state.st_mtime_ns,state.st_size,device,overhead,device_id,strict)
@@ -253,6 +268,16 @@ def _predict_batch(tensor, config, device):
         raise RasterError("Model output must be [N,C,H,W] logits or [N,H,W] class IDs.")
     if np.any(predicted >= classes):
         raise RasterError("Model predicted a class index outside its manifest.")
+    if return_heads:
+        if config.get("output_type", "logits") == "logits":
+            raise RasterError("Building auxiliary inference requires an explicit binary output contract.")
+        heads = {"probability": probability}
+        if config.get("boundary_channel") is not None:
+            logits = raw[:, config["boundary_channel"]].astype(np.float32)
+            heads["boundary"] = np.exp(-np.logaddexp(0., -logits))
+        if config.get("distance_channel") is not None:
+            heads["distance"] = np.tanh(raw[:, config["distance_channel"]].astype(np.float32))
+        return predicted, confidence, heads
     return predicted, confidence
 
 
@@ -261,6 +286,14 @@ def _predict_tile(tensor, config, device):
     if len(predicted) != 1:
         raise RasterError("Single tile prediction requires batch size one.")
     return predicted[0], confidence[0]
+
+
+def predict_building_heads(tensor, config, device):
+    """Return declared mask/boundary/distance fields without confidence round-trips."""
+    _, _, heads = _predict_batch(tensor, config, device, return_heads=True)
+    if tensor.shape[0] != 1:
+        raise RasterError("Building head inference requires a single tile.")
+    return {name: value[0] for name, value in heads.items()}
 
 
 def semantic_segmentation(path: Path, image_id: str, model_id: str,

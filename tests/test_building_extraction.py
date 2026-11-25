@@ -198,3 +198,17 @@ def test_job_api_preserves_snapshots_project_isolation_and_checked_downloads(set
     from vision.buildings import artifact_directory
     (artifact_directory(uid) / "mask.tif").write_bytes(b"changed")
     assert client.get(download + "?asset=mask.tif").status_code == 422
+
+
+def test_instance_extraction_exports_real_auxiliary_fields_and_exact_support(setup):
+    path, out, data, transform = setup
+    manifest = _manifest("numerical")["model_path"].with_suffix(".json")
+    config = json.loads(manifest.read_text())
+    config.update(boundary_channel=1, distance_channel=2)
+    manifest.write_text(json.dumps(config))
+    result = extract_buildings(path, options(instance_mode="watershed", memory_mb=64), out)
+    assert {"boundary.tif", "distance.tif", "instances.tif"}.issubset(result["artifacts"])
+    with rasterio.open(out/"instances.tif") as instances, rasterio.open(out/"mask.tif") as mask:
+        assert instances.transform == transform
+        np.testing.assert_array_equal(instances.read(1) > 0, mask.read(1) == 1)
+    assert all(f["properties"]["instance_id"] > 0 for f in result["features"])

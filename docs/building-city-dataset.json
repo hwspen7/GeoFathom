@@ -1,0 +1,1467 @@
+{
+  "schema": "geofathom-building-dataset-1",
+  "provenance": {
+    "dataset": "https://huggingface.co/datasets/PingL/PolyTopoBench",
+    "revision": "91319835ea7fcbdad25105cbe90af58258259250",
+    "annotation_sha256": {
+      "train.parquet": "bba356e5467bf382313846f378a77413ead71b429b86630c93fd320d180243ea",
+      "val.parquet": "5b0a0182990ea3fa9adf15c38d8e456e23e4ad1218055698f6807e0bf17204ac"
+    },
+    "index_sha256": "4236e9660525ce3f2f2b82d4660238f5a83fb357f60c0911822a9d81f0fa4ed5",
+    "sampling": "SHA-256 order seeded 731; one patch per source scene; labels not consulted",
+    "split_policy": {
+      "austin": "train",
+      "vienna": "train",
+      "chicago": "validation",
+      "kitsap": "test",
+      "tyrol-w": "test"
+    },
+    "georeferencing": "Pixel coordinates only; no geographic area claim.",
+    "annotation_policy": "Author WKB rings retain holes; last annotation wins on overlapping raster pixels.",
+    "limitations": "Small cross-city study. Publisher removed empty patches from its train subset; source sampling reflects that availability.",
+    "attribution": "Inria imagery: Maggiori et al. (2017). PolyTopoBench curation: Liu et al. (2026). Vector labels: OpenStreetMap contributors, ODbL-1.0."
+  },
+  "samples": [
+    {
+      "id": "austin11-x3072-y0000",
+      "region": "austin",
+      "group": "austin11.tif",
+      "split": "train",
+      "coordinate_space": "pixel",
+      "image": "images/austin/austin11-x3072-y0000.tif",
+      "labels": "labels/austin/austin11-x3072-y0000.tif",
+      "instances": "instances/austin/austin11-x3072-y0000.tif",
+      "source_split": "train",
+      "source_file": "austin/austin11-x3072-y0000.tif",
+      "pixel_origin": [
+        3072,
+        0
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "1e5ed90029dbccfdb83806b60217c1572c4146a5f6c85bb15d9c2e54b05f26b6",
+      "labels_sha256": "872da74d48bece5a037fc3e167217f45f518cc7951b416d4059f9839d99851a7",
+      "instances_sha256": "c40bd19f9d9e1d6c7111f751611e8a123d22fbdea58a43c022231023c9743ab3"
+    },
+    {
+      "id": "austin24-x1536-y2560",
+      "region": "austin",
+      "group": "austin24.tif",
+      "split": "train",
+      "coordinate_space": "pixel",
+      "image": "images/austin/austin24-x1536-y2560.tif",
+      "labels": "labels/austin/austin24-x1536-y2560.tif",
+      "instances": "instances/austin/austin24-x1536-y2560.tif",
+      "source_split": "val",
+      "source_file": "austin/austin24-x1536-y2560.tif",
+      "pixel_origin": [
+        1536,
+        2560
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "48707c1065d41ab87a5fda21fcc9ae0155da695b253e57cfdef82bee3a3888f4",
+      "labels_sha256": "c4d8577dd59b19926d8079cee78da563544128e6eb40db2710af55046c8a49ca",
+      "instances_sha256": "a6dd3afebd05fed9beda9ad87942c7e8e2d2a440615b79631bac2c6c76f8b95b"
+    },
+    {
+      "id": "austin13-x4096-y1024",
+      "region": "austin",
+      "group": "austin13.tif",
+      "split": "train",
+      "coordinate_space": "pixel",
+      "image": "images/austin/austin13-x4096-y1024.tif",
+      "labels": "labels/austin/austin13-x4096-y1024.tif",
+      "instances": "instances/austin/austin13-x4096-y1024.tif",
+      "source_split": "train",
+      "source_file": "austin/austin13-x4096-y1024.tif",
+      "pixel_origin": [
+        4096,
+        1024
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "a36438fc602b00ca8babc4fca5f02858d52bdca5d5312e602ff6b85107a7833f",
+      "labels_sha256": "f4f4434b6779fe0e8e3b8bcce6e62c18e5d41629ab551092873a26f589985ece",
+      "instances_sha256": "6e2cde92c771e688ca2de13b58657e4caf2c16ee2099461c47ba963b3e57534d"
+    },
+    {
+      "id": "austin2-x2560-y2560",
+      "region": "austin",
+      "group": "austin2.tif",
+      "split": "train",
+      "coordinate_space": "pixel",
+      "image": "images/austin/austin2-x2560-y2560.tif",
+      "labels": "labels/austin/austin2-x2560-y2560.tif",
+      "instances": "instances/austin/austin2-x2560-y2560.tif",
+      "source_split": "train",
+      "source_file": "austin/austin2-x2560-y2560.tif",
+      "pixel_origin": [
+        2560,
+        2560
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "db4672a863c65d1d18da3c3fbb0d32dfdb12ea0b7fb942ad27ab43eea8caf5e3",
+      "labels_sha256": "516cb5578500e11c4bbc38b25fe7fe813fdd738be09504a6cb9d9e173b8e2ac6",
+      "instances_sha256": "e2056bc588a370e9028653f26215dcd8e45a1d41168ba467ff2d999bf7eb5d9f"
+    },
+    {
+      "id": "austin15-x1536-y1536",
+      "region": "austin",
+      "group": "austin15.tif",
+      "split": "train",
+      "coordinate_space": "pixel",
+      "image": "images/austin/austin15-x1536-y1536.tif",
+      "labels": "labels/austin/austin15-x1536-y1536.tif",
+      "instances": "instances/austin/austin15-x1536-y1536.tif",
+      "source_split": "train",
+      "source_file": "austin/austin15-x1536-y1536.tif",
+      "pixel_origin": [
+        1536,
+        1536
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "603ffe214b6a110cebda560d996a5488ede6bcd822fb6b374a3b683f6dc4eab7",
+      "labels_sha256": "813d1f1afae7853df50508c93fda743d694bcdecef9457485740cbd5574d3937",
+      "instances_sha256": "49533e84638d3193efafcc4890250c0f056bbdc62a16432c8c941c395ffbbe4a"
+    },
+    {
+      "id": "austin28-x1024-y4488",
+      "region": "austin",
+      "group": "austin28.tif",
+      "split": "train",
+      "coordinate_space": "pixel",
+      "image": "images/austin/austin28-x1024-y4488.tif",
+      "labels": "labels/austin/austin28-x1024-y4488.tif",
+      "instances": "instances/austin/austin28-x1024-y4488.tif",
+      "source_split": "train",
+      "source_file": "austin/austin28-x1024-y4488.tif",
+      "pixel_origin": [
+        1024,
+        4488
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "eb583bd0a02b126285f48fb75cd3120355b0b32fb1616c970218e2e6bbdd92ea",
+      "labels_sha256": "1a0c7a8ff79d99548bdd612860e05cbeb6d377e9998e12a9b86cdc40516a94cd",
+      "instances_sha256": "323f49cec86621514c38d26b6dc8cbd803fc4d0be84f4ba00d7179735b8c9347"
+    },
+    {
+      "id": "austin26-x0000-y1536",
+      "region": "austin",
+      "group": "austin26.tif",
+      "split": "train",
+      "coordinate_space": "pixel",
+      "image": "images/austin/austin26-x0000-y1536.tif",
+      "labels": "labels/austin/austin26-x0000-y1536.tif",
+      "instances": "instances/austin/austin26-x0000-y1536.tif",
+      "source_split": "train",
+      "source_file": "austin/austin26-x0000-y1536.tif",
+      "pixel_origin": [
+        0,
+        1536
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "a9ee266176cee936c75d5bc60317a5ed75274142c032678ba654de2c0a2c4a05",
+      "labels_sha256": "67f4df5e3f5c3b27db9f5539a81b4e7bea0a929a798f1f1bd9a7f694ee3568a1",
+      "instances_sha256": "1d5533d4fc22c1846b6af9ffc2dcd94fde703023365d53822a4108266e2b558b"
+    },
+    {
+      "id": "austin10-x3072-y4488",
+      "region": "austin",
+      "group": "austin10.tif",
+      "split": "train",
+      "coordinate_space": "pixel",
+      "image": "images/austin/austin10-x3072-y4488.tif",
+      "labels": "labels/austin/austin10-x3072-y4488.tif",
+      "instances": "instances/austin/austin10-x3072-y4488.tif",
+      "source_split": "train",
+      "source_file": "austin/austin10-x3072-y4488.tif",
+      "pixel_origin": [
+        3072,
+        4488
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "21f169477f1131660a1f6be14bc51b904c674d9f218ad085b81907447b237f72",
+      "labels_sha256": "486da3663c514719fbe6b4c2933d8b53e3d1dfaec23af8e8d0d62b0dc1ca192a",
+      "instances_sha256": "d9df8381fe4af1770ba1e7855f67c5912e38a21910c285878d76912a9c5a9c5d"
+    },
+    {
+      "id": "austin20-x1536-y0000",
+      "region": "austin",
+      "group": "austin20.tif",
+      "split": "train",
+      "coordinate_space": "pixel",
+      "image": "images/austin/austin20-x1536-y0000.tif",
+      "labels": "labels/austin/austin20-x1536-y0000.tif",
+      "instances": "instances/austin/austin20-x1536-y0000.tif",
+      "source_split": "train",
+      "source_file": "austin/austin20-x1536-y0000.tif",
+      "pixel_origin": [
+        1536,
+        0
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "84563bd6d9942c9e2d58585dc5a66f0e903493b843da6504be6fe6d4ab8ea07c",
+      "labels_sha256": "85bcfe63fe3545d794bb0468a4dad712f1bd34f592d033d10491355b530106e4",
+      "instances_sha256": "654ef762620ea159e62049a73efeb645a1fcd61dbc0f8423b8dc8d3054db23a6"
+    },
+    {
+      "id": "austin4-x0512-y2560",
+      "region": "austin",
+      "group": "austin4.tif",
+      "split": "train",
+      "coordinate_space": "pixel",
+      "image": "images/austin/austin4-x0512-y2560.tif",
+      "labels": "labels/austin/austin4-x0512-y2560.tif",
+      "instances": "instances/austin/austin4-x0512-y2560.tif",
+      "source_split": "train",
+      "source_file": "austin/austin4-x0512-y2560.tif",
+      "pixel_origin": [
+        512,
+        2560
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "538047e11086bd382418e96949d7c042161f74050f649b5600b196e50aab0a3c",
+      "labels_sha256": "85ee47544efaced4dc8f6cfe97faed2eea69bfe9ed60ad42907c9f58c0474b4f",
+      "instances_sha256": "400ace9def4252c8aba4ebc3c080642e0e2806140400b854270fa83fbbaa4226"
+    },
+    {
+      "id": "austin35-x1024-y4096",
+      "region": "austin",
+      "group": "austin35.tif",
+      "split": "train",
+      "coordinate_space": "pixel",
+      "image": "images/austin/austin35-x1024-y4096.tif",
+      "labels": "labels/austin/austin35-x1024-y4096.tif",
+      "instances": "instances/austin/austin35-x1024-y4096.tif",
+      "source_split": "train",
+      "source_file": "austin/austin35-x1024-y4096.tif",
+      "pixel_origin": [
+        1024,
+        4096
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "fd5198f4555f0977e0d6c4ce34b0147373308c9bf874c17af58ad62963802bde",
+      "labels_sha256": "cafd3112c062b2e55cdbefa2a0d50353da84c7d50e5fd5e44f0a6bfe6db5c589",
+      "instances_sha256": "1d116ec936160ec889564c531eb493ff7d4311a805acf5adc1430b707a5861a7"
+    },
+    {
+      "id": "austin21-x0512-y0512",
+      "region": "austin",
+      "group": "austin21.tif",
+      "split": "train",
+      "coordinate_space": "pixel",
+      "image": "images/austin/austin21-x0512-y0512.tif",
+      "labels": "labels/austin/austin21-x0512-y0512.tif",
+      "instances": "instances/austin/austin21-x0512-y0512.tif",
+      "source_split": "train",
+      "source_file": "austin/austin21-x0512-y0512.tif",
+      "pixel_origin": [
+        512,
+        512
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "c00503df3b7544329ef05677a6605caf120c8b9ef18182dda0e0d28914dec546",
+      "labels_sha256": "a4b116868a5986b6280dc92783d20f299137310aecca4f6da1f1354a7de90857",
+      "instances_sha256": "d2ef9d67a6e0f510a6858580d9f61a15f63eaf091e418dc5f6a5ebed449b87ac"
+    },
+    {
+      "id": "austin30-x4096-y1536",
+      "region": "austin",
+      "group": "austin30.tif",
+      "split": "train",
+      "coordinate_space": "pixel",
+      "image": "images/austin/austin30-x4096-y1536.tif",
+      "labels": "labels/austin/austin30-x4096-y1536.tif",
+      "instances": "instances/austin/austin30-x4096-y1536.tif",
+      "source_split": "val",
+      "source_file": "austin/austin30-x4096-y1536.tif",
+      "pixel_origin": [
+        4096,
+        1536
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "98d56ad13aaa1084ffefdb2b8f5cbd9f531d733e9018b4b5b8416207ef0bec60",
+      "labels_sha256": "66295a020ab626e81723324cc312154418b4af3a21ee4cd3906f774012a07678",
+      "instances_sha256": "a70ed3c3d0bdd47bc7facff1abebfef22c7326b24fde1f4a05791f9184eda295"
+    },
+    {
+      "id": "austin33-x3584-y4488",
+      "region": "austin",
+      "group": "austin33.tif",
+      "split": "train",
+      "coordinate_space": "pixel",
+      "image": "images/austin/austin33-x3584-y4488.tif",
+      "labels": "labels/austin/austin33-x3584-y4488.tif",
+      "instances": "instances/austin/austin33-x3584-y4488.tif",
+      "source_split": "val",
+      "source_file": "austin/austin33-x3584-y4488.tif",
+      "pixel_origin": [
+        3584,
+        4488
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "27977f43575b131359cbbf7486107675ad3b2595dd89a618d716613dfbd981f8",
+      "labels_sha256": "b310ec19e879ebc26e79c1d556aa6112aee7ba92087f20a3022f7ad1a829fc8a",
+      "instances_sha256": "53cf62f33f232779cf1b801b7093106a06f3f569c79646dfa42b45eb4a8bd342"
+    },
+    {
+      "id": "austin23-x0512-y2048",
+      "region": "austin",
+      "group": "austin23.tif",
+      "split": "train",
+      "coordinate_space": "pixel",
+      "image": "images/austin/austin23-x0512-y2048.tif",
+      "labels": "labels/austin/austin23-x0512-y2048.tif",
+      "instances": "instances/austin/austin23-x0512-y2048.tif",
+      "source_split": "train",
+      "source_file": "austin/austin23-x0512-y2048.tif",
+      "pixel_origin": [
+        512,
+        2048
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "d310b5e218a4c876b8e2f0abbbead32a34fc7dd9f212e3cfe96ade79d8048809",
+      "labels_sha256": "10305f438adfec93e8c865ab9ed019ce2163af6259f9fef0ad98deccc6dc7ae2",
+      "instances_sha256": "68d8bbc18de83c428aa14f33d4ab73d423d7f89879e6d5cb95de75282efdf2ce"
+    },
+    {
+      "id": "austin1-x3584-y2560",
+      "region": "austin",
+      "group": "austin1.tif",
+      "split": "train",
+      "coordinate_space": "pixel",
+      "image": "images/austin/austin1-x3584-y2560.tif",
+      "labels": "labels/austin/austin1-x3584-y2560.tif",
+      "instances": "instances/austin/austin1-x3584-y2560.tif",
+      "source_split": "train",
+      "source_file": "austin/austin1-x3584-y2560.tif",
+      "pixel_origin": [
+        3584,
+        2560
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "592218dc1b6bf98689dc1b235e8e1ec3500bc4bf8945703834f2813fe45c0339",
+      "labels_sha256": "ea4d3688fcce6ed7d644c282cbb528e5cccbc8b2c1da2eb84c3dc5a1e079eb04",
+      "instances_sha256": "043fe02c97c78b98102b88c57f5bea090d5dc4bf9e499f5073460d20f7d6b4cf"
+    },
+    {
+      "id": "austin31-x4096-y4096",
+      "region": "austin",
+      "group": "austin31.tif",
+      "split": "train",
+      "coordinate_space": "pixel",
+      "image": "images/austin/austin31-x4096-y4096.tif",
+      "labels": "labels/austin/austin31-x4096-y4096.tif",
+      "instances": "instances/austin/austin31-x4096-y4096.tif",
+      "source_split": "train",
+      "source_file": "austin/austin31-x4096-y4096.tif",
+      "pixel_origin": [
+        4096,
+        4096
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "2d73dc09da143f8381d5c61fe361112d6a664f70171ef81035ef533b0f17830f",
+      "labels_sha256": "cc75728553ea49364c64186c811877cacef57201bc1cedf758474349b4a9201d",
+      "instances_sha256": "93b152cbdd723d5ed3ffadabeaa93173930a1ab96bb79a980c0c93b6910a59c8"
+    },
+    {
+      "id": "austin5-x0512-y3584",
+      "region": "austin",
+      "group": "austin5.tif",
+      "split": "train",
+      "coordinate_space": "pixel",
+      "image": "images/austin/austin5-x0512-y3584.tif",
+      "labels": "labels/austin/austin5-x0512-y3584.tif",
+      "instances": "instances/austin/austin5-x0512-y3584.tif",
+      "source_split": "train",
+      "source_file": "austin/austin5-x0512-y3584.tif",
+      "pixel_origin": [
+        512,
+        3584
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "d851c9efae4b38945061c9a068f99b21f9604574cdeb434f000cde860dc344bf",
+      "labels_sha256": "cc4648f85d560295ff38c0dd0cee4b8e98faf489f6d77cbef5fde2cd3665eb71",
+      "instances_sha256": "34d833d450ccdc03e3223571ecd677960d240f8eb86fa8e1fd4eda6cfe563a2c"
+    },
+    {
+      "id": "austin17-x4096-y3072",
+      "region": "austin",
+      "group": "austin17.tif",
+      "split": "train",
+      "coordinate_space": "pixel",
+      "image": "images/austin/austin17-x4096-y3072.tif",
+      "labels": "labels/austin/austin17-x4096-y3072.tif",
+      "instances": "instances/austin/austin17-x4096-y3072.tif",
+      "source_split": "val",
+      "source_file": "austin/austin17-x4096-y3072.tif",
+      "pixel_origin": [
+        4096,
+        3072
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "cddf90ce9f8598ac2411c2bb53a48a0044dc31a0d6227c555e7d8e9199f2a7e5",
+      "labels_sha256": "2f3f47701387825523ffd021796f56c887a4127cf92106d436b1adfdd1d06e2f",
+      "instances_sha256": "2a989f2f734682092cc00d5aafcee18a05b4c039ee9b25f4e516f559db67ab4d"
+    },
+    {
+      "id": "austin19-x3072-y0000",
+      "region": "austin",
+      "group": "austin19.tif",
+      "split": "train",
+      "coordinate_space": "pixel",
+      "image": "images/austin/austin19-x3072-y0000.tif",
+      "labels": "labels/austin/austin19-x3072-y0000.tif",
+      "instances": "instances/austin/austin19-x3072-y0000.tif",
+      "source_split": "train",
+      "source_file": "austin/austin19-x3072-y0000.tif",
+      "pixel_origin": [
+        3072,
+        0
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "25e8a8e2d271824a033cdc6dec3ae0af6668c4b71a77d03c44851ac594678b1f",
+      "labels_sha256": "200c7fc8791c6ce000a36c6de6df7051fc654e3817e9ea95d99e00bd6f0776d3",
+      "instances_sha256": "e2b6b0958a6170008a77ef1cffa97711a06b8e32bd394b2fc1b0e9befcdaf191"
+    },
+    {
+      "id": "austin29-x1024-y4096",
+      "region": "austin",
+      "group": "austin29.tif",
+      "split": "train",
+      "coordinate_space": "pixel",
+      "image": "images/austin/austin29-x1024-y4096.tif",
+      "labels": "labels/austin/austin29-x1024-y4096.tif",
+      "instances": "instances/austin/austin29-x1024-y4096.tif",
+      "source_split": "train",
+      "source_file": "austin/austin29-x1024-y4096.tif",
+      "pixel_origin": [
+        1024,
+        4096
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "3eefaa7e919397b353c72c32bee01b754ae30a91eed12bd21aa19fecf78521a9",
+      "labels_sha256": "40b823b5f1a00593829ceb3ca505aaf00f6414a0f0a88f6a09a0bef8965f772a",
+      "instances_sha256": "46556213e690e0ce903857a3f8a151a0c2af39046307cbe3f1c6586c9360fe12"
+    },
+    {
+      "id": "austin25-x1536-y4488",
+      "region": "austin",
+      "group": "austin25.tif",
+      "split": "train",
+      "coordinate_space": "pixel",
+      "image": "images/austin/austin25-x1536-y4488.tif",
+      "labels": "labels/austin/austin25-x1536-y4488.tif",
+      "instances": "instances/austin/austin25-x1536-y4488.tif",
+      "source_split": "train",
+      "source_file": "austin/austin25-x1536-y4488.tif",
+      "pixel_origin": [
+        1536,
+        4488
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "1f3628f9344c5b36e3e66bde42afc8b15c8d99bfab0415c12bddcf53f9077cd6",
+      "labels_sha256": "0aa6cacd3c4b56677536b7ecea8f64b68c5c5333907223d605aded2aef045520",
+      "instances_sha256": "2ade1203e5ff486aeedffb7ff9682a3ee088fe404af9b7487a354aad2bb48a7c"
+    },
+    {
+      "id": "austin3-x2560-y2048",
+      "region": "austin",
+      "group": "austin3.tif",
+      "split": "train",
+      "coordinate_space": "pixel",
+      "image": "images/austin/austin3-x2560-y2048.tif",
+      "labels": "labels/austin/austin3-x2560-y2048.tif",
+      "instances": "instances/austin/austin3-x2560-y2048.tif",
+      "source_split": "train",
+      "source_file": "austin/austin3-x2560-y2048.tif",
+      "pixel_origin": [
+        2560,
+        2048
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "2288122ee97410a52a4e5f245c403f693a2f8e761a11eff21c838cac56819d60",
+      "labels_sha256": "9cd38d64324dbc6ee35d31a157f2ed1f7366a6c5d8ed4b387c0cf4e648a1372d",
+      "instances_sha256": "4f6841a12c1fac5250d02c2c35fef9059d98214028cdce921d5c119e0e539986"
+    },
+    {
+      "id": "austin6-x0000-y1536",
+      "region": "austin",
+      "group": "austin6.tif",
+      "split": "train",
+      "coordinate_space": "pixel",
+      "image": "images/austin/austin6-x0000-y1536.tif",
+      "labels": "labels/austin/austin6-x0000-y1536.tif",
+      "instances": "instances/austin/austin6-x0000-y1536.tif",
+      "source_split": "val",
+      "source_file": "austin/austin6-x0000-y1536.tif",
+      "pixel_origin": [
+        0,
+        1536
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "f4055b72750b45346103b120d35aecbe580c61b82e5213c2a66d804edc519354",
+      "labels_sha256": "b310ec19e879ebc26e79c1d556aa6112aee7ba92087f20a3022f7ad1a829fc8a",
+      "instances_sha256": "53cf62f33f232779cf1b801b7093106a06f3f569c79646dfa42b45eb4a8bd342"
+    },
+    {
+      "id": "vienna7-x4488-y2560",
+      "region": "vienna",
+      "group": "vienna7.tif",
+      "split": "train",
+      "coordinate_space": "pixel",
+      "image": "images/vienna/vienna7-x4488-y2560.tif",
+      "labels": "labels/vienna/vienna7-x4488-y2560.tif",
+      "instances": "instances/vienna/vienna7-x4488-y2560.tif",
+      "source_split": "train",
+      "source_file": "vienna/vienna7-x4488-y2560.tif",
+      "pixel_origin": [
+        4488,
+        2560
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "4b48ce11bde44f9837facad0bbdd83bfaba287eb350ea78923e7d18aa36369eb",
+      "labels_sha256": "3667530bfdc1c7aca342cc487a52175be3f7476d12851483523f4a106562c892",
+      "instances_sha256": "cf68103dc2e230e70af2846af22d92f06db4aa27f9687c6726542fbea934f098"
+    },
+    {
+      "id": "vienna33-x2048-y1536",
+      "region": "vienna",
+      "group": "vienna33.tif",
+      "split": "train",
+      "coordinate_space": "pixel",
+      "image": "images/vienna/vienna33-x2048-y1536.tif",
+      "labels": "labels/vienna/vienna33-x2048-y1536.tif",
+      "instances": "instances/vienna/vienna33-x2048-y1536.tif",
+      "source_split": "train",
+      "source_file": "vienna/vienna33-x2048-y1536.tif",
+      "pixel_origin": [
+        2048,
+        1536
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "ab26c380eb82cdf006bbc59be91fb8355741dc890af4325e50284c12295a65a7",
+      "labels_sha256": "3f3b391a619b01fcdd672be6497fde74b1b77b9d67365d8cb346e4afb2a4533b",
+      "instances_sha256": "30376865ad257ee4cede7ead5898cbf064318c68c08494e35fb13ae6fa9637c8"
+    },
+    {
+      "id": "vienna10-x2560-y4488",
+      "region": "vienna",
+      "group": "vienna10.tif",
+      "split": "train",
+      "coordinate_space": "pixel",
+      "image": "images/vienna/vienna10-x2560-y4488.tif",
+      "labels": "labels/vienna/vienna10-x2560-y4488.tif",
+      "instances": "instances/vienna/vienna10-x2560-y4488.tif",
+      "source_split": "train",
+      "source_file": "vienna/vienna10-x2560-y4488.tif",
+      "pixel_origin": [
+        2560,
+        4488
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "cb1428ed31f051f75e8574ac16ececaf85e0f284aa97377e29059f2ae0fd9d2e",
+      "labels_sha256": "3e02bedee2ea8625fc2b5844dfa2a1c3f87a068c9a2cb17f74f6068360c177e1",
+      "instances_sha256": "16569607c2f71e3bb852164772926d1d1f8dd527df80da271290b72f25908eba"
+    },
+    {
+      "id": "vienna8-x4096-y1024",
+      "region": "vienna",
+      "group": "vienna8.tif",
+      "split": "train",
+      "coordinate_space": "pixel",
+      "image": "images/vienna/vienna8-x4096-y1024.tif",
+      "labels": "labels/vienna/vienna8-x4096-y1024.tif",
+      "instances": "instances/vienna/vienna8-x4096-y1024.tif",
+      "source_split": "train",
+      "source_file": "vienna/vienna8-x4096-y1024.tif",
+      "pixel_origin": [
+        4096,
+        1024
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "6442fb30171e369ef944832971ff68787de2084e9bf052e314d31ad1f79003c4",
+      "labels_sha256": "f43335b01ee40503707b51ad2f56831b9b209af8c92364daf93bf42ffc94bbde",
+      "instances_sha256": "3e8b229bb3735e99abcb6f8ab0f5422249a6d49e75e2c0cdc3a48dc17558e32a"
+    },
+    {
+      "id": "vienna32-x4488-y3072",
+      "region": "vienna",
+      "group": "vienna32.tif",
+      "split": "train",
+      "coordinate_space": "pixel",
+      "image": "images/vienna/vienna32-x4488-y3072.tif",
+      "labels": "labels/vienna/vienna32-x4488-y3072.tif",
+      "instances": "instances/vienna/vienna32-x4488-y3072.tif",
+      "source_split": "train",
+      "source_file": "vienna/vienna32-x4488-y3072.tif",
+      "pixel_origin": [
+        4488,
+        3072
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "b12ae88bc164119abed2c72ebac2f5a2d5854e7e07f4ad8d62ef305f32243411",
+      "labels_sha256": "533d09039a7ca44459e55755630449f61366d4ccfcfc9b5b2eb9b4609b2e22bb",
+      "instances_sha256": "cbcac3f2422ee4a1811fa178464a1e863f74bcc977478d6d36745f598f2e8876"
+    },
+    {
+      "id": "vienna30-x0512-y0512",
+      "region": "vienna",
+      "group": "vienna30.tif",
+      "split": "train",
+      "coordinate_space": "pixel",
+      "image": "images/vienna/vienna30-x0512-y0512.tif",
+      "labels": "labels/vienna/vienna30-x0512-y0512.tif",
+      "instances": "instances/vienna/vienna30-x0512-y0512.tif",
+      "source_split": "train",
+      "source_file": "vienna/vienna30-x0512-y0512.tif",
+      "pixel_origin": [
+        512,
+        512
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "4b071230dc89d4b0babd444410812b7f43fdcf295396e31a27c520355938549d",
+      "labels_sha256": "7664b576167ae027dcb2e0f00188acff72c5e2903d034827d08e94ae08aba615",
+      "instances_sha256": "82fe5ce63e2977e95331547b241146a0fcb199e076d09a7ef8bef9f4fe15e0fc"
+    },
+    {
+      "id": "vienna9-x3072-y3584",
+      "region": "vienna",
+      "group": "vienna9.tif",
+      "split": "train",
+      "coordinate_space": "pixel",
+      "image": "images/vienna/vienna9-x3072-y3584.tif",
+      "labels": "labels/vienna/vienna9-x3072-y3584.tif",
+      "instances": "instances/vienna/vienna9-x3072-y3584.tif",
+      "source_split": "val",
+      "source_file": "vienna/vienna9-x3072-y3584.tif",
+      "pixel_origin": [
+        3072,
+        3584
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "131c2f935ef9bc3db5c0d1aefb01ce40a1fe8af83b41a8064b69d4f14994002f",
+      "labels_sha256": "c654f1b1a54ddf25167829d83a621e2b4eda9222601c99f0528cfb94e3df4129",
+      "instances_sha256": "4659c506bc507f2c43d651c7c34d7d272abe9302dd76afeb45f6249c55c41aad"
+    },
+    {
+      "id": "vienna6-x3584-y0512",
+      "region": "vienna",
+      "group": "vienna6.tif",
+      "split": "train",
+      "coordinate_space": "pixel",
+      "image": "images/vienna/vienna6-x3584-y0512.tif",
+      "labels": "labels/vienna/vienna6-x3584-y0512.tif",
+      "instances": "instances/vienna/vienna6-x3584-y0512.tif",
+      "source_split": "train",
+      "source_file": "vienna/vienna6-x3584-y0512.tif",
+      "pixel_origin": [
+        3584,
+        512
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "025f44a3fbde903616fa92d50c1c9efaec6e1e7cf1a8fcc334a3742b5d6a0bd0",
+      "labels_sha256": "53a7cd203d9cd347988b1e64aed74a35a34bd7df00b3389522255b966c557110",
+      "instances_sha256": "f42f15b72e920d2364b0544c1184c709c2557c3f7ffa4b024869b422b930519d"
+    },
+    {
+      "id": "vienna31-x4488-y0512",
+      "region": "vienna",
+      "group": "vienna31.tif",
+      "split": "train",
+      "coordinate_space": "pixel",
+      "image": "images/vienna/vienna31-x4488-y0512.tif",
+      "labels": "labels/vienna/vienna31-x4488-y0512.tif",
+      "instances": "instances/vienna/vienna31-x4488-y0512.tif",
+      "source_split": "train",
+      "source_file": "vienna/vienna31-x4488-y0512.tif",
+      "pixel_origin": [
+        4488,
+        512
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "21d82b99fc7d0ed447b570f89ee51dc8b95231e1990fa1f96370969becefe047",
+      "labels_sha256": "73fed275f370e0f9ac97b3f49af9b09aa1f7f604d8e9bee75e251d84d8164872",
+      "instances_sha256": "fc58f8d0d7f469fe81f6b0c8b8ce016d17b999da69df5f145eb43ff584394262"
+    },
+    {
+      "id": "vienna5-x3072-y3072",
+      "region": "vienna",
+      "group": "vienna5.tif",
+      "split": "train",
+      "coordinate_space": "pixel",
+      "image": "images/vienna/vienna5-x3072-y3072.tif",
+      "labels": "labels/vienna/vienna5-x3072-y3072.tif",
+      "instances": "instances/vienna/vienna5-x3072-y3072.tif",
+      "source_split": "val",
+      "source_file": "vienna/vienna5-x3072-y3072.tif",
+      "pixel_origin": [
+        3072,
+        3072
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "aafdd6fe515e149691cc9dd9354abf84956a3165f667dbd46ab7314d4f9817f4",
+      "labels_sha256": "d1644ed3286f82f5641d586f024ecf5168428e386b8950a6b8c0dede7cad2686",
+      "instances_sha256": "3e6e3962b46bbe85db09ce3a3b7acfdfa0a5134e89ad4ed71ec2b0122330bd84"
+    },
+    {
+      "id": "vienna1-x1024-y3072",
+      "region": "vienna",
+      "group": "vienna1.tif",
+      "split": "train",
+      "coordinate_space": "pixel",
+      "image": "images/vienna/vienna1-x1024-y3072.tif",
+      "labels": "labels/vienna/vienna1-x1024-y3072.tif",
+      "instances": "instances/vienna/vienna1-x1024-y3072.tif",
+      "source_split": "train",
+      "source_file": "vienna/vienna1-x1024-y3072.tif",
+      "pixel_origin": [
+        1024,
+        3072
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "e44dca7d9400416cbdfa69d39d770c35abcd229ba0bdb23946dec92381f6677f",
+      "labels_sha256": "20865348cc82841c7f5197d24ebb80b3a467a4ecd342046ced924442c1c42155",
+      "instances_sha256": "27669818829345ccaaa1f09097f73964dcba248cf4308bc8be6ce89c3a68c450"
+    },
+    {
+      "id": "vienna17-x3584-y4096",
+      "region": "vienna",
+      "group": "vienna17.tif",
+      "split": "train",
+      "coordinate_space": "pixel",
+      "image": "images/vienna/vienna17-x3584-y4096.tif",
+      "labels": "labels/vienna/vienna17-x3584-y4096.tif",
+      "instances": "instances/vienna/vienna17-x3584-y4096.tif",
+      "source_split": "train",
+      "source_file": "vienna/vienna17-x3584-y4096.tif",
+      "pixel_origin": [
+        3584,
+        4096
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "d6d9e3087085e67454115a4ff941e993cdbbc401e9088379df3d3fca061b146c",
+      "labels_sha256": "f11103a993f721e1585de959deca6c635744a7d3124789a7c25764b3a4007d14",
+      "instances_sha256": "1326f132b8c26cd4a8f21db2ed5d59d7de1416d74293cf7842df368f90535e14"
+    },
+    {
+      "id": "vienna24-x3072-y1536",
+      "region": "vienna",
+      "group": "vienna24.tif",
+      "split": "train",
+      "coordinate_space": "pixel",
+      "image": "images/vienna/vienna24-x3072-y1536.tif",
+      "labels": "labels/vienna/vienna24-x3072-y1536.tif",
+      "instances": "instances/vienna/vienna24-x3072-y1536.tif",
+      "source_split": "val",
+      "source_file": "vienna/vienna24-x3072-y1536.tif",
+      "pixel_origin": [
+        3072,
+        1536
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "a3fec2ffd6453efaa2564a91420685503d3936d9b88967a8ace6c006a9462d86",
+      "labels_sha256": "b16c3d5d359e8d9018961f34ba82d3668714b34ea50dd7154baae56e7a4d3e83",
+      "instances_sha256": "fe72f4a52c2e866c0fca6b2fc226310ca6aeed3697ba3c88e83b52c9f09bd190"
+    },
+    {
+      "id": "vienna27-x4096-y0512",
+      "region": "vienna",
+      "group": "vienna27.tif",
+      "split": "train",
+      "coordinate_space": "pixel",
+      "image": "images/vienna/vienna27-x4096-y0512.tif",
+      "labels": "labels/vienna/vienna27-x4096-y0512.tif",
+      "instances": "instances/vienna/vienna27-x4096-y0512.tif",
+      "source_split": "train",
+      "source_file": "vienna/vienna27-x4096-y0512.tif",
+      "pixel_origin": [
+        4096,
+        512
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "b9b9f4473071890c99c266c0c1329459209ba4d156a1efcf1ebe952539fa5613",
+      "labels_sha256": "5e900f90168587634e9e2fb537303eda65c5b97e6006986164487bc937186fe3",
+      "instances_sha256": "58e5281c72c1e7a6e7ee3175d4b1258f19752f2e897aff0aa72ef8baf3b6641b"
+    },
+    {
+      "id": "vienna29-x1536-y0512",
+      "region": "vienna",
+      "group": "vienna29.tif",
+      "split": "train",
+      "coordinate_space": "pixel",
+      "image": "images/vienna/vienna29-x1536-y0512.tif",
+      "labels": "labels/vienna/vienna29-x1536-y0512.tif",
+      "instances": "instances/vienna/vienna29-x1536-y0512.tif",
+      "source_split": "train",
+      "source_file": "vienna/vienna29-x1536-y0512.tif",
+      "pixel_origin": [
+        1536,
+        512
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "5993b17cf0cfb9de3fb8fd1a71da21fdbf7763c8f53c9bbb68ed3d491fd657a0",
+      "labels_sha256": "f2249166a1a28b2afb2ccc5e0939432524b224d76a4bc55e1a01cb7a4872a0b5",
+      "instances_sha256": "36ebf865a8d0a1819282fdfdfd33d9574b10dd2caa09ce8997349b88ecbac2a2"
+    },
+    {
+      "id": "vienna35-x1024-y4096",
+      "region": "vienna",
+      "group": "vienna35.tif",
+      "split": "train",
+      "coordinate_space": "pixel",
+      "image": "images/vienna/vienna35-x1024-y4096.tif",
+      "labels": "labels/vienna/vienna35-x1024-y4096.tif",
+      "instances": "instances/vienna/vienna35-x1024-y4096.tif",
+      "source_split": "train",
+      "source_file": "vienna/vienna35-x1024-y4096.tif",
+      "pixel_origin": [
+        1024,
+        4096
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "cff0a649c7bb982939eedab069766e637034390f4b589ea64086bd54aca2936b",
+      "labels_sha256": "773db0904b70ef0b4cbeb396ef77b6be54619d145a53ca1354d410ca6cb8ea25",
+      "instances_sha256": "c1a2737540e81666155b86e2c94f847b2d7c190ae9eb6df2d6c888ce30c7aef9"
+    },
+    {
+      "id": "vienna21-x3072-y4096",
+      "region": "vienna",
+      "group": "vienna21.tif",
+      "split": "train",
+      "coordinate_space": "pixel",
+      "image": "images/vienna/vienna21-x3072-y4096.tif",
+      "labels": "labels/vienna/vienna21-x3072-y4096.tif",
+      "instances": "instances/vienna/vienna21-x3072-y4096.tif",
+      "source_split": "train",
+      "source_file": "vienna/vienna21-x3072-y4096.tif",
+      "pixel_origin": [
+        3072,
+        4096
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "c0b84dbbcf542be932343f54d00cc8d2a2dc6c33a3e3fbd54e55dca5020bbae9",
+      "labels_sha256": "a82c4a6ac97b3558ae29875b8d6383e78f7f9474414ae853b472a046aee5d760",
+      "instances_sha256": "6b61286223354e2a1ecbcda1e4aa3bc6385d358d16186369e4b2a8080e33e00d"
+    },
+    {
+      "id": "vienna34-x2048-y2048",
+      "region": "vienna",
+      "group": "vienna34.tif",
+      "split": "train",
+      "coordinate_space": "pixel",
+      "image": "images/vienna/vienna34-x2048-y2048.tif",
+      "labels": "labels/vienna/vienna34-x2048-y2048.tif",
+      "instances": "instances/vienna/vienna34-x2048-y2048.tif",
+      "source_split": "train",
+      "source_file": "vienna/vienna34-x2048-y2048.tif",
+      "pixel_origin": [
+        2048,
+        2048
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "2cb94dd0952f3a63b8122ce41aa0145641dee9b876a9b8d107d8ae18ebadf4b1",
+      "labels_sha256": "ffc234df2749faeb230f29efb28ad044bf7890626974b01ccaa91f297d8b4185",
+      "instances_sha256": "10db6d7ff38d5b45f1999fbc55cb30ffddd1499cdfc962952efd0469faf01178"
+    },
+    {
+      "id": "vienna36-x3584-y1024",
+      "region": "vienna",
+      "group": "vienna36.tif",
+      "split": "train",
+      "coordinate_space": "pixel",
+      "image": "images/vienna/vienna36-x3584-y1024.tif",
+      "labels": "labels/vienna/vienna36-x3584-y1024.tif",
+      "instances": "instances/vienna/vienna36-x3584-y1024.tif",
+      "source_split": "train",
+      "source_file": "vienna/vienna36-x3584-y1024.tif",
+      "pixel_origin": [
+        3584,
+        1024
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "d74401d3ba15bf01071d7b461c06cf22e0ada3d61fd03fb0021292fb6f84af95",
+      "labels_sha256": "568a296f0c0c7b25b4dcecf5b78a4edd32e5689c9a91d9e286a68f11ae5b1079",
+      "instances_sha256": "9c5999eb32d7464833628826ddf9f20e6f2fdcc051c8b8f2fcbd3f4b60ec70af"
+    },
+    {
+      "id": "vienna23-x4096-y2560",
+      "region": "vienna",
+      "group": "vienna23.tif",
+      "split": "train",
+      "coordinate_space": "pixel",
+      "image": "images/vienna/vienna23-x4096-y2560.tif",
+      "labels": "labels/vienna/vienna23-x4096-y2560.tif",
+      "instances": "instances/vienna/vienna23-x4096-y2560.tif",
+      "source_split": "val",
+      "source_file": "vienna/vienna23-x4096-y2560.tif",
+      "pixel_origin": [
+        4096,
+        2560
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "110867946a1ebbe9a1b06d3d46f60793863b9d9090bbd98fc6904cfbab4534a7",
+      "labels_sha256": "a89be44146278f58a41458d2ed381fbc717b638e0628254bd64711fdb3c1a6f3",
+      "instances_sha256": "c43546853009a040751bf95160eb55c9cd5a1dab03bc2a1ecb03d487e70335a2"
+    },
+    {
+      "id": "vienna13-x0512-y0000",
+      "region": "vienna",
+      "group": "vienna13.tif",
+      "split": "train",
+      "coordinate_space": "pixel",
+      "image": "images/vienna/vienna13-x0512-y0000.tif",
+      "labels": "labels/vienna/vienna13-x0512-y0000.tif",
+      "instances": "instances/vienna/vienna13-x0512-y0000.tif",
+      "source_split": "train",
+      "source_file": "vienna/vienna13-x0512-y0000.tif",
+      "pixel_origin": [
+        512,
+        0
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "ecd100c2e7cc5c7ad8e758e86263d3f841855978001cc5c3d90da8edfa238a9b",
+      "labels_sha256": "7de920ae655c305261d7f481354e1b051cdb6d7e48ad4df5364aba8d6404b8a1",
+      "instances_sha256": "0bbf1e90309198c5b474edc88f91412e6e0df8adfb2aead2ca0d2890a0dc11be"
+    },
+    {
+      "id": "vienna28-x2560-y3072",
+      "region": "vienna",
+      "group": "vienna28.tif",
+      "split": "train",
+      "coordinate_space": "pixel",
+      "image": "images/vienna/vienna28-x2560-y3072.tif",
+      "labels": "labels/vienna/vienna28-x2560-y3072.tif",
+      "instances": "instances/vienna/vienna28-x2560-y3072.tif",
+      "source_split": "train",
+      "source_file": "vienna/vienna28-x2560-y3072.tif",
+      "pixel_origin": [
+        2560,
+        3072
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "f03127940fdb9417be1e29683cc6f01d717ae9b4a24960c063e81f485bfb9058",
+      "labels_sha256": "859740b9cf71971c3e60a8d308c0c6a23ce8fb371ab9c9d349376dd26c667885",
+      "instances_sha256": "71bbbfc86104dab8956ff8b7e10dd054d0c1cc181a7aa4d6c1b063cf82e78ffd"
+    },
+    {
+      "id": "vienna22-x0000-y3072",
+      "region": "vienna",
+      "group": "vienna22.tif",
+      "split": "train",
+      "coordinate_space": "pixel",
+      "image": "images/vienna/vienna22-x0000-y3072.tif",
+      "labels": "labels/vienna/vienna22-x0000-y3072.tif",
+      "instances": "instances/vienna/vienna22-x0000-y3072.tif",
+      "source_split": "train",
+      "source_file": "vienna/vienna22-x0000-y3072.tif",
+      "pixel_origin": [
+        0,
+        3072
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "c037d25af90b4e5103f81ff82eeadc3d23c9cb30b3a9326fe4d9d8a7b10126ed",
+      "labels_sha256": "30f8f5bb4af4c4fc7b5347ea6cae0faaeeed6684642ae30f1d1f87008f1dd52c",
+      "instances_sha256": "50c038c77449c90210ffaf63fab42b769acfa0c93fa31012c6bbc60ae7a4bcbb"
+    },
+    {
+      "id": "vienna19-x0512-y3584",
+      "region": "vienna",
+      "group": "vienna19.tif",
+      "split": "train",
+      "coordinate_space": "pixel",
+      "image": "images/vienna/vienna19-x0512-y3584.tif",
+      "labels": "labels/vienna/vienna19-x0512-y3584.tif",
+      "instances": "instances/vienna/vienna19-x0512-y3584.tif",
+      "source_split": "val",
+      "source_file": "vienna/vienna19-x0512-y3584.tif",
+      "pixel_origin": [
+        512,
+        3584
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "ba036307aa9b71868a37f7c4eb5ccf26b89bfd7ee0f4f89dbf53a4a23bbab8d5",
+      "labels_sha256": "7b5a5ce05b29671b9ed4fcf1d76e14dfa8f3cfc04e774992908f6c2c74bad487",
+      "instances_sha256": "bf6f5e021e4f59ba611a858ac3f7ba3ca51646715515d89fb01acdf20a4e2c18"
+    },
+    {
+      "id": "chicago9-x2048-y1536",
+      "region": "chicago",
+      "group": "chicago9.tif",
+      "split": "validation",
+      "coordinate_space": "pixel",
+      "image": "images/chicago/chicago9-x2048-y1536.tif",
+      "labels": "labels/chicago/chicago9-x2048-y1536.tif",
+      "instances": "instances/chicago/chicago9-x2048-y1536.tif",
+      "source_split": "train",
+      "source_file": "chicago/chicago9-x2048-y1536.tif",
+      "pixel_origin": [
+        2048,
+        1536
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "1b44148b4cb384b8c5aedefeb70268560a1355d87991ab09fd4cd44e9fc6ad4b",
+      "labels_sha256": "3fdb5ae301773daebe34bef09c318fdfce4876904a62710d5a429076d865c47c",
+      "instances_sha256": "116d3e1188677c001fd59cb6a72bd292a4da64418e8744552c4823cf66aa0183"
+    },
+    {
+      "id": "chicago26-x4096-y3072",
+      "region": "chicago",
+      "group": "chicago26.tif",
+      "split": "validation",
+      "coordinate_space": "pixel",
+      "image": "images/chicago/chicago26-x4096-y3072.tif",
+      "labels": "labels/chicago/chicago26-x4096-y3072.tif",
+      "instances": "instances/chicago/chicago26-x4096-y3072.tif",
+      "source_split": "train",
+      "source_file": "chicago/chicago26-x4096-y3072.tif",
+      "pixel_origin": [
+        4096,
+        3072
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "224aea7710521c5fd9fa6eb6e54d4a915f25e721245a09d30afcefb500404909",
+      "labels_sha256": "131b2da7a293df931037d7884c6bf082c9f30b0d28e34578cb52818631e2979b",
+      "instances_sha256": "2689da009197284156ab52cad220d6a87d34d6f1b5d0027477e8bc0283dec760"
+    },
+    {
+      "id": "chicago33-x2048-y2048",
+      "region": "chicago",
+      "group": "chicago33.tif",
+      "split": "validation",
+      "coordinate_space": "pixel",
+      "image": "images/chicago/chicago33-x2048-y2048.tif",
+      "labels": "labels/chicago/chicago33-x2048-y2048.tif",
+      "instances": "instances/chicago/chicago33-x2048-y2048.tif",
+      "source_split": "train",
+      "source_file": "chicago/chicago33-x2048-y2048.tif",
+      "pixel_origin": [
+        2048,
+        2048
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "569d7af946cbcaf9eebca5d264caf04f838bf4d6eebde266511f6354004f4e1b",
+      "labels_sha256": "482945b6b144fb7b1b1479ee1089ba3cd9c73b0bcb6ee3b071c243b9a60a4ff2",
+      "instances_sha256": "1459a48c4133f46f339aea53bfd17580a8775948da2e0354c72a0040e0447ba7"
+    },
+    {
+      "id": "chicago36-x2560-y0512",
+      "region": "chicago",
+      "group": "chicago36.tif",
+      "split": "validation",
+      "coordinate_space": "pixel",
+      "image": "images/chicago/chicago36-x2560-y0512.tif",
+      "labels": "labels/chicago/chicago36-x2560-y0512.tif",
+      "instances": "instances/chicago/chicago36-x2560-y0512.tif",
+      "source_split": "val",
+      "source_file": "chicago/chicago36-x2560-y0512.tif",
+      "pixel_origin": [
+        2560,
+        512
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "f87a39256827242ec9eeac541e752e711c9eeec8f03fb7f6fc9d1adbf8baeb67",
+      "labels_sha256": "e944f5ef3a5082916c396c3d229e83129982e50dae4b24dfa8b4054eb0f11f15",
+      "instances_sha256": "cebd76caffb6a58390ece8461bbdd2d130c96eaf7583bddef3c6d76d256863f7"
+    },
+    {
+      "id": "chicago32-x1024-y0000",
+      "region": "chicago",
+      "group": "chicago32.tif",
+      "split": "validation",
+      "coordinate_space": "pixel",
+      "image": "images/chicago/chicago32-x1024-y0000.tif",
+      "labels": "labels/chicago/chicago32-x1024-y0000.tif",
+      "instances": "instances/chicago/chicago32-x1024-y0000.tif",
+      "source_split": "train",
+      "source_file": "chicago/chicago32-x1024-y0000.tif",
+      "pixel_origin": [
+        1024,
+        0
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "c554034b1e464339e5ea3a1af837f75a7d288912ee581e8282f3070723e296d7",
+      "labels_sha256": "386d7d7b8172ecb720318d32a72f80a730b51f27115a1f4baeb459d68ef7a00a",
+      "instances_sha256": "d0fb0066d56c1fb911ac264f057431f9d9bcc308f09718c0b19d4179b31e894d"
+    },
+    {
+      "id": "chicago11-x2560-y3584",
+      "region": "chicago",
+      "group": "chicago11.tif",
+      "split": "validation",
+      "coordinate_space": "pixel",
+      "image": "images/chicago/chicago11-x2560-y3584.tif",
+      "labels": "labels/chicago/chicago11-x2560-y3584.tif",
+      "instances": "instances/chicago/chicago11-x2560-y3584.tif",
+      "source_split": "train",
+      "source_file": "chicago/chicago11-x2560-y3584.tif",
+      "pixel_origin": [
+        2560,
+        3584
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "92b8549ea140205e1e739424c5ddb279c76e06f2c15a61e5c198c128e9579713",
+      "labels_sha256": "8a9298d697e0e32b00b7bda7a787cc79c27c2817233b1182494f7b77fa74ee65",
+      "instances_sha256": "12b07b69a643c2f9723892c4f18ab638e371940c906192b62c3d524c61f790f3"
+    },
+    {
+      "id": "chicago19-x1536-y4096",
+      "region": "chicago",
+      "group": "chicago19.tif",
+      "split": "validation",
+      "coordinate_space": "pixel",
+      "image": "images/chicago/chicago19-x1536-y4096.tif",
+      "labels": "labels/chicago/chicago19-x1536-y4096.tif",
+      "instances": "instances/chicago/chicago19-x1536-y4096.tif",
+      "source_split": "train",
+      "source_file": "chicago/chicago19-x1536-y4096.tif",
+      "pixel_origin": [
+        1536,
+        4096
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "573c161b0732d1673cb1bfe0748b2d9e240806c80e04afab5759dcf153490cdb",
+      "labels_sha256": "baa4258a9e5b17545094234571c96352e64deb0534809d09b475f9c1169bae68",
+      "instances_sha256": "b5c3497af6b8c5251a3c379346011e3b6eb8f6691f50d8a5d23e8ef42cdaa7aa"
+    },
+    {
+      "id": "chicago13-x3584-y1024",
+      "region": "chicago",
+      "group": "chicago13.tif",
+      "split": "validation",
+      "coordinate_space": "pixel",
+      "image": "images/chicago/chicago13-x3584-y1024.tif",
+      "labels": "labels/chicago/chicago13-x3584-y1024.tif",
+      "instances": "instances/chicago/chicago13-x3584-y1024.tif",
+      "source_split": "train",
+      "source_file": "chicago/chicago13-x3584-y1024.tif",
+      "pixel_origin": [
+        3584,
+        1024
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "8d9bcc1e21451728039d393a8ea0e59c5d1c8731bdc4f9ad029d3688415e936d",
+      "labels_sha256": "639c66ad7cf209eadc838eec833e5b7f8090fdb861082d0aed343864cab258e4",
+      "instances_sha256": "6a1b7c4d855845e631f4ea7e6f3059c286140c12bdab80d6acf7b2560bb7398e"
+    },
+    {
+      "id": "kitsap33-x1024-y3584",
+      "region": "kitsap",
+      "group": "kitsap33.tif",
+      "split": "test",
+      "coordinate_space": "pixel",
+      "image": "images/kitsap/kitsap33-x1024-y3584.tif",
+      "labels": "labels/kitsap/kitsap33-x1024-y3584.tif",
+      "instances": "instances/kitsap/kitsap33-x1024-y3584.tif",
+      "source_split": "train",
+      "source_file": "kitsap/kitsap33-x1024-y3584.tif",
+      "pixel_origin": [
+        1024,
+        3584
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "81ecce185d6df907b889e269bf8cb70d3d9fbaf0c44b9350ac4cdf9360173e9b",
+      "labels_sha256": "5953ab8567ec7d07bdbf14042d2a487d106e285590123bee9012f5ce3e14b1fd",
+      "instances_sha256": "574ad4b04224d905bed716e3e0df1bcdd8668f485fba20674d7fcb67597b3f48"
+    },
+    {
+      "id": "kitsap20-x2048-y0512",
+      "region": "kitsap",
+      "group": "kitsap20.tif",
+      "split": "test",
+      "coordinate_space": "pixel",
+      "image": "images/kitsap/kitsap20-x2048-y0512.tif",
+      "labels": "labels/kitsap/kitsap20-x2048-y0512.tif",
+      "instances": "instances/kitsap/kitsap20-x2048-y0512.tif",
+      "source_split": "train",
+      "source_file": "kitsap/kitsap20-x2048-y0512.tif",
+      "pixel_origin": [
+        2048,
+        512
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "b924f707248f3a11d4933e4501bbdf6a43c7328121bd08232418b244253f7305",
+      "labels_sha256": "76e576217659c7be1a5ad0e86db8d847da57887c3d3221a7310977b60ea4e344",
+      "instances_sha256": "7dff53c4fa912459ebae99bfca53afb04c346daa9e4ca2d57b4ee2cf4de130fd"
+    },
+    {
+      "id": "kitsap10-x3584-y0000",
+      "region": "kitsap",
+      "group": "kitsap10.tif",
+      "split": "test",
+      "coordinate_space": "pixel",
+      "image": "images/kitsap/kitsap10-x3584-y0000.tif",
+      "labels": "labels/kitsap/kitsap10-x3584-y0000.tif",
+      "instances": "instances/kitsap/kitsap10-x3584-y0000.tif",
+      "source_split": "val",
+      "source_file": "kitsap/kitsap10-x3584-y0000.tif",
+      "pixel_origin": [
+        3584,
+        0
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "2fd08aa5ae6bad3b393b7a1576bc1aa49f6cce57ca5d6ece045cbe2f287740f4",
+      "labels_sha256": "b310ec19e879ebc26e79c1d556aa6112aee7ba92087f20a3022f7ad1a829fc8a",
+      "instances_sha256": "53cf62f33f232779cf1b801b7093106a06f3f569c79646dfa42b45eb4a8bd342"
+    },
+    {
+      "id": "kitsap28-x2048-y4488",
+      "region": "kitsap",
+      "group": "kitsap28.tif",
+      "split": "test",
+      "coordinate_space": "pixel",
+      "image": "images/kitsap/kitsap28-x2048-y4488.tif",
+      "labels": "labels/kitsap/kitsap28-x2048-y4488.tif",
+      "instances": "instances/kitsap/kitsap28-x2048-y4488.tif",
+      "source_split": "val",
+      "source_file": "kitsap/kitsap28-x2048-y4488.tif",
+      "pixel_origin": [
+        2048,
+        4488
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "2798c69dddf56c606c8bf48979f1bc1f3e2668ffe5041915864a802a5498edad",
+      "labels_sha256": "04d4c1f66b2b9e634720638e45bab9fe8bcd7bee2fdaff87261b92eec23e55b3",
+      "instances_sha256": "0281a1c6e06cedb319f93a30df7150f0040c80a597cd7a002b774ff2a1227014"
+    },
+    {
+      "id": "kitsap23-x4096-y1536",
+      "region": "kitsap",
+      "group": "kitsap23.tif",
+      "split": "test",
+      "coordinate_space": "pixel",
+      "image": "images/kitsap/kitsap23-x4096-y1536.tif",
+      "labels": "labels/kitsap/kitsap23-x4096-y1536.tif",
+      "instances": "instances/kitsap/kitsap23-x4096-y1536.tif",
+      "source_split": "train",
+      "source_file": "kitsap/kitsap23-x4096-y1536.tif",
+      "pixel_origin": [
+        4096,
+        1536
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "97832908c7fa114db39d7f05a6bebc8fc8ee84c0333245cc7f28ebf4176ad2b2",
+      "labels_sha256": "d02ecae958dbbfb82e96cb541c1bf34f680d6e28207b51d721950c82a959705f",
+      "instances_sha256": "e946a86904cf7652da66492691f96f6034fa67d25dabbcb3feceeaf98befca36"
+    },
+    {
+      "id": "kitsap17-x2048-y0512",
+      "region": "kitsap",
+      "group": "kitsap17.tif",
+      "split": "test",
+      "coordinate_space": "pixel",
+      "image": "images/kitsap/kitsap17-x2048-y0512.tif",
+      "labels": "labels/kitsap/kitsap17-x2048-y0512.tif",
+      "instances": "instances/kitsap/kitsap17-x2048-y0512.tif",
+      "source_split": "train",
+      "source_file": "kitsap/kitsap17-x2048-y0512.tif",
+      "pixel_origin": [
+        2048,
+        512
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "0a5450977ead0b0705eab04b5cc9f3aff847006953b94bb9160fd936af4ad99f",
+      "labels_sha256": "ff2223c1718296e37352b82e6abb443c4856c2cd78a3faae11544130b9091afc",
+      "instances_sha256": "a4e844c7371edd5622e315d3459c437ad5fef4a09877b2983164cbb8670807ab"
+    },
+    {
+      "id": "kitsap30-x3584-y2560",
+      "region": "kitsap",
+      "group": "kitsap30.tif",
+      "split": "test",
+      "coordinate_space": "pixel",
+      "image": "images/kitsap/kitsap30-x3584-y2560.tif",
+      "labels": "labels/kitsap/kitsap30-x3584-y2560.tif",
+      "instances": "instances/kitsap/kitsap30-x3584-y2560.tif",
+      "source_split": "val",
+      "source_file": "kitsap/kitsap30-x3584-y2560.tif",
+      "pixel_origin": [
+        3584,
+        2560
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "1d1f37a43a99371f0372a1319024dbcbfb36da7a02952fa16d8534ebd2b8e28b",
+      "labels_sha256": "cb253e4b058ebcfc90b1d9b10c49c280f4848acfdf30f337ee3859ffb8a78fdf",
+      "instances_sha256": "26aec0f4cd041d27701bb934d4616b36e8a0886fb8224cc2243bffcecc6f8771"
+    },
+    {
+      "id": "kitsap15-x0512-y4096",
+      "region": "kitsap",
+      "group": "kitsap15.tif",
+      "split": "test",
+      "coordinate_space": "pixel",
+      "image": "images/kitsap/kitsap15-x0512-y4096.tif",
+      "labels": "labels/kitsap/kitsap15-x0512-y4096.tif",
+      "instances": "instances/kitsap/kitsap15-x0512-y4096.tif",
+      "source_split": "train",
+      "source_file": "kitsap/kitsap15-x0512-y4096.tif",
+      "pixel_origin": [
+        512,
+        4096
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "3db9eac9c18b8fe88ecea9736b4f59c471050312e3536763c01ecaf211a79826",
+      "labels_sha256": "8e6816dde51dbffa547b76d449481b4e57c14020f8d67a82312fb1bcf8d69bd9",
+      "instances_sha256": "f1d42910fa778d5cb4c70a3d488b9696d607fddd28a5000d69fa1b36f20d8749"
+    },
+    {
+      "id": "tyrol-w33-x3584-y3072",
+      "region": "tyrol-w",
+      "group": "tyrol-w33.tif",
+      "split": "test",
+      "coordinate_space": "pixel",
+      "image": "images/tyrol-w/tyrol-w33-x3584-y3072.tif",
+      "labels": "labels/tyrol-w/tyrol-w33-x3584-y3072.tif",
+      "instances": "instances/tyrol-w/tyrol-w33-x3584-y3072.tif",
+      "source_split": "train",
+      "source_file": "tyrol-w/tyrol-w33-x3584-y3072.tif",
+      "pixel_origin": [
+        3584,
+        3072
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "6e2d792da993935809f76c3c5c7d6e6c82db9a4ccd3f0456f1c5a8e502dacecd",
+      "labels_sha256": "cd95fb8ccf75574ffe8d377938c28ebd4b582f6314780058b52d2fe823df8900",
+      "instances_sha256": "15480c8620a2f2e503088607989c33b400eb2a2ffa4ae70578c241b114730fe3"
+    },
+    {
+      "id": "tyrol-w4-x2048-y1536",
+      "region": "tyrol-w",
+      "group": "tyrol-w4.tif",
+      "split": "test",
+      "coordinate_space": "pixel",
+      "image": "images/tyrol-w/tyrol-w4-x2048-y1536.tif",
+      "labels": "labels/tyrol-w/tyrol-w4-x2048-y1536.tif",
+      "instances": "instances/tyrol-w/tyrol-w4-x2048-y1536.tif",
+      "source_split": "val",
+      "source_file": "tyrol-w/tyrol-w4-x2048-y1536.tif",
+      "pixel_origin": [
+        2048,
+        1536
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "d6c7ee44eacffd112b1a3b3431627c95dca47f33c446c97996c9ed472dd95d75",
+      "labels_sha256": "76d711cf935d4ef1f98ef97326a017fc42a97d2ed348f1ddbe85d4603992a0af",
+      "instances_sha256": "2be63d02fab5bc4aad1baa0e34d29fcfe288a2569249a4140fa50b8b58771c07"
+    },
+    {
+      "id": "tyrol-w2-x3072-y4096",
+      "region": "tyrol-w",
+      "group": "tyrol-w2.tif",
+      "split": "test",
+      "coordinate_space": "pixel",
+      "image": "images/tyrol-w/tyrol-w2-x3072-y4096.tif",
+      "labels": "labels/tyrol-w/tyrol-w2-x3072-y4096.tif",
+      "instances": "instances/tyrol-w/tyrol-w2-x3072-y4096.tif",
+      "source_split": "train",
+      "source_file": "tyrol-w/tyrol-w2-x3072-y4096.tif",
+      "pixel_origin": [
+        3072,
+        4096
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "eb734a3c412c268219996d1583b1fbc3b6170dc8cd4b91e16d03fbbd982994ae",
+      "labels_sha256": "41d4838417613f02ab5a3c331ca9efee06581bb7eede790312398642de5e7ec0",
+      "instances_sha256": "f0f935d85aeb4759f49c593376d1b85f19386166a8c304527c3a17bb8800c988"
+    },
+    {
+      "id": "tyrol-w28-x1536-y4488",
+      "region": "tyrol-w",
+      "group": "tyrol-w28.tif",
+      "split": "test",
+      "coordinate_space": "pixel",
+      "image": "images/tyrol-w/tyrol-w28-x1536-y4488.tif",
+      "labels": "labels/tyrol-w/tyrol-w28-x1536-y4488.tif",
+      "instances": "instances/tyrol-w/tyrol-w28-x1536-y4488.tif",
+      "source_split": "val",
+      "source_file": "tyrol-w/tyrol-w28-x1536-y4488.tif",
+      "pixel_origin": [
+        1536,
+        4488
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "92ebef496e6cddfe353b979d4dd483f837a93c945e28b8168929955fc03bd83a",
+      "labels_sha256": "9725e60b46b8d0ebcb7699fd858f7a6fa471dc00e9195418057bf810f4a75870",
+      "instances_sha256": "e8b2312d2f77bea30dad777f24134c09f9f7bb1d1c51433b54859bde2854cc85"
+    },
+    {
+      "id": "tyrol-w23-x2048-y0512",
+      "region": "tyrol-w",
+      "group": "tyrol-w23.tif",
+      "split": "test",
+      "coordinate_space": "pixel",
+      "image": "images/tyrol-w/tyrol-w23-x2048-y0512.tif",
+      "labels": "labels/tyrol-w/tyrol-w23-x2048-y0512.tif",
+      "instances": "instances/tyrol-w/tyrol-w23-x2048-y0512.tif",
+      "source_split": "train",
+      "source_file": "tyrol-w/tyrol-w23-x2048-y0512.tif",
+      "pixel_origin": [
+        2048,
+        512
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "9cef22722ce3e1295f00fc772868d6723bab45879f7239a41f7f93a58bdf3b25",
+      "labels_sha256": "a07c14acd91e72ee89e5e3f28c0e345556cf8e3b7abad9e7bcfe4b315c0d4f5c",
+      "instances_sha256": "580ecfedd574fbe375135a378e098113ec8c9025c535ddc8cefd6baac2a1e848"
+    },
+    {
+      "id": "tyrol-w25-x4096-y2560",
+      "region": "tyrol-w",
+      "group": "tyrol-w25.tif",
+      "split": "test",
+      "coordinate_space": "pixel",
+      "image": "images/tyrol-w/tyrol-w25-x4096-y2560.tif",
+      "labels": "labels/tyrol-w/tyrol-w25-x4096-y2560.tif",
+      "instances": "instances/tyrol-w/tyrol-w25-x4096-y2560.tif",
+      "source_split": "val",
+      "source_file": "tyrol-w/tyrol-w25-x4096-y2560.tif",
+      "pixel_origin": [
+        4096,
+        2560
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "a102c071a21c2a9f993e848b1f6a77098568c6e8d547bc73af0bca27e222f62b",
+      "labels_sha256": "b310ec19e879ebc26e79c1d556aa6112aee7ba92087f20a3022f7ad1a829fc8a",
+      "instances_sha256": "53cf62f33f232779cf1b801b7093106a06f3f569c79646dfa42b45eb4a8bd342"
+    },
+    {
+      "id": "tyrol-w7-x1024-y3072",
+      "region": "tyrol-w",
+      "group": "tyrol-w7.tif",
+      "split": "test",
+      "coordinate_space": "pixel",
+      "image": "images/tyrol-w/tyrol-w7-x1024-y3072.tif",
+      "labels": "labels/tyrol-w/tyrol-w7-x1024-y3072.tif",
+      "instances": "instances/tyrol-w/tyrol-w7-x1024-y3072.tif",
+      "source_split": "train",
+      "source_file": "tyrol-w/tyrol-w7-x1024-y3072.tif",
+      "pixel_origin": [
+        1024,
+        3072
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "0c85025408e3ac481e1e6ff774e0df9c5eedc8a19a41430978d5fbac93c4413d",
+      "labels_sha256": "13f09782954f79c7e9c91c6c5e75f401b012c414a9cab96032ecdd6e86d30421",
+      "instances_sha256": "143ca731baed94ead0b4b1045b38c1772dd7f52847b75804a62981d0ef47f060"
+    },
+    {
+      "id": "tyrol-w14-x3072-y3584",
+      "region": "tyrol-w",
+      "group": "tyrol-w14.tif",
+      "split": "test",
+      "coordinate_space": "pixel",
+      "image": "images/tyrol-w/tyrol-w14-x3072-y3584.tif",
+      "labels": "labels/tyrol-w/tyrol-w14-x3072-y3584.tif",
+      "instances": "instances/tyrol-w/tyrol-w14-x3072-y3584.tif",
+      "source_split": "train",
+      "source_file": "tyrol-w/tyrol-w14-x3072-y3584.tif",
+      "pixel_origin": [
+        3072,
+        3584
+      ],
+      "ground_sampling_distance_m": 0.3,
+      "image_sha256": "677bb95e8341c0e54cac00a922a1ad636d3bc913fe35b56eec24b3e4fec97af2",
+      "labels_sha256": "cb9590f293f22d4e0f36c94806bbccda35b79edab8a71499b36fa2b71ea6e963",
+      "instances_sha256": "57d3b0ae039d4fbffc2144d52f156a458c6271a4eec2b775d5c75eb2a362995f"
+    }
+  ],
+  "fingerprint": "3562257ab197b1f9e6541515a96b48c6d0aafb4160c0063080120ad8cdb01bd4"
+}

@@ -39,6 +39,8 @@ export default defineConfig({
         GEOFATHOM_IMAGERY_DIR:testImagery,
         GEOFATHOM_VISION_MODELS_DIR:resolve('..',testDatabase)+'.models',
         GEOFATHOM_BUILDING_RESULTS_DIR:resolve('..',testDatabase)+'.buildings',
+        GEOFATHOM_BUILDING_DATASETS_DIR:resolve('..',testDatabase)+'.building-datasets',
+        GEOFATHOM_BUILDING_RESEARCH_RESULTS_DIR:resolve('..',testDatabase)+'.building-research',
         GEOFATHOM_CORS_ORIGINS:'http://localhost:5173',
       },
     },

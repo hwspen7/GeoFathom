@@ -238,7 +238,8 @@ describe('GeoAI analysis controls',()=>{
     change('GeoAI administration token','admin');click('Run georeferenced analysis');
     await waitFor(()=>expect(api.queueGISJob).toHaveBeenCalledWith('p','building_extraction',{
       image_id:'scene',model_id:'buildings',probability_threshold:.6,minimum_area_m2:12,
-      full_resolution:true,memory_mb:32,max_pixels:16777216,aoi:polygon},'admin'));
+      full_resolution:true,memory_mb:64,max_pixels:16777216,aoi:polygon,
+      instance_mode:'connected',seed_distance:6},'admin'));
     await screen.findByText('0 building candidates · 0.0 m² retained area');
     click('Download probability.tif');
     await waitFor(()=>expect(api.downloadBuildingArtifact).toHaveBeenCalledWith('p','building-job','probability.tif'));

@@ -1,0 +1,160 @@
+{
+  "input": {
+    "recipe": "multi_line",
+    "vector_geojson": null,
+    "vector_attribute": "",
+    "vector_epsg": 4326,
+    "csv": "epoch,Training loss,Validation loss\r\n1,3.2926163574059806,2.2676928639411926\r\n2,2.97688361008962,2.106230854988098\r\n3,2.7240310311317444,1.949083924293518\r\n4,2.4823086261749268,1.7936761975288391\r\n5,2.204662655790647,1.64735609292984\r\n6,1.9733431835969288,1.5154078602790833\r\n7,1.7353756427764893,1.3863206803798676\r\n8,1.5343626042207081,1.2863056063652039\r\n9,1.3681755910317104,1.2295369803905487\r\n10,1.28837754825751,1.2104903757572174\r\n11,1.2232383042573929,1.2049586176872253\r\n12,1.2088921268781025,1.2032268941402435\r\n",
+    "rasters": [],
+    "x": "epoch",
+    "y": "",
+    "z": "",
+    "group": "",
+    "low": "",
+    "high": "",
+    "columns": [
+      "Training loss",
+      "Validation loss"
+    ],
+    "title": "Building head adaptation",
+    "x_label": "Epoch",
+    "y_label": "Composite segmentation loss",
+    "parameter": null,
+    "maximize_x": false,
+    "maximize_y": false,
+    "palette": "color",
+    "font": "sans",
+    "font_size": 10,
+    "grid": true,
+    "width_mm": 180.0,
+    "height_mm": 115.0,
+    "dpi": 300,
+    "format": "png",
+    "variogram_model": "none",
+    "variogram_view": "fit",
+    "kriging_max_distance_m": 500,
+    "kriging_neighbors": 24,
+    "spectral_mode": "angle",
+    "endmember_csv": "",
+    "endmember_index": 1,
+    "hydrology_mode": "observed",
+    "training_fraction": 0.7,
+    "model_validation": "recorded",
+    "block_size_m": 100,
+    "validation_buffer_m": 0,
+    "validation_folds": 5,
+    "ridge_penalty": 1,
+    "point_mode": "planar",
+    "voxel_size": 10,
+    "export_grid": false,
+    "spatial_inference": "statistic",
+    "permutations": 199,
+    "random_seed": 42,
+    "alpha": 0.05,
+    "response_style": "surface",
+    "contour_levels": 12,
+    "show_values": true,
+    "show_points": true,
+    "optimum": "none",
+    "profile_style": "series",
+    "map_style": "continuous",
+    "map_columns": null,
+    "map_common_mask": false,
+    "map_min": null,
+    "map_max": null,
+    "class_breaks": [],
+    "sequential_cmap": "default",
+    "map_decoration": "grid",
+    "line_width": 1.3,
+    "legend_position": "best"
+  },
+  "render": {
+    "recipe": "multi_line",
+    "method_note": "",
+    "input_count": 12,
+    "used_count": 12,
+    "raster_sources": [],
+    "family": "Statistics",
+    "source_type": "table",
+    "required_fields": [
+      "x",
+      "columns"
+    ],
+    "software": {
+      "numpy": "2.3.5",
+      "matplotlib": "3.10.8"
+    },
+    "series_valid_counts": [
+      12,
+      12
+    ],
+    "profile_style": "series",
+    "x_label": "Epoch",
+    "y_label": "Composite segmentation loss",
+    "omitted_count": 0,
+    "plot_table_rows": 12,
+    "layout": {
+      "canvas_pixels": [
+        708,
+        452
+      ],
+      "axes_bounds_normalized": [
+        [
+          0.006,
+          0.009,
+          0.995,
+          0.945
+        ]
+      ],
+      "potentially_clipped_axes": [],
+      "clipped_tick_text": [
+        {
+          "axis": 1,
+          "text": "14"
+        }
+      ],
+      "tick_overlaps": [],
+      "layout_check": "canvas and tick bounding-box preflight; visual review still required",
+      "preflight_passed": false,
+      "layout_attempts": [
+        {
+          "font_factor": 1.0,
+          "layout_warnings": [],
+          "collapsed_axes": false,
+          "unresolved": true
+        },
+        {
+          "font_factor": 0.9,
+          "layout_warnings": [],
+          "collapsed_axes": false,
+          "unresolved": true
+        },
+        {
+          "font_factor": 0.8,
+          "layout_warnings": [],
+          "collapsed_axes": false,
+          "unresolved": true
+        },
+        {
+          "font_factor": 0.7,
+          "layout_warnings": [],
+          "collapsed_axes": false,
+          "unresolved": true
+        }
+      ],
+      "typography_factor": 0.7,
+      "layout_frozen": true
+    },
+    "publication": {
+      "width_mm": 180.0,
+      "height_mm": 115.0,
+      "export_dpi": 300,
+      "format": "png",
+      "font_size_pt": 10,
+      "line_width_pt": 1.3,
+      "palette": "color"
+    }
+  },
+  "dataset_fingerprint": "3562257ab197b1f9e6541515a96b48c6d0aafb4160c0063080120ad8cdb01bd4",
+  "selection_sha256": "c779edbc81d46a993d167b1a3dc1ebc55e24db74f554ed65aa2a81fdfac71828"
+}

@@ -20,10 +20,39 @@ def object_metrics(predicted, truth, iou_threshold=.5):
     from scipy.optimize import linear_sum_assignment
     if not 0 < iou_threshold <= 1:
         raise ValueError("Invalid object IoU threshold.")
-    if len(predicted) > 100 or len(truth) > 10000:
+    if len(predicted) > 20000 or len(truth) > 20000:
         raise RasterError("Object evaluation exceeds the bounded matching budget.")
     matches = []
     if predicted and truth:
+        # Use sparse spatial candidates for dense scenes instead of allocating N×M matrices.
+        if len(predicted)*len(truth) > 1_000_000:
+            from shapely.strtree import STRtree
+            from scipy.sparse import csr_matrix
+            from scipy.sparse.csgraph import maximum_bipartite_matching
+            tree = STRtree(truth)
+            edges, scores = [], {}
+            for i, first in enumerate(predicted):
+                for j in tree.query(first, predicate="intersects"):
+                    second = truth[int(j)]
+                    union = first.union(second).area
+                    overlap = first.intersection(second).area/union if union else 0.
+                    if overlap >= iou_threshold:
+                        edges.append((i, int(j)))
+                        scores[(i, int(j))] = overlap
+                    if len(edges) > 1_000_000:
+                        raise RasterError("Object overlap graph exceeds the sparse matching budget.")
+            if edges:
+                rows, cols = zip(*edges)
+                graph = csr_matrix((np.ones(len(edges), np.uint8), (rows, cols)), shape=(len(predicted), len(truth)))
+                assignment = maximum_bipartite_matching(graph, perm_type="column")
+                matches = [scores[(i, int(j))] for i, j in enumerate(assignment) if j >= 0]
+            tp = len(matches)
+            fp, fn = len(predicted)-tp, len(truth)-tp
+            return {"iou_threshold": iou_threshold, "true_positive": tp, "false_positive": fp, "false_negative": fn,
+                "precision": tp/(tp+fp) if tp+fp else 0., "recall": tp/(tp+fn) if tp+fn else 0.,
+                "f1": 2*tp/(2*tp+fp+fn) if 2*tp+fp+fn else 0.,
+                "mean_matched_iou": float(np.mean(matches)) if matches else None,
+                "matching": "sparse maximum cardinality; matched-IoU ties are not optimized"}
         ious = np.zeros((len(predicted), len(truth)), np.float64)
         for i, first in enumerate(predicted):
             for j, second in enumerate(truth):

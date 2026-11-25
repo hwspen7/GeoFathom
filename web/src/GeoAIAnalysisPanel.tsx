@@ -1,6 +1,7 @@
 import {useEffect,useRef,useState} from 'react';
 import {BrainCircuit,Database,Layers3} from 'lucide-react';
 import ScientificFigureStudio from './ScientificFigureStudio';
+import BuildingResearchPanel from './BuildingResearchPanel';
 import {
   getGISJob,getVisionModels,listImagery,queueGISJob,saveFeatureBatch,
   cancelGISJob,downloadBuildingArtifact,
@@ -41,6 +42,9 @@ export default function GeoAIAnalysisPanel(p:Props){
   const [buildingThreshold,setBuildingThreshold]=useState(.5);
   const [minimumArea,setMinimumArea]=useState(4);
   const [useStudyArea,setUseStudyArea]=useState(false);
+  const [instanceMode,setInstanceMode]=useState<'connected'|'watershed'>('connected');
+  const [seedDistance,setSeedDistance]=useState(6);
+  const [researchOpen,setResearchOpen]=useState(false);
   const [afterImageId,setAfterImageId]=useState('');
   const [maxSide,setMaxSide]=useState(512);
   const [fullResolution,setFullResolution]=useState(false);
@@ -109,6 +113,7 @@ export default function GeoAIAnalysisPanel(p:Props){
     const payload:Record<string,unknown>=buildingMode?{
       image_id:p.image!.id,model_id:modelId,probability_threshold:buildingThreshold,
       minimum_area_m2:minimumArea,full_resolution:true,memory_mb:memoryBudget,
+      instance_mode:instanceMode,seed_distance:seedDistance,
       max_pixels:maxPixels,...(useStudyArea&&polygonArea?{aoi:polygonArea}:{}),
     }:operation==='stac_ndvi'?
       {collection:stacCollection,item_id:stacItemId,
@@ -210,7 +215,10 @@ export default function GeoAIAnalysisPanel(p:Props){
         <select aria-label="GeoAI analysis operation" value={operation} disabled={processing}
           onChange={event=>{
             const next=event.target.value as Operation;setOperation(next);
-            if(next==='building_extraction')setModelId(models?.models.find(item=>item.task==='building_extraction')?.id||'');
+            if(next==='building_extraction'){
+              setModelId(models?.models.find(item=>item.task==='building_extraction')?.id||'');
+              setMemoryBudget(value=>Math.max(value,64));
+            }
           }}>
           <option value="building_extraction">AI building footprint extraction</option>
           <option value="spectral_index">Spectral index regions (NDVI / NDWI)</option>
@@ -301,12 +309,20 @@ export default function GeoAIAnalysisPanel(p:Props){
               <input aria-label="Minimum building footprint area" type="number" min={0} max={100000}
                 value={minimumArea} onChange={e=>setMinimumArea(Number(e.target.value))}/>
             </label>
+            <label>Building separation<select aria-label="Building instance separation" value={instanceMode}
+              onChange={e=>setInstanceMode(e.target.value as typeof instanceMode)}>
+              <option value="watershed">Experimental instances · boundary / distance watershed</option>
+              <option value="connected">Connected foreground regions</option>
+            </select></label>
+            {instanceMode==='watershed'&&<label>Minimum seed spacing (pixels)
+              <input aria-label="Building instance seed spacing" type="number" min={1} max={64} value={seedDistance}
+                onChange={e=>setSeedDistance(Number(e.target.value))}/></label>}
             <label><input aria-label="Limit buildings to selected study area" type="checkbox"
               disabled={!polygonArea} checked={useStudyArea}
               onChange={e=>setUseStudyArea(e.target.checked)}/> Use selected polygon as study area</label>
             <p className="project-hint">Use high-resolution RGB aerial or satellite imagery.
               Footprints retain native pixels, holes and geographic coordinates.
-              Touching buildings may form one candidate region.</p>
+              Review instance boundaries for merged or over-separated roofs.</p>
             {!visibleModels.length&&<p className="compact-notice">No building model is installed. Install the supported public model using the setup command in the building extraction guide.</p>}
           </>:<label>Minimum model confidence
             <input aria-label="Minimum model confidence" type="number" step=".05"
@@ -402,6 +418,9 @@ export default function GeoAIAnalysisPanel(p:Props){
         </>}
         {message&&<p className="project-info">{message}</p>}
         {error&&<p className="discovery-error">{error}</p>}
+        {buildingMode&&<><button aria-expanded={researchOpen} onClick={()=>setResearchOpen(old=>!old)}>Model training and validation</button>
+          {researchOpen&&<BuildingResearchPanel projectId={p.projectId} token={token} models={visibleModels}
+            onInstalled={()=>{void getVisionModels().then(setModels).catch(cause=>setError(String(cause.message??cause)));}}/>}</>}
         {figuresOpen&&result&&<ScientificFigureStudio onClose={()=>setFiguresOpen(false)}
           source={{name:'Building footprint candidates',vectors:result,
             csv:['building_id,area_m2,perimeter_m,mean_building_probability,compactness,pixel_count',

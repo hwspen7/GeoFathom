@@ -936,6 +936,8 @@ export interface VisionModel {
   input_scale:number; mean:number[]; std:number[]; description:string;
   runtime:string;
   task?:'semantic_segmentation'|'building_extraction';
+  trainable?:boolean;
+  boundary_channel?:number|null;distance_channel?:number|null;
 }
 export interface VisionModels {
   models:VisionModel[]; runtime_available:boolean;device:string;note:string;
@@ -956,7 +958,7 @@ export function getVisionModels():Promise<VisionModels>{
 
 export type GISJobKind='topology_qa'|'spatial_select'|'export_geojson'|
   'postgis_sync'|'rebuild_index'|'spectral_index'|'spectral_change'|
-  'semantic_segmentation'|'building_extraction'|'stac_ndvi'|'vector_import'|'vector_export'|'remote_windowed'|'remote_cube'|'remote_model_train'|'remote_model_predict'|'remote_model_evaluate'|'remote_experiment';
+  'semantic_segmentation'|'building_extraction'|'building_train'|'building_compare'|'stac_ndvi'|'vector_import'|'vector_export'|'remote_windowed'|'remote_cube'|'remote_model_train'|'remote_model_predict'|'remote_model_evaluate'|'remote_experiment';
 export interface GISJob {
   id:string;project_id:string;kind:GISJobKind;
   status:'queued'|'running'|'completed'|'failed'|'cancelled'|'interrupted';
@@ -994,6 +996,20 @@ export async function downloadBuildingArtifact(projectId:string,id:string,asset:
     const link=document.createElement('a');link.href=url;link.download=asset;
     document.body.appendChild(link);link.click();link.remove();
   }finally{window.setTimeout(()=>URL.revokeObjectURL(url),1000);}
+}
+export interface BuildingDataset {id:string;counts:{train:number;validation:number;test:number};regions:Record<string,string[]>;provenance?:Record<string,unknown>}
+export interface BuildingResearchCatalog {datasets:BuildingDataset[];training_runtime_available:boolean;test_policy:string}
+export function getBuildingResearch(token:string):Promise<BuildingResearchCatalog>{
+  return request('/vision/buildings/research',{headers:{'X-GeoFathom-Admin-Token':token}});
+}
+export function uploadBuildingStudy(file:File,token:string):Promise<BuildingDataset>{
+  const body=new FormData();body.append('file',file);
+  return request('/vision/buildings/datasets',{method:'POST',body,headers:{'X-GeoFathom-Admin-Token':token}});
+}
+export function installBuildingModel(project:string,job:string,token:string):Promise<{model_id:string;installed:boolean}>{
+  return request('/projects/'+encodeURIComponent(project)+'/jobs/'+encodeURIComponent(job)+'/install-building-model',{
+    method:'POST',headers:{'X-GeoFathom-Admin-Token':token},
+  });
 }
 export async function downloadGISJob(projectId:string,id:string):Promise<void>{
   const response=await rawRequest('/projects/'+encodeURIComponent(projectId)+
