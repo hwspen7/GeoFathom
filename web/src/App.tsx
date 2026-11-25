@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent, type SyntheticEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import {createPortal} from 'react-dom';
 import {
   ArrowRight, Compass, Globe2, Layers3, MapPin, Maximize2, Minimize2,
@@ -142,8 +142,7 @@ export default function App() {
   const [projectActionsTarget,setProjectActionsTarget]=useState<HTMLDivElement|null>(null);
   const [terrainExportTarget,setTerrainExportTarget]=useState<HTMLDivElement|null>(null);
   const [objectTreeTarget,setObjectTreeTarget]=useState<HTMLDivElement|null>(null);
-  const [objectsOpen,setObjectsOpen]=useState(true);
-  const objectCapacity=()=>Math.max(1,Math.min(6,Math.floor((window.innerHeight-580)/28)));
+  const objectCapacity=()=>Math.max(1,Math.min(6,Math.floor((window.innerHeight-650)/28)));
   const [gisObjectCapacity,setGisObjectCapacity]=useState(objectCapacity);
   useEffect(()=>{const resize=()=>setGisObjectCapacity(objectCapacity());window.addEventListener('resize',resize);return()=>window.removeEventListener('resize',resize);},[]);
   const [shortcutHelp,setShortcutHelp]=useState(false);
@@ -554,7 +553,6 @@ export default function App() {
       return;
     }
     setShowTools(true);setActiveTool(id);if(id!=='tools-terrain'){setTerrainPicking(false);setTerrainHover(null);}
-    setObjectsOpen(!['tools-terrain','tools-spatial-science','tools-remote-sensing','tools-network-science','tools-spacetime','tools-lidar'].includes(id));
     // Tool activation, including keyboard shortcuts, dismisses the transient
     // drawer so it cannot intercept input intended for the operations dock.
     // Its project/search state stays mounted and the selected place is retained.
@@ -563,7 +561,7 @@ export default function App() {
     // the outer document and can move the central map off-screen when a
     // long Terrain chart is active.
     requestAnimationFrame(()=>{
-      const scroll=document.querySelector<HTMLElement>('.gis-inspector .sidebar-scroll');
+      const scroll=document.querySelector<HTMLElement>('.gis-inspector .workspace-module-content');
       if(scroll)scroll.scrollTop=0;
     });
   }
@@ -1238,11 +1236,8 @@ export default function App() {
   if(networkVisible)addVectorLegend(networkResults,'Network','#287aa1');
   namedLegend.push(...vectorLegend.values());
   if(terrainProfileLine)namedLegend.push({id:'profile-line',name:'Profile measurement line',color:'#d26b2f'});
-  // All modules share the compact object browser. Terrain keeps its
-  // dedicated browser/tools switch so the fixed analysis inputs can fit.
-  const gisFlat=activeTool==='tools-gis'||activeTool==='tools-survey';
-  const flatObjects=activeTool!=='tools-terrain';
-  const ObjectsContainer=flatObjects?'section':'details';
+  // Keep the object portal host stable across navigation; only module tools change.
+  const gisFlat=['tools-gis','tools-survey','tools-spatial'].includes(activeTool);
   const GeometryContainer=gisFlat?'section':'details';
   return (
     <div className="workspace desktop-gis">
@@ -1367,7 +1362,6 @@ export default function App() {
               objectGroups={[{id:'local-drawings',name:'Local drawings',items:scratch,
                 selectedId:scratchId,onOpen:id=>{const item=scratch.find(f=>f.id===id);if(item){
                   setScratch(old=>old.map(f=>f.id===id?{...f,visible:true}:f));selectScratch({...item,visible:true});
-                  if(activeTool==='tools-terrain')setObjectsOpen(false);
                 }},
                 onRename:async(id,name)=>{setScratch(old=>old.map(item=>item.id===id?{...item,name}:item));setMessage('Local drawing renamed · Ctrl Z to undo.');},
                 onDelete:async id=>removeLocal(id)}]}
@@ -1431,7 +1425,7 @@ export default function App() {
                 setProjectWorkspace(data);
                 setActiveProjectId(id);
               }}
-              onOpen={feature=>{openStoredFeature(feature);if(activeTool==='tools-terrain')setObjectsOpen(false);}}
+              onOpen={openStoredFeature}
               onSavedDraft={()=>{if(scratchId)setScratchState(scratchHistory.current!.checkpoint(scratchHistory.current!.current.filter(f=>f.id!==scratchId)));setScratchId(null);}}
               onFeatureDeleted={deselect}
               onPlaceAnnotation={(projectId,layerId,text)=>{
@@ -1798,18 +1792,14 @@ export default function App() {
 
         </main>
         <aside className="gis-inspector gis-operations" data-active-module={activeTool}
-          data-object-browser={activeTool==='tools-terrain'&&objectsOpen?'true':'false'}
           aria-label="Operations">
           <div className={'sidebar-scroll'+(['tools-services','tools-export'].includes(activeTool)?' data-fixed-operations':'')}
             tabIndex={0} aria-label="Operations scrolling region">
-          <ObjectsContainer className="workspace-objects" hidden={['tools-services','tools-export'].includes(activeTool)}
-            {...(flatObjects?{}:{open:objectsOpen,onToggle:(event:SyntheticEvent<HTMLElement>)=>setObjectsOpen((event.currentTarget as HTMLDetailsElement).open)})}>
-            {flatObjects?<h3 className="gis-static-heading">Objects</h3>:<summary>Objects{activeTool==='tools-terrain'&&!objectsOpen&&<small className="workspace-object-current">
-              {selectedSaved?.name??scratch.find(item=>item.id===scratchId)?.name??selectedPlace?.name??'Choose an object'}
-            </small>}</summary>}
-            {activeTool==='tools-terrain'&&objectsOpen&&<button type="button" className="workspace-object-back"
-              onClick={()=>setObjectsOpen(false)}>Back to terrain tools</button>}
+          <section className="workspace-objects" hidden={['tools-services','tools-export'].includes(activeTool)}>
+            <h3 className="gis-static-heading">Objects</h3>
             <div ref={setObjectTreeTarget}/>
+          </section>
+          <div className="workspace-module-content">
             {geometry&&<GeometryContainer className="geometry-edit-controls">
               {!gisFlat&&<summary>Geometry / vertices</summary>}
               <BoundaryEditor compact={gisFlat} geometry={geometry} sourcePlace={selectedPlace} selectedParcel={selectedParcel}
@@ -1828,8 +1818,6 @@ export default function App() {
                   catch(e){setError(e instanceof Error?e.message:String(e));}
                 }}/>
             </GeometryContainer>}
-
-          </ObjectsContainer>
           {resultsTarget&&['tools-survey','tools-services'].includes(activeTool)&&
             (networkAreas?.count??0)>0&&createPortal(
             <section className="panel-section data-network-results" aria-label="Independent enclosed areas">
@@ -2178,7 +2166,6 @@ export default function App() {
           </section>
 
           <section id="tools-spatial" hidden={activeTool!=='tools-spatial'} className="panel-section">
-            <div className="section-heading"><Layers3 size={16}/><span>Geometry processing</span></div>
             <GeometryAnalysis geometry={preview||drawingMode?null:geometry} selectedId={selectedFeatureId??scratchId}
               features={[...scratch,...(projectWorkspace?.features??[])]} connected={Boolean(capabilities)}
               onResult={(g,measured,name)=>{
@@ -2188,7 +2175,6 @@ export default function App() {
                 lastValid.current=structuredClone(g);timeline.current=new GeometryTimeline();timeline.current.push(g);setHistoryPulse(v=>v+1);
                 setGeometrySource('GIS geometry analysis');setFeatureProperties({source_type:'spatial_operation',operation:name});setMessage(name+' created as a new local feature.');
               }}/>
-            <div className="section-heading"><Layers3 size={16}/><span>GIS selection, QA & print layout</span></div>
             <SpatialToolsPanel
               resultsTarget={resultsTarget} active={activeTool==='tools-spatial'}
               key={activeProjectId ?? 'no-project'}
@@ -2300,6 +2286,7 @@ export default function App() {
           </section>
 
 
+          </div>
           </div>
           <div className="workspace-fixed-footer" ref={setOperationsFooterTarget}/>
         </aside>

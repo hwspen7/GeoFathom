@@ -2081,3 +2081,47 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .workspace-object-row .workspace-object-rename .object-rename-confirm{color:#28764f}
 .workspace-object-row .workspace-object-rename button:not(:disabled):hover{background:#e4eef4}
 .workspace-object-row .workspace-object-rename button:disabled{opacity:.4;cursor:default}
+
+/* One stationary object browser above the active module; only tools can scroll
+   when a small viewport or an unusually long form requires overflow access. */
+.desktop-gis .gis-operations>.sidebar-scroll:not(.data-fixed-operations){display:flex;flex-direction:column;overflow:hidden!important;padding:6px 10px 7px}
+.desktop-gis .gis-operations .workspace-objects{flex:none;padding:0 0 5px;margin:0 0 4px}
+.desktop-gis .gis-operations .workspace-module-content{flex:1 1 auto;min-height:0;min-width:0;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;scroll-behavior:auto;overscroll-behavior:contain}
+.desktop-gis .gis-operations .workspace-module-content::-webkit-scrollbar{display:none}
+.desktop-gis .data-fixed-operations>.workspace-module-content{display:flex;flex-direction:column;overflow:hidden}
+.desktop-gis .data-fixed-operations>.workspace-module-content>.panel-section:not([hidden]){display:flex;flex-direction:column;flex:1;min-height:0;border:0;padding:0;margin:0}
+.desktop-gis .data-fixed-operations>.workspace-module-content>.geometry-edit-controls{display:none}
+.desktop-gis .gis-operations .compact-object-list{align-content:start;grid-auto-rows:minmax(26px,auto)}
+.desktop-gis .gis-operations .compact-object-row{min-height:26px}
+.desktop-gis .gis-operations[data-active-module="tools-terrain"] .terrain-control-page:not([hidden]){overflow:visible;flex:none}
+.desktop-gis .gis-operations[data-active-module="tools-terrain"] .terrain-workbench{flex:none}
+.desktop-gis [data-active-module="tools-gis"] #tools-gis,.desktop-gis [data-active-module="tools-spatial"] #tools-spatial{padding:0;margin:0;border:0}
+.desktop-gis [data-active-module="tools-gis"] .gis-tool-group,.analysis-tool-group{padding:9px 0;margin:0;border:0;border-bottom:1px solid #dce5eb;background:transparent}
+.desktop-gis [data-active-module="tools-gis"] .gis-tool-heading,.analysis-tool-heading{display:flex;align-items:center;gap:6px;font-size:12px;line-height:17px;font-weight:650;color:#3c5b70;margin:0 0 7px;padding:0}
+.analysis-tool-heading small{margin-left:auto;font-size:10px;font-weight:500;color:#637b8d}
+.desktop-gis [data-active-module="tools-gis"] .gis-tool-group .professional-form,.analysis-tool-group .professional-form{gap:6px;margin-top:0}
+.desktop-gis [data-active-module="tools-gis"] .professional-form .area-fields,.analysis-tool-group .area-fields{gap:6px}
+.desktop-gis [data-active-module="tools-gis"] .professional-form input:not([type=file]),.desktop-gis [data-active-module="tools-gis"] .professional-form select,.analysis-tool-group input:not([type=checkbox]),.analysis-tool-group select{box-sizing:border-box;min-height:30px;height:30px;min-width:0;padding:4px 7px;font-size:11px;border-radius:4px}
+.desktop-gis [data-active-module="tools-gis"] .professional-form button,.desktop-gis [data-active-module="tools-gis"] .gis-file-row .raster-upload,.analysis-tool-group button{min-height:30px;height:30px;padding:4px 6px;font-size:11px;border-radius:4px}
+.desktop-gis [data-active-module="tools-gis"] .gis-edit-header{margin-top:5px}
+.desktop-gis [data-active-module="tools-spatial"] .professional-panel{gap:0}
+.analysis-inline,.analysis-tool-group .professional-form.analysis-inline{display:flex;flex-direction:row;align-items:center;justify-content:space-between;gap:6px}
+.analysis-inline-label{display:flex;flex:1;min-width:0;align-items:center;gap:5px;font-size:10px;white-space:nowrap}
+.analysis-inline-label input{flex:1;width:0}
+.analysis-inline>button{flex:none;white-space:nowrap}
+.analysis-tool-group .survey-action-bar{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px}
+.analysis-tool-group .analysis-four-actions{grid-template-columns:repeat(4,minmax(0,1fr))}
+.analysis-tool-group .analysis-four-actions button{padding:3px 1px;font-size:10px}
+.analysis-tool-group .professional-form .analysis-print-fields{grid-template-columns:repeat(3,minmax(0,1fr))}
+.analysis-print-fields label{min-width:0}
+.analysis-print-fields select{width:100%;padding:3px 2px;font-size:10px}
+.analysis-inline .linked-vertex-toggle{font-size:10px;white-space:nowrap;gap:4px}
+.analysis-inline .linked-vertex-toggle input{width:13px;height:13px;margin:0}
+.desktop-gis [data-active-module="tools-spatial"] .geometry-edit-controls{margin:0;padding:4px 0;border:0}
+.desktop-gis [data-active-module="tools-spatial"] .compact-boundary{margin:0;padding:0;gap:4px;border:0}
+@media(max-height:760px){
+ .desktop-gis [data-active-module="tools-gis"] .gis-tool-group,.analysis-tool-group{padding:6px 0}
+ .desktop-gis [data-active-module="tools-gis"] .gis-tool-heading,.analysis-tool-heading{margin-bottom:5px}
+ .analysis-tool-group .professional-form{gap:4px}
+ .analysis-tool-group button,.analysis-tool-group input:not([type=checkbox]),.analysis-tool-group select{height:28px;min-height:28px}
+}

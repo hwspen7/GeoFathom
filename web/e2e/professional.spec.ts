@@ -46,8 +46,6 @@ test('professional spatial QA detects overlap and prints a valid real PDF',async
   await page.reload();
   await expect(page.getByLabel('Active project')).toHaveValue(id);
   await activateWorkspaceModule(page,'Analysis');
-  await page.locator('details').filter({hasText:'Topology quality inspection'})
-    .locator('summary').click();
   await page.getByLabel('Run topology QA').click();
   await expect(page.getByLabel('Topology QA results')).toContainText('overlap');
   await expect(page.getByLabel('Results monitor').getByLabel('Topology QA results')).toBeVisible();
@@ -56,8 +54,6 @@ test('professional spatial QA detects overlap and prints a valid real PDF',async
   }});
   expect(api.status()).toBe(200);
   expect((await api.json()).counts.overlap).toBeGreaterThan(0);
-  await page.locator('details').filter({hasText:'PDF print layout'})
-    .locator('summary').click();
   await page.getByLabel('PDF map title').fill('Engineering Parcel Map');
   await page.getByLabel('PDF paper').selectOption('a3');
   const downloaded=page.waitForEvent('download');
@@ -141,8 +137,6 @@ test('drawing selection rectangle selects actual saved map features',async({page
   const map=page.getByLabel('Interactive geospatial map');
   await expect(map).toHaveAttribute('data-label-layer-ready','true',{timeout:25000});
   await activateWorkspaceModule(page,'Analysis');
-  await page.locator('details').filter({hasText:'Select by location'})
-    .locator('summary').click();
   await page.getByLabel('Draw selection rectangle').click();
   const rect=await map.boundingBox();
   expect(rect).not.toBeNull();

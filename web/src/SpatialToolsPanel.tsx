@@ -87,14 +87,14 @@ export default function SpatialToolsPanel(p:Props){
         </div>}
   </div>;
   return <div className="professional-panel">
-    <details>
-      <summary><MousePointer2 size={14}/> Select by location · {p.selectedIds.length} selected</summary>
+    <section className="analysis-tool-group" aria-label="Select by location">
+      <h3 className="analysis-tool-heading"><MousePointer2 size={13}/> Selection <small>{p.selectedIds.length} selected</small></h3>
       <div className="professional-form">
         <div className="area-fields">
           <select aria-label="Selection area mode" value={selectionSource}
             onChange={e=>setSelectionSource(e.target.value as typeof selectionSource)}>
-            <option value="box">Rectangle from map drag</option>
-            <option value="geometry">Current geometry / polygon lasso</option>
+            <option value="box">Rectangle</option>
+            <option value="geometry">Current geometry</option>
           </select>
           <select aria-label="Spatial relationship" value={relation}
             onChange={e=>setRelation(e.target.value as SpatialRelation)}>
@@ -105,16 +105,15 @@ export default function SpatialToolsPanel(p:Props){
             <option value="crosses">Crosses</option>
           </select>
         </div>
-        {selectionSource==='box'?<button aria-label="Draw selection rectangle"
+        <div className="analysis-inline">{selectionSource==='box'?<button aria-label="Draw selection rectangle"
           disabled={busy||!p.projectId} onClick={()=>{
             p.onBoxMode(!p.boxMode);if(!p.boxMode)p.onBox(null);
           }} className={p.boxMode?'active':''}><Square size={14}/>
-          {p.boxMode?'Drag on map to select area':'Draw map rectangle'}</button>:
-          <p className="project-hint">Draw a polygon with the survey tools and use it as a lasso.</p>}
-        <label className="linked-vertex-toggle">
+          {p.boxMode?'Drag on map':'Draw rectangle'}</button>:null}
+        <label className="linked-vertex-toggle" title="Only select features on visible layers">
           <input aria-label="Only visible layers" type="checkbox" checked={visible}
-            onChange={e=>setVisible(e.target.checked)}/> Visible layers only
-        </label>
+            onChange={e=>setVisible(e.target.checked)}/> Visible only
+        </label></div>
         <div className="survey-action-bar">
           <button aria-label="Select spatial matches" disabled={!p.projectId||busy||!selectedGeometry}
             onClick={()=>void execute(select)}>Select matches</button>
@@ -124,68 +123,60 @@ export default function SpatialToolsPanel(p:Props){
         </div>
 
       </div>
-    </details>
-    <details>
-      <summary><AlertTriangle size={14}/> Topology quality inspection</summary>
-      <div className="professional-form">
-        <label>Minimum overlap / gap (m²)
+    </section>
+    <section className="analysis-tool-group" aria-label="Topology quality inspection">
+      <h3 className="analysis-tool-heading"><AlertTriangle size={13}/> Topology</h3>
+      <div className="professional-form analysis-inline">
+        <label className="analysis-inline-label" title="Minimum overlap or gap area in square meters">Min. m²
           <input aria-label="Topology threshold" type="number" min="0" step=".01"
             value={threshold} onChange={e=>setThreshold(Number(e.target.value))}/>
         </label>
-        <p className="project-hint">Check duplicate and overlapping polygons,
-          uncovered gaps inside a chosen polygon study area and dangling line endpoints.
-          Results are diagnostic and do not modify geometry.</p>
-        <button aria-label="Run topology QA" disabled={busy||!p.projectId}
-          onClick={()=>void execute(quality)}>Analyze topology</button>
-
+        <button aria-label="Run topology QA" title="Check duplicate polygons, overlaps, gaps and dangling endpoints without modifying geometry" disabled={busy||!p.projectId}
+          onClick={()=>void execute(quality)}>Analyze</button>
       </div>
-    </details>
-    <details>
-      <summary><Download size={14}/> PDF print layout</summary>
+    </section>
+    <section className="analysis-tool-group" aria-label="PDF print layout">
+      <h3 className="analysis-tool-heading"><Download size={13}/> PDF layout</h3>
       <form className="professional-form" onSubmit={event=>{
         event.preventDefault();void execute(print);
       }}>
-        <label>Map title
-          <input aria-label="PDF map title" value={title} maxLength={120}
+        <input aria-label="PDF map title" placeholder="Map title" value={title} maxLength={120}
             onChange={e=>setTitle(e.target.value)}/>
-        </label>
-        <div className="area-fields">
-          <label>Paper
+        <div className="area-fields analysis-print-fields">
+          <label title="Paper size">
             <select aria-label="PDF paper" value={paper}
               onChange={e=>setPaper(e.target.value as typeof paper)}>
               <option value="a4">A4</option><option value="a3">A3</option>
               <option value="letter">US Letter</option>
             </select>
           </label>
-          <label>Orientation
+          <label title="Orientation">
             <select aria-label="PDF orientation" value={orientation}
               onChange={e=>setOrientation(e.target.value as typeof orientation)}>
               <option value="landscape">Landscape</option>
               <option value="portrait">Portrait</option>
             </select>
           </label>
-          <label>Extent
+          <label title="Map extent">
             <select aria-label="PDF extent" value={coverage}
               onChange={e=>setCoverage(e.target.value as typeof coverage)}>
-              <option value="all">All visible features</option>
-              <option value="viewport">Map viewport</option>
+              <option value="all">All visible</option>
+              <option value="viewport">Viewport</option>
             </select>
           </label>
         </div>
-        <label className="linked-vertex-toggle">
+        <div className="analysis-inline analysis-print-actions"><label className="linked-vertex-toggle">
           <input aria-label="PDF include grid" type="checkbox" checked={grid}
-            onChange={e=>setGrid(e.target.checked)}/> Coordinate grid
+            onChange={e=>setGrid(e.target.checked)}/> Grid
         </label>
         <label className="linked-vertex-toggle">
           <input aria-label="PDF include legend" type="checkbox" checked={legend}
-            onChange={e=>setLegend(e.target.checked)}/> Layer legend
+            onChange={e=>setLegend(e.target.checked)}/> Legend
         </label>
         <button aria-label="Export vector PDF" disabled={!p.projectId||busy||!title.trim()}
-          type="submit"><Download size={14}/> Export vector PDF</button>
-        <p className="project-hint">Vector geometries, geographic grid, north arrow,
-          metric scale, timestamp and visible-layer legend; no unlicensed basemap.</p>
+          type="submit" title="Export vector PDF with scale, north arrow and selected layout"><Download size={12}/> Export</button></div>
       </form>
-    </details>
+    </section>
     {notice&&<p className="project-info">{notice}</p>}
     {error&&<p className="discovery-error">{error}</p>}
     {p.resultsTarget?(p.active&&(result||issueCount!==null)?createPortal(resultPanel,p.resultsTarget):null):resultPanel}

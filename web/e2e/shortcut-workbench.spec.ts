@@ -125,7 +125,7 @@ test('GIS tools and object browser stay open without collapsible sections',async
   await expect(tools.getByRole('button',{name:/Analyze selected/})).toBeInViewport({ratio:1});
   await expect(tools.getByLabel('GIS export format')).toBeInViewport({ratio:1});
   await expect(tools.getByLabel('Boundary longitude')).toBeInViewport({ratio:1});
-  const region=tools.getByLabel('Operations scrolling region');
+  const region=tools.locator('.workspace-module-content');
   await expect.poll(()=>region.evaluate(e=>e.scrollHeight-e.clientHeight)).toBeLessThanOrEqual(1);
  }
 });
@@ -183,4 +183,32 @@ test('Survey uses flat compact sections and keeps every construction control acc
   await expect(survey.getByRole('button',{name:'Intersect'})).toBeInViewport({ratio:1});
  }
  await expect(survey.getByRole('button',{name:'Union'})).toBeDisabled();
+});
+
+test('Analysis has flat sections and the same persistent Objects host',async({page})=>{
+ await page.setViewportSize({width:1680,height:900});
+ await page.route('**/tile.openstreetmap.org/**',r=>r.fulfill({contentType:'image/png',body:tile}));
+ await page.goto('/');
+ const nav=page.getByRole('navigation',{name:'Workspace tools'});
+ const objects=page.locator('.workspace-objects');
+ const filter=objects.getByLabel('Filter project features');
+ await filter.fill('persistent search');
+ const before=await objects.boundingBox();
+ await filter.evaluate(el=>el.setAttribute('data-test-persistent-host','true'));
+ for(const name of ['GIS','Analysis','Terrain','Spatial','Network','Temporal','LiDAR','Sensing','Raster','Mapping','Assistant','Survey']){
+  await nav.getByRole('button',{name,exact:true}).click();
+  await expect(filter).toHaveValue('persistent search');
+  await expect(filter).toHaveAttribute('data-test-persistent-host','true');
+  const current=(await objects.boundingBox())!;
+  expect(Math.abs(current.y-before!.y)).toBeLessThanOrEqual(1);
+  expect(Math.abs(current.x-before!.x)).toBeLessThanOrEqual(1);
+  expect(Math.abs(current.height-before!.height)).toBeLessThanOrEqual(1);
+ }
+ await filter.fill('');
+ await nav.getByRole('button',{name:'Analysis',exact:true}).click();
+ const analysis=page.locator('#tools-spatial');
+ await expect(analysis.locator('details,summary')).toHaveCount(0);
+ for(const label of ['Buffer distance','Selection area mode','Topology threshold','PDF map title','PDF paper','PDF orientation','PDF extent'])
+  await expect(analysis.getByLabel(label,{exact:true})).toBeVisible();
+ await expect(analysis.getByRole('button',{name:'Export vector PDF'})).toBeInViewport({ratio:1});
 });

@@ -37,7 +37,6 @@ with tempfile.TemporaryDirectory() as directory:
  await page.getByRole('button',{name:'Get DEM',exact:true}).click();
  await page.getByLabel('DEM elevation layer').selectOption(fixture.id);
  await page.getByLabel('Confirm DEM meter elevations').check();
- await page.locator('.workspace-objects > summary').click();
  await page.getByRole('button',{name:/DEM study area/}).click();
  await expect(page.getByLabel('DEM fetch area')).toHaveValue('selection');
  await expect(page.getByLabel('DEM download target')).toContainText('Selected geometry');
@@ -279,7 +278,6 @@ with tempfile.TemporaryDirectory() as directory:
  await page.getByRole('button',{name:'Get DEM',exact:true}).click();
  await page.getByLabel('DEM elevation layer').selectOption(fixture.id);
  await page.getByLabel('Confirm DEM meter elevations').check();
- await page.locator('.workspace-objects > summary').click();
  await page.getByLabel('Filter project features').fill('DEM profile line');
  await page.getByRole('button',{name:/DEM profile line/}).click();
  await page.getByRole('button',{name:'Browse terrain tools',exact:true}).click();

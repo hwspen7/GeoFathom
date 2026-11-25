@@ -90,11 +90,18 @@ describe('shared research workbench chrome',()=>{
   const layers=features.map(f=>({id:f.layer_id,name:'Layer '+f.id,visible:true}));
   const {container}=render(<WorkspaceFeatureTree layers={layers} features={features} selectedId={null} pageSize={6} alwaysOpen onOpen={vi.fn()} onRename={vi.fn()} onDelete={vi.fn()}/>);
   expect(container.querySelectorAll('.compact-object-row')).toHaveLength(6);
+  const height=container.querySelector<HTMLElement>('.compact-object-list')!.style.minHeight;
+  expect(height).toBe('166px');
   expect(container.querySelectorAll('details,.workspace-object-type')).toHaveLength(0);
   expect(screen.getAllByRole('button',{name:'Rename object'})).toHaveLength(6);
   fireEvent.click(screen.getByRole('button',{name:'Next objects'}));
   expect(container.querySelectorAll('.compact-object-row')).toHaveLength(1);
+  expect(container.querySelector<HTMLElement>('.compact-object-list')!.style.minHeight).toBe(height);
   expect(screen.getByRole('button',{name:'Compact 6'})).toBeDefined();
+  fireEvent.change(screen.getByRole('searchbox',{name:'Filter project features'}),{target:{value:'no matching feature'}});
+  expect(container.querySelector<HTMLElement>('.compact-object-list')!.style.minHeight).toBe(height);
+  expect(screen.getByRole('button',{name:'Previous objects'}).hasAttribute('disabled')).toBe(true);
+  expect(screen.getByRole('button',{name:'Next objects'}).hasAttribute('disabled')).toBe(true);
  });
  it('bounds the entire object list across many layers and searches beyond the current page',()=>{
   const open=vi.fn();

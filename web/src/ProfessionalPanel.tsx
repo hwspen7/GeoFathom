@@ -198,13 +198,12 @@ export default function ProfessionalPanel({
           </div>
           <input aria-label="New attribute value" placeholder="New value" value={editValue}
               onChange={e=>setEditValue(e.target.value)}/>
-          <p className="project-hint">Changes are atomic, versioned, and rejected on locked layers.</p>
         </form>
       </section>
       <section className="gis-tool-group" aria-label="GIS file import / export">
-        <h3 className="gis-tool-heading"><Database size={14}/> GIS file import / export</h3>
+        <h3 className="gis-tool-heading"><Database size={14}/> Import / Export</h3>
         <div className="professional-form gis-file-row">
-          <label className="raster-upload" title="Import GIS file"><FileUp size={12}/> Import
+          <label className="raster-upload" title="Import GIS file · up to 100 features · transformed to WGS84"><FileUp size={12}/> Import
             <input aria-label="Import GIS vector file" disabled={busy||!projectId}
               type="file" accept=".geojson,.gpkg,.kml,.gpx,.zip"
               onChange={e=>void upload(e)}/>
@@ -216,20 +215,18 @@ export default function ProfessionalPanel({
               <option value="kml">KML</option><option value="gpx">GPX</option>
               <option value="shapefile">Shapefile ZIP</option>
             </select>
-            <button disabled={!projectId||busy} onClick={()=>void exportFile()}>
+            <button disabled={!projectId||busy} title="Export vector data; GPX supports points and lines" onClick={()=>void exportFile()}>
               <FileDown size={12}/> Export
             </button>
           </div>
-          <p className="project-hint">Import up to 100 features per file. Source coordinate systems are transformed to WGS84. GPX export is limited to points and lines.</p>
         </div>
       </section>
       <section className="gis-tool-group" aria-label="Terrain slope and elevation profile">
         <div className="gis-terrain-row"><h3 className="gis-tool-heading"><Mountain size={14}/> Terrain</h3>
         <div className="professional-form">
-          <button disabled={!raster||!geometry||busy} aria-label={'Analyze selected '+(geometry?.type==='LineString'?'elevation profile':'terrain area')} onClick={()=>void analyze()}>
+          <button disabled={!raster||!geometry||busy} aria-label={'Analyze selected '+(geometry?.type==='LineString'?'elevation profile':'terrain area')} title="Requires a projected DEM with elevations in meters" onClick={()=>void analyze()}>
             Analyze selected {geometry?.type==='LineString'?'profile':'area'}
           </button>
-          <p className="project-hint">Requires a meter-based projected DEM GeoTIFF, with meter elevations in its first band. Satellite RGB imagery is not a DEM.</p>
 
         </div></div>
       </section>

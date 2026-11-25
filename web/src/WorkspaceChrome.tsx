@@ -1,7 +1,7 @@
 /** Shared research workspace chrome. Module navigation and command discovery
  * are independent of GIS/Terrain internals so future workbenches can reuse them.
  */
-import {useEffect,useMemo,useState,type ReactNode} from 'react';
+import {useEffect,useMemo,useRef,useState,type ReactNode} from 'react';
 import {Search,Layers3,Pencil,Trash2,MapPin,Minus,Shapes,ChevronLeft,ChevronRight,Check,X} from 'lucide-react';
 
 export interface WorkspaceModule {id:string;label:string;description:string;hint:string}
@@ -225,9 +225,14 @@ export function WorkspaceFeatureTree<T extends FeatureItem>({
   const lastPage=pages.length-1,currentPage=Math.min(page,lastPage);
   const paged=new Set(pages[currentPage]);
   const selectedPage=pages.findIndex(items=>selectedKey!==null&&items.includes(selectedKey));
+  const previousSelection=useRef<string|null|undefined>(undefined);
   useEffect(()=>{
-    setPage(selectedPage>=0?selectedPage:0);
-  },[selectedKey,selectedPage,filter,pageSize]);
+    if(previousSelection.current!==selectedKey&&selectedPage>=0)setPage(selectedPage);
+    previousSelection.current=selectedKey;
+  },[selectedKey,selectedPage]);
+  // Reserve the same number of slots on every page, even on the short last page.
+  const objectCount=features.length+additionalGroups.reduce((sum,g)=>sum+g.items.length,0);
+  const reservedRows=Math.min(pageSize,objectCount);
   return <div className={'workspace-feature-tree'+(alwaysOpen?' compact-object-tree':'')} role="region" aria-label="Project feature tree">
     <div className="workspace-tree-header"><strong>Features</strong><span>{features.length+additionalGroups.reduce((sum,g)=>sum+g.items.length,0)}</span></div>
     <label className="workspace-tree-filter"><Search size={13}/>
@@ -235,9 +240,10 @@ export function WorkspaceFeatureTree<T extends FeatureItem>({
         value={filter} placeholder="Filter name or layer"
         onChange={e=>{setFilter(e.target.value);setPage(0);}}/>
     </label>
-    {alwaysOpen?<div className="compact-object-list">
+    {alwaysOpen?<div className="compact-object-list" style={{minHeight:reservedRows?reservedRows*28-2:0}}>
       {groups.flatMap(g=>g.items.filter(item=>paged.has(g.id+':'+item.id)).map(item=><ObjectRow key={g.id+':'+item.id} item={item} compact layerName={g.name} selected={selectedId===item.id} disabled={!g.visible} locked={g.locked} busy={busy} onOpen={()=>onOpen(item)} onRename={onRename?name=>onRename(item,name):undefined} onDelete={onDelete?()=>onDelete(item):undefined}/>))}
       {extras.flatMap(g=>g.items.filter(item=>paged.has(g.id+':'+item.id)).map(item=><ObjectRow key={g.id+':'+item.id} item={item} compact layerName={g.name} selected={g.selectedId===item.id} disabled={false} locked={false} busy={busy} onOpen={()=>g.onOpen(item.id)} onRename={g.onRename?name=>g.onRename!(item.id,name):undefined} onDelete={g.onDelete?()=>g.onDelete!(item.id):undefined}/>))}
+      {!rows.length&&<small className="workspace-tree-empty">{lowered?'No matching features':'No saved features yet.'}</small>}
     </div>:<>{groups.filter(g=>g.items.some(item=>paged.has(g.id+':'+item.id))).map(g=><FeatureGroup key={g.id} name={g.name} alwaysOpen={alwaysOpen}
       features={g.items.filter(item=>paged.has(g.id+':'+item.id))} total={g.items.length}
       visible={g.visible} search={Boolean(lowered)}
@@ -249,12 +255,12 @@ export function WorkspaceFeatureTree<T extends FeatureItem>({
       features={g.items.filter(item=>paged.has(g.id+':'+item.id))} total={g.items.length} visible
       selectedId={g.selectedId} search={Boolean(lowered)} busy={busy}
       onOpen={g.onOpen} onRename={g.onRename} onDelete={g.onDelete}/>)}</>}
-    {pages.length>1&&<div className="workspace-object-pager">
+    {(pages.length>1||(alwaysOpen&&objectCount>pageSize))&&<div className="workspace-object-pager">
       <button type="button" aria-label="Previous objects" title="Previous page" disabled={currentPage===0} onClick={()=>setPage(currentPage-1)}><ChevronLeft size={14}/></button>
       <span aria-label="Object page">{currentPage+1} / {pages.length}</span>
       <button type="button" aria-label="Next objects" title="Next page" disabled={currentPage===lastPage} onClick={()=>setPage(currentPage+1)}><ChevronRight size={14}/></button>
     </div>}
-    {!groups.length&&!extras.length&&<small className="workspace-tree-empty">
+    {!alwaysOpen&&!groups.length&&!extras.length&&<small className="workspace-tree-empty">
       {lowered?'No matching features':'No saved features yet.'}</small>}
   </div>;
 }
