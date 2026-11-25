@@ -13,7 +13,7 @@ import {
 import MapCanvas, { type FocusPoint } from './MapCanvas';
 import BoundaryEditor from './BoundaryEditor';
 import ComputingResources from './ComputingResources';
-import {loadDisplay,saveDisplay,areaText,distanceText,type AreaUnit} from './displaySettings';
+import {loadDisplay,saveDisplay,areaText,distanceText,mapPalette,type AreaUnit} from './displaySettings';
 import {BASEMAPS,BASEMAP_GROUPS,basemapAvailable,customBasemap,defaultCustom,mapTilerImagery,type BasemapId,type CustomBasemap} from './basemaps';
 import {ScratchHistory} from './scratchHistory';
 import {addRaster,changeRaster,selectDEM,hideDEMs,type RasterLayerView} from './rasterLayers';
@@ -40,7 +40,7 @@ import CartographyProPanel from './CartographyProPanel';
 import type {ExternalTile} from './DataServicesPanel';
 import DataWorkbench from './DataWorkbench';
 import ExportWorkbench from './ExportWorkbench';
-import { featureColor, legendEntries, DEFAULT_LAYER_STYLE } from './labels';
+import { featureColor, DEFAULT_LAYER_STYLE } from './labels';
 import ImageCorrectionPanel, { type PromptMode } from './ImageCorrectionPanel';
 import {
   GeometryTimeline, approximateMeasurement, previewEdgeLengths, pathsOf, drawingPreview,
@@ -1191,6 +1191,36 @@ export default function App() {
     {id:'map:help',label:'Keyboard shortcuts',group:'Help',
       shortcut:'?',run:()=>setShortcutHelp(true)},
   ];
+  // Legend names are taken from the same visible objects as the map, not layer counts.
+  const legendPalette=mapPalette(basemap,display.contrast);
+  const namedLegend:Array<{id:string;name:string;color:string;detail?:string}>= [];
+  const savedLegendFeatures=[...(projectWorkspace?.features??[]),...pagedFeatures.filter(f=>!(projectWorkspace?.features??[]).some(row=>row.id===f.id))];
+  for(const feature of savedLegendFeatures){
+    const layer=projectWorkspace?.layers.find(l=>l.id===feature.layer_id);
+    if(!layer?.visible)continue;
+    const field=layer.style.symbol.category_field;
+    const category=field==='name'?feature.name:field==='source'?feature.source:feature.properties[field];
+    namedLegend.push({id:'saved:'+feature.id,name:feature.name,color:spatialSelected.includes(feature.id)?'#f59e0b':featureColor(feature,layer.style,layer.color),detail:field&&category!=null&&typeof category!=='object'&&String(category)!==feature.name?String(category):undefined});
+  }
+  for(const item of scratch.filter(f=>f.visible))namedLegend.push({id:'local:'+item.id,name:item.name,color:item.id===scratchId&&geometry?legendPalette.selected:'#168047'});
+  if(!drawingMode)for(const face of (networkAreas?.faces??[]).slice(0,300))namedLegend.push({id:'face:'+face.id,name:face.name,color:'#238d89'});
+  for(const item of rasterLayers.filter(l=>l.visible))namedLegend.push({id:'asset:'+item.asset.id,name:item.asset.name,color:'#a8adb0',detail:item.kind==='dem'?'DEM':'Raster'});
+  if(geometry&&!scratchId&&!selectedFeatureId&&selectedPlace)namedLegend.push({id:'selection',name:selectedPlace.name,color:legendPalette.selected});
+  const visibleScienceRasters=[...(terrainVisible?terrainRasters:[]),...(spatialVisible&&spatialRaster?[spatialRaster]:[]),...(remoteVisible&&remoteRaster?[remoteRaster]:[]),...(spacetimeVisible&&spacetimeRaster?[spacetimeRaster]:[])];
+  // Repeated scientific vector classes (e.g. contour lines) share a single symbol key.
+  const vectorLegend=new Map<string,{id:string;name:string;color:string}>();
+  const addVectorLegend=(items:GeoJSON.Feature[],prefix:string,fallback:string)=>items.forEach((feature,index)=>{
+    const props=feature.properties??{};
+    const name=String(props.name??props.label??prefix+' '+(index+1));
+    const color=prefix==='Spatial'?'#914db6':prefix==='Terrain'&&typeof props.elevation_m==='number'?(props.major?legendPalette.major:legendPalette.contour):prefix==='Terrain'&&name==='Visible terrain'?'#21bb72':typeof props.color==='string'?props.color:fallback;
+    const id=prefix+':'+name+':'+color;
+    vectorLegend.set(id,{id,name,color});
+  });
+  if(terrainVisible)addVectorLegend(terrainFeatures,'Terrain','#1ea8df');
+  if(spatialVisible)addVectorLegend(spatialResults,'Spatial','#914db6');
+  if(networkVisible)addVectorLegend(networkResults,'Network','#287aa1');
+  namedLegend.push(...vectorLegend.values());
+  if(terrainProfileLine)namedLegend.push({id:'profile-line',name:'Profile measurement line',color:'#d26b2f'});
   // GIS uses static sections; other modules retain their existing object-browser workflow.
   const gisFlat=activeTool==='tools-gis';
   const ObjectsContainer=gisFlat?'section':'details';
@@ -1728,25 +1758,15 @@ export default function App() {
               <Layers3 size={15}/> Legend
             </button>
             {showLegend&&!editing&&<div className="map-legend-items" aria-label="Map legend">
-              {legendEntries(projectWorkspace?.layers??[],projectWorkspace?.features??[]).map(item=>(
-                <div key={item.id} className="map-legend-item">
-                  <span className="legend-swatch" style={{
-                    borderColor:item.color,
-                    backgroundColor:item.color,
-                    opacity:Math.max(.3,item.opacity),
-                  }}/>
-                  <span>{item.name}</span>
-                  {item.labels&&<small>Labels</small>}
-                </div>
-              ))}
-              {!!networkAreas?.count&&<div className="map-legend-item"><span className="legend-swatch" style={{background:'#238d89'}}/><span>Enclosed areas · {networkAreas.count}</span></div>}
-              {scratch.some(f=>f.visible)&&<div className="map-legend-item"><span className="legend-swatch" style={{background:'#168047'}}/><span>Local drawings · {scratch.filter(f=>f.visible).length}</span></div>}
-              {rasterLayers.filter(l=>l.visible).map(l=><div key={l.asset.id} className="map-legend-item"><span className="legend-swatch" style={{background:'#a8adb0'}}/><span>{l.kind==='dem'?'DEM':'Raster'} · {l.asset.name}</span></div>)}
-              {terrainVisible&&(terrainFeatures.length+terrainRasters.length)>0&&<div className="map-legend-item"><span className="legend-swatch" style={{background:'#d7b65e'}}/><span>Terrain results · {terrainFeatures.length+terrainRasters.length}</span></div>}
-              {spacetimeVisible&&spacetimeRaster?.raster.scale&&<div className="temporal-map-legend"><strong>Temporal result</strong><TemporalScale scale={spacetimeRaster.raster.scale} unit={spacetimeRaster.raster.unit??''}/></div>}
-              {terrainVisible&&terrainRasters.map(item=><details key={item.id} className="terrain-map-legend"><summary>{item.title}</summary>{item.raster.legend.map(bin=><div key={bin.label} className="map-legend-item"><span className="legend-swatch" style={{background:bin.color}}/><span>{bin.label}</span></div>)}</details>)}
-              {!(projectWorkspace?.layers??[]).some(layer=>Boolean(layer.visible))&&!scratch.some(f=>f.visible)&&!rasterLayers.some(l=>l.visible)&&!(terrainFeatures.length+terrainRasters.length)&&
-                <small>No visible overlays</small>}
+              {namedLegend.map(item=><div key={item.id} className="map-legend-item" title={item.detail?item.name+' · '+item.detail:item.name}>
+                <span className="legend-swatch" style={{borderColor:item.color,backgroundColor:item.color}}/>
+                <span className="map-legend-name">{item.name}{item.detail&&<small> · {item.detail}</small>}</span>
+              </div>)}
+              {visibleScienceRasters.map(item=><section key={item.id} className="named-raster-legend">
+                <strong title={item.title}>{item.title}</strong>
+                {item.raster.scale?<TemporalScale scale={item.raster.scale} unit={item.raster.unit??''}/>:item.raster.legend.length>0?item.raster.legend.map((bin,i)=><div key={i} className="map-legend-item"><span className="legend-swatch" style={{borderColor:bin.color,backgroundColor:bin.color}}/><span>{bin.label}</span></div>):<small>{item.raster.unit||'Raster'}</small>}
+              </section>)}
+              {!namedLegend.length&&!visibleScienceRasters.length&&<small>No visible overlays</small>}
             </div>}
           </div>
           {pendingAnnotation&&<div className="annotation-banner">

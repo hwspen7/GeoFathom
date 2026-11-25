@@ -2,7 +2,7 @@
  * are independent of GIS/Terrain internals so future workbenches can reuse them.
  */
 import {useEffect,useMemo,useState,type ReactNode} from 'react';
-import {Search,Layers3,Pencil,Trash2,MapPin,Minus,Shapes} from 'lucide-react';
+import {Search,Layers3,Pencil,Trash2,MapPin,Minus,Shapes,ChevronLeft,ChevronRight} from 'lucide-react';
 
 export interface WorkspaceModule {id:string;label:string;description:string;hint:string}
 export const WORKSPACE_MODULES:readonly WorkspaceModule[]=[
@@ -223,7 +223,6 @@ export function WorkspaceFeatureTree<T extends FeatureItem>({
     }
   }
   const lastPage=pages.length-1,currentPage=Math.min(page,lastPage);
-  const offset=pages.slice(0,currentPage).reduce((sum,items)=>sum+items.length,0);
   const paged=new Set(pages[currentPage]);
   const selectedPage=pages.findIndex(items=>selectedKey!==null&&items.includes(selectedKey));
   useEffect(()=>{
@@ -251,9 +250,9 @@ export function WorkspaceFeatureTree<T extends FeatureItem>({
       selectedId={g.selectedId} search={Boolean(lowered)} busy={busy}
       onOpen={g.onOpen} onRename={g.onRename} onDelete={g.onDelete}/>)}</>}
     {pages.length>1&&<div className="workspace-object-pager">
-      <button type="button" aria-label="Previous objects" disabled={currentPage===0} onClick={()=>setPage(currentPage-1)}>Previous</button>
-      <span>{offset+1}–{offset+paged.size} / {rows.length}</span>
-      <button type="button" aria-label="Next objects" disabled={currentPage===lastPage} onClick={()=>setPage(currentPage+1)}>Next</button>
+      <button type="button" aria-label="Previous objects" title="Previous page" disabled={currentPage===0} onClick={()=>setPage(currentPage-1)}><ChevronLeft size={14}/></button>
+      <span aria-label="Object page">{currentPage+1} / {pages.length}</span>
+      <button type="button" aria-label="Next objects" title="Next page" disabled={currentPage===lastPage} onClick={()=>setPage(currentPage+1)}><ChevronRight size={14}/></button>
     </div>}
     {!groups.length&&!extras.length&&<small className="workspace-tree-empty">
       {lowered?'No matching features':'No saved features yet.'}</small>}

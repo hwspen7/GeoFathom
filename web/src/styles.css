@@ -2037,3 +2037,16 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 /* Keep portal hosts mounted, but release the entire dock when no module has
    published a result or a result action. MapCanvas observes its new size. */
 .desktop-gis .gis-body>.gis-results-monitor:not(:has(>.sidebar-scroll>:not([hidden]),>.workspace-fixed-footer>:not([hidden]))){display:none!important}
+
+/* Compact icon pagination and object-level legend. */
+.desktop-gis .workspace-object-pager{justify-content:center;gap:9px;min-height:25px;margin:4px 0 0;font-variant-numeric:tabular-nums}
+.desktop-gis .workspace-object-pager button{display:grid;place-items:center;width:25px;height:24px;min-height:24px;padding:0!important;background:#fff;border:1px solid #d5e1e9;color:#365d78;cursor:pointer}
+.desktop-gis .workspace-object-pager button:not(:disabled):hover{background:#e6eff6;border-color:#aac4d6}
+.desktop-gis .workspace-object-pager button:disabled{background:transparent;border-color:transparent;color:#b5c2cc;cursor:default}
+.desktop-gis .workspace-object-pager>span{min-width:38px;text-align:center;font-size:11px;color:#58748a}
+.map-legend-items{gap:4px;padding:6px 8px;max-width:245px;min-width:135px;max-height:min(320px,45vh);border-radius:5px}
+.map-legend-item{min-height:15px;gap:6px}
+.map-legend-item .map-legend-name{white-space:normal;overflow-wrap:anywhere;line-height:1.35}
+.map-legend-item .legend-swatch{width:13px;height:8px;border-width:1px;border-radius:2px}
+.named-raster-legend{display:grid;gap:3px;border-top:1px solid #e0e7eb;padding-top:4px;font-size:10px;color:#405e73}
+.named-raster-legend>strong{font-size:10px;overflow-wrap:anywhere}

@@ -101,6 +101,15 @@ test('GIS tools and object browser stay open without collapsible sections',async
  await page.keyboard.press('Enter');
  await expect(tools.getByLabel('Boundary longitude')).toBeVisible();
  await expect(tools.locator('.compact-object-row')).toHaveCount(1);
+ const legend=page.getByLabel('Map legend',{exact:true});
+ await expect(legend).toContainText('Polygon 1');
+ await expect(legend).not.toContainText('Local drawings ·');
+ const object=tools.getByRole('group',{name:'Object Polygon 1'});
+ await object.getByRole('button',{name:'Rename object'}).click();
+ await object.getByLabel('Object name').fill('Area 1');
+ await object.getByRole('button',{name:'Save name'}).click();
+ await expect(legend).toContainText('Area 1');
+ await expect(legend).not.toContainText('Polygon 1');
  for(const [width,height] of [[1680,900],[1280,720]]){
   await page.setViewportSize({width,height});
   await expect(tools.getByRole('button',{name:/Analyze selected/})).toBeInViewport({ratio:1});

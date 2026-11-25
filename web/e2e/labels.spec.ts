@@ -85,7 +85,7 @@ test('style labels by field, persist symbol settings and reload the workspace',a
   await expect(page.getByLabel('Label source field')).toHaveValue('category');
   await expect(page.getByLabel('Polygon fill opacity')).toHaveValue('0.6');
   await closeProjectDrawer(page);
-  await expect(page.getByLabel('Map legend',{exact:true})).toContainText('Measurements');
+  await expect(page.getByLabel('Map legend',{exact:true})).toContainText('No visible overlays');
   await page.getByLabel('Toggle map legend').click();
   await expect(page.getByLabel('Map legend',{exact:true})).not.toBeVisible();
   expect(invalidStyles).toEqual([]);
@@ -193,6 +193,8 @@ test('categorized attribute colors produce visible legend classes and identify a
     return Object.keys(w.layers[0].style.symbol.category_colors).length;
   }).toBe(2);
   const legend=page.getByLabel('Map legend',{exact:true});
+  await expect(legend).toContainText('Facility A');
+  await expect(legend).toContainText('Facility B');
   await expect(legend).toContainText('hospital');
   await expect(legend).toContainText('school');
   await closeProjectDrawer(page);
