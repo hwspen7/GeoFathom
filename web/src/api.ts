@@ -935,6 +935,7 @@ export interface VisionModel {
   id:string; classes:string[]; bands:number[]; tile_size:number;
   input_scale:number; mean:number[]; std:number[]; description:string;
   runtime:string;
+  task?:'semantic_segmentation'|'building_extraction';
 }
 export interface VisionModels {
   models:VisionModel[]; runtime_available:boolean;device:string;note:string;
@@ -946,6 +947,8 @@ export interface GeoAIResult extends GeoJSON.FeatureCollection {
   loss_pixels?:number;truncated:boolean;warning:string;
   provenance?:{source_sha256:Record<string,string>;
                 model_sha256?:string;model_id?:string;task_kind?:string};
+  summary?:{candidate_count:number;total_area_m2:number;foreground_fraction:number};
+  artifacts?:Record<string,{sha256:string;size_bytes:number}>;
 }
 export function getVisionModels():Promise<VisionModels>{
   return request('/vision/models/segmentation');
@@ -953,7 +956,7 @@ export function getVisionModels():Promise<VisionModels>{
 
 export type GISJobKind='topology_qa'|'spatial_select'|'export_geojson'|
   'postgis_sync'|'rebuild_index'|'spectral_index'|'spectral_change'|
-  'semantic_segmentation'|'stac_ndvi'|'vector_import'|'vector_export'|'remote_windowed'|'remote_cube'|'remote_model_train'|'remote_model_predict'|'remote_model_evaluate'|'remote_experiment';
+  'semantic_segmentation'|'building_extraction'|'stac_ndvi'|'vector_import'|'vector_export'|'remote_windowed'|'remote_cube'|'remote_model_train'|'remote_model_predict'|'remote_model_evaluate'|'remote_experiment';
 export interface GISJob {
   id:string;project_id:string;kind:GISJobKind;
   status:'queued'|'running'|'completed'|'failed'|'cancelled'|'interrupted';
@@ -981,6 +984,16 @@ export function queueGISJob(projectId:string,kind:GISJobKind,
 export function cancelGISJob(projectId:string,id:string):Promise<GISJob>{
   return request('/projects/'+encodeURIComponent(projectId)+'/jobs/'+
     encodeURIComponent(id)+'/cancel',{method:'POST'});
+}
+export async function downloadBuildingArtifact(projectId:string,id:string,asset:string):Promise<void>{
+  const response=await rawRequest('/projects/'+encodeURIComponent(projectId)+
+    '/jobs/'+encodeURIComponent(id)+'/download?asset='+encodeURIComponent(asset));
+  if(!response.ok)throw new Error('Building output is unavailable or has changed.');
+  const url=URL.createObjectURL(await response.blob());
+  try{
+    const link=document.createElement('a');link.href=url;link.download=asset;
+    document.body.appendChild(link);link.click();link.remove();
+  }finally{window.setTimeout(()=>URL.revokeObjectURL(url),1000);}
 }
 export async function downloadGISJob(projectId:string,id:string):Promise<void>{
   const response=await rawRequest('/projects/'+encodeURIComponent(projectId)+

@@ -1978,6 +1978,7 @@ export default function App() {
               key={activeProjectId ?? 'no-project'}
               projectId={activeProjectId}
               image={imageLayer}
+              studyArea={preview||drawingMode?null:geometry}
               onPreview={value=>{if(projectCurrent())setExternalFeatures(value);}}
               onSaved={()=>setRefreshToken(value=>value+1)}
             />

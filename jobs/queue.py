@@ -23,7 +23,7 @@ from .leases import (PROCESS_ID,LEASE_SECONDS,ensure_lease_schema,
     recover_expired,claim,heartbeat,is_owner,release_slot)
 
 KINDS={"vector_import","vector_export","topology_qa","spatial_select","export_geojson","postgis_sync",
-       "rebuild_index","spectral_index","spectral_change","semantic_segmentation",
+       "rebuild_index","spectral_index","spectral_change","semantic_segmentation","building_extraction",
        "stac_ndvi","remote_windowed","remote_cube","remote_model_train","remote_model_predict","remote_model_evaluate","remote_experiment"}
 _POOL=ThreadPoolExecutor(max_workers=2,thread_name_prefix="geofathom-gis")
 _LOCK=Lock()
@@ -145,6 +145,9 @@ def queue_job(project_id,kind,payload,reproduction=None):
     if not isinstance(payload,dict):raise StorageError("Job payload must be a JSON object.")
     if kind=="stac_ndvi":
         payload={**payload,"full_resolution":True}
+    if kind=="building_extraction":
+        from vision.buildings import validate
+        payload=validate(payload).model_dump(mode="json")
     if kind=="remote_windowed":
         from imagery.remote_managed import validate
         payload=validate(payload).model_dump(mode="json")
@@ -259,6 +262,16 @@ def cancel_job(project_id,job_id):
 
 
 def _execute(kind,project_id,payload):
+    if kind=="building_extraction":
+        # Keep building artifacts local while sharing the immutable input capture contract.
+        from storage.snapshots import analysis_snapshot
+        from imagery.store import image_file
+        from vision.buildings import extract_buildings, artifact_directory
+        with analysis_snapshot(kind,payload) as provenance:
+            outcome=extract_buildings(image_file(payload["image_id"]),payload,
+                artifact_directory(_ACTIVE_JOB.get()),_progress,check_cancelled)
+            outcome["provenance"]=provenance
+            return outcome
     from .reproducibility import SCIENTIFIC_KINDS,recorded_execute
     if kind in SCIENTIFIC_KINDS:
         return recorded_execute(kind,payload,lambda clean:_execute_impl(kind,project_id,clean))
@@ -470,7 +483,7 @@ def _worker(uid,path):
             owner_token=_ACTIVE_OWNER.set(owner)
             try:
                 if (kind in {"spectral_index","spectral_change",
-                             "semantic_segmentation","stac_ndvi","remote_windowed","remote_cube","remote_model_train","remote_model_predict","remote_model_evaluate","remote_experiment"}
+                             "semantic_segmentation","building_extraction","stac_ndvi","remote_windowed","remote_cube","remote_model_train","remote_model_predict","remote_model_evaluate","remote_experiment"}
                         and (((payload.get("full_resolution") is True or kind in {"remote_windowed","remote_cube","remote_model_train","remote_model_predict","remote_model_evaluate","remote_experiment"})
                              and os.getenv("GEOFATHOM_RASTER_ISOLATE","1")=="1")
                              or os.getenv("GEOFATHOM_WORKER_MEMORY_MB","0")!="0")):
@@ -539,6 +552,14 @@ def _worker(uid,path):
                 with _connect() as c:
                     release_slot(c,owner)
                     row=c.execute('SELECT kind,status FROM gis_jobs WHERE id=?',(uid,)).fetchone()
+                    if row and row['kind']=='building_extraction' and row['status']!='completed':
+                        import shutil
+                        from vision.buildings import artifact_directory
+                        target=artifact_directory(uid)
+                        shutil.rmtree(target,ignore_errors=True)
+                        # Reap only this task's staging directories after forced termination.
+                        for directory in target.parent.glob('.'+uid+'-*'):
+                            shutil.rmtree(directory,ignore_errors=True)
                     if row and row['kind'] in {'remote_model_train','remote_model_predict','remote_model_evaluate','remote_experiment'} and row['status']!='completed':
                         import shutil
                         from imagery.remote_model_managed import model_path

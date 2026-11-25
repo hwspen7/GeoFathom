@@ -47,3 +47,4 @@ source = [".", "*/GeoFathom", '*\GeoFathom']
 
 [tool.setuptools.package-data]
 terrain = ["fonts/*.ttf", "fonts/*.txt"]
+vision = ["catalog/*.json"]

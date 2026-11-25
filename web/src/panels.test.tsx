@@ -14,7 +14,7 @@ const api=vi.hoisted(()=>({
   discoverFeatures:vi.fn(),listImagery:vi.fn(),uploadImagery:vi.fn(),
   searchPublicImagery:vi.fn(),selectSpatialFeatures:vi.fn(),reviewTopology:vi.fn(),
   downloadMapPDF:vi.fn(),getGISJob:vi.fn(),getVisionModels:vi.fn(),
-  queueGISJob:vi.fn(),saveFeatureBatch:vi.fn(),
+  queueGISJob:vi.fn(),saveFeatureBatch:vi.fn(),cancelGISJob:vi.fn(),downloadBuildingArtifact:vi.fn(),
 }));
 vi.mock('./api',()=>api);
 
@@ -214,6 +214,43 @@ describe('spatial QA and print',()=>{
 });
 
 describe('GeoAI analysis controls',()=>{
+  it('runs building extraction at native resolution with selected AOI, then exposes checked scientific outputs',async()=>{
+    api.getVisionModels.mockResolvedValue({runtime_available:true,models:[
+      {id:'generic',classes:['background','other']},
+      {id:'buildings',task:'building_extraction',classes:['background','building']},
+    ]});
+    api.queueGISJob.mockResolvedValue({id:'building-job',status:'completed',progress:100,result:{
+      type:'FeatureCollection',features:[],analysis:'building_extraction',provider:'onnxruntime',
+      source_images:['scene'],valid_pixels:8000,warning:'Review footprints',
+      summary:{candidate_count:0,total_area_m2:0,foreground_fraction:0},
+      artifacts:{'probability.tif':{sha256:'a',size_bytes:100}},
+    }});
+    api.downloadBuildingArtifact.mockResolvedValue(undefined);
+    const {container}=render(<GeoAIAnalysisPanel projectId="p" image={image} studyArea={polygon}
+      onPreview={vi.fn()} onSaved={vi.fn()}/>);openDetails(container);
+    change('GeoAI analysis operation','semantic_segmentation');
+    await screen.findByRole('option',{name:/generic/});
+    change('GeoAI analysis operation','building_extraction');
+    expect(screen.queryByRole('option',{name:/generic/})).toBeNull();
+    expect(screen.queryByLabelText('GeoAI processing resolution')).toBeNull();
+    fireEvent.click(screen.getByLabelText('Limit buildings to selected study area'));
+    change('Building probability threshold','0.6');change('Minimum building footprint area','12');
+    change('GeoAI administration token','admin');click('Run georeferenced analysis');
+    await waitFor(()=>expect(api.queueGISJob).toHaveBeenCalledWith('p','building_extraction',{
+      image_id:'scene',model_id:'buildings',probability_threshold:.6,minimum_area_m2:12,
+      full_resolution:true,memory_mb:32,max_pixels:16777216,aoi:polygon},'admin'));
+    await screen.findByText('0 building candidates · 0.0 m² retained area');
+    click('Download probability.tif');
+    await waitFor(()=>expect(api.downloadBuildingArtifact).toHaveBeenCalledWith('p','building-job','probability.tif'));
+  });
+  it('keeps building extraction disabled until a dedicated model is installed',async()=>{
+    const {container}=render(<GeoAIAnalysisPanel projectId="p" image={image}
+      onPreview={vi.fn()} onSaved={vi.fn()}/>);openDetails(container);
+    await waitFor(()=>expect(api.getVisionModels).toHaveBeenCalled());
+    change('GeoAI analysis operation','building_extraction');change('GeoAI administration token','admin');
+    expect((screen.getByRole('button',{name:'Run georeferenced analysis'}) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByLabelText('Limit buildings to selected study area') as HTMLInputElement).disabled).toBe(true);
+  });
   it('validates bands and second-date identity, then preserves full-resolution job budgets',async()=>{
     const p:ComponentProps<typeof GeoAIAnalysisPanel>={projectId:'p',image,onPreview:vi.fn(),onSaved:vi.fn()};
     api.queueGISJob.mockResolvedValue({id:'job-1234',status:'failed',progress:0,error:'controlled task failure'});

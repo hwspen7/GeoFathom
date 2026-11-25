@@ -11,7 +11,7 @@ from uuid import uuid4
 
 LEASE_SECONDS = 30.0
 PROCESS_ID = str(uuid4())
-RASTER_KINDS = {"spectral_index", "spectral_change", "semantic_segmentation", "stac_ndvi", "remote_windowed", "remote_cube", "remote_model_train", "remote_model_predict", "remote_model_evaluate","remote_experiment"}
+RASTER_KINDS = {"spectral_index", "spectral_change", "semantic_segmentation", "building_extraction", "stac_ndvi", "remote_windowed", "remote_cube", "remote_model_train", "remote_model_predict", "remote_model_evaluate","remote_experiment"}
 
 
 def ensure_lease_schema(connection):
@@ -61,9 +61,9 @@ def _resources(kind,payload):
     result=[]
     if kind in RASTER_KINDS and (payload.get("full_resolution") is True or kind in {"remote_windowed","remote_cube","remote_model_train","remote_model_predict","remote_model_evaluate","remote_experiment"}):
         result.append("raster")
-    if kind=="semantic_segmentation":
+    if kind in {"semantic_segmentation","building_extraction"}:
         result.append("inference")
-    if ((kind=="semantic_segmentation" and
+    if ((kind in {"semantic_segmentation","building_extraction"} and
             os.getenv("GEOFATHOM_VISION_DEVICE","cpu").lower()=="cuda")
             or (kind in {"spectral_index","spectral_change","stac_ndvi"} and
             os.getenv("GEOFATHOM_SPECTRAL_DEVICE","cpu").lower() in ("cuda","auto"))):

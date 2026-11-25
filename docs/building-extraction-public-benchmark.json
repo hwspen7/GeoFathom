@@ -1,0 +1,875 @@
+{
+  "dataset": "https://huggingface.co/datasets/hotosm/vhr-building-segmentation",
+  "revision": "8d3e64e5c69aa37209953cce3a48df1092bc7c94",
+  "split": "test-project subset",
+  "sampling": "3 evenly spaced chips from sorted archive names per project, including empty scenes",
+  "archives_sha256": {
+    "10655": "cce17fcfe0c4030554f9fe47d8160828a4f2e00380b26133cb463c99953abeb3",
+    "14859": "fb4533f32be87490c86d6a504df8a3c368abded41cb0d53ce243343e1e846752",
+    "17127": "acaaf8a62d51026af22e0dfbaccfefcd2584dc25d440eb3c1bab44f86554d8f9",
+    "29145": "9720a55b6f26b58ec642d390f626b57a316c632dcfab828c66484e748ed083a6"
+  },
+  "model_id": "hotosm-dinov3s-buildings",
+  "aggregate": {
+    "confusion_matrix": [
+      [
+        746518,
+        3868
+      ],
+      [
+        26505,
+        9541
+      ]
+    ],
+    "classes": [
+      {
+        "name": "background",
+        "support": 750386,
+        "predicted": 773023,
+        "iou": 0.9609044254599423,
+        "precision": 0.9657125337797193,
+        "recall": 0.9948453196088413,
+        "f1": 0.9800624782970297
+      },
+      {
+        "name": "building",
+        "support": 36046,
+        "predicted": 13409,
+        "iou": 0.23903893370747106,
+        "precision": 0.711537027369677,
+        "recall": 0.2646895633357377,
+        "f1": 0.3858457183297948
+      }
+    ],
+    "overall_accuracy": 0.9613787333170573,
+    "mean_iou_present_classes": 0.5999716795837067,
+    "valid_pixels": 786432,
+    "absent_class_policy": "Excluded from mean IoU, reported as zero per class"
+  },
+  "records": [
+    {
+      "project_id": 10655,
+      "country": "Tajikistan",
+      "tile": "OAM-361313-199746-19",
+      "original_image_sha256": "b9edfe1a70db92e1f30e9e0a6e6dc1cfdcba7692fbb320462b53b74903a3e8ba",
+      "sidecar_sha256": "c9a4591d53ae3d250ac71b802ba985c9e90b705b8cd15222d4d0d18d43a99c82",
+      "metrics": {
+        "confusion_matrix": [
+          [
+            65341,
+            0
+          ],
+          [
+            195,
+            0
+          ]
+        ],
+        "classes": [
+          {
+            "name": "background",
+            "support": 65341,
+            "predicted": 65536,
+            "iou": 0.9970245361328125,
+            "precision": 0.9970245361328125,
+            "recall": 1.0,
+            "f1": 0.9985100514223278
+          },
+          {
+            "name": "building",
+            "support": 195,
+            "predicted": 0,
+            "iou": 0.0,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
+          }
+        ],
+        "overall_accuracy": 0.9970245361328125,
+        "mean_iou_present_classes": 0.49851226806640625,
+        "valid_pixels": 65536,
+        "absent_class_policy": "Excluded from mean IoU, reported as zero per class",
+        "brier_score": 0.0025684210883461715,
+        "labels_sha256": "3cdbbded5d9802bd4b97bc124e924f9ebaf013cf4562d02af137009608ef089b",
+        "prediction_sha256": "c343c862b412369c6916d1aa242c01324278bce6253404331672a3830ee17cce",
+        "probability_sha256": "34ee05dc31a08405d19beeb6782383e32dfd2f93f13b8b6e26e9354b3e3bbed3",
+        "objects": {
+          "iou_threshold": 0.5,
+          "true_positive": 0,
+          "false_positive": 0,
+          "false_negative": 1,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "mean_matched_iou": null,
+          "empty_scene_policy": "Undefined precision/recall/F1 reported as zero; counts retained."
+        },
+        "reference_geojson_sha256": "488f89ff46f7774fb18cd618fb9f2a18289487cfc589d4ddac6edc56785c9991",
+        "object_output_truncated": false
+      },
+      "summary": {
+        "candidate_count": 0,
+        "total_area_m2": 0,
+        "foreground_fraction": 0.0
+      },
+      "seconds": 4.845,
+      "model_sha256": "9a28e28403accc06c70a3104aedb31eca50401ed23c8ba4314b26357c25e9043",
+      "manifest_sha256": "a72060da5f2625454f592447b7475f95b1051cff7c9c0fb64170e0d24afa1cd1"
+    },
+    {
+      "project_id": 10655,
+      "country": "Tajikistan",
+      "tile": "OAM-361334-199757-19",
+      "original_image_sha256": "070c3a98c0c700abd75bb7d4a676ea0aeafa0ccdf8c742499cb98b2b1b629669",
+      "sidecar_sha256": "66f63fec0f61ee53ce07ea98b31f3aca0a5b44853ae371a2508086ad99c69663",
+      "metrics": {
+        "confusion_matrix": [
+          [
+            65536,
+            0
+          ],
+          [
+            0,
+            0
+          ]
+        ],
+        "classes": [
+          {
+            "name": "background",
+            "support": 65536,
+            "predicted": 65536,
+            "iou": 1.0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          {
+            "name": "building",
+            "support": 0,
+            "predicted": 0,
+            "iou": 0.0,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
+          }
+        ],
+        "overall_accuracy": 1.0,
+        "mean_iou_present_classes": 1.0,
+        "valid_pixels": 65536,
+        "absent_class_policy": "Excluded from mean IoU, reported as zero per class",
+        "brier_score": 0.00013698194413544191,
+        "labels_sha256": "ac2852cea8027bd809961ab917c5e5477629c6c0d6c56d097e503778915e8fc0",
+        "prediction_sha256": "d9e605f9856cce922dbd82639a9ff95e7f87791c911882232c39bf719a627f8c",
+        "probability_sha256": "39ef4ca95a497af7ef19de6834757008e300b28c0bf9414b4ce51585886aa913",
+        "objects": {
+          "iou_threshold": 0.5,
+          "true_positive": 0,
+          "false_positive": 0,
+          "false_negative": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "mean_matched_iou": null,
+          "empty_scene_policy": "Undefined precision/recall/F1 reported as zero; counts retained."
+        },
+        "reference_geojson_sha256": "96aa335460d0e5fb8dd51ecdb5eb1f1dcc5c1741d74c7b36b02ce24d4573f41e",
+        "object_output_truncated": false
+      },
+      "summary": {
+        "candidate_count": 0,
+        "total_area_m2": 0,
+        "foreground_fraction": 0.0
+      },
+      "seconds": 2.617,
+      "model_sha256": "9a28e28403accc06c70a3104aedb31eca50401ed23c8ba4314b26357c25e9043",
+      "manifest_sha256": "a72060da5f2625454f592447b7475f95b1051cff7c9c0fb64170e0d24afa1cd1"
+    },
+    {
+      "project_id": 10655,
+      "country": "Tajikistan",
+      "tile": "OAM-361350-199745-19",
+      "original_image_sha256": "9733dd74449761b72b5cd863ef61157d89432575d335162509d8444c57d81739",
+      "sidecar_sha256": "8ad524aace83373c67075426c3e87da6d4742c105449b3ab0b974955aed147a1",
+      "metrics": {
+        "confusion_matrix": [
+          [
+            64099,
+            0
+          ],
+          [
+            1437,
+            0
+          ]
+        ],
+        "classes": [
+          {
+            "name": "background",
+            "support": 64099,
+            "predicted": 65536,
+            "iou": 0.9780731201171875,
+            "precision": 0.9780731201171875,
+            "recall": 1.0,
+            "f1": 0.9889150306630153
+          },
+          {
+            "name": "building",
+            "support": 1437,
+            "predicted": 0,
+            "iou": 0.0,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
+          }
+        ],
+        "overall_accuracy": 0.9780731201171875,
+        "mean_iou_present_classes": 0.48903656005859375,
+        "valid_pixels": 65536,
+        "absent_class_policy": "Excluded from mean IoU, reported as zero per class",
+        "brier_score": 0.021042788993172922,
+        "labels_sha256": "8f48ebb6b75b2d368a7fa1f4a7f2bdacd20fd8ed479be179a6e884935f51dc18",
+        "prediction_sha256": "aafe0f751cf3f823d1b3e966f6c3811cf1af3612e7f393e60bcbde10ed3cec68",
+        "probability_sha256": "1887c5fa70a5fe2b5cfd9415183bd5abb7077698f2fa66af6a3de28a2e6055cc",
+        "objects": {
+          "iou_threshold": 0.5,
+          "true_positive": 0,
+          "false_positive": 0,
+          "false_negative": 3,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "mean_matched_iou": null,
+          "empty_scene_policy": "Undefined precision/recall/F1 reported as zero; counts retained."
+        },
+        "reference_geojson_sha256": "37d1e197367177c7ed11367b14ccbc1c8130ad937b6fb02ac71177aeffb5a127",
+        "object_output_truncated": false
+      },
+      "summary": {
+        "candidate_count": 0,
+        "total_area_m2": 0,
+        "foreground_fraction": 0.0
+      },
+      "seconds": 2.564,
+      "model_sha256": "9a28e28403accc06c70a3104aedb31eca50401ed23c8ba4314b26357c25e9043",
+      "manifest_sha256": "a72060da5f2625454f592447b7475f95b1051cff7c9c0fb64170e0d24afa1cd1"
+    },
+    {
+      "project_id": 14859,
+      "country": "Japan",
+      "tile": "OAM-467395-202762-19",
+      "original_image_sha256": "6ecdd5b4c80f4b305c00156a79daa9f491577fdb5456219d9dcf43da94237574",
+      "sidecar_sha256": "6c91268ec38ca6fed079dc726c49949ca86b6d8d3b38a223750caf9a793ac360",
+      "metrics": {
+        "confusion_matrix": [
+          [
+            65536,
+            0
+          ],
+          [
+            0,
+            0
+          ]
+        ],
+        "classes": [
+          {
+            "name": "background",
+            "support": 65536,
+            "predicted": 65536,
+            "iou": 1.0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          {
+            "name": "building",
+            "support": 0,
+            "predicted": 0,
+            "iou": 0.0,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
+          }
+        ],
+        "overall_accuracy": 1.0,
+        "mean_iou_present_classes": 1.0,
+        "valid_pixels": 65536,
+        "absent_class_policy": "Excluded from mean IoU, reported as zero per class",
+        "brier_score": 5.3310638039527776e-05,
+        "labels_sha256": "36b46d1a191f4f5ce7f0e4dd9b40b85b8ec4189d02d3295e5433eb5ea5b7e757",
+        "prediction_sha256": "74dcda73b733d0ef380a61e50c3e5f88bfe832f16d6bf38838dd434496124c25",
+        "probability_sha256": "fd3a16f05e0ba6a687a9573e035e7ed7627b0a7c797e056cd7c15f0f0eefe843",
+        "objects": {
+          "iou_threshold": 0.5,
+          "true_positive": 0,
+          "false_positive": 0,
+          "false_negative": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "mean_matched_iou": null,
+          "empty_scene_policy": "Undefined precision/recall/F1 reported as zero; counts retained."
+        },
+        "reference_geojson_sha256": "6aca071fcac770028d1438330ff3cf3cc56ce9fc37727d626e75ed72f5fee097",
+        "object_output_truncated": false
+      },
+      "summary": {
+        "candidate_count": 0,
+        "total_area_m2": 0,
+        "foreground_fraction": 0.0
+      },
+      "seconds": 2.456,
+      "model_sha256": "9a28e28403accc06c70a3104aedb31eca50401ed23c8ba4314b26357c25e9043",
+      "manifest_sha256": "a72060da5f2625454f592447b7475f95b1051cff7c9c0fb64170e0d24afa1cd1"
+    },
+    {
+      "project_id": 14859,
+      "country": "Japan",
+      "tile": "OAM-467424-202756-19",
+      "original_image_sha256": "982c345084834f9b91bd3a0eb0dc639881ccb691c2c174b7b4603defba667879",
+      "sidecar_sha256": "c4fce803ba75303978ba71ed5b749b8608802d4d9e4dd355505d384cb40f3096",
+      "metrics": {
+        "confusion_matrix": [
+          [
+            65480,
+            56
+          ],
+          [
+            0,
+            0
+          ]
+        ],
+        "classes": [
+          {
+            "name": "background",
+            "support": 65536,
+            "predicted": 65480,
+            "iou": 0.9991455078125,
+            "precision": 1.0,
+            "recall": 0.9991455078125,
+            "f1": 0.9995725712890029
+          },
+          {
+            "name": "building",
+            "support": 0,
+            "predicted": 56,
+            "iou": 0.0,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
+          }
+        ],
+        "overall_accuracy": 0.9991455078125,
+        "mean_iou_present_classes": 0.49957275390625,
+        "valid_pixels": 65536,
+        "absent_class_policy": "Excluded from mean IoU, reported as zero per class",
+        "brier_score": 0.000975789539910002,
+        "labels_sha256": "43b31ed1ba79842b6708df5cae24c12a39372e24a3b3da1feae9f9fff464ee26",
+        "prediction_sha256": "759ccaa074bff6fd57234838bf9dc30f5347fb84d869ba366c40a2ca8e4ad6d1",
+        "probability_sha256": "e39ae3e08b6b045be567d96f550c83da91dbbab8bc674d2e25953c6a23047a96",
+        "objects": {
+          "iou_threshold": 0.5,
+          "true_positive": 0,
+          "false_positive": 0,
+          "false_negative": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "mean_matched_iou": null,
+          "empty_scene_policy": "Undefined precision/recall/F1 reported as zero; counts retained."
+        },
+        "reference_geojson_sha256": "f344bb6bf9ebfe08baacfcf97d661c69903b42bc90251f4cb93df652353fb6df",
+        "object_output_truncated": false
+      },
+      "summary": {
+        "candidate_count": 0,
+        "total_area_m2": 0,
+        "foreground_fraction": 0.0008544921875
+      },
+      "seconds": 2.521,
+      "model_sha256": "9a28e28403accc06c70a3104aedb31eca50401ed23c8ba4314b26357c25e9043",
+      "manifest_sha256": "a72060da5f2625454f592447b7475f95b1051cff7c9c0fb64170e0d24afa1cd1"
+    },
+    {
+      "project_id": 14859,
+      "country": "Japan",
+      "tile": "OAM-467452-202789-19",
+      "original_image_sha256": "e6ea02145da8420fde104fef9073e9e37385f4dabf73c6f5a92401875bb9cf3c",
+      "sidecar_sha256": "d836eb2c662cf97a56fc3670b69f017aadd2e795e3cb329da757758b3a07afd9",
+      "metrics": {
+        "confusion_matrix": [
+          [
+            65536,
+            0
+          ],
+          [
+            0,
+            0
+          ]
+        ],
+        "classes": [
+          {
+            "name": "background",
+            "support": 65536,
+            "predicted": 65536,
+            "iou": 1.0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          {
+            "name": "building",
+            "support": 0,
+            "predicted": 0,
+            "iou": 0.0,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
+          }
+        ],
+        "overall_accuracy": 1.0,
+        "mean_iou_present_classes": 1.0,
+        "valid_pixels": 65536,
+        "absent_class_policy": "Excluded from mean IoU, reported as zero per class",
+        "brier_score": 7.999463373334706e-05,
+        "labels_sha256": "e23c755d132b7509010790554e09f8f4a9f8d25a498bf2c21635a4f0126b5d83",
+        "prediction_sha256": "9fe5099f51ec0860bcc68853efb0d2476b0d19260b7d20e9db4b4d78cdc0c2ae",
+        "probability_sha256": "b21e1bbd288338282abf9eeeb8848c0135bf197de944b9fe3e75686266516a38",
+        "objects": {
+          "iou_threshold": 0.5,
+          "true_positive": 0,
+          "false_positive": 0,
+          "false_negative": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "mean_matched_iou": null,
+          "empty_scene_policy": "Undefined precision/recall/F1 reported as zero; counts retained."
+        },
+        "reference_geojson_sha256": "8b3d748a8a2e7c24a8dcc35beeb6a476dd5b08be54df7cc716b4ddd939b89171",
+        "object_output_truncated": false
+      },
+      "summary": {
+        "candidate_count": 0,
+        "total_area_m2": 0,
+        "foreground_fraction": 0.0
+      },
+      "seconds": 2.62,
+      "model_sha256": "9a28e28403accc06c70a3104aedb31eca50401ed23c8ba4314b26357c25e9043",
+      "manifest_sha256": "a72060da5f2625454f592447b7475f95b1051cff7c9c0fb64170e0d24afa1cd1"
+    },
+    {
+      "project_id": 17127,
+      "country": "Eswatini",
+      "tile": "OAM-307633-301346-19",
+      "original_image_sha256": "a9beef207011ba25009d58428ecf573ec02fa8497ee5599685820dbfa62879cb",
+      "sidecar_sha256": "c2600fd13d320111dffb068ebce6b3492d2db8848a4157269a11ba6db6ced093",
+      "metrics": {
+        "confusion_matrix": [
+          [
+            65525,
+            11
+          ],
+          [
+            0,
+            0
+          ]
+        ],
+        "classes": [
+          {
+            "name": "background",
+            "support": 65536,
+            "predicted": 65525,
+            "iou": 0.9998321533203125,
+            "precision": 1.0,
+            "recall": 0.9998321533203125,
+            "f1": 0.9999160696164382
+          },
+          {
+            "name": "building",
+            "support": 0,
+            "predicted": 11,
+            "iou": 0.0,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
+          }
+        ],
+        "overall_accuracy": 0.9998321533203125,
+        "mean_iou_present_classes": 0.49991607666015625,
+        "valid_pixels": 65536,
+        "absent_class_policy": "Excluded from mean IoU, reported as zero per class",
+        "brier_score": 0.0006992883946054054,
+        "labels_sha256": "1a790d9e8cd60a711e76c6b25b8d702c7edf9c04000bdf04859f089b01de49fe",
+        "prediction_sha256": "224a93de162c9a376e0f950924ed7c601b6be137fae719222776bbbc90aaeee0",
+        "probability_sha256": "e3dbdf4723a60064abca9b2f380b5d2bd4373d5a41ca37f8d9f34d8cac094aa7",
+        "objects": {
+          "iou_threshold": 0.5,
+          "true_positive": 0,
+          "false_positive": 0,
+          "false_negative": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "mean_matched_iou": null,
+          "empty_scene_policy": "Undefined precision/recall/F1 reported as zero; counts retained."
+        },
+        "reference_geojson_sha256": "0f47576aeebc038848491925d4c0c193e1d5418dce5b17bac1dcdfe74be557d6",
+        "object_output_truncated": false
+      },
+      "summary": {
+        "candidate_count": 0,
+        "total_area_m2": 0,
+        "foreground_fraction": 0.0001678466796875
+      },
+      "seconds": 3.199,
+      "model_sha256": "9a28e28403accc06c70a3104aedb31eca50401ed23c8ba4314b26357c25e9043",
+      "manifest_sha256": "a72060da5f2625454f592447b7475f95b1051cff7c9c0fb64170e0d24afa1cd1"
+    },
+    {
+      "project_id": 17127,
+      "country": "Eswatini",
+      "tile": "OAM-307661-301331-19",
+      "original_image_sha256": "c0de79139a049d8de0e200c25a6db3eb43651a79a9a594c55c6ed69038be7934",
+      "sidecar_sha256": "0b8a6bc6f704d68b333a590321f5b37e6b3b4214c677142a784fd4cf2e77e27c",
+      "metrics": {
+        "confusion_matrix": [
+          [
+            65536,
+            0
+          ],
+          [
+            0,
+            0
+          ]
+        ],
+        "classes": [
+          {
+            "name": "background",
+            "support": 65536,
+            "predicted": 65536,
+            "iou": 1.0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          {
+            "name": "building",
+            "support": 0,
+            "predicted": 0,
+            "iou": 0.0,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
+          }
+        ],
+        "overall_accuracy": 1.0,
+        "mean_iou_present_classes": 1.0,
+        "valid_pixels": 65536,
+        "absent_class_policy": "Excluded from mean IoU, reported as zero per class",
+        "brier_score": 8.200972754598458e-05,
+        "labels_sha256": "dd1c26dbb3ba4043c6130e96f489aaa3b758221deb92df51f647bcc33672f7ca",
+        "prediction_sha256": "cf7f4977608f879bfdbffa35cdaf3016fb50638ded8158018097d15e0c330470",
+        "probability_sha256": "59225d746f7f4b1269bbb4fb7751899cb6df15c5beb8d53c0620a37d0a929102",
+        "objects": {
+          "iou_threshold": 0.5,
+          "true_positive": 0,
+          "false_positive": 0,
+          "false_negative": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "mean_matched_iou": null,
+          "empty_scene_policy": "Undefined precision/recall/F1 reported as zero; counts retained."
+        },
+        "reference_geojson_sha256": "5979928f309b4b405611757a1a13d3e92919bed52bace84674acdd75d291e56a",
+        "object_output_truncated": false
+      },
+      "summary": {
+        "candidate_count": 0,
+        "total_area_m2": 0,
+        "foreground_fraction": 0.0
+      },
+      "seconds": 2.594,
+      "model_sha256": "9a28e28403accc06c70a3104aedb31eca50401ed23c8ba4314b26357c25e9043",
+      "manifest_sha256": "a72060da5f2625454f592447b7475f95b1051cff7c9c0fb64170e0d24afa1cd1"
+    },
+    {
+      "project_id": 17127,
+      "country": "Eswatini",
+      "tile": "OAM-307691-301302-19",
+      "original_image_sha256": "bdf6abbe4508230731390bb108d5a7d8664332c8f763adb754f5bab9d9e1280d",
+      "sidecar_sha256": "04df35e6d4c6852fbf059d559a6a8e9f82a3d029bfb9c8789aee86b910f3ff9d",
+      "metrics": {
+        "confusion_matrix": [
+          [
+            65536,
+            0
+          ],
+          [
+            0,
+            0
+          ]
+        ],
+        "classes": [
+          {
+            "name": "background",
+            "support": 65536,
+            "predicted": 65536,
+            "iou": 1.0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          {
+            "name": "building",
+            "support": 0,
+            "predicted": 0,
+            "iou": 0.0,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
+          }
+        ],
+        "overall_accuracy": 1.0,
+        "mean_iou_present_classes": 1.0,
+        "valid_pixels": 65536,
+        "absent_class_policy": "Excluded from mean IoU, reported as zero per class",
+        "brier_score": 7.426863704457464e-05,
+        "labels_sha256": "47146712ea73749548658a1a3c9d256930d19df0cb848cab0fb4e26f8cfe1ba3",
+        "prediction_sha256": "c5867cf496b9bc2a946233f82518a049d950b4f9b0d08d027fb845966d9cf9ff",
+        "probability_sha256": "5f8452beb81245f4c3c37b32f64ddf102eea949aecfdaa4ef3d289818278e85f",
+        "objects": {
+          "iou_threshold": 0.5,
+          "true_positive": 0,
+          "false_positive": 0,
+          "false_negative": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "mean_matched_iou": null,
+          "empty_scene_policy": "Undefined precision/recall/F1 reported as zero; counts retained."
+        },
+        "reference_geojson_sha256": "b44071c0e4a19ff50bf4fb4b93d4dc2a8bd5d1ee5e2b9103b1a42a93194fe301",
+        "object_output_truncated": false
+      },
+      "summary": {
+        "candidate_count": 0,
+        "total_area_m2": 0,
+        "foreground_fraction": 0.0
+      },
+      "seconds": 2.633,
+      "model_sha256": "9a28e28403accc06c70a3104aedb31eca50401ed23c8ba4314b26357c25e9043",
+      "manifest_sha256": "a72060da5f2625454f592447b7475f95b1051cff7c9c0fb64170e0d24afa1cd1"
+    },
+    {
+      "project_id": 29145,
+      "country": "Peru",
+      "tile": "OAM-151429-275712-19",
+      "original_image_sha256": "23b123006d5d5cdc0af29575687304809d16da46c3f3f8559beac5a794dcab49",
+      "sidecar_sha256": "1e201cc777a3a3be3591bd85149a637afefcd2e9f2e67198dcdd02fed723f885",
+      "metrics": {
+        "confusion_matrix": [
+          [
+            65533,
+            0
+          ],
+          [
+            3,
+            0
+          ]
+        ],
+        "classes": [
+          {
+            "name": "background",
+            "support": 65533,
+            "predicted": 65536,
+            "iou": 0.9999542236328125,
+            "precision": 0.9999542236328125,
+            "recall": 1.0,
+            "f1": 0.9999771112925253
+          },
+          {
+            "name": "building",
+            "support": 3,
+            "predicted": 0,
+            "iou": 0.0,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
+          }
+        ],
+        "overall_accuracy": 0.9999542236328125,
+        "mean_iou_present_classes": 0.49997711181640625,
+        "valid_pixels": 65536,
+        "absent_class_policy": "Excluded from mean IoU, reported as zero per class",
+        "brier_score": 0.00019432394645363567,
+        "labels_sha256": "8abf5c8e528496ac13c828666912f823bd42c3d19dfc25965f15215a5e50ee47",
+        "prediction_sha256": "4e371fe55f060aa1a285d588339fbbab83792474cd447b6f8d210120ec8a3f7f",
+        "probability_sha256": "392ed4b397d280a7101d4acc1b888d1d9926496be4af1b6039f2782cd49c0cb5",
+        "objects": {
+          "iou_threshold": 0.5,
+          "true_positive": 0,
+          "false_positive": 0,
+          "false_negative": 1,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "mean_matched_iou": null,
+          "empty_scene_policy": "Undefined precision/recall/F1 reported as zero; counts retained."
+        },
+        "reference_geojson_sha256": "628a94dda0cbe67dee699ffe3905cbfc6113b65914920a26a3caf408b4c5735a",
+        "object_output_truncated": false
+      },
+      "summary": {
+        "candidate_count": 0,
+        "total_area_m2": 0,
+        "foreground_fraction": 0.0
+      },
+      "seconds": 2.726,
+      "model_sha256": "9a28e28403accc06c70a3104aedb31eca50401ed23c8ba4314b26357c25e9043",
+      "manifest_sha256": "a72060da5f2625454f592447b7475f95b1051cff7c9c0fb64170e0d24afa1cd1"
+    },
+    {
+      "project_id": 29145,
+      "country": "Peru",
+      "tile": "OAM-151458-275760-19",
+      "original_image_sha256": "2428b683ceb9b674845769f026a05a255446d210477a8ce35b2119e2953c5327",
+      "sidecar_sha256": "bcbc98db330d4144b11b416f67d218ee97e9197afe8cce33cd7d2fdc9d288bab",
+      "metrics": {
+        "confusion_matrix": [
+          [
+            27324,
+            3801
+          ],
+          [
+            24870,
+            9541
+          ]
+        ],
+        "classes": [
+          {
+            "name": "background",
+            "support": 31125,
+            "predicted": 52194,
+            "iou": 0.48797214036967584,
+            "precision": 0.5235084492470399,
+            "recall": 0.8778795180722891,
+            "f1": 0.6558888128758146
+          },
+          {
+            "name": "building",
+            "support": 34411,
+            "predicted": 13342,
+            "iou": 0.2496859625248613,
+            "precision": 0.7151101783840503,
+            "recall": 0.2772659905262852,
+            "f1": 0.3995979310200406
+          }
+        ],
+        "overall_accuracy": 0.5625152587890625,
+        "mean_iou_present_classes": 0.3688290514472686,
+        "valid_pixels": 65536,
+        "absent_class_policy": "Excluded from mean IoU, reported as zero per class",
+        "brier_score": 0.3777402450334314,
+        "labels_sha256": "6dc20b5778ef96e2a1850b3ac82f39e39cae45f41eca33da66a9cec4d7292f93",
+        "prediction_sha256": "39dce88e58198fffc1c984c4fd50bf9a149f628197d0440d9ed863cf6d8e43db",
+        "probability_sha256": "f4c13b47d89db197e752c1d2d873b709d551ea35ff66f17d950bef29682568af",
+        "objects": {
+          "iou_threshold": 0.5,
+          "true_positive": 0,
+          "false_positive": 7,
+          "false_negative": 28,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "mean_matched_iou": null,
+          "empty_scene_policy": "Undefined precision/recall/F1 reported as zero; counts retained."
+        },
+        "reference_geojson_sha256": "5aeab29d0138039623383366e167906732e5df8b2a0444265cbbd5fee4cf580f",
+        "object_output_truncated": false
+      },
+      "summary": {
+        "candidate_count": 7,
+        "total_area_m2": 1143.7642873820732,
+        "foreground_fraction": 0.203582763671875
+      },
+      "seconds": 2.535,
+      "model_sha256": "9a28e28403accc06c70a3104aedb31eca50401ed23c8ba4314b26357c25e9043",
+      "manifest_sha256": "a72060da5f2625454f592447b7475f95b1051cff7c9c0fb64170e0d24afa1cd1"
+    },
+    {
+      "project_id": 29145,
+      "country": "Peru",
+      "tile": "OAM-151482-275733-19",
+      "original_image_sha256": "9e874aea2d69182233a93729d7128621b5c53c3f001278eb79ddb10f6a6c14b7",
+      "sidecar_sha256": "ee922d5610a474144532309ecefed6b07fc2de62aa24150b8252050c768700f0",
+      "metrics": {
+        "confusion_matrix": [
+          [
+            65536,
+            0
+          ],
+          [
+            0,
+            0
+          ]
+        ],
+        "classes": [
+          {
+            "name": "background",
+            "support": 65536,
+            "predicted": 65536,
+            "iou": 1.0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          {
+            "name": "building",
+            "support": 0,
+            "predicted": 0,
+            "iou": 0.0,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
+          }
+        ],
+        "overall_accuracy": 1.0,
+        "mean_iou_present_classes": 1.0,
+        "valid_pixels": 65536,
+        "absent_class_policy": "Excluded from mean IoU, reported as zero per class",
+        "brier_score": 0.00010743244872495804,
+        "labels_sha256": "d92d9a29a4302014fc0d1fa132789f0475874285c44d95df8a74045543a8fe0e",
+        "prediction_sha256": "22360bb9ee981efc2015606e5f2f15e220af54c506aaf111b7bdd8f66856f5d7",
+        "probability_sha256": "d8048d76921bebd4a740030dee68e048e53f57144313abdb7f61130ee0ceb0ee",
+        "objects": {
+          "iou_threshold": 0.5,
+          "true_positive": 0,
+          "false_positive": 0,
+          "false_negative": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "mean_matched_iou": null,
+          "empty_scene_policy": "Undefined precision/recall/F1 reported as zero; counts retained."
+        },
+        "reference_geojson_sha256": "1dfd965fce33c10631cf54583465b77535bd4b7eb87047b632bbc85f2516017a",
+        "object_output_truncated": false
+      },
+      "summary": {
+        "candidate_count": 0,
+        "total_area_m2": 0,
+        "foreground_fraction": 0.0
+      },
+      "seconds": 2.72,
+      "model_sha256": "9a28e28403accc06c70a3104aedb31eca50401ed23c8ba4314b26357c25e9043",
+      "manifest_sha256": "a72060da5f2625454f592447b7475f95b1051cff7c9c0fb64170e0d24afa1cd1"
+    }
+  ],
+  "independent_generalization_qualified": false,
+  "limitations": [
+    "Small public-data integration sample; no accuracy pass threshold.",
+    "Upstream post-processing tuning included HOT train/test chips; this is not an untouched external test.",
+    "Connected regions can merge touching buildings; per-object metrics score retained polygons separately.",
+    "Labels originate from OSM and may be incomplete or temporally misaligned."
+  ],
+  "attribution": "Imagery: contributors of Open Imagery Network / OpenAerialMap (CC-BY-4.0). Labels: OpenStreetMap contributors (ODbL-1.0). Dataset: HOT."
+}

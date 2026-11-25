@@ -54,6 +54,16 @@ def _manifest(identifier):
     scale = info.get("input_scale", 255.0)
     halo = info.get("halo", 0)
     max_batch = info.get("max_batch", 1)
+    # Binary/multi-task heads must never be decoded as competing land-cover classes.
+    output_type = info.get("output_type", "logits")
+    output_channels = info.get("output_channels", len(classes) if isinstance(classes, list) else 0)
+    output_channel = info.get("output_channel", 0)
+    task = info.get("task", "semantic_segmentation")
+    if (output_type not in ("logits", "binary_logits", "binary_probability")
+            or type(output_channels) is not int or not 1 <= output_channels <= 32
+            or type(output_channel) is not int or not 0 <= output_channel < output_channels
+            or task not in ("semantic_segmentation", "building_extraction")):
+        raise RasterError("Invalid model task or output head contract.")
     mean = info.get("mean", [0] * len(bands) if isinstance(bands,list) else [])
     std = info.get("std", [1] * len(bands) if isinstance(bands,list) else [])
     if (not isinstance(classes, list) or not 2 <= len(classes) <= 32 or
@@ -77,11 +87,17 @@ def _manifest(identifier):
             raise RasterError("Model normalization must match selected input bands.")
     if any(x <= 0 for x in std):
         raise RasterError("Model normalization standard deviations must be positive.")
+    if output_type != "logits" and len(classes) != 2:
+        raise RasterError("Binary model heads require exactly two class names.")
+    if output_type == "logits" and output_channels != len(classes):
+        raise RasterError("Logit output channels must match class names.")
     return {
         "id": identifier, "classes": classes, "bands": bands,
         "tile_size": size, "halo": halo, "max_batch": max_batch, "input_scale": float(scale),
         "mean": [float(x) for x in mean], "std": [float(x) for x in std],
         "description": str(info.get("description", ""))[:180],
+        "task": task, "output_type": output_type,
+        "output_channels": output_channels, "output_channel": output_channel,
         "runtime": "onnxruntime", "model_path": weights,
     }
 
@@ -108,6 +124,10 @@ def _session(path, modified_ns, device):
         import onnxruntime as ort
     except ImportError as error:
         raise RuntimeError("Install the optional onnxruntime package to run this model.") from error
+    # Local scientific inference does not need runtime usage telemetry.
+    disable_telemetry = getattr(ort, "disable_telemetry_events", None)
+    if disable_telemetry is not None:
+        disable_telemetry()
     options = ort.SessionOptions()
     options.intra_op_num_threads = cpu_threads()
     options.inter_op_num_threads = 1
@@ -153,7 +173,7 @@ def _predict_batch(tensor, config, device):
     channels = len(config.get("bands", [1, 2, 3]))
     batch = tensor.shape[0] if tensor.ndim == 4 else 0
     # Count working logits, softmax intermediates, masks and input.
-    expected_bytes = batch * size * size * (channels + 4 * classes + 12) * 4
+    expected_bytes = batch * size * size * (channels + 4 * max(classes, config.get("output_channels", classes)) + 12) * 4
     if (not 1 <= batch <= config.get("max_batch", 1)
             or tensor.shape != (batch, channels, size, size) or tensor.dtype != np.float32
             or expected_bytes > tensor_budget_mb() * 1024 * 1024):
@@ -164,7 +184,9 @@ def _predict_batch(tensor, config, device):
     # may allocate outside an arena; this is admission, not a driver quota.
     overhead=(gpu_arena_budget_mb() if device=="cuda" else 128)*1024**2
     device_id=int(os.getenv("GEOFATHOM_CUDA_DEVICE_ID","0")) if device=="cuda" else 0
-    gpu_decode=device=="cuda" and os.getenv("GEOFATHOM_VISION_DEVICE_POSTPROCESS","0")=="1"
+    # The native decoder handles competing logits; binary auxiliary heads use host decoding.
+    gpu_decode=(device=="cuda" and config.get("output_type", "logits")=="logits"
+                and os.getenv("GEOFATHOM_VISION_DEVICE_POSTPROCESS","0")=="1")
     strict=device=="cuda" and os.getenv("GEOFATHOM_VISION_STRICT_CUDA","0")=="1"
     key=(str(path.resolve()),state.st_mtime_ns,state.st_size,device,overhead,device_id,strict)
     with pool_for(device).lease(key,lambda:_session(str(path),state.st_mtime_ns,device),
@@ -201,7 +223,19 @@ def _predict_batch(tensor, config, device):
         raw = outputs[0]
     if not isinstance(raw, np.ndarray) or not np.isfinite(raw).all():
         raise RasterError("Model output contains nonfinite predictions.")
-    if raw.ndim == 4 and raw.shape == (batch, classes, size, size):
+    if config.get("output_type", "logits") != "logits":
+        expected = (batch, config["output_channels"], size, size)
+        if raw.shape != expected or not np.issubdtype(raw.dtype, np.floating):
+            raise RasterError("Binary model output does not match its declared head shape.")
+        probability = raw[:, config["output_channel"]].astype(np.float32)
+        if config["output_type"] == "binary_logits":
+            # Stable sigmoid avoids overflow for confidently negative logits.
+            probability = np.exp(-np.logaddexp(0., -probability))
+        elif np.any((probability < 0) | (probability > 1)):
+            raise RasterError("Binary model probabilities must be between zero and one.")
+        predicted = (probability >= .5).astype(np.uint8)
+        confidence = np.maximum(probability, 1 - probability).astype(np.float32)
+    elif raw.ndim == 4 and raw.shape == (batch, classes, size, size):
         logits = raw.astype(np.float32)
         logits -= logits.max(axis=1, keepdims=True)
         np.exp(logits, out=logits)

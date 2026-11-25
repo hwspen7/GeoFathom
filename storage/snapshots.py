@@ -62,7 +62,7 @@ def analysis_snapshot(kind,payload):
         identifiers.append(payload["after_image_id"])
     originals={uid:image_file(uid) for uid in identifiers}
     models={}
-    if kind=="semantic_segmentation":
+    if kind in {"semantic_segmentation","building_extraction"}:
         config=_manifest(payload["model_id"])
         model=config["model_path"]
         models={model.name:model,model.with_suffix(".json").name:model.with_suffix(".json")}
