@@ -172,7 +172,9 @@ jobs:
 
   windows:
     runs-on: windows-latest
-    timeout-minutes: 20
+    # Full scientific acceptance with branch coverage exceeds the previous 20-minute budget.
+    # Keep the entire test suite and coverage gate; allow bounded runner headroom.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -210,7 +212,7 @@ jobs:
       - name: Execute Python tests using Windows DLL
         env:
           GEOFATHOM_REQUIRE_NATIVE: '1'
-        run: python scripts/run_acceptance.py -q --cov --cov-branch --cov-report=xml:coverage.xml --cov-report=json:coverage.json --junitxml=build/windows-junit.xml
+        run: python scripts/run_acceptance.py -q --durations=30 --cov --cov-branch --cov-report=xml:coverage.xml --cov-report=json:coverage.json --junitxml=build/windows-junit.xml
       - name: Preserve raw Windows coverage data
         run: Copy-Item .coverage coverage-data.bin
       - uses: actions/upload-artifact@v4
