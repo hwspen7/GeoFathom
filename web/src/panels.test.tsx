@@ -125,7 +125,7 @@ describe('survey controls',()=>{
     const p=props();
     const {rerender}=render(<SurveyTools {...p}/>);
     const names=['Point','Polygon','Line','Rectangle','Circle','Cut hole','Split line','Trace network'];
-    const buttons=names.map(name=>screen.getByRole('button',{name,exact:true}));
+    const buttons=names.map(name=>screen.getByRole('button',{name}));
     // Lucide supplies a named class for each icon; all eight must differ.
     const icons=buttons.map(button=>Array.from(button.querySelector('svg')!.classList)
       .find(name=>name.startsWith('lucide-')));

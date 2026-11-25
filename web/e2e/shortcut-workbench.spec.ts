@@ -33,3 +33,37 @@ test('keyboard drawing, right-click completion, selection context and cancel',as
  await page.keyboard.press('Escape');
  await expect(page.getByRole('dialog',{name:'Keyboard shortcuts'})).toHaveCount(0);
 });
+
+// Module navigation must not detach or duplicate the global drawing controls.
+test('global survey toolbar persists across all research modules',async({page})=>{
+ await page.setViewportSize({width:1680,height:900});
+ await page.route('**/tile.openstreetmap.org/**',r=>r.fulfill({contentType:'image/png',body:tile}));
+ await page.goto('/');
+ const toolbar=page.getByLabel('Survey toolbar');
+ const navigation=page.getByRole('navigation',{name:'Workspace tools'});
+ const names=['Point','Polygon','Line','Rectangle','Circle','Cut hole','Split line','Trace network','Vertices','Move','Edge','Snap ON','Undo','Redo','Copy'];
+ await expect(toolbar.getByRole('button',{name:'Polygon',exact:true})).toBeVisible();
+ const initial=await toolbar.boundingBox();
+ expect(initial).not.toBeNull();
+ for(const module of ['GIS','Analysis','Terrain','Spatial','Network','Temporal','LiDAR','Sensing','Raster','Mapping','Data','Export','Assistant','Survey']){
+  await navigation.getByRole('button',{name:module,exact:true}).click();
+  await expect(navigation.getByRole('button',{name:module,exact:true})).toHaveAttribute('aria-pressed','true');
+  for(const name of names){
+   const tool=toolbar.getByRole('button',{name,exact:true});
+   await expect(tool).toHaveCount(1);
+   await expect(tool).toBeVisible();
+  }
+  await expect(toolbar.getByLabel('Map type')).toBeVisible();
+  const bounds=await toolbar.boundingBox();
+  expect(bounds).not.toBeNull();
+  expect(bounds!.y).toBe(initial!.y);
+  expect(bounds!.height).toBe(initial!.height);
+ }
+ await navigation.getByRole('button',{name:'Raster',exact:true}).click();
+ await toolbar.getByRole('button',{name:'Polygon',exact:true}).click();
+ await expect(toolbar.getByRole('button',{name:'Polygon',exact:true})).toHaveAttribute('aria-pressed','true');
+ await expect(toolbar.getByRole('button',{name:'Cancel drawing'})).toBeVisible();
+ await toolbar.getByRole('button',{name:'Cancel drawing'}).click();
+ await expect(navigation.getByRole('button',{name:'Raster',exact:true})).toHaveAttribute('aria-pressed','true');
+ await expect(toolbar.getByRole('button',{name:'Polygon',exact:true})).toHaveAttribute('aria-pressed','false');
+});

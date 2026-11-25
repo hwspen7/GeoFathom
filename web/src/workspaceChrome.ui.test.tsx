@@ -8,11 +8,11 @@ describe('shared research workbench chrome',()=>{
   const activate=vi.fn();
   render(<WorkspaceModuleBar active="tools-raster" open onActivate={activate}/>);
   for(const module of WORKSPACE_MODULES){
-   const button=screen.getByRole('button',{name:module.label,exact:true});
+   const button=screen.getByRole('button',{name:module.label});
    expect(button.getAttribute('title')).toBe(module.hint);
   }
   expect(screen.getByRole('combobox',{name:'Workspace module'}).getAttribute('title')).toBe('Raster and AI extraction');
-  fireEvent.click(screen.getByRole('button',{name:'Terrain',exact:true}));
+  fireEvent.click(screen.getByRole('button',{name:'Terrain'}));
   expect(activate).toHaveBeenCalledWith('tools-terrain');
  });
  it('searches and invokes commands without invoking disabled actions',()=>{
