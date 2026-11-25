@@ -58,6 +58,11 @@ describe('shared research workbench chrome',()=>{
     features={features} selectedId="a" onOpen={open} onRename={rename} onDelete={remove}/>);
   const row=within(screen.getByRole('group',{name:'Object Polygon 1'}));
   fireEvent.click(row.getByRole('button',{name:'Rename object'}));
+  expect(row.getByRole('button',{name:'Save name'}).textContent).toBe('');
+  expect(row.getByRole('button',{name:'Cancel rename'}).textContent).toBe('');
+  fireEvent.keyDown(row.getByRole('textbox',{name:'Object name'}),{key:'Escape'});
+  expect(row.queryByRole('textbox')).toBeNull();
+  fireEvent.click(row.getByRole('button',{name:'Rename object'}));
   fireEvent.change(row.getByRole('textbox',{name:'Object name'}),{target:{value:'  Study buffer  '}});
   fireEvent.click(row.getByRole('button',{name:'Save name'}));
   expect(await row.findByRole('alert')).toHaveProperty('textContent','Revision changed. Refresh and retry.');

@@ -2,7 +2,7 @@
  * are independent of GIS/Terrain internals so future workbenches can reuse them.
  */
 import {useEffect,useMemo,useState,type ReactNode} from 'react';
-import {Search,Layers3,Pencil,Trash2,MapPin,Minus,Shapes,ChevronLeft,ChevronRight} from 'lucide-react';
+import {Search,Layers3,Pencil,Trash2,MapPin,Minus,Shapes,ChevronLeft,ChevronRight,Check,X} from 'lucide-react';
 
 export interface WorkspaceModule {id:string;label:string;description:string;hint:string}
 export const WORKSPACE_MODULES:readonly WorkspaceModule[]=[
@@ -138,8 +138,8 @@ function ObjectRow({item,selected,disabled,locked,busy,onOpen,onRename,onDelete,
     }}>
       <input autoFocus aria-label="Object name" value={name} maxLength={200} disabled={working||busy}
         onFocus={event=>event.currentTarget.select()} onChange={event=>setName(event.target.value)}/>
-      <button type="submit" disabled={!name.trim()||working||busy}>Save name</button>
-      <button type="button" disabled={working} onClick={()=>{setRenaming(false);setError('');}}>Cancel rename</button>
+      <button type="submit" className="object-rename-confirm" aria-label="Save name" title="Save name (Enter)" disabled={!name.trim()||working||busy}><Check size={13} aria-hidden="true"/></button>
+      <button type="button" className="object-rename-cancel" aria-label="Cancel rename" title="Cancel rename (Esc)" disabled={working} onClick={()=>{setRenaming(false);setError('');}}><X size={13} aria-hidden="true"/></button>
     </form>:<>
       <button type="button" className="workspace-object-select" disabled={disabled||busy||working}
         aria-label={item.name} aria-pressed={selected} onClick={onOpen}

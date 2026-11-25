@@ -1240,7 +1240,7 @@ export default function App() {
   if(terrainProfileLine)namedLegend.push({id:'profile-line',name:'Profile measurement line',color:'#d26b2f'});
   // All modules share the compact object browser. Terrain keeps its
   // dedicated browser/tools switch so the fixed analysis inputs can fit.
-  const gisFlat=activeTool==='tools-gis';
+  const gisFlat=activeTool==='tools-gis'||activeTool==='tools-survey';
   const flatObjects=activeTool!=='tools-terrain';
   const ObjectsContainer=flatObjects?'section':'details';
   const GeometryContainer=gisFlat?'section':'details';
@@ -1896,7 +1896,7 @@ export default function App() {
           </section>,resultsTarget)}
 
           <section id="tools-survey" hidden={activeTool!=='tools-survey'} className="panel-section">
-            <div className="section-heading"><Pencil size={16} /><span>Survey & geometry editor</span><span className="section-pill">Precision</span></div>
+            <h3 className="survey-flat-heading survey-main-heading">Survey & geometry editor</h3>
             <SurveyTools
               // The survey commands belong to the global toolbar, not the active module.
               toolbarTarget={toolbarTarget} busy={busy} locked={selectedLocked}

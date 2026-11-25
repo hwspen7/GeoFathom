@@ -166,23 +166,23 @@ export default function SurveyTools({
     <div className="survey-tools">
       {toolbarTarget?createPortal(toolbar,toolbarTarget):toolbar}
       <p className="survey-workflow-hint">Draw or select · Enter to finish · Esc to cancel.</p>
-      <details className="survey-options">
-      <summary>Vertex editing options</summary>
+      {/* Keep high-frequency survey controls visible, like GIS tools. */}
+      <section className="survey-flat-group" aria-label="Vertex editing options">
+      <h3 className="survey-flat-heading">Vertex editing options</h3>
       <label className="linked-vertex-toggle">
         <input type="checkbox" checked={linked} onChange={e=>onLinked(e.target.checked)} />
-        Linked/shared vertices (preview neighboring feature edits)
+        <span title="Preview neighboring feature edits">Linked/shared vertices</span>
       </label>
-      <p className="project-hint">Drag white corner handles to reshape. Drag blue midpoints to insert. Right-click a corner to remove it. Use Move to drag the whole feature.</p>
-      </details>
-      <details className="survey-options">
-      <summary>Exact coordinates and construction</summary>
+      <small className="survey-vertex-help" title="Drag white corner handles to reshape. Drag blue midpoints to insert. Right-click a corner to remove it. Use Move to drag the whole feature.">Drag vertices · Midpoint inserts · Right-click removes</small>
+      </section>
+      <section className="survey-flat-group" aria-label="Exact coordinates and construction">
+      <h3 className="survey-flat-heading"><CornerDownRight size={13}/> Exact construction</h3>
       <form className="survey-numeric" onSubmit={numeric}>
-        <div className="section-heading"><CornerDownRight size={14}/> Construct geometry</div>
         <select aria-label="Numeric construction mode" value={numericMode} onChange={event => setNumericMode(event.target.value)}>
-          <option value="point">Add precise longitude / latitude point</option>
-          <option value="rectangle">Rectangle between two coordinates</option>
-          <option value="circle">Geodesic circle around a coordinate</option>
-          <option value="bearing">Line at bearing and distance</option>
+          <option value="point">Point</option>
+          <option value="rectangle">Rectangle</option>
+          <option value="circle">Geodesic circle</option>
+          <option value="bearing">Bearing / distance</option>
         </select>
         <div className="area-fields">
           <input aria-label="Longitude" type="number" min="-180" max="180" step="any"
@@ -208,11 +208,10 @@ export default function SurveyTools({
           {mode&&numericMode==='point'?'Add precise vertex':'Apply exact geometry'}
         </button>
       </form>
-      </details>
-      <details className="survey-options">
-      <summary>Combine with saved feature</summary>
+      </section>
+      <section className="survey-flat-group" aria-label="Combine with saved feature">
+      <h3 className="survey-flat-heading"><GitMerge size={13}/> Boolean operations</h3>
       <div className="survey-overlay">
-        <div className="section-heading"><GitMerge size={14}/> Boolean operations</div>
         <select aria-label="Boolean operation target" value={reference}
           onChange={event => setReference(event.target.value)}>
           <option value="">Choose another feature…</option>
@@ -225,7 +224,7 @@ export default function SurveyTools({
           <button disabled={!geometry || !reference||Boolean(mode)||busy} onClick={() => onOverlay('intersection',reference)}>Intersect</button>
         </div>
       </div>
-      </details>
+      </section>
     </div>
   );
 }

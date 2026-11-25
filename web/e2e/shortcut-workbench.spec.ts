@@ -105,7 +105,11 @@ test('GIS tools and object browser stay open without collapsible sections',async
  await expect(legend).toContainText('Polygon 1');
  await expect(legend).not.toContainText('Local drawings ·');
  const object=tools.getByRole('group',{name:'Object Polygon 1'});
+ const rowBefore=(await object.boundingBox())!;
  await object.getByRole('button',{name:'Rename object'}).click();
+ await expect(object.getByRole('button',{name:'Cancel rename'})).toBeVisible();
+ const rowDuring=(await object.boundingBox())!;
+ expect(rowDuring.height).toBeLessThanOrEqual(rowBefore.height+2);
  await object.getByLabel('Object name').fill('Area 1');
  await object.getByRole('button',{name:'Save name'}).click();
  await expect(legend).toContainText('Area 1');
@@ -152,4 +156,25 @@ test('empty results dock releases map width and returns only when results exist'
  await expect(monitor).toBeVisible();
  await page.getByLabel('Survey toolbar').getByRole('button',{name:'Deselect',exact:true}).click();
  await expect(monitor).toBeHidden();
+});
+
+test('Survey uses flat compact sections and keeps every construction control accessible',async({page})=>{
+ await page.setViewportSize({width:1280,height:720});
+ await page.route('**/tile.openstreetmap.org/**',r=>r.fulfill({contentType:'image/png',body:tile}));
+ await page.goto('/');
+ await page.getByRole('navigation',{name:'Workspace tools'}).getByRole('button',{name:'Survey',exact:true}).click();
+ const survey=page.locator('#tools-survey');
+ await expect(survey.locator('details,summary')).toHaveCount(0);
+ await expect(survey.getByRole('checkbox')).toBeVisible();
+ await expect(survey.getByLabel('Numeric construction mode')).toBeVisible();
+ await expect(survey.getByRole('button',{name:'Apply exact geometry'})).toBeInViewport({ratio:1});
+ await expect(survey.getByRole('button',{name:'Intersect'})).toBeInViewport({ratio:1});
+ for(const mode of ['rectangle','circle','bearing','point']){
+  await survey.getByLabel('Numeric construction mode').selectOption(mode);
+  if(mode==='rectangle')await expect(survey.getByLabel('Opposite longitude')).toBeVisible();
+  if(mode==='circle'||mode==='bearing')await expect(survey.getByLabel('Radius or length in meters')).toBeVisible();
+  if(mode==='bearing')await expect(survey.getByLabel('Bearing in degrees')).toBeVisible();
+  await expect(survey.getByRole('button',{name:'Intersect'})).toBeInViewport({ratio:1});
+ }
+ await expect(survey.getByRole('button',{name:'Union'})).toBeDisabled();
 });
