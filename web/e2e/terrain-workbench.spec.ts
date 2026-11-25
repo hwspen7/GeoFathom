@@ -100,7 +100,12 @@ with tempfile.TemporaryDirectory() as directory:
  const review=async(tab:'Overview'|'Figures'|'Data')=>{
   await expect(page.getByRole('button',{name:'Calculating…',exact:true})).toHaveCount(0);
   if(!await dialogue.isVisible())await page.getByRole('button',{name:'Review',exact:true}).click();
+  const before=await dialogue.boundingBox();
   await dialogue.getByRole('tab',{name:tab,exact:true}).click();
+  const after=await dialogue.boundingBox();
+  expect(after!.width).toBeCloseTo(before!.width,0);
+  expect(after!.height).toBeCloseTo(before!.height,0);
+  await expect(dialogue.getByRole('button',{name:'Close review',exact:true})).toBeInViewport();
  };
  const visual=()=>review('Figures');
  const outputs=()=>review('Data');

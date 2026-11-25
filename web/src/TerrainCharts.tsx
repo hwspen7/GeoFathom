@@ -123,8 +123,8 @@ export function chartPDF(jpeg:Uint8Array,width:number,height:number){
  const xref=position;put('xref\n0 6\n0000000000 65535 f \n'+offsets.slice(1).map(n=>String(n).padStart(10,'0')+' 00000 n \n').join('')+'trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n'+xref+'\n%%EOF\n');
  return new Blob(chunks,{type:'application/pdf'});
 }
-export function ResultPane({expanded,onClose,children}:{expanded:boolean;onClose:()=>void;children:ReactNode}){
- const ref=useRef<HTMLDialogElement>(null),content=useRef<HTMLElement>(null),[error,setError]=useState('');
+export function ResultPane({expanded,onClose,children,title='Terrain results'}:{expanded:boolean;onClose:()=>void;children:ReactNode;title?:string}){
+ const ref=useRef<HTMLDialogElement>(null),content=useRef<HTMLDivElement>(null),[error,setError]=useState('');
  const [plots,setPlots]=useState<string[]>([]),[plot,setPlot]=useState(0);
  const selector='svg.terrain-chart, .terrain-profile-chart svg, .dem-mesh canvas, .terrain-profile-chart img, .terrain-overview-preview';
  useEffect(()=>{if(!expanded)return;const names=Array.from(content.current?.querySelectorAll(selector)??[]).map(n=>n.getAttribute('aria-label')??n.getAttribute('alt')??'Plot');setPlots(old=>JSON.stringify(old)===JSON.stringify(names)?old:names);setPlot(i=>Math.min(i,Math.max(0,names.length-1)));},[expanded,children]);
@@ -143,10 +143,14 @@ export function ResultPane({expanded,onClose,children}:{expanded:boolean;onClose
      else{const jpeg=Uint8Array.from(atob(canvas.toDataURL('image/jpeg',.92).split(',')[1]),c=>c.charCodeAt(0));saveBlob(chartPDF(jpeg,canvas.width,canvas.height),'terrain-chart.pdf');}
    }catch(e){setError(e instanceof Error?e.message:String(e));}
  }
- const panel=<section ref={content} className="terrain-output" aria-label="Terrain results">{children}
-   {expanded&&plots.length>0&&<div className="survey-action-bar"><select aria-label="Plot to export" value={plot} onChange={e=>setPlot(Number(e.target.value))}>{plots.map((name,i)=><option key={i} value={i}>{name}</option>)}</select>{['SVG','PNG','PDF'].map(format=><button key={format} onClick={()=>void exportPlot(format)}>{format}</button>)}</div>}
-   {error&&<small role="alert">{error}</small>}</section>;
- return expanded?<dialog ref={ref} className="terrain-result-dialog" aria-label="Terrain result review" onCancel={e=>{e.preventDefault();onClose();}}>{panel}</dialog>:panel;
+ // Keep the dialog shell independent of tab content, including export controls.
+ const panel=<section className="terrain-output" aria-label="Terrain results">
+   <div ref={content} className={expanded?'terrain-review-body':undefined}>{children}</div>
+   {expanded&&plots.length>0&&<div className="terrain-review-export"><select aria-label="Plot to export" value={plot} onChange={e=>setPlot(Number(e.target.value))}>{plots.map((name,i)=><option key={i} value={i}>{name}</option>)}</select>{['SVG','PNG','PDF'].map(format=><button key={format} onClick={()=>void exportPlot(format)}>{format}</button>)}</div>}
+   {error&&<small className="terrain-review-error" role="alert">{error}</small>}</section>;
+ return expanded?<dialog ref={ref} className="terrain-result-dialog" aria-label="Terrain result review" onCancel={e=>{e.preventDefault();onClose();}}>
+   <header className="terrain-review-header"><strong>{title}</strong><button type="button" onClick={onClose} aria-label="Close review">Close</button></header>{panel}
+ </dialog>:panel;
 }
 
 /** Area-elevation relation derived from the actual valid-cell histogram, not a fitted DEM. */

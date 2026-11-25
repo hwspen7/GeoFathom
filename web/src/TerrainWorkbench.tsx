@@ -651,7 +651,6 @@ export default function TerrainWorkbench(p:Props){
    window.setTimeout(()=>URL.revokeObjectURL(url),1000);
  }
  const resultActions=(result||slope||profile)&&selected?<div className="terrain-result-footer" aria-label="Terrain result actions">
-   <button type="button" onClick={()=>{setResultTab('overview');setFigureView('analysis');setExpanded(true);}}>Review</button>
    {result?.features.length? <button disabled={!p.projectId||busy||selected.saved||result.features.length>512}
      title={result.features.length>512?'Export GeoJSON for large contour outputs':'Save terrain features'}
      onClick={()=>void save()}>{selected.saved?'Saved to project':'Save terrain features'}</button>:null}
@@ -680,7 +679,9 @@ export default function TerrainWorkbench(p:Props){
        {[...usableRecords].reverse().map(r=><option value={r.id} key={r.id}>{r.title} · {new Date(r.createdAt).toLocaleTimeString()}</option>)}
      </select>
    </div>}
-   <h3 className="terrain-flat-heading"><SectionIcon role="terrainResult"/> {selected.title}</h3>
+   <div className="terrain-summary-title"><h3 className="terrain-flat-heading"><SectionIcon role="terrainResult"/> {selected.title}</h3>
+     <button type="button" className="terrain-review-button" onClick={()=>{setResultTab('overview');setFigureView('analysis');setExpanded(true);}}>Review</button>
+   </div>
    {inputsChanged&&<small className="terrain-summary-source">Previous result</small>}
    {result?.raster?.png&&<img className="terrain-overview-preview" src={result.raster.png} alt="Terrain overview preview"/>}
    {profile&&<div aria-hidden={expanded} style={{visibility:expanded?'hidden':'visible'}}><ProfilePlot samples={profile.samples} length={profile.length_m} onHover={p.onHover} mapIndex={p.profileMapIndex??null}/></div>}
@@ -688,9 +689,9 @@ export default function TerrainWorkbench(p:Props){
    {slope&&<div className="terrain-metrics terrain-key-metrics"><div><span>Mean slope</span><strong>{fmt(slope.mean_slope_deg)}°</strong></div><div><span>Mean elevation</span><strong>{fmt(slope.elevation_mean_m)} m</strong></div></div>}
    {profile&&<small>{fmt(profile.length_m)} m · {profile.samples.length} samples</small>}
    {result&&<small>{result.valid_cells.toLocaleString()} valid cells{result.features.length?' · '+result.features.length+' features':''}</small>}
+   {resultActions}
  </section>:null;
  const reviewContent=<div className="terrain-monitor-content">
-   {!selected&&<div className="section-heading">Terrain history <button type="button" onClick={()=>setExpanded(false)}>Close review</button></div>}
    {resultCacheError&&<small role="alert" className="discovery-error">
      Result cache: {resultCacheError} Export active results before leaving this page.
    </small>}
@@ -742,7 +743,7 @@ export default function TerrainWorkbench(p:Props){
    </section>}
    {(result||slope||profile)&&<>
      <div id="terrain-result-content" role="tabpanel" aria-label={resultTab[0].toUpperCase()+resultTab.slice(1)+' terrain result'} className="terrain-tab-content">
-     <div className="section-heading">{selected?.title} <span>{resultTab==='visual'&&selected&&<button type="button" onClick={()=>{setExpanded(false);setFigureGalleryOpen(true);}}>Figure library</button>}{expanded&&<button onClick={()=>setExpanded(false)}>Close review</button>}</span></div>
+     {resultTab==='visual'&&selected&&<div className="section-heading"><button type="button" onClick={()=>{setExpanded(false);setFigureGalleryOpen(true);}}>Figure library</button></div>}
      {resultTab==='visual'&&researchFigures.length>0&&<nav className="terrain-figure-tabs" aria-label="Research figures">
        <button type="button" aria-pressed={figureView==='analysis'} onClick={()=>setFigureView('analysis')}>Analysis</button>
        {researchFigures.map(item=><button type="button" key={item.id} aria-pressed={figureView===item.id}
@@ -818,10 +819,6 @@ export default function TerrainWorkbench(p:Props){
        {resultTab==='details'&&<small className="compact-notice" title={slope.warning}>{slope.valid_pixels} valid cells · {slope.engine}</small>}
      </>}
      {(resultTab==='overview'||resultTab==='visual'&&figureView==='analysis')&&profile&&<ProfilePlot samples={profile.samples} length={profile.length_m} onHover={p.onHover} mapIndex={p.profileMapIndex??null}/>}
-     {resultTab==='overview'&&selected&&<div className="terrain-overview-context">
-       <span>{selected.source.name}</span>
-       <span>{new Date(selected.createdAt).toLocaleString()}</span>
-     </div>}
      {resultTab==='overview'&&!result&&profile&&<div className="terrain-key-metrics">
        <div><span>Length</span><strong>{fmt(profile.length_m)} m</strong></div>
        <div><span>Samples</span><strong>{profile.samples.length}</strong></div>
@@ -959,7 +956,7 @@ export default function TerrainWorkbench(p:Props){
 
  </div>;
  return <>
- {p.active&&expanded&&(selected||runHistory.length>0||resultCacheError)&&<ResultPane expanded onClose={()=>setExpanded(false)}>{reviewContent}</ResultPane>}
+ {p.active&&expanded&&(selected||runHistory.length>0||resultCacheError)&&<ResultPane expanded title={selected?.title??'Terrain history'} onClose={()=>setExpanded(false)}>{reviewContent}</ResultPane>}
  {studioOpen&&<ScientificFigureStudio source={{name:selected?.title??'Terrain workspace',csv:selected?.profile?studioTableCSV({columns:['distance_m','elevation_m'],rows:selected.profile.samples.map(s=>[s.distance_m,s.elevation_m]),x_label:'',y_label:'',unit:'m'}):selected?.advanced?studioTableCSV({columns:Object.keys(selected.advanced.metrics),rows:[Object.values(selected.advanced.metrics)],x_label:'',y_label:'',unit:''}):undefined,rasters:studioRasters,provenance:selected?{id:selected.id,source:selected.source,geometry:selected.geometry,parameters:selected.parameters}:undefined}} onClose={()=>setStudioOpen(false)}/>}
  {figureGalleryOpen&&selected&&<FigureGallery record={selected} projectId={p.projectId} onClose={()=>setFigureGalleryOpen(false)}/>}
  {researchOpen&&<TerrainResearchPanel projectId={p.projectId} record={selected??null} connected={p.connected}
@@ -1297,7 +1294,6 @@ export default function TerrainWorkbench(p:Props){
  </div>
  {p.resultsTarget?(p.active&&monitor?createPortal(monitor,p.resultsTarget):null):monitor}
  {p.operationsFooterTarget?(p.active&&runActions?createPortal(runActions,p.operationsFooterTarget):null):null}
- {p.resultsFooterTarget?(p.active&&resultActions?createPortal(resultActions,p.resultsFooterTarget):null):resultActions}
  {/* Export owns a separate module; its actions must survive leaving Terrain. */}
  {p.exportTarget?createPortal(terrainFileActions,p.exportTarget):null}
  </>;
