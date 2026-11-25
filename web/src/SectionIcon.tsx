@@ -1,4 +1,4 @@
-import {ListTree,PanelLeft,FolderKanban,Paintbrush,Layers,MapPinned,Scan,ListChecks,BookOpen,Focus,Image,ChartScatter,Box,CalendarClock,Network,Satellite,Earth,Bot,Waypoints,Spline,CornerDownRight,GitMerge,TableProperties,FilePenLine,ArrowLeftRight,MountainSnow,DraftingCompass,ScanLine,Workflow,FileText,Folder,Layers3,Palette,SlidersHorizontal,Compass,BrainCircuit,Target,Monitor,RadioTower,HeartPulse,Server,DatabaseZap,Timer,type LucideIcon} from 'lucide-react';
+import {ListTree,PanelLeft,FolderKanban,Paintbrush,Combine,MapPinned,Scan,ListChecks,BookOpen,Focus,Image,ChartScatter,Box,CalendarClock,Network,Satellite,Earth,Bot,Waypoints,Spline,CornerDownRight,GitMerge,TableProperties,FilePenLine,ArrowLeftRight,MountainSnow,DraftingCompass,ScanLine,Share2,FileText,Folder,Layers3,Palette,SlidersHorizontal,Compass,BrainCircuit,Target,Monitor,RadioTower,HeartPulse,Server,DatabaseZap,Timer,HardDrive,ListOrdered,Gauge,Wrench,FlaskConical,ChartNoAxesCombined,FileCog,Info,Landmark,Telescope,Scale,Binoculars,Cog,type LucideIcon} from 'lucide-react';
 
 // A distinct visual identifier for each functional section in the workspace.
 export const SECTION_ICONS={
@@ -6,7 +6,7 @@ export const SECTION_ICONS={
   workspace:PanelLeft,
   projects:FolderKanban,
   drawings:Paintbrush,
-  overlays:Layers,
+  overlays:Combine,
   placeSearch:MapPinned,
   areaSearch:Scan,
   searchResults:ListChecks,
@@ -30,7 +30,7 @@ export const SECTION_ICONS={
   terrain:MountainSnow,
   geometry:DraftingCompass,
   selection:ScanLine,
-  topology:Workflow,
+  topology:Share2,
   pdf:FileText,
   layerGroup:Folder,
   layerManager:Layers3,
@@ -45,6 +45,19 @@ export const SECTION_ICONS={
   ogcServices:Server,
   spatialDatabase:DatabaseZap,
   backgroundJobs:Timer,
+  demSource:HardDrive,
+  terrainCatalog:ListOrdered,
+  terrainParameters:Gauge,
+  demPreparation:Wrench,
+  terrainResearch:FlaskConical,
+  terrainFigures:ChartNoAxesCombined,
+  demAccess:FileCog,
+  demMetadata:Info,
+  terrainDesign:Landmark,
+  viewingSector:Telescope,
+  criterionWeights:Scale,
+  observers:Binoculars,
+  demProcessing:Cog,
 } satisfies Record<string,LucideIcon>;
 export type SectionIconRole=keyof typeof SECTION_ICONS;
 export function SectionIcon({role,size=13}:{role:SectionIconRole;size?:number}){

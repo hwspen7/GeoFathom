@@ -2163,3 +2163,44 @@ button:disabled { opacity: .45; cursor: not-allowed; }
    moving the global object list or introducing an invisible scroll container. */
 .desktop-gis .gis-operations:is([data-active-module="tools-survey"],[data-active-module="tools-gis"],[data-active-module="tools-spatial"])[data-dock-density="compact"] .workspace-module-content>.panel-section:not([hidden]){padding-top:0}
 .desktop-gis .gis-operations .analysis-selection-actions button{min-width:0}
+
+/* Terrain follows the flat editing workspaces, with fixed, measured pages
+   rather than a hidden scrolling panel. */
+.desktop-gis .gis-operations[data-active-module="tools-terrain"] .workspace-module-content{display:flex;flex-direction:column;overflow:clip;overscroll-behavior:none;overflow-anchor:none}
+.desktop-gis .gis-operations[data-active-module="tools-terrain"]>.sidebar-scroll{overflow:clip!important}
+.desktop-gis .gis-operations[data-active-module="tools-terrain"] #tools-terrain:not([hidden]){display:flex;flex:1 1 0;min-height:0;flex-direction:column;padding:0;margin:0;border:0}
+.desktop-gis .gis-operations[data-active-module="tools-terrain"] .terrain-workbench{display:flex;flex:1 1 0;min-height:0;gap:0}
+.desktop-gis .gis-operations[data-active-module="tools-terrain"] .terrain-control-page:not([hidden]){display:flex;flex:1 1 0;min-height:0;overflow:clip;gap:6px;padding:9px 0 0!important}
+.terrain-flat-heading{display:flex;align-items:center;gap:6px;margin:0;font-size:12px;line-height:17px;font-weight:650;color:#3c5b70}
+.terrain-flat-heading>svg{flex:none;color:#526f85;stroke-width:1.7}
+.desktop-gis .terrain-linked-controls{gap:6px;padding:3px 0 9px}
+.desktop-gis .terrain-linked-controls .terrain-flat-heading:not(:first-child){margin-top:3px}
+.desktop-gis .terrain-linked-select select,.desktop-gis .terrain-linked-row>button{height:30px;min-height:30px;border-radius:4px;font-size:11px;padding:4px 6px}
+.terrain-secondary-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}
+.terrain-secondary-actions button{display:flex;align-items:center;justify-content:center;gap:4px;min-width:0;min-height:30px;border:1px solid #d3e0e8;border-radius:4px;background:#fff;color:#42687f;font-size:10px;white-space:nowrap;padding:4px 2px}
+.terrain-secondary-actions button[aria-pressed=true]{background:#eaf4fa;border-color:#89b1c8}
+.terrain-secondary-actions button:disabled{opacity:.4}
+.desktop-gis .terrain-control-page .terrain-paged-form{display:flex;flex-direction:column;flex:1 1 0;min-height:0;gap:4px;margin:0}
+.terrain-page-viewport{flex:1 1 0;min-height:0;position:relative;overflow:clip}
+.terrain-page-row{position:absolute;left:0;right:0;min-width:0;display:grid;gap:4px}
+.terrain-page-row>.area-fields{margin:0}
+.terrain-form-pager{flex:none;height:25px}
+.desktop-gis .gis-operations .terrain-step .terrain-page-row :is(input:not([type=checkbox]):not([type=file]),select,button){box-sizing:border-box;min-height:30px;border-radius:4px!important;font-size:11px;padding:4px 6px}
+.desktop-gis .gis-operations .terrain-step .terrain-page-row label{font-size:11px}
+.desktop-gis .gis-operations .terrain-step .terrain-page-row .area-fields{gap:6px}
+.desktop-gis .gis-operations .terrain-step .terrain-page-row .raster-upload{min-height:30px}
+.desktop-gis .terrain-control-page .terrain-source-metadata{padding:5px 0;border:0}
+.desktop-gis .terrain-control-page .terrain-source-metadata .compact-notice{display:block;margin-top:3px}
+.desktop-gis .gis-operations .terrain-control-page .workspace-tool-shelf,.terrain-catalog-pager{display:flex;flex-direction:column;flex:1 1 0;min-height:0}
+.desktop-gis .terrain-control-page .terrain-command-grid{margin:0;gap:6px}
+.desktop-gis .terrain-control-page .terrain-command-grid button{min-height:30px!important}
+.desktop-gis .gis-operations[data-active-module="tools-terrain"] .workspace-module-content>.geometry-edit-controls{flex:none;margin:0;padding:3px 0}
+.desktop-gis .gis-operations[data-active-module="tools-terrain"]>.workspace-fixed-footer:not(:empty){padding:6px 10px}
+.desktop-gis .gis-operations[data-dock-density="compact"] .terrain-linked-controls{gap:4px;padding-bottom:6px}
+.desktop-gis .gis-operations[data-dock-density="compact"] .terrain-linked-controls :is(button,select),.desktop-gis .gis-operations[data-dock-density="compact"] .terrain-page-row :is(button,select,input:not([type=checkbox]):not([type=file])){min-height:26px;height:26px;padding-top:2px;padding-bottom:2px}
+
+.desktop-gis .terrain-workbench>.terrain-inline-status,.desktop-gis .terrain-workbench>.terrain-inline-error{flex:none;margin:3px 0 0;padding:0;font-size:10px;line-height:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.desktop-gis .terrain-workbench .terrain-source-note{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.desktop-gis .terrain-page-row>.terrain-flat-heading{padding-top:3px;border-top:1px solid #dce5eb}
+.desktop-gis .terrain-page-row>.terrain-source-metadata>.terrain-flat-heading{margin-bottom:4px}
+.desktop-gis .terrain-page-row .terrain-observer-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;align-items:end;gap:5px}

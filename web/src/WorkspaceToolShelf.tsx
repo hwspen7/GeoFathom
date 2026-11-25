@@ -2,12 +2,13 @@
  * remain in their owning workbench, keeping one source of state.
  */
 import {useState} from 'react';
+import TerrainPagedForm from './TerrainPagedForm';
 import {SearchCode} from 'lucide-react';
 export interface WorkbenchTool<T extends string> {id:T;title:string}
 export default function WorkspaceToolShelf<T extends string>({
-  category,categories,tools,selected,onCategory,onSelect,
+  category,categories,tools,selected,onCategory,onSelect,active=true,
 }:{
-  category:string;categories:Record<string,T[]>;tools:WorkbenchTool<T>[];
+  active?:boolean;category:string;categories:Record<string,T[]>;tools:WorkbenchTool<T>[];
   selected:T|null;onCategory:(group:string)=>void;onSelect:(tool:T|null)=>void;
 }){
   const [query,setQuery]=useState('');
@@ -29,13 +30,14 @@ export default function WorkspaceToolShelf<T extends string>({
           onChange={event=>setQuery(event.target.value)}/>
       </label>
     </div>
-    <div className="terrain-command-grid" aria-label="Terrain tools">
-      {matches.map(tool=><button key={tool.id} type="button"
-        aria-pressed={selected===tool.id}
-        title={tool.id.replaceAll('_',' ')}
-        onClick={()=>onSelect(selected===tool.id?null:tool.id)}>{tool.title}</button>)}
+    <div className="terrain-catalog-pager" aria-label="Terrain tools">
+      <TerrainPagedForm active={active} name="Terrain catalog pages" resetKey={category+':'+query}>
+        {Array.from({length:Math.ceil(matches.length/2)},(_,i)=><div className="terrain-command-grid" key={i}>
+          {matches.slice(i*2,i*2+2).map(tool=><button key={tool.id} type="button" aria-pressed={selected===tool.id} title={tool.id.replaceAll('_',' ')} onClick={()=>onSelect(selected===tool.id?null:tool.id)}>{tool.title}</button>)}
+        </div>)}
+        {!matches.length&&<small className="workspace-tree-empty">No matching terrain tools</small>}
+      </TerrainPagedForm>
     </div>
-    {!matches.length&&<small className="workspace-tree-empty">No matching terrain tools</small>}
     <select aria-label="Advanced terrain operation" className="visually-hidden"
       tabIndex={-1} value={selected??''}
       onChange={e=>{const tool=e.target.value as T;

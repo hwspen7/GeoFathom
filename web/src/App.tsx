@@ -1250,7 +1250,7 @@ export default function App() {
   namedLegend.push(...vectorLegend.values());
   if(terrainProfileLine)namedLegend.push({id:'profile-line',name:'Profile measurement line',color:'#d26b2f'});
   // Keep the object portal host stable across navigation; only module tools change.
-  const gisFlat=['tools-gis','tools-survey','tools-spatial'].includes(activeTool);
+  const gisFlat=['tools-gis','tools-survey','tools-spatial','tools-terrain'].includes(activeTool);
   const GeometryContainer=gisFlat?'section':'details';
   return (
     <div className="workspace desktop-gis">
@@ -1814,7 +1814,7 @@ export default function App() {
             <div ref={setObjectTreeTarget}/>
           </section>
           <div className="workspace-module-content">
-            {geometry&&<GeometryContainer className="geometry-edit-controls">
+            {geometry&&(activeTool!=='tools-terrain'||editing)&&<GeometryContainer className="geometry-edit-controls">
               {!gisFlat&&<summary>Geometry / vertices</summary>}
               <BoundaryEditor compact={gisFlat} geometry={geometry} sourcePlace={selectedPlace} selectedParcel={selectedParcel}
                 onChooseParcel={value=>void chooseSelectedParcel(value)}

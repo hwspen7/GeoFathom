@@ -1,3 +1,5 @@
+import {SectionIcon} from './SectionIcon';
+import TerrainPagedForm from './TerrainPagedForm';
 import {downloadTerrainRaster,materializeScientificRaster,type StudioRaster} from './api';
 import {terrainSource,type ScienceRaster} from './scienceRegistry';
 import {useEffect,useMemo,useRef,useState,type ChangeEvent} from 'react';
@@ -943,8 +945,8 @@ export default function TerrainWorkbench(p:Props){
  <div className="terrain-workbench professional-panel">
    {researchLayer&&<div className="survey-action-bar"><button type="button" onClick={()=>setResearchLayer(null)}>Clear research map</button></div>}
    <div className="terrain-linked-controls" aria-label="Terrain analysis inputs">
-     <div className="terrain-linked-row">
-       <label className="terrain-linked-select">DEM
+    <h3 className="terrain-flat-heading"><SectionIcon role="demSource"/> Elevation</h3>
+    <div className="terrain-linked-row"><label className="terrain-linked-select" title="Digital elevation model">
          <select aria-label="DEM elevation layer" value={dem?.id??''} disabled={fetching||importing}
            onChange={e=>{
              sourceIntent.current++;
@@ -956,14 +958,10 @@ export default function TerrainWorkbench(p:Props){
            {[...assets,...(dem&&!assets.some(a=>a.id===dem.id)?[dem]:[])].map(asset=>
              <option key={asset.id} value={asset.id}>{asset.name}</option>)}
          </select>
-       </label>
-       <button className={leftTab==='source'?'terrain-linked-active':''} type="button"
-         aria-label="Get DEM" aria-pressed={leftTab==='source'} onClick={()=>setLeftTab('source')}>Get DEM</button>
-       <button type="button" aria-label="Research analysis" onClick={()=>setResearchOpen(true)}>Research</button>
-       <button type="button" onClick={()=>{const r=selected?.advanced?.raster;setStudioRasters([]);if(!r){setStudioOpen(true);return;}void materializeScientificRaster({name:selected?.title??'Terrain result',data:r.geotiff,unit:r.unit??'',product_id:r.product_id}).then(x=>{if(alive.current){setStudioRasters([{name:x.name,data:x.data,unit:x.unit}]);setStudioOpen(true);}}).catch(e=>{if(alive.current){setError(String(e.message??e));setStudioRasters([]);setStudioOpen(true);}});}}>Figure studio</button>
-     </div>
-     <div className="terrain-linked-row">
-       <label className="terrain-linked-select">Analysis
+       </label><button className={leftTab==='source'?'terrain-linked-active':''} type="button"
+         aria-label="Get DEM" aria-pressed={leftTab==='source'} onClick={()=>setLeftTab('source')}>Get DEM</button></div>
+    <h3 className="terrain-flat-heading"><SectionIcon role="terrainCatalog"/> Analysis</h3>
+    <div className="terrain-linked-row"><label className="terrain-linked-select">
          <select aria-label="Choose terrain analysis" value={operation??''}
            onChange={e=>{
              const value=e.target.value as Operation|'';
@@ -973,20 +971,20 @@ export default function TerrainWorkbench(p:Props){
            <option value="">Choose an analysis</option>
            {modes.map(item=><option key={item.id} value={item.id}>{item.title}</option>)}
          </select>
-       </label>
-       <button className={leftTab==='tools'?'terrain-linked-active':''} type="button"
+       </label><button className={leftTab==='tools'?'terrain-linked-active':''} type="button"
          aria-label="Browse terrain tools" aria-pressed={leftTab==='tools'}
-         onClick={()=>setLeftTab('tools')}>Browse</button>
-       <button type="button" disabled={!dem}
+         onClick={()=>setLeftTab('tools')}>Browse</button></div>
+    <div className="terrain-secondary-actions"><button type="button" disabled={!dem}
          aria-label="Process DEM" aria-pressed={leftTab==='process'}
-         onClick={()=>setLeftTab('process')}>Prepare</button>
-     </div>
+         onClick={()=>setLeftTab('process')}><SectionIcon role="demPreparation"/> Prepare</button><button type="button" aria-label="Research analysis" onClick={()=>setResearchOpen(true)}><SectionIcon role="terrainResearch"/> Research</button><button type="button" onClick={()=>{const r=selected?.advanced?.raster;setStudioRasters([]);if(!r){setStudioOpen(true);return;}void materializeScientificRaster({name:selected?.title??'Terrain result',data:r.geotiff,unit:r.unit??'',product_id:r.product_id}).then(x=>{if(alive.current){setStudioRasters([{name:x.name,data:x.data,unit:x.unit}]);setStudioOpen(true);}}).catch(e=>{if(alive.current){setError(String(e.message??e));setStudioRasters([]);setStudioOpen(true);}});}}><SectionIcon role="terrainFigures"/> Figure studio</button></div>
    </div>
    <section id="terrain-panel-source" className="terrain-source terrain-step terrain-control-page"
      role="region" aria-label="Source settings" hidden={leftTab!=='source'}>
-     {!p.localImport&&<details className="access-settings"><summary>Import access</summary><input type="password" aria-label="DEM import token" value={token} onChange={e=>setToken(e.target.value)}/></details>}
+     <TerrainPagedForm active={p.active&&leftTab==='source'} name="DEM source pages">
+     {!p.localImport&&<label className="terrain-access-row"><SectionIcon role="demAccess"/> Import token<input type="password" aria-label="DEM import token" value={token} onChange={e=>setToken(e.target.value)}/></label>}
      <label className="raster-upload" title="Single-band DEM GeoTIFF, projected in meters, with meter elevations"><Mountain size={14}/> {importing?'Importing…':'Import DEM'}
        <input type="file" aria-label="Import DEM" accept=".tif,.tiff" disabled={importing||fetching||!p.connected} onChange={e=>void importDEM(e)}/></label>
+     {dem&&!/Copernicus DEM GLO-|USGS 3DEP Bare Earth DEM/.test(dem.provenance)&&<label className="gis-check"><input aria-label="Confirm DEM meter elevations" type="checkbox" checked={verticalConfirmed} onChange={e=>setVerticalConfirmed(e.target.checked)}/> Elevations in meters</label>}
      <label>Download area <select aria-label="DEM fetch area" value={fetchScope} onChange={e=>{setFetchChoice(e.target.value as FetchScope);setInfo('');}}>
        <option value="viewport">Current map view</option><option value="selection" disabled={!selectedGeometry}>Selected geometry</option>
      </select></label>
@@ -1022,19 +1020,19 @@ export default function TerrainWorkbench(p:Props){
        <button disabled={!p.connected||!fetchArea||!!budget?.warning||fetching||importing} title="Download the explicitly displayed area, not a previous selection" onClick={()=>void fetchDEM()}>{fetching?'Fetching…':'Fetch DEM'}</button>
        {fetching&&<button aria-label="Cancel DEM download" onClick={()=>{sourceIntent.current++;fetchAbort.current?.abort();setInfo('Cancelling the previous download…');}}>Cancel</button>}
      </div>
-     {(sourceInfo||dem||!supportsUSGS&&fetchArea)&&<details className="terrain-source-metadata">
-       <summary>Source info</summary>
-       {sourceInfo&&<small className="compact-notice" title="Copernicus DSM / USGS bare-earth DEM">{sourceInfo}</small>}
-       {!supportsUSGS&&fetchArea&&<small className="compact-notice">Global coverage: Copernicus. Regional DEMs may offer finer native resolution.</small>}
-       {dem&&<small className="compact-notice" title={dem.provenance}>{dem.width} × {dem.height} · {dem.crs} · elevation m · {describeTerrainBounds(dem.bbox)}</small>}
-     </details>}
-     {mapMismatch&&<small className="discovery-error" role="status">Selected DEM is outside the current map. Choose a local source or use Fit explicitly.</small>}
-     {sourceMismatch&&<small className="discovery-error" role="status">Selected analysis shape is not completely covered by this DEM. Select a matching source.</small>}
-     {dem&&!/Copernicus DEM GLO-|USGS 3DEP Bare Earth DEM/.test(dem.provenance)&&<label className="gis-check"><input aria-label="Confirm DEM meter elevations" type="checkbox" checked={verticalConfirmed} onChange={e=>setVerticalConfirmed(e.target.checked)}/> Confirm single-band meter elevations</label>}
+     {(sourceInfo||dem||!supportsUSGS&&fetchArea)&&<section className="terrain-source-metadata"><h3 className="terrain-flat-heading"><SectionIcon role="demMetadata"/> Source</h3>
+       {sourceInfo&&<small className="compact-notice terrain-source-note" title={sourceInfo}>{sourceInfo}</small>}
+       {!supportsUSGS&&fetchArea&&<small className="compact-notice">Copernicus global</small>}
+       {dem&&<small className="compact-notice" title={dem.provenance}>{dem.width} × {dem.height} · {dem.crs} · m</small>}
+     </section>}
+     {mapMismatch&&<small className="discovery-error" role="status">DEM outside map. Use Fit or change source.</small>}
+     {sourceMismatch&&<small className="discovery-error" role="status">Study area outside DEM.</small>}
+     
+   </TerrainPagedForm>
    </section>
    <section id="terrain-panel-tools" className="terrain-step terrain-analysis-step terrain-control-page"
      role="region" aria-label="Terrain tools page" hidden={leftTab!=='tools'}>
-   <WorkspaceToolShelf category={category} categories={categories} tools={modes}
+   <WorkspaceToolShelf active={p.active&&leftTab==='tools'} category={category} categories={categories} tools={modes}
     selected={operation} onCategory={name=>{
       setCategory(name);setOperation(null);setLive(false);setPickEnd(false);
     }} onSelect={value=>{
@@ -1045,22 +1043,19 @@ export default function TerrainWorkbench(p:Props){
    </section>
    <section id="terrain-panel-setup" className="terrain-step terrain-setup-page terrain-control-page"
      role="region" aria-label="Terrain parameters page" hidden={leftTab!=='setup'}>
-     <div className="terrain-setup-heading"><strong>{modes.find(m=>m.id===operation)?.title??'Analysis settings'}</strong>
-       <button type="button" onClick={()=>setLeftTab('tools')}>Browse tools</button>
-     </div>
-   {operation&&<div className="professional-form">
+     <h3 className="terrain-flat-heading"><SectionIcon role="terrainParameters"/> {modes.find(m=>m.id===operation)?.title??'Parameters'}</h3>
+   {operation&&<TerrainPagedForm active={p.active&&leftTab==='setup'} name="Terrain parameter pages" resetKey={operation}>
      <div className="survey-action-bar">
        <button onClick={()=>p.onDraw(lineOperation)}>{lineOperation?'Draw profile line':'Draw study area'}</button>
        {lineOperation&&p.profileGeometry&&<button onClick={p.onClearProfile}>Remove profile line</button>}
        {!lineOperation&&<button disabled={!dem} aria-pressed={p.extentMode} onClick={p.onUseExtent}>DEM extent</button>}
        {p.extentMode&&<button onClick={p.onUseSelection}>Use selection</button>}
      </div>
-     <small className="compact-notice">{correctShape?(lineOperation?'✓ Independent profile line':p.extentMode?'✓ DEM footprint':'✓ Geometry selected'):lineOperation?'Draw a profile line; the selected area stays on the map':'Select or draw a polygon'}</small>
+     <small className="compact-notice">{correctShape?(lineOperation?'✓ Independent profile line':p.extentMode?'✓ DEM footprint':'✓ Geometry selected'):lineOperation?'Draw profile line':'Select study area'}</small>
      {operation==='contours'&&<label>Interval (m)<input aria-label="Contour interval" type="number" min=".01" step="any" value={interval} onChange={e=>setInterval(e.target.value)}/></label>}
      {operation==='dem_difference'&&<label>Reference DEM<select aria-label="Reference comparison DEM" value={comparisonId} onChange={e=>setComparisonId(e.target.value)}><option value="">Select second DEM</option>{assets.filter(a=>a.bands===1&&a.id!==dem?.id).map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>}
      {(operation==='volume'||operation==='cutfill_map')&&<label>Reference elevation (m)<input aria-label="Reference elevation" type="number" step="any" value={reference} onChange={e=>setReference(e.target.value)}/></label>}
-     {['volume','cutfill_map'].includes(operation)&&<details className="terrain-method-settings">
-       <summary>Design surface and uncertainty</summary>
+     {['volume','cutfill_map'].includes(operation)&&<><h3 className="terrain-flat-heading"><SectionIcon role="terrainDesign"/> Design surface</h3>
        <div className="area-fields">
          <label>East grade (m/m)<input aria-label="Design east grade" type="number" step="0.01" min="-1" max="1" value={designEastGrade} onChange={e=>setDesignEastGrade(e.target.value)}/></label>
          <label>North grade (m/m)<input aria-label="Design north grade" type="number" step="0.01" min="-1" max="1" value={designNorthGrade} onChange={e=>setDesignNorthGrade(e.target.value)}/></label>
@@ -1074,8 +1069,8 @@ export default function TerrainWorkbench(p:Props){
          <label>Cross quadratic (1/m)<input aria-label="Design cross quadratic curvature" type="number" step="0.00001" min="-1" max="1" value={designCurvatureCross} onChange={e=>setDesignCurvatureCross(e.target.value)}/></label>
          <label>North quadratic (1/m)<input aria-label="Design north quadratic curvature" type="number" step="0.00001" min="-1" max="1" value={designCurvatureNorth} onChange={e=>setDesignCurvatureNorth(e.target.value)}/></label>
        </div>
-       <small className="compact-notice">Design uses a quadratic surface with a conservative maximum-grade check across the grid rectangle. Vertical uncertainty is assumed, not measured.</small>
-     </details>}
+       <small className="compact-notice" title="Quadratic design surface; conservative maximum-grade check across the grid.">Assumed vertical uncertainty</small>
+     </>}
      {operation==='cross_sections'&&<div className="area-fields"><label>Station spacing (m)<input type="number" value={sectionSpacing} onChange={e=>setSectionSpacing(e.target.value)}/></label><label>Half-width (m)<input type="number" value={sectionWidth} onChange={e=>setSectionWidth(e.target.value)}/></label></div>}
      {operation==='mesh'&&<label>3D mesh detail
         <select aria-label="3D mesh sampling budget" value={meshSamples} onChange={e=>setMeshSamples(e.target.value)}>
@@ -1085,8 +1080,8 @@ export default function TerrainWorkbench(p:Props){
           <option value="512">High detail · 512 samples/axis</option>
         </select>
       </label>}
-      {operation==='mesh'&&<label className="gis-check"><input aria-label="Generate 3D LOD tiles" type="checkbox" checked={meshLod} onChange={e=>setMeshLod(e.target.checked)}/> Generate mesh LOD pyramid (transport-ready)</label>}
-      {operation==='mesh'&&meshLod&&<small className="compact-notice">Aligned tile levels are calculated for export; camera-triggered streaming is not implemented.</small>}
+      {operation==='mesh'&&<label className="gis-check"><input aria-label="Generate 3D LOD tiles" type="checkbox" checked={meshLod} onChange={e=>setMeshLod(e.target.checked)}/> Generate LOD pyramid</label>}
+      {operation==='mesh'&&meshLod&&<small className="compact-notice" title="Aligned LOD tiles for export; camera-triggered streaming is not implemented.">Export LOD tiles</small>}
       {operation==='mesh'&&p.imageRaster&&p.imageRaster.bands>=3&&<label className="gis-check"><input type="checkbox" checked={drape} onChange={e=>setDrape(e.target.checked)}/> Drape selected RGB imagery</label>}
      {['slope','slope_map','aspect_map','hillshade','suitability','plan_curvature','profile_curvature'].includes(operation)&&
         <label>Gradient algorithm
@@ -1144,7 +1139,7 @@ export default function TerrainWorkbench(p:Props){
          <option value="">None · unknown off-grid catchments excluded</option>
          {assets.filter(a=>a.bands===1&&a.id!==dem?.id).map(a=><option key={a.id} value={a.id}>{a.name}</option>)}
        </select>
-       <small className="compact-notice">Requires a grid-aligned GeoTIFF explicitly tagged TERRAIN_UNIT=cells or cell_equivalents, with zeros outside known inlet cells.</small>
+       <small className="compact-notice" title="Grid-aligned GeoTIFF, TERRAIN_UNIT=cells or cell_equivalents; zeros outside known inlet cells.">Grid-aligned inflow raster</small>
      </label>}
      {operation==='flow_accumulation_mfd'&&<label>MFD convergence exponent
        <input aria-label="MFD routing exponent" type="number" min="0.5" max="8" step="0.1"
@@ -1171,7 +1166,7 @@ export default function TerrainWorkbench(p:Props){
          <option value="">Bare DEM · no building blockage</option>
          {assets.filter(a=>a.bands===1&&a.id!==dem?.id).map(a=><option key={a.id} value={a.id}>{a.name}</option>)}
        </select>
-       <small className="compact-notice">DSM must align with the DEM grid; unknown DSM cells remain unclassified.</small>
+       <small className="compact-notice" title="DSM must align with DEM; unknown DSM cells remain unclassified.">Grid-aligned DSM</small>
      </label>}
      {operation==='viewshed_multi'&&<label>Optimize observation sites
        <select aria-label="Optimize observer count" value={optimizeObservers} onChange={e=>setOptimizeObservers(e.target.value)}>
@@ -1180,8 +1175,7 @@ export default function TerrainWorkbench(p:Props){
          <option value="3">Best 3</option><option value="4">Best 4</option>
        </select>
      </label>}
-     {['visibility','viewshed_multi'].includes(operation)&&<details className="terrain-method-settings">
-        <summary>Viewing sector and range</summary>
+     {['visibility','viewshed_multi'].includes(operation)&&<><h3 className="terrain-flat-heading"><SectionIcon role="viewingSector"/> Viewing sector</h3>
         <label>Maximum distance (m, 0 = all)
           <input aria-label="Viewshed maximum distance" type="number" min="0" max="100000"
             value={viewshedDistance} onChange={e=>setViewshedDistance(e.target.value)}/>
@@ -1196,8 +1190,8 @@ export default function TerrainWorkbench(p:Props){
               value={viewshedWidth} onChange={e=>setViewshedWidth(e.target.value)}/>
           </label>
         </div>
-      </details>}
-      {(operation==='visibility'||operation==='viewshed_multi')&&<><label className="gis-check"><input aria-label="Consider Earth curvature" type="checkbox" checked={considerCurvature} onChange={e=>setConsiderCurvature(e.target.checked)}/> Earth curvature and atmospheric refraction</label>{considerCurvature&&<label>Refraction coefficient<input aria-label="Terrain refraction coefficient" type="number" min="0" max="0.5" step="0.01" value={refractionCoeff} onChange={e=>setRefractionCoeff(e.target.value)}/></label>}</>}
+      </>}
+      {(operation==='visibility'||operation==='viewshed_multi')&&<><label className="gis-check"><input aria-label="Consider Earth curvature" type="checkbox" checked={considerCurvature} onChange={e=>setConsiderCurvature(e.target.checked)}/> Curvature / refraction</label>{considerCurvature&&<label>Refraction coefficient<input aria-label="Terrain refraction coefficient" type="number" min="0" max="0.5" step="0.01" value={refractionCoeff} onChange={e=>setRefractionCoeff(e.target.value)}/></label>}</>}
      {operation==='least_cost'&&<label>Routing cost model
         <select aria-label="Terrain routing cost model" value={routeModel}
           onChange={e=>setRouteModel(e.target.value as 'surface'|'distance'|'gentle')}>
@@ -1213,15 +1207,14 @@ export default function TerrainWorkbench(p:Props){
          <option value="weighted">Weighted multi-criteria score 0–1</option>
        </select>
      </label>}
-     {operation==='suitability'&&suitabilityModel==='weighted'&&<details open className="terrain-method-settings">
-       <summary>Criterion weights</summary>
+     {operation==='suitability'&&suitabilityModel==='weighted'&&<><h3 className="terrain-flat-heading"><SectionIcon role="criterionWeights"/> Criterion weights</h3>
        <div className="area-fields">
          <label>Slope<input aria-label="Slope criterion weight" type="number" min="0" max="100" step="0.05" value={suitabilitySlopeWeight} onChange={e=>setSuitabilitySlopeWeight(e.target.value)}/></label>
          <label>Ruggedness<input aria-label="Ruggedness criterion weight" type="number" min="0" max="100" step="0.05" value={suitabilityTriWeight} onChange={e=>setSuitabilityTriWeight(e.target.value)}/></label>
          <label>Elevation<input aria-label="Elevation criterion weight" type="number" min="0" max="100" step="0.05" value={suitabilityElevationWeight} onChange={e=>setSuitabilityElevationWeight(e.target.value)}/></label>
        </div>
-       <small className="compact-notice">Weights are normalized to sum to one. Constraints remain mandatory; scores are not predicted probabilities.</small>
-     </details>}
+       <small className="compact-notice" title="Weights normalized to one; hard constraints remain mandatory.">Relative score, not probability</small>
+     </>}
      {operation==='suitability'&&<><div className="area-fields"><label>Min elevation (m)<input type="number" value={minElevation} onChange={e=>setMinElevation(e.target.value)}/></label><label>Max elevation (m)<input type="number" value={maxElevation} onChange={e=>setMaxElevation(e.target.value)}/></label></div><label>Maximum TRI (m)<input type="number" value={maxTri} onChange={e=>setMaxTri(e.target.value)}/></label></>}
      {needsPoint&&<>
        <div className="survey-action-bar"><button className={p.picking?'active':''} disabled={!area} onClick={()=>{setPickEnd(false);p.onPick();}}>{p.picking?'Click map…':operation==='visibility'?'Pick observer':operation==='least_cost'?'Pick route start':'Pick outlet'}</button>
@@ -1233,10 +1226,7 @@ export default function TerrainWorkbench(p:Props){
        {operation==='visibility'&&<div className="area-fields"><label>Observer (m)<input aria-label="Observer height" type="number" min="0" value={height} onChange={e=>setHeight(e.target.value)}/></label>
        <label>Target (m)<input aria-label="Target height" type="number" min="0" value={target} onChange={e=>setTarget(e.target.value)}/></label></div>}
      </>}
-     {operation==='viewshed_multi'&&<div className="terrain-multi-observers">
-      <div className="section-heading">Observers · {observerPoints.length}</div>
-      <small className="compact-notice">Specify {Number(optimizeObservers)>0?'2–12 candidate':'2–4'} WGS84 positions in distinct valid DEM cells. Optimization exhaustively checks all candidate combinations (up to 12 choose 4) for maximum positively observed coverage.</small>
-      <div className="terrain-observer-grid">
+     {operation==='viewshed_multi'&&<><h3 className="terrain-flat-heading" title="Distinct valid WGS84 cells; optimization checks all combinations."><SectionIcon role="observers"/> Observers · {observerPoints.length}</h3>
         {observerPoints.map(([x,y],index)=><div className="terrain-observer-row" key={index}>
           <label>Observer {index+1} longitude
             <input type="number" step="any" aria-label={`Observer ${index+1} longitude`}
@@ -1247,7 +1237,6 @@ export default function TerrainWorkbench(p:Props){
           <button type="button" aria-label={`Clear observer ${index+1}`}
             onClick={()=>setObserverPoints(old=>old.map((p,i)=>i===index?['','']:p))}>Clear</button>
         </div>)}
-      </div>
       <div className="survey-action-bar">
         <button disabled={!area||p.picking} onClick={()=>p.onPick()}>Pick next observer on map</button>
         <button disabled={observerPoints.length>=(Number(optimizeObservers)>0?12:4)}
@@ -1264,21 +1253,19 @@ export default function TerrainWorkbench(p:Props){
       {!multiObserversValid&&<small className="discovery-error">
         Enter {Number(optimizeObservers)>0?'2–12':'2–4'} different valid longitude/latitude pairs.
       </small>}
-    </div>}
+    </>}
     {!p.operationsFooterTarget&&runActions}
      {!p.connected&&<small className="compact-notice">API offline</small>}
      {!dem&&<small className="compact-notice">DEM required</small>}
      {sourceMismatch&&<small className="discovery-error">Selected analysis area is not fully covered by the DEM</small>}
-     {mapMismatch&&<small className="discovery-error">Run blocked: the selected DEM is outside the visible map. Use the raster Fit control or fetch new data.</small>}
+     {mapMismatch&&<small className="discovery-error">DEM outside map. Use Fit or fetch a new DEM.</small>}
      {dem&&!verified&&<small className="compact-notice">Confirm elevation units before analysis</small>}
      {!parametersValid&&<small className="discovery-error">Check numeric parameters</small>}
-   </div>}
+   </TerrainPagedForm>}
    </section>
    <section id="terrain-panel-process" className="terrain-step terrain-process-page terrain-control-page"
      role="region" aria-label="DEM processing page" hidden={leftTab!=='process'}>
-     {dem?<><div className="terrain-setup-heading"><strong>DEM processing</strong></div>
-     {dem&&<div className="terrain-dem-process-form">
-       <div className="professional-form">
+     {dem?<><h3 className="terrain-flat-heading"><SectionIcon role="demProcessing"/> Preparation</h3><TerrainPagedForm active={p.active&&leftTab==='process'} name="DEM preparation pages">
          <label>Operation<select aria-label="DEM processing operation" value={demProcessMode} onChange={e=>setDemProcessMode(e.target.value as DEMProcessMode)}>
            <option value="clip">Clip selected polygon</option><option value="resample">Resample source</option><option value="mosaic">Mosaic two DEMs</option>
          </select></label>
@@ -1291,13 +1278,10 @@ export default function TerrainWorkbench(p:Props){
          </select></label>
          <button disabled={!p.connected||fetching||importing||demProcessMode==='clip'&&!['Polygon','MultiPolygon'].includes(p.geometry?.type??'')||demProcessMode==='mosaic'&&(!processSecond||processSecond===dem.id)}
            onClick={()=>void processDEM()}>{importing?'Processing…':'Create processed DEM'}</button>
-         <small className="compact-notice">Processing changes the output grid, not the native input resolution or vertical datum.</small>
-       </div>
-     </div>}
-
-     </>:<span>No DEM selected</span>}
+         <small className="compact-notice" title="Native input resolution and vertical datum are unchanged.">Output grid only</small>
+       </TerrainPagedForm></>:<span>No DEM selected</span>}
    </section>
-   {info&&<p className="project-info">{info}</p>}{error&&<p className="discovery-error" role="alert">{error}</p>}
+   {info&&<p className="project-info terrain-inline-status" title={info}>{info}</p>}{error&&<p className="discovery-error terrain-inline-error" role="alert" title={error}>{error}</p>}
  </div>
  {p.resultsTarget?(p.active&&(records.length>0||runHistory.length>0||resultCacheError)?createPortal(monitor,p.resultsTarget):null):monitor}
  {p.operationsFooterTarget?(p.active&&runActions?createPortal(runActions,p.operationsFooterTarget):null):null}
