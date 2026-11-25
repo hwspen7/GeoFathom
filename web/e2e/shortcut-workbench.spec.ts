@@ -110,6 +110,12 @@ test('GIS tools and object browser stay open without collapsible sections',async
  await object.getByRole('button',{name:'Save name'}).click();
  await expect(legend).toContainText('Area 1');
  await expect(legend).not.toContainText('Polygon 1');
+ // Every object appears only once, and navigation uses the same compact list.
+ for(const module of ['Survey','Analysis','Spatial','Network','Temporal','LiDAR','Sensing','Raster','Mapping','Assistant']){
+  await nav.getByRole('button',{name:module,exact:true}).click();
+  await expect(tools.locator('.compact-object-row').filter({hasText:'Area 1'})).toBeVisible();
+ }
+ await nav.getByRole('button',{name:'GIS',exact:true}).click();
  for(const [width,height] of [[1680,900],[1280,720]]){
   await page.setViewportSize({width,height});
   await expect(tools.getByRole('button',{name:/Analyze selected/})).toBeInViewport({ratio:1});

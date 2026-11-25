@@ -14,7 +14,9 @@ from .measure import GeometryError, measure_geometry
 
 
 def polygonize_network(geometries: list[dict[str, Any]], tolerance_m: float = 1.0,
-                       minimum_area_m2: float = 0.01, max_faces: int = 300) -> dict:
+                       minimum_area_m2: float = 0.01, max_faces: int = 300,
+                       exclude_existing: bool = False,
+                       existing_areas: list[dict[str, Any]] | None = None) -> dict:
     if (isinstance(tolerance_m, bool) or not isinstance(tolerance_m, (int,float))
         or not math.isfinite(tolerance_m) or not 0 <= tolerance_m <= 20):
         raise GeometryError("Snap tolerance must be finite, 0–20 meters.")
@@ -24,6 +26,7 @@ def polygonize_network(geometries: list[dict[str, Any]], tolerance_m: float = 1.
     if not 1 <= max_faces <= 500 or not 1 <= len(geometries) <= 300:
         raise GeometryError("Network requires 1–300 sources and at most 500 faces.")
     lines=[]
+    source_polygons=[]
     count=0
     for geometry in geometries:
         if not isinstance(geometry, dict) or geometry.get("type") not in (
@@ -42,6 +45,8 @@ def polygonize_network(geometries: list[dict[str, Any]], tolerance_m: float = 1.
             continue
         pieces=[feature] if feature.geom_type in ("LineString","Polygon") else list(feature.geoms)
         for piece in pieces:
+            if exclude_existing and piece.geom_type=="Polygon":
+                source_polygons.append(piece)
             boundaries=[piece] if piece.geom_type=="LineString" else [piece.exterior,*piece.interiors]
             for path in boundaries:
                 coords=list(path.coords)
@@ -63,6 +68,50 @@ def polygonize_network(geometries: list[dict[str, Any]], tolerance_m: float = 1.
         f"+proj=aeqd +lat_0={latitude:.9f} +lon_0={longitude:.9f} +datum=WGS84 +units=m +no_defs")
     forward=Transformer.from_crs("EPSG:4326",projected,always_xy=True).transform
     backward=Transformer.from_crs(projected,"EPSG:4326",always_xy=True).transform
+    # The interactive workspace only needs genuinely new faces. Keep the
+    # complete polygonization API available for explicit scientific workflows.
+    references=[]
+    if exclude_existing:
+        if len(existing_areas or [])>500:
+            raise GeometryError("At most 500 existing area references are supported.")
+        reference_vertices=0
+        for geometry in existing_areas or []:
+            try:
+                candidate=shape(geometry)
+                if candidate.geom_type not in ("Polygon","MultiPolygon") or candidate.is_empty or not candidate.is_valid:
+                    raise ValueError("Invalid existing polygon")
+                pieces=[candidate] if candidate.geom_type=="Polygon" else candidate.geoms
+                for piece in pieces:
+                    for ring in [piece.exterior,*piece.interiors]:
+                        for point in ring.coords:
+                            reference_vertices+=1
+                            if reference_vertices>20000 or not all(math.isfinite(v) for v in point[:2]) or not (-180<=point[0]<=180 and -90<=point[1]<=90):
+                                raise ValueError("Invalid existing area coordinates")
+                    source_polygons.append(piece)
+            except (TypeError,ValueError,KeyError,AttributeError,IndexError,GEOSException,OverflowError) as exc:
+                raise GeometryError("Invalid existing area reference.") from exc
+        for polygon in source_polygons:
+            projected_polygon=transform(forward,polygon)
+            if projected_polygon.is_valid and projected_polygon.area>0 and all(math.isfinite(v) for v in projected_polygon.bounds):
+                references.append(projected_polygon)
+
+    def existing_face(face):
+        # Ring order, winding and redundant collinear vertices do not define
+        # identity. Use projected geometric equality, allowing only tiny
+        # numerical deviations (not arbitrary overlapping or adjacent faces).
+        for reference in references:
+            if not face.intersects(reference):
+                continue
+            area_scale=max(face.area,reference.area)
+            if abs(face.area-reference.area)>area_scale*1e-8:
+                continue
+            if face.equals(reference):
+                return True
+            if (face.hausdorff_distance(reference)<=0.0001
+                and face.symmetric_difference(reference).area<=area_scale*1e-8):
+                return True
+        return False
+
     paths=[transform(forward,path) for path in lines]
     if tolerance_m>0:
         # Endpoints are included as snapping references for T-junctions.
@@ -75,13 +124,15 @@ def polygonize_network(geometries: list[dict[str, Any]], tolerance_m: float = 1.
     measured=[]
     for face in faces.geoms:
         if face.is_empty or not face.is_valid or face.area<minimum_area_m2: continue
+        duplicate=exclude_existing and existing_face(face)
         geographic=mapping(transform(backward,face))
         result=measure_geometry(geographic)  # Ellipsoidal, includes inner rings.
         if result["area_m2"]<minimum_area_m2:continue
         anchor=transform(backward,face.representative_point())
-        measured.append((face.centroid.y,face.centroid.x,geographic,result,[anchor.x,anchor.y]))
-    if len(measured)>max_faces:
-        raise GeometryError(f"Detected {len(measured)} faces; reduce input or increase max_faces.")
+        measured.append((face.centroid.y,face.centroid.x,geographic,result,[anchor.x,anchor.y],duplicate))
+    novel_count=sum(not item[-1] for item in measured)
+    if novel_count>max_faces:
+        raise GeometryError(f"Detected {novel_count} faces; reduce input or increase max_faces.")
     measured.sort(key=lambda x:(-round(x[0],3),round(x[1],3)))
     outputs=[{"id":f"area-{index+1}","name":f"Area {index+1}",
               "geometry":geometry,"measurement":measurement,"label_anchor":anchor,
@@ -89,7 +140,7 @@ def polygonize_network(geometries: list[dict[str, Any]], tolerance_m: float = 1.
                             "area_m2":measurement["area_m2"],
                             "perimeter_m":measurement["perimeter_m"],
                             "snap_tolerance_m":tolerance_m}}
-             for index,(_,__,geometry,measurement,anchor) in enumerate(measured)]
+             for index,(_,__,geometry,measurement,anchor,duplicate) in enumerate(measured) if not duplicate]
     return {"faces":outputs,"count":len(outputs),
             "area_m2":math.fsum(f["measurement"]["area_m2"] for f in outputs),
             "dangles":len(dangles.geoms),"cuts":len(cuts.geoms),

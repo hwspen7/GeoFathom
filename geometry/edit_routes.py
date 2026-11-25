@@ -107,6 +107,8 @@ class PolygonizeBody(BaseModel):
     tolerance_m: float = Field(default=1.0,ge=0,le=20)
     minimum_area_m2: float = Field(default=0.01,ge=0,le=1e10)
     max_faces: int = Field(default=300,ge=1,le=500)
+    exclude_existing: bool = False
+    existing_areas: list[dict[str, Any]] = Field(default_factory=list,max_length=500)
 
 
 @router.post("/polygonize")
@@ -114,4 +116,5 @@ def polygonize_line_network(body:PolygonizeBody)->dict:
     """Node intersections, derive closed faces and measure each on WGS84."""
     from .polygonize import polygonize_network
     return checked(lambda: polygonize_network(
-        body.geometries,body.tolerance_m,body.minimum_area_m2,body.max_faces))
+        body.geometries,body.tolerance_m,body.minimum_area_m2,body.max_faces,
+        body.exclude_existing,body.existing_areas))

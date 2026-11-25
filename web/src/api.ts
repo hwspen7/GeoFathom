@@ -1141,11 +1141,12 @@ export interface NetworkPolygonization{
 }
 export function polygonizeNetwork(
  geometries:GeoJSON.Geometry[],tolerance_m=1,minimum_area_m2=.01,
- signal?:AbortSignal,
+ signal?:AbortSignal, existingAreas?:GeoJSON.Geometry[],
 ):Promise<NetworkPolygonization>{
  return request('/edit/polygonize',{method:'POST',signal,
   headers:{'Content-Type':'application/json'},
-  body:JSON.stringify({geometries,tolerance_m,minimum_area_m2,max_faces:300}),
+  body:JSON.stringify({geometries,tolerance_m,minimum_area_m2,max_faces:300,
+    exclude_existing:existingAreas!==undefined,existing_areas:existingAreas??[]}),
  });
 }
 

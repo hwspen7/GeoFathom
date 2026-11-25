@@ -142,5 +142,26 @@ test('four separate connected lines create a selectable independently measured a
  await expect(page.getByText(/closed polygon selected with area and perimeter/)).toBeVisible({timeout:10000});
  // Derived polygons are saved as independent local objects, not discarded
  // with their source line segments.
- await expect(page.getByLabel('Live map dimensions').locator('.map-face-dimension').first()).toContainText('perimeter');
+ await expect(page.getByLabel('Live map dimensions').locator('.map-face-dimension')).toHaveCount(0);
+ await expect(page.getByLabel('Live map dimensions').locator('.map-dimension-total')).toContainText('perimeter');
+ await expect(page.getByLabel('Map legend',{exact:true}).getByText('Area 1',{exact:true})).toHaveCount(1);
+});
+
+test('existing drawn polygons are not duplicated by automatic polygonization',async({page})=>{
+ const toolbar=page.getByLabel('Survey toolbar');
+ const map=page.getByLabel('Interactive geospatial map');
+ const box=(await map.boundingBox())!;
+ await page.mouse.move(box.x+box.width/2,box.y+box.height/2);
+ await page.mouse.wheel(0,-1600);
+ await page.waitForTimeout(900);
+ const response=page.waitForResponse(r=>r.url().includes('/edit/polygonize')&&r.request().method()==='POST'&&r.ok());
+ const p=await positions(page);
+ await toolbar.getByRole('button',{name:'Polygon',exact:true}).click();
+ for(const [x,y] of [p.a,p.b,p.c,p.d])await page.mouse.click(x,y);
+ await page.keyboard.press('Enter');
+ const output=await (await response).json();
+ expect(output.count).toBe(0);
+ const legend=page.getByLabel('Map legend',{exact:true});
+ await expect(legend.getByText('Polygon 1',{exact:true})).toHaveCount(1);
+ await expect(legend.getByText('Area 1',{exact:true})).toHaveCount(0);
 });

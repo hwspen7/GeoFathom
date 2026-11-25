@@ -2050,3 +2050,8 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .map-legend-item .legend-swatch{width:13px;height:8px;border-width:1px;border-radius:2px}
 .named-raster-legend{display:grid;gap:3px;border-top:1px solid #e0e7eb;padding-top:4px;font-size:10px;color:#405e73}
 .named-raster-legend>strong{font-size:10px;overflow-wrap:anywhere}
+
+/* Use the same compact object rows, search and pagination throughout the workspace. */
+.desktop-gis .gis-operations .workspace-objects{padding:0 0 5px;margin:0 0 4px}
+.desktop-gis .gis-operations .workspace-objects .gis-static-heading{margin:0;padding:2px 0 4px;font-size:11px;line-height:15px;font-weight:650;color:#3c5b70}
+.desktop-gis .gis-operations .workspace-objects .compact-object-tree{padding:0;margin:0}

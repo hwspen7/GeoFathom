@@ -119,3 +119,26 @@ def test_polygonize_api_returns_exact_measurements_and_rejects_invalid_payloads(
     assert bogus.status_code==422
     missing=client.post("/edit/polygonize",json={"geometries":[]})
     assert missing.status_code==422
+
+
+def test_workspace_does_not_recreate_existing_polygons():
+    shell={"type":"Polygon","coordinates":[[[0,0],[.02,0],[.02,.02],[0,.02],[0,0]]]}
+    other={"type":"Polygon","coordinates":[[[.03,0],[.04,0],[.04,.01],[.03,.01],[.03,0]]]}
+    assert polygonize_network([shell,other],exclude_existing=True)["count"]==0
+    assert polygonize_network([shell,other])["count"]==2
+    # Splitting an existing polygon still creates real, distinct new faces.
+    assert polygonize_network([shell,edge([.01,0],[.01,.02])],exclude_existing=True)["count"]==2
+
+
+def test_materialized_line_face_is_not_repeated_in_workspace():
+    lines=three_adjacent_areas()
+    original=polygonize_network(lines)
+    kept=original["faces"][0]["geometry"]
+    # Ring orientation and starting vertex are irrelevant.
+    ring=list(reversed(kept["coordinates"][0][:-1]))
+    ring=ring[1:]+ring[:1]
+    retained={"type":"Polygon","coordinates":[ring+[ring[0]]]}
+    result=polygonize_network(lines,exclude_existing=True,existing_areas=[retained])
+    assert result["count"]==2
+    assert {f["id"] for f in result["faces"]}=={f["id"] for f in original["faces"][1:]}
+    assert result["area_m2"]==pytest.approx(original["area_m2"]-original["faces"][0]["measurement"]["area_m2"])

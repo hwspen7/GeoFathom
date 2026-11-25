@@ -304,6 +304,12 @@ export default function App() {
     return sources;
   },[scratch,projectWorkspace,geometry,featureProperties.source_type]);
 
+  // Materialized faces are no longer transient overlays, even when hidden.
+  const retainedNetworkAreas=useMemo(()=>[...scratch,...(projectWorkspace?.features??[]),...pagedFeatures]
+    .filter(item=>item.properties?.source_type==='polygonized_network'&&['Polygon','MultiPolygon'].includes(item.geometry.type))
+    .filter((item,index,all)=>all.findIndex(other=>other.id===item.id)===index)
+    .map(item=>item.geometry),[scratch,projectWorkspace,pagedFeatures]);
+
   async function rebuildNetwork(tolerance=networkTolerance.current,
                                 minArea=networkMinimumArea.current){
     networkTolerance.current=tolerance;networkMinimumArea.current=minArea;
@@ -314,12 +320,12 @@ export default function App() {
       return;
     }
     try{
-      const result=await polygonizeNetwork(networkSources,tolerance,minArea);
+      const result=await polygonizeNetwork(networkSources,tolerance,minArea,undefined,retainedNetworkAreas);
       if(ticket!==networkTicket.current)return;
       setNetworkAreas(result);
       setNetworkNotice(result.count?
         result.count+' independently measured enclosed area'+(result.count===1?'':'s')+'.':
-        'No enclosed areas yet. Join line endpoints or increase the snap tolerance.');
+        'No new enclosed areas. Existing polygons remain available as objects.');
     }catch(error){
       if(ticket!==networkTicket.current)return;
       setNetworkAreas(null);
@@ -337,8 +343,17 @@ export default function App() {
     }
     const timer=window.setTimeout(()=>{void rebuildNetwork().catch(()=>{});},300);
     return()=>window.clearTimeout(timer);
-  },[networkSources,drawingMode,capabilities,activeProjectId]);
+  },[networkSources,retainedNetworkAreas,drawingMode,capabilities,activeProjectId]);
 
+  // Immediately retire transient faces on materialization; the next server
+  // rebuild also excludes the retained geometry independent of ring order.
+  function retireNetworkFaces(ids:Set<string>){
+    setNetworkAreas(old=>{
+      if(!old)return old;
+      const faces=old.faces.filter(face=>!ids.has(face.id));
+      return {...old,faces,count:faces.length,area_m2:faces.reduce((sum,face)=>sum+(face.measurement.area_m2??0),0)};
+    });
+  }
   function keepNetworkAreas(faces:NetworkFace[]){
     if(!faces.length)return;
     const existing=scratchHistory.current!.current.filter(
@@ -355,6 +370,7 @@ export default function App() {
       source:'GEOS line-network polygonization',properties:{...face.properties},
     } satisfies ScratchFeature));
     setScratch(old=>[...old,...saved]);
+    retireNetworkFaces(new Set(faces.map(face=>face.id)));
     setMessage('Kept '+saved.length+' independent closed areas; the original lines are unchanged.');
   }
 
@@ -378,6 +394,7 @@ export default function App() {
       properties:{...face.properties},
     } satisfies ScratchFeature);
     if(!existing)setScratch(old=>[...old,selected]);
+    retireNetworkFaces(new Set([face.id]));
     selectScratch(selected,false);
     setMessage(face.name+' · closed polygon selected with area and perimeter. Original lines preserved.');
   }
@@ -1221,9 +1238,11 @@ export default function App() {
   if(networkVisible)addVectorLegend(networkResults,'Network','#287aa1');
   namedLegend.push(...vectorLegend.values());
   if(terrainProfileLine)namedLegend.push({id:'profile-line',name:'Profile measurement line',color:'#d26b2f'});
-  // GIS uses static sections; other modules retain their existing object-browser workflow.
+  // All modules share the compact object browser. Terrain keeps its
+  // dedicated browser/tools switch so the fixed analysis inputs can fit.
   const gisFlat=activeTool==='tools-gis';
-  const ObjectsContainer=gisFlat?'section':'details';
+  const flatObjects=activeTool!=='tools-terrain';
+  const ObjectsContainer=flatObjects?'section':'details';
   const GeometryContainer=gisFlat?'section':'details';
   return (
     <div className="workspace desktop-gis">
@@ -1336,7 +1355,7 @@ export default function App() {
             <div className="section-heading"><Layers3 size={16} /><span>Projects</span></div>
             {!capabilities&&connectionError&&<div className="discovery-error" role="alert">{connectionError} <button onClick={()=>setConnectionRetry(v=>v+1)}>Reconnect</button></div>}
             <ProjectsPanel toolbarTarget={projectToolbarTarget} toolbarActionsTarget={projectActionsTarget} treeTarget={objectTreeTarget}
-              interactionBusy={busy||Boolean(drawingMode)} objectPageSize={gisFlat?gisObjectCapacity:3} objectsAlwaysOpen={gisFlat}
+              interactionBusy={busy||Boolean(drawingMode)} objectPageSize={gisObjectCapacity} objectsAlwaysOpen
               onObjectMutation={(id,feature)=>{
                 // Search/attribute results may lie outside the workspace's
                 // first page. Update their owner as well, avoiding ghost
@@ -1784,8 +1803,8 @@ export default function App() {
           <div className={'sidebar-scroll'+(['tools-services','tools-export'].includes(activeTool)?' data-fixed-operations':'')}
             tabIndex={0} aria-label="Operations scrolling region">
           <ObjectsContainer className="workspace-objects" hidden={['tools-services','tools-export'].includes(activeTool)}
-            {...(gisFlat?{}:{open:objectsOpen,onToggle:(event:SyntheticEvent<HTMLElement>)=>setObjectsOpen((event.currentTarget as HTMLDetailsElement).open)})}>
-            {gisFlat?<h3 className="gis-static-heading">Objects</h3>:<summary>Objects{activeTool==='tools-terrain'&&!objectsOpen&&<small className="workspace-object-current">
+            {...(flatObjects?{}:{open:objectsOpen,onToggle:(event:SyntheticEvent<HTMLElement>)=>setObjectsOpen((event.currentTarget as HTMLDetailsElement).open)})}>
+            {flatObjects?<h3 className="gis-static-heading">Objects</h3>:<summary>Objects{activeTool==='tools-terrain'&&!objectsOpen&&<small className="workspace-object-current">
               {selectedSaved?.name??scratch.find(item=>item.id===scratchId)?.name??selectedPlace?.name??'Choose an object'}
             </small>}</summary>}
             {activeTool==='tools-terrain'&&objectsOpen&&<button type="button" className="workspace-object-back"
