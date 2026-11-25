@@ -79,8 +79,12 @@ def render_table(kind,req,fig,ax,table,meta,palette,rows):
         ax.scatter(a,b,s=12,color=color);lo=min(a.min(),b.min());hi=max(a.max(),b.max());ax.plot([lo,hi],[lo,hi],'--',color='#555555');ax.set(xlabel=req.x+' quantile',ylabel=req.y+' quantile',aspect='equal')
         return save(['probability','reference_quantile','comparison_quantile'],p,a,b)
     if kind=='research_forest':
-        (y,lo,hi),(g,)=rows([req.y,req.low,req.high],[req.x]);require(len(y)<=40 and np.all(lo<=y) and np.all(y<=hi),'At most 40 effects, each with ordered bounds containing its estimate.')
-        i=np.arange(len(y));ax.errorbar(y,i,xerr=[y-lo,hi-y],fmt='o',color=color,capsize=2);ax.set_yticks(i,g);ax.invert_yaxis();ax.set_xlabel(req.y)
+        (y,lo,hi),(g,)=rows([req.y,req.low,req.high],[req.x]);require(len(y)<=40 and np.all(lo<=hi),'At most 40 effects with ordered interval endpoints.')
+        # Percentile bootstrap intervals need not contain the point estimate.
+        # Draw their actual endpoints without forcing symmetric/nonnegative errors.
+        i=np.arange(len(y));ax.hlines(i,lo,hi,color=color);ax.scatter(y,i,s=20,color=color)
+        ax.vlines(np.r_[lo,hi],np.r_[i,i]-.07,np.r_[i,i]+.07,color=color)
+        ax.set_yticks(i,g);ax.invert_yaxis();ax.set_xlabel(req.y)
         if min(lo)<=0<=max(hi):ax.axvline(0,color='#777777',linestyle='--',linewidth=.8)
         return save([req.x,req.y,req.low,req.high],g,y,lo,hi)
     if kind=='research_taylor':

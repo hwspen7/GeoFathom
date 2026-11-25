@@ -1,5 +1,26 @@
 # Remote Sensing scientific computing
 
+## Independent-reference diagnostics and spatial intervals
+
+The saved-model workbench evaluates completed predictions against separately
+supplied, exactly aligned class labels with a required source/annotation record.
+It rejects the original training-label file, excludes actual training sample
+locations and an explicitly specified projected Chebyshev-distance buffer,
+and reports excluded support and abstention coverage. Unknown reference classes
+are rejected rather than silently omitted. Outputs include an actual binary
+error GeoTIFF, per-class precision/recall/F1/IoU, confusion matrix, probability
+Brier/log loss, reliability bins and ECE.
+
+Percentile 95% intervals for accuracy, macro F1 and mIoU resample entire occupied
+spatial blocks, preserving their confusion counts. Block size, replicate count
+and seed are explicit. The gate compares intervals with an independently
+written cluster-resampling oracle. The workbench sends actual reliability,
+class metrics and interval bounds to the shared figure renderer. These are
+conditional intervals under exchangeable-block and reference-quality
+assumptions, not evidence that arbitrary supplied labels are independent or
+that a model has achieved real-world accuracy. Field/site validation requires
+actual independent observations.
+
 ## Persistent classifiers and full-resolution prediction
 
 The workbench trains a random forest from explicit managed reflectance features

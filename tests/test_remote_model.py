@@ -71,7 +71,7 @@ def test_managed_training_prediction_and_project_isolation(tmp_path,monkeypatch)
     monkeypatch.setenv('GEOFATHOM_MODEL_ADMIN_TOKEN','model-test')
     # The separate cube fixture tests subprocess transport; this test inspects model identity contracts.
     monkeypatch.setenv('GEOFATHOM_RASTER_ISOLATE','0')
-    config,_,_,_=model_fixture(tmp_path);root=imagery_dir();root.mkdir();ids={}
+    config,_,_,truth=model_fixture(tmp_path);root=imagery_dir();root.mkdir();ids={}
     for p in [*[b['path'] for b in config['features'].values()],config['labels']['path']]:
         uid=str(uuid4());ids[p]=uid;(root/(uid+'.tif')).write_bytes(Path(p).read_bytes())
     features={r:{'image_id':ids[b['path']]} for r,b in config['features'].items()}
@@ -94,6 +94,13 @@ def test_managed_training_prediction_and_project_isolation(tmp_path,monkeypatch)
         predicted=submit('remote_model_predict',{'model_job_id':model['id'],'features':features})
         assert predicted['result']['model_sha256']==model['result']['sha256']
         assert client.get(url+'/'+predicted['id']+'/download').status_code==200
+        reference_id=str(uuid4())
+        (root/(reference_id+'.tif')).write_bytes(base64.b64decode(source(truth)['data']))
+        evaluation=submit('remote_model_evaluate',{'prediction_job_id':predicted['id'],'reference_image_id':reference_id,
+            'reference_description':'Independent dense reference fixture with training positions excluded.',
+            'block_m':40,'training_buffer_m':0,'replicates':100})
+        assert evaluation['result']['metrics']['training_excluded_cells']==960
+        assert client.get(url+'/'+evaluation['id']+'/download').status_code==200
         other=client.post('/projects',json={'name':'Other'}).json()['id']
         assert client.post('/projects/'+other+'/jobs',json={'kind':'remote_model_predict',
             'payload':{'model_job_id':model['id'],'features':features}},headers=headers).status_code==404

@@ -48,6 +48,20 @@ class TrainInput(BaseModel):
     snapshot_mb:int=Field(default=1024,ge=64,le=8192)
 
 
+class EvaluationInput(BaseModel):
+    model_config=ConfigDict(extra='forbid',allow_inf_nan=False)
+    prediction_job_id:UUID
+    reference_image_id:UUID
+    reference_band:int=Field(default=1,ge=1,le=1024)
+    reference_description:str=Field(min_length=10,max_length=4000)
+    block_m:float=Field(default=1000,ge=1,le=100000)
+    training_buffer_m:float=Field(default=1000,ge=0,le=100000)
+    replicates:int=Field(default=500,ge=100,le=2000)
+    seed:int=Field(default=42,ge=0,le=2147483647)
+    tile:int=Field(default=256,ge=32,le=512)
+    snapshot_mb:int=Field(default=1024,ge=64,le=8192)
+
+
 def model_path(job_id):return result_path(job_id).with_suffix('.model.json')
 
 
@@ -92,6 +106,35 @@ def run_managed(payload,job_id,project_id,training,progress,check):
             copy_verified(source,target);config['model_path']=str(target)
         try:
             receipt=(train if training else predict)(config,output,progress,check);check();return receipt
+        except BaseException:
+            output.unlink(missing_ok=True)
+            raise
+
+
+def run_evaluation(payload,job_id,project_id,progress,check):
+    from jobs.queue import get_job
+    from .store import image_file
+    from .remote_windowed import digest
+    from .remote_model_validation import evaluate
+    body=EvaluationInput.model_validate(payload)
+    prediction=get_job(project_id,str(body.prediction_job_id))
+    require(prediction['kind']=='remote_model_predict' and prediction['status']=='completed','Choose completed predictions from this project.')
+    model_id=prediction['payload']['model_job_id'];model=get_job(project_id,model_id)
+    sources={'prediction:'+prediction['id']:result_path(prediction['id']),
+        'model:'+model_id:model_path(model_id),str(body.reference_image_id):image_file(str(body.reference_image_id))}
+    require(digest(sources['prediction:'+prediction['id']])==prediction['result']['sha256'],'Prediction changed or is corrupt.')
+    require(digest(sources['model:'+model_id])==prediction['result']['model_sha256']==model['result']['sha256'],'Model identity changed.')
+    size=sum(p.stat().st_size for p in sources.values());output=result_path(job_id);output.parent.mkdir(parents=True,exist_ok=True)
+    require(size<=body.snapshot_mb*1024**2 and size+64*1024**2<shutil.disk_usage(output.parent).free,'Evaluation snapshot disk budget exceeded.')
+    with TemporaryDirectory(prefix='evaluation-input-'+str(job_id)+'-',dir=output.parent) as folder:
+        paths={}
+        for i,(uid,p) in enumerate(sources.items()):
+            check();target=Path(folder)/(str(i)+p.suffix);copy_verified(p,target);paths[uid]=str(target)
+        config={**body.model_dump(exclude={'prediction_job_id','reference_image_id','snapshot_mb'}),
+            'model_path':paths['model:'+model_id],'prediction_path':paths['prediction:'+prediction['id']],
+            'reference_path':paths[str(body.reference_image_id)],'source_names':{p:uid for uid,p in paths.items()}}
+        try:
+            receipt=evaluate(config,output,progress,check);check();return receipt
         except BaseException:
             output.unlink(missing_ok=True)
             raise

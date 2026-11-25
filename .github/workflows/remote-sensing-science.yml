@@ -54,7 +54,7 @@ jobs:
       - name: Verify numerical methods and full scientific workflows
         run: |
           mkdir -p build
-          GEOFATHOM_REQUIRE_REMOTE_GDAL=1 python -m pytest -q --junitxml=build/remote-sensing-tests.xml tests/test_remote_sensing.py tests/test_remote_cog.py tests/test_remote_cube.py tests/test_remote_model.py
+          GEOFATHOM_REQUIRE_REMOTE_GDAL=1 python -m pytest -q --junitxml=build/remote-sensing-tests.xml tests/test_remote_sensing.py tests/test_remote_cog.py tests/test_remote_cube.py tests/test_remote_model.py tests/test_remote_model_validation.py
           python scripts/remote_sensing_gate.py --junit build/remote-sensing-tests.xml --output build/remote-sensing-acceptance.json
       - name: Preserve numerical evidence
         if: always()
