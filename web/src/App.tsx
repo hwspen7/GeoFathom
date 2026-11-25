@@ -1776,7 +1776,7 @@ export default function App() {
               if(complete<4000&&next.length===complete)void finishDrawing(next);
             }}
           />
-          <div className="map-legend">
+          {(namedLegend.length>0||visibleScienceRasters.length>0)&&<div className="map-legend">
             <button className="map-legend-toggle" aria-label="Toggle map legend"
               aria-expanded={showLegend&&!editing} disabled={editing}
               title={editing?'Finish geometry editing to open the map legend':'Toggle map legend'}
@@ -1792,9 +1792,8 @@ export default function App() {
                 <strong title={item.title}>{item.title}</strong>
                 {item.raster.scale?<TemporalScale scale={item.raster.scale} unit={item.raster.unit??''}/>:item.raster.legend.length>0?item.raster.legend.map((bin,i)=><div key={i} className="map-legend-item"><span className="legend-swatch" style={{borderColor:bin.color,backgroundColor:bin.color}}/><span>{bin.label}</span></div>):<small>{item.raster.unit||'Raster'}</small>}
               </section>)}
-              {!namedLegend.length&&!visibleScienceRasters.length&&<small>No visible overlays</small>}
             </div>}
-          </div>
+          </div>}
           {pendingAnnotation&&<div className="annotation-banner">
             Click map to place: <strong>{pendingAnnotation.text}</strong>
             <button onClick={()=>setPendingAnnotation(null)} aria-label="Cancel map note">

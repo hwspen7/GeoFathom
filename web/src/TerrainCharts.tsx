@@ -144,7 +144,7 @@ export function ResultPane({expanded,onClose,children}:{expanded:boolean;onClose
    }catch(e){setError(e instanceof Error?e.message:String(e));}
  }
  const panel=<section ref={content} className="terrain-output" aria-label="Terrain results">{children}
-   {expanded&&<div className="survey-action-bar"><select aria-label="Plot to export" value={plot} onChange={e=>setPlot(Number(e.target.value))}>{plots.map((name,i)=><option key={i} value={i}>{name}</option>)}</select>{['SVG','PNG','PDF'].map(format=><button key={format} onClick={()=>void exportPlot(format)}>{format}</button>)}</div>}
+   {expanded&&plots.length>0&&<div className="survey-action-bar"><select aria-label="Plot to export" value={plot} onChange={e=>setPlot(Number(e.target.value))}>{plots.map((name,i)=><option key={i} value={i}>{name}</option>)}</select>{['SVG','PNG','PDF'].map(format=><button key={format} onClick={()=>void exportPlot(format)}>{format}</button>)}</div>}
    {error&&<small role="alert">{error}</small>}</section>;
  return expanded?<dialog ref={ref} className="terrain-result-dialog" aria-label="Terrain result review" onCancel={e=>{e.preventDefault();onClose();}}>{panel}</dialog>:panel;
 }

@@ -127,7 +127,7 @@ export default function SpatialToolsPanel(p:Props){
     <section className="analysis-tool-group" aria-label="Topology quality inspection">
       <h3 className="analysis-tool-heading"><SectionIcon role="topology" size={13}/> Topology</h3>
       <div className="professional-form analysis-inline">
-        <label className="analysis-inline-label" title="Minimum overlap or gap area in square meters">Min. m²
+        <label className="analysis-inline-label" title="Minimum overlap or gap area in square meters">Min area (m²)
           <input aria-label="Topology threshold" type="number" min="0" step=".01"
             value={threshold} onChange={e=>setThreshold(Number(e.target.value))}/>
         </label>

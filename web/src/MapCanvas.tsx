@@ -345,8 +345,9 @@ export default function MapCanvas({
       container: container.current, style: mapStyle(), center: [0, 22],
       zoom: 2.1, attributionControl: false,
     });
+    // Preserve provider credit without the opaque information badge.
+    map.addControl(new maplibregl.AttributionControl({ compact: false }), 'bottom-right');
     map.addControl(new maplibregl.NavigationControl({ showCompass: true }), 'bottom-right');
-    map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left');
     map.addControl(new maplibregl.ScaleControl({ maxWidth:140,unit:'metric' }), 'bottom-left');
     const refreshZoomLabels=()=>{
       const view=renderRef.current;
@@ -1422,7 +1423,7 @@ export default function MapCanvas({
     <div aria-label="Interactive geospatial map" data-label-layer-ready={ready ? "true" : "false"} className="map-canvas" ref={container}/>
     <div className="map-dimension-overlay" aria-label="Live map dimensions" ref={dimensionRef}/>
     <div aria-label="Cursor coordinates" className="map-coordinate-readout" ref={coordinateRef}>
-      Move cursor to inspect WGS84 coordinates
+      Lon — · Lat —
     </div>
   </>;
 }

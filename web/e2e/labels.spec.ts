@@ -85,9 +85,8 @@ test('style labels by field, persist symbol settings and reload the workspace',a
   await expect(page.getByLabel('Label source field')).toHaveValue('category');
   await expect(page.getByLabel('Polygon fill opacity')).toHaveValue('0.6');
   await closeProjectDrawer(page);
-  await expect(page.getByLabel('Map legend',{exact:true})).toContainText('No visible overlays');
-  await page.getByLabel('Toggle map legend').click();
-  await expect(page.getByLabel('Map legend',{exact:true})).not.toBeVisible();
+  await expect(page.getByLabel('Toggle map legend')).toHaveCount(0);
+  await expect(page.getByLabel('Map legend',{exact:true})).toHaveCount(0);
   expect(invalidStyles).toEqual([]);
 });
 

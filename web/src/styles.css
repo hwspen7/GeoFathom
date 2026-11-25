@@ -2204,3 +2204,33 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .desktop-gis .terrain-page-row>.terrain-flat-heading{padding-top:3px;border-top:1px solid #dce5eb}
 .desktop-gis .terrain-page-row>.terrain-source-metadata>.terrain-flat-heading{margin-bottom:4px}
 .desktop-gis .terrain-page-row .terrain-observer-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;align-items:end;gap:5px}
+
+/* Transparent map controls and compact Terrain result summaries. */
+.map-canvas .maplibregl-ctrl-bottom-left .maplibregl-ctrl-scale{
+ margin:0 0 27px 10px;box-sizing:border-box;height:18px;line-height:15px;
+ border:1px solid #334b64;border-top:0;border-bottom-width:2px;
+ background:transparent!important;color:#233f53!important;font-size:10px!important;
+ text-align:center;text-shadow:0 0 2px white,0 0 3px white;
+ box-shadow:none;border-radius:0;padding:0 3px;
+}
+.map-coordinate-readout{left:10px;right:auto;bottom:8px;background:transparent;border:0;border-radius:0;padding:0;box-shadow:none;color:#233f53;font-size:10px;line-height:13px;text-shadow:0 0 2px white,0 0 3px white;white-space:nowrap}
+.map-canvas .maplibregl-ctrl-bottom-right .maplibregl-ctrl-attrib{
+ background:transparent!important;border:0;border-radius:0;box-shadow:none;
+ font-size:9px;line-height:12px;margin:0 5px 3px 0;padding:0 2px;
+ max-width:calc(100% - 6px);color:#344d60;text-shadow:0 0 2px white,0 0 3px white;
+}
+.map-canvas .maplibregl-ctrl-attrib a{color:inherit}
+.map-canvas .maplibregl-ctrl-attrib-button{display:none}
+.terrain-summary-monitor{display:grid;gap:9px;min-width:0;padding:3px 0!important;border:0!important;margin:0!important}
+.terrain-summary-monitor h3{margin:0;color:#263d51;font-weight:750;font-size:13px}
+.terrain-summary-monitor small{font-size:11px;color:#557185}
+.terrain-summary-source{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.terrain-summary-monitor .terrain-overview-preview{width:100%;height:auto;max-height:195px;object-fit:contain}
+.terrain-summary-monitor .terrain-metrics{margin:0}
+.terrain-summary-monitor .terrain-key-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
+.terrain-summary-monitor .terrain-run-selector select{width:100%;min-width:0}
+.terrain-result-dialog .terrain-monitor-content{display:flex;flex-direction:column;gap:10px}
+.terrain-result-dialog .terrain-result-tabs{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;grid-template-columns:none}
+.terrain-result-dialog .terrain-result-tabs button[aria-selected=true]{background:#e9f3f9;color:#175f8a;border-color:#83b4d0}
+.terrain-result-dialog .terrain-tab-content .section-heading{display:flex;justify-content:space-between}
+.terrain-history-entry{min-height:28px;border:1px solid #cbd8e1;border-radius:4px;color:#36576c;background:white}

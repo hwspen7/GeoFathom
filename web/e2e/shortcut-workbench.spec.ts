@@ -266,3 +266,24 @@ test('functional section icons are distinct and static choice labels have no ell
  await nav.getByRole('button',{name:'Analysis',exact:true}).click();
  await expect(tools.getByLabel('Analysis second feature').locator('option').first()).toHaveText('Compare / combine with');
 });
+
+test('map furniture is transparent and empty legends are absent',async({page})=>{
+ await page.setViewportSize({width:1680,height:900});
+ await page.route('**/tile.openstreetmap.org/**',r=>r.fulfill({contentType:'image/png',body:tile}));
+ await page.goto('/');
+ const map=page.getByLabel('Interactive geospatial map');
+ await expect(map).toHaveAttribute('data-label-layer-ready','true',{timeout:25000});
+ await expect(page.getByLabel('Toggle map legend')).toHaveCount(0);
+ const scale=map.locator('.maplibregl-ctrl-scale');
+ const coordinates=page.getByLabel('Cursor coordinates');
+ await expect(scale).toBeVisible();
+ await expect(coordinates).toBeVisible();
+ const a=(await scale.boundingBox())!,b=(await coordinates.boundingBox())!;
+ expect(Math.abs(a.x-b.x)).toBeLessThanOrEqual(1);
+ expect(a.y+a.height).toBeLessThanOrEqual(b.y);
+ for(const control of [scale,coordinates])expect(await control.evaluate(el=>getComputedStyle(el).backgroundColor)).toBe('rgba(0, 0, 0, 0)');
+ await expect(map.locator('.maplibregl-ctrl-attrib-button')).toBeHidden();
+ await expect(map.locator('.maplibregl-ctrl-attrib-inner')).toContainText('OpenStreetMap');
+ await page.getByRole('navigation',{name:'Workspace tools'}).getByRole('button',{name:'Analysis',exact:true}).click();
+ await expect(page.locator('#tools-spatial')).toContainText('Min area (m²)');
+});
