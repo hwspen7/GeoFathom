@@ -35,7 +35,7 @@ def test_public_oscd_member_range_and_checksum_validation(monkeypatch):
     with pytest.raises(FigureInputError,match='honor'):member_bytes('https://example.com/public.zip',spec)
 
 
-def test_oscd_grid_recovery_requires_exact_original_anchor_and_label_legend(tmp_path):
+def test_oscd_grid_recovery_requires_exact_original_anchor_and_label_legend(tmp_path,monkeypatch):
     root=tmp_path/'cache';folder=root/'members'/'city';(folder/'imgs_1').mkdir(parents=True)
     z=np.arange(32*48).reshape(32,48)+1000;aff=from_origin(35.4,33.9,.0001,.0001)
     anchor=folder/'imgs_1'/'anchor_B04.tif'
@@ -57,6 +57,11 @@ def test_oscd_grid_recovery_requires_exact_original_anchor_and_label_legend(tmp_
     assert receipt['crs']=='EPSG:32636' and set(features)=={'red_before','red_after','nir_before','nir_after','red_difference','nir_difference'}
     assert np.isin(values[np.isfinite(values)],[1,2]).all() and np.isfinite(values).any()
     with rasterio.open(features['red_difference']['path']) as ds:assert np.all(ds.read(1,masked=True).compressed()==0)
+    import scripts.remote_oscd_benchmark as oscd
+    from scripts.remote_scene_reference import public_oscd_native
+    monkeypatch.setattr(oscd,'obtain',lambda root,manifest:None)
+    native=public_oscd_native(root,{'training_city':'city','dataset':'Synthetic transport fixture','source':'test'})
+    assert native['passed'] and native['native_difference']['maximum_absolute_error']==0
     with rasterio.open(anchor,'r+') as ds:ds.write(z+1,1)
     with pytest.raises(FigureInputError,match='original anchor'):prepare_city(root,'city','train',tmp_path/'unproven')
 

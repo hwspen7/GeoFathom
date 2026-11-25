@@ -1,0 +1,29 @@
+{
+  "passed": true,
+  "dataset": "Onera Satellite Change Detection (OSCD)",
+  "source": "https://rcdaudt.github.io/oscd/",
+  "city": "beirut",
+  "published_files": {
+    "S2A_OPER_MSI_L1C_TL_EPA__20160929T004310_A000833_T36SYC_B04.tif": "17aa5c019d2d01c1b417fb2f3c95d586ab01bd1a4a124dd2231058050287f63b",
+    "rectified_B08.tif": "375b38718d72c5fcaf68cfed7e42092bec59a268fb8b1d35dd70b3cec35d80b0"
+  },
+  "window": [
+    279,
+    334,
+    512,
+    512
+  ],
+  "native_difference": {
+    "passed": true,
+    "paired_cells": 262144,
+    "mask_disagreement": 0,
+    "rmse": 0.0,
+    "bias": 0.0,
+    "maximum_absolute_error": 0.0,
+    "candidate_sha256": "9563071904f5c463ed74e74690bdf7fea324ab3f05751edb4f50f9d057128421",
+    "reference_sha256": "314425e7489167a7a50148ae528d4dc04ce62f7c8443f90f91b51dd9b52f0351",
+    "atol": 0,
+    "rtol": 0
+  },
+  "scope": "Pinned author-sourced real-scene native DN arithmetic and masks; no surface-reflectance or field accuracy claim."
+}
