@@ -11,7 +11,7 @@ import {BASEMAPS,type BasemapId,type CustomBasemap} from './basemaps';
 import {OFFLINE_METHOD} from './scratch';
 import type {RasterLayerView} from './rasterLayers';
 import {areaText,distanceText,mapPalette,type DisplaySettings} from './displaySettings';
-import {drawingPreview,measurementAnchor,approximateMeasurement,previewEdgeLengths,shouldShowEdgeLength,MIN_MAP_EDGE_METERS,type MeasuredEdge} from './editing';
+import {drawingPreview,measurementAnchor,approximateMeasurement,previewEdgeLengths,shouldShowEdgeLength,MIN_MAP_EDGE_METERS,nearestMeasuredEdge,type MeasuredEdge} from './editing';
 import { featureLabel } from './labels';
 import type { ExternalTile } from './DataServicesPanel';
 import type { Measurement,LayerStyle,TerrainRasterLayer,NetworkFace } from './api';
@@ -106,6 +106,8 @@ interface Props {
   onSelectPinnedPlace?:(id:string)=>void;
   selectedBoundaryNode?:GeometryPath|null;
   selectedMeasuredEdge?:MeasuredEdge|null;
+  cuttingEdge?:boolean;
+  onCutEdge?:(index:number)=>void;
   onSelectBoundaryNode?:(path:GeometryPath)=>void;
 }
 
@@ -303,7 +305,7 @@ export default function MapCanvas({
   selectionBoxMode,onSelectionBox,selectedIds,qualityIssues,projectGrid,externalTiles,
   labelMoveMode,onLabelMove,
   onGeometryPreview, onGeometryCommit, onSelectSavedFeature,onDeselect,preservePlaceSelection=false,
-  pinnedPlaces=[],onSelectPinnedPlace,selectedBoundaryNode=null,onSelectBoundaryNode,selectedMeasuredEdge=null,
+  pinnedPlaces=[],onSelectPinnedPlace,selectedBoundaryNode=null,onSelectBoundaryNode,selectedMeasuredEdge=null,cuttingEdge=false,onCutEdge,
 }: Props) {
   const container = useRef<HTMLDivElement>(null);
   const coordinateRef = useRef<HTMLDivElement>(null);
@@ -315,7 +317,7 @@ export default function MapCanvas({
     selected,selectedFeatureId,drawingMode,vertices, traceMode, annotationMode,selectionBoxMode,labelMoveMode,editing, moving,edgeMoving, snapping, selectedLocked,
     layerFeatures, onMapClick,onFinishDrawing,terrainPicking,onTerrainPick,onContextMenu,onEditingError, onTraceClick,onAnnotationClick,onSelectionBox,onLabelMove,onViewportChange,
     onGeometryPreview, onGeometryCommit, onSelectSavedFeature,onSelectNetworkFace,onDeselect,preservePlaceSelection,onSelectPinnedPlace,onSelectBoundaryNode,
-    profileSamples,onProfileCursor,
+    profileSamples,onProfileCursor,cuttingEdge,onCutEdge,
   });
   const renderRef = useRef({
     selected,vertices,drawingMode,discovered,layerFeatures,editing,
@@ -338,7 +340,7 @@ export default function MapCanvas({
     selected,selectedFeatureId,drawingMode,vertices, traceMode, annotationMode,selectionBoxMode,labelMoveMode,editing, moving,edgeMoving, snapping, selectedLocked,
     layerFeatures, onMapClick,onFinishDrawing,terrainPicking,onTerrainPick,onContextMenu,onEditingError, onTraceClick,onAnnotationClick,onSelectionBox,onLabelMove,onViewportChange,
     onGeometryPreview, onGeometryCommit, onSelectSavedFeature,onSelectNetworkFace,onDeselect,preservePlaceSelection,onSelectPinnedPlace,onSelectBoundaryNode,
-    profileSamples,onProfileCursor,
+    profileSamples,onProfileCursor,cuttingEdge,onCutEdge,
   };
 
   useEffect(() => {
@@ -656,6 +658,12 @@ export default function MapCanvas({
     function click(event: MapMouseEvent) {
       const state = eventRef.current;
       if (drag.current) return;
+      if(state.cuttingEdge&&state.selected&&!state.selectedLocked){
+        if(event.originalEvent.detail>=2)return;
+        const index=nearestMeasuredEdge(state.selected,[event.point.x,event.point.y],p=>{const px=map.project(p);return [px.x,px.y];});
+        if(index!==null)state.onCutEdge?.(index);
+        return;
+      }
       if(state.terrainPicking){state.onTerrainPick(coordinates(event));return;}
       if (state.selectionBoxMode||state.labelMoveMode) return;
       if (state.annotationMode) state.onAnnotationClick(coordinates(event));
@@ -1338,9 +1346,9 @@ export default function MapCanvas({
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    map.doubleClickZoom[editing||drawingMode ? 'disable' : 'enable']();
-    map.getCanvas().style.cursor = drawingMode || traceMode || editing || annotationMode || selectionBoxMode || labelMoveMode || terrainPicking ? 'crosshair' : '';
-  }, [editing, drawingMode, traceMode, annotationMode, selectionBoxMode,labelMoveMode,terrainPicking,ready]);
+    map.doubleClickZoom[editing||drawingMode||cuttingEdge ? 'disable' : 'enable']();
+    map.getCanvas().style.cursor = cuttingEdge || drawingMode || traceMode || editing || annotationMode || selectionBoxMode || labelMoveMode || terrainPicking ? 'crosshair' : '';
+  }, [editing, drawingMode, traceMode, annotationMode, selectionBoxMode,labelMoveMode,terrainPicking,ready,cuttingEdge]);
 
   useEffect(()=>{
     const map=mapRef.current;if(!ready||!map||!import.meta.env.DEV||!container.current)return;

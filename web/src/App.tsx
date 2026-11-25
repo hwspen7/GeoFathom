@@ -44,7 +44,7 @@ import ExportWorkbench from './ExportWorkbench';
 import { featureColor, DEFAULT_LAYER_STYLE } from './labels';
 import ImageCorrectionPanel, { type PromptMode } from './ImageCorrectionPanel';
 import {
-  GeometryTimeline, approximateMeasurement, previewEdgeLengths, pathsOf, drawingPreview,
+  GeometryTimeline, approximateMeasurement, previewEdgeLengths, pathsOf, drawingPreview, cutGeometryEdge,
   singleMovedVertex,moveVertex,removeVertex,type GeometryPath, type Position, type ShapeMode,
 } from './editing';
 import DiscoveryPanel from './DiscoveryPanel';
@@ -72,6 +72,8 @@ export default function App() {
   const [geometry, setGeometry] = useState<GeoJSON.Geometry | null>(null);
   const [selectedParcel,setSelectedParcel]=useState<number|'all'>('all');
   const [selectedBoundaryNode,setSelectedBoundaryNode]=useState<GeometryPath|null>(null);
+  const [cutTarget,setCutTarget]=useState<GeoJSON.Geometry|null>(null);
+  const cuttingEdge=!!geometry&&cutTarget===geometry;
   const [edgeSelection,setEdgeSelection]=useState<{geometry:GeoJSON.Geometry;index:number}|null>(null);
   const [edgePage,setEdgePage]=useState(0);
   const selectedEdgeIndex=edgeSelection?.geometry===geometry?edgeSelection.index:null;
@@ -784,6 +786,7 @@ export default function App() {
   }
 
   function startDrawing(next: Exclude<ShapeMode, null>) {
+    setCutTarget(null);
     if(drawingMode===next){stopInteraction();return;}
     if(busy)return;
     if(drawingMode&&vertices.length){setError('Finish or cancel the existing sketch before starting another.');return;}
@@ -1065,6 +1068,7 @@ export default function App() {
   }
 
   function stopInteraction(){
+    setCutTarget(null);
     geometrySequence.current++;setBusy(false);setTerrainLineDrawing(false);setDrawingMode(null);setSketchVertices([]);setVertexRedo([]);setTerrainPicking(false);
     setEditing(false);setEdgeMoving(false);setMoving(false);setTraceMode(false);setPromptMode(null);
     setSelectionBoxMode(false);setLabelMoveMode(false);setPendingAnnotation(null);setContextMenu(null);
@@ -1072,6 +1076,7 @@ export default function App() {
     setError('');setMessage(drawingMode?'Drawing cancelled. Retained locations are unchanged.':'Select / pan');
   }
   function editMode(mode:'vertices'|'edge'|'move'){
+    setCutTarget(null);
     if(!geometry||selectedLocked||busy||drawingMode)return;
     // The legend is temporarily hidden by the editing state in the map
     // render. Preserve the user's expanded/collapsed preference when editing
@@ -1083,6 +1088,24 @@ export default function App() {
     setTraceMode(false);setPromptMode(null);setTerrainPicking(false);setPendingAnnotation(null);
     setSelectionBoxMode(false);setLabelMoveMode(false);setContextMenu(null);
     setMessage(mode==='move'?'Drag feature':mode==='edge'?'Drag edge midpoint':'Drag vertices · right-click to delete');
+  }
+  function toggleCutEdge(){
+    if(cuttingEdge){stopInteraction();return;}
+    if(!geometry||!pathsOf(geometry).length||selectedLocked||busy||drawingMode)return;
+    stopInteraction();setLinked(false);setCutTarget(geometry);setMessage('Cut edge');
+  }
+  function cutSelectedEdge(index:number){
+    if(!cuttingEdge||!geometry||selectedLocked||busy)return;
+    try{
+      const next=cutGeometryEdge(geometry,index);
+      setCutTarget(null);
+      if(next){void commitGeometry(next,'Edge removed.');}
+      else if(scratchId)removeLocal();
+      else if(selectedFeatureId){
+        // Use the existing revision-safe trash operation and confirmation.
+        document.querySelector<HTMLButtonElement>('[data-project-delete]')?.click();
+      }else deselect();
+    }catch(error){setError(error instanceof Error?error.message:String(error));}
   }
   function fitSelection(){
     if(!measurement||preview)return;
@@ -1165,7 +1188,7 @@ export default function App() {
         if(!drawingVerticesRef.current.length)stopInteraction();else void finishDrawing();
         return;
       }
-      if(editing&&(event.key==='Enter'||event.key==='F2')){
+      if((editing||cuttingEdge)&&(event.key==='Enter'||event.key==='F2')){
         event.preventDefault();stopInteraction();return;
       }
       if(drawingMode&&!busy&&event.key==='Backspace'){
@@ -1592,7 +1615,8 @@ export default function App() {
             onTerrainPick={position=>{setTerrainOrigin(position);setTerrainPicking(false);setMessage('Terrain point selected.');}}
             onContextMenu={(x,y)=>setContextMenu({x,y})} onDeselect={deselect}
             selectedBoundaryNode={selectedBoundaryNode} onSelectBoundaryNode={setSelectedBoundaryNode}
-            selectedMeasuredEdge={drawingMode?null:measuredEdges.edges[selectedEdgeIndex??-1]??null}
+            selectedMeasuredEdge={drawingMode||cuttingEdge?null:measuredEdges.edges[selectedEdgeIndex??-1]??null}
+            cuttingEdge={cuttingEdge&&!drawingMode&&!editing&&!terrainPicking} onCutEdge={cutSelectedEdge}
             onEditingError={setError}
             editing={editing} moving={moving} edgeMoving={edgeMoving} snapping={snapping}
             selectedLocked={selectedLocked}
@@ -1923,7 +1947,9 @@ export default function App() {
             <SurveyTools
               // The survey commands belong to the global toolbar, not the active module.
               toolbarTarget={toolbarTarget} busy={busy} locked={selectedLocked}
+              cuttingEdge={cuttingEdge} onCutEdge={toggleCutEdge}
               edgeMoving={edgeMoving} onEdgeMove={active=>{
+                setCutTarget(null);
                 setEdgeMoving(active);setEditing(active);setMoving(false);setLinked(false);
                 setDrawingMode(null);setVertices([]);setTraceMode(false);setPromptMode(null);
                 setPendingAnnotation(null);setSelectionBoxMode(false);setLabelMoveMode(false);
@@ -1955,6 +1981,7 @@ export default function App() {
               onUndo={()=>drawingMode?undoSketchPoint():historyStep()}
               onRedo={()=>drawingMode?redoSketchPoint():historyStep(true)}
               onEdit={(active, shouldMove) => {
+                setCutTarget(null);
                 if (selectedLocked) {
                   setError('Unlock the feature layer before editing.');
                 } else {
@@ -2336,6 +2363,7 @@ export default function App() {
         style={{left:Math.max(4,Math.min(contextMenu.x,window.innerWidth-210)),top:Math.max(4,Math.min(contextMenu.y,window.innerHeight-260))}}>
         <button role="menuitem" onClick={()=>{stopInteraction();}}>Select / pan <kbd>V</kbd></button>
         <button role="menuitem" disabled={!geometry||selectedLocked||busy} onClick={()=>editMode('vertices')}>Edit vertices <kbd>E</kbd></button>
+        <button role="menuitem" disabled={!geometry||!pathsOf(geometry).length||selectedLocked||busy} onClick={toggleCutEdge}>Cut edge</button>
         <button role="menuitem" disabled={!geometry||geometry.type==='Point'||selectedLocked||busy} onClick={()=>editMode('edge')}>Move edge <kbd>B</kbd></button>
         <button role="menuitem" disabled={!geometry||selectedLocked||busy} onClick={()=>editMode('move')}>Move feature <kbd>M</kbd></button>
         <button role="menuitem" disabled={!measurement} onClick={()=>{fitSelection();setContextMenu(null);}}>Fit selection <kbd>F</kbd></button>

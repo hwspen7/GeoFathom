@@ -82,7 +82,8 @@ for(const width of [1100,1280,1600])test(`drawing exits and error recovery stay 
  // The compact toolbar must remain distinguishable even without captions.
  const split=toolbar.getByRole('button',{name:'Split line',exact:true});
  const trace=toolbar.getByRole('button',{name:'Trace network',exact:true});
- await expect(split.locator('svg.lucide-scissors')).toHaveCount(1);
+ await expect(split.locator('svg.lucide-split')).toHaveCount(1);
+ await expect(toolbar.getByRole('button',{name:'Cut edge',exact:true}).locator('svg.lucide-scissors')).toHaveCount(1);
  await expect(trace.locator('svg.lucide-route')).toHaveCount(1);
  await expect(split).toHaveAttribute('title','Split polygon by line');
  await expect(trace).toHaveAttribute('title','Save a vector line first');

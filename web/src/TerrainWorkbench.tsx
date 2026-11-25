@@ -1037,16 +1037,13 @@ export default function TerrainWorkbench(p:Props){
        {selectedGeometry&&p.onFitSelectedArea&&<button title="Fit selected area" onClick={()=>{setFetchChoice('selection');p.onFitSelectedArea?.();}}>Fit selected area</button>}
        <button type="button" disabled={!fetchArea} aria-label="Show DEM download extent" aria-pressed={showFetchExtent} title="Preview rectangular download bounds; analysis still uses the selected geometry" onClick={()=>setShowFetchExtent(v=>!v)}>Extent</button>
      </div>
-     {budget?.warning&&<small role="alert" className="discovery-error">{budget.warning}</small>}
-     {fetchArea&&<div className="terrain-resolution-tools">
-       <button aria-label="Auto-fit DEM resolution" disabled={!recommendedResolution||fetching}
+     <div className="terrain-resolution-tools">
+       <button aria-label="Auto-fit DEM resolution" disabled={!fetchArea||!recommendedResolution||fetching}
          onClick={()=>{if(!recommendedResolution)return;setResolution(recommendedResolution);
            setInfo('');}}>
-         Auto resolution{recommendedResolution?' · '+recommendedResolution+' m':''}
+         Auto{recommendedResolution?' · '+recommendedResolution+' m':''}
        </button>
        <small className="terrain-accessible-detail" aria-label="DEM source coverage">Up to 8M cells, 4096 px/side · {supportsUSGS?'USGS 3DEP / Copernicus':'Copernicus global'}</small>
-     </div>}
-     <div className="area-fields terrain-fetch-actions">
        <select aria-label="Public DEM resolution" value={resolution}
           onChange={e=>setResolution(Number(e.target.value) as 1|3|10|30|90)}>
           <option value={30}>GLO-30 · 30 m</option>
@@ -1055,6 +1052,9 @@ export default function TerrainWorkbench(p:Props){
           <option value={3} disabled={!supportedResolutions.includes(3)}>USGS 3DEP · 3 m grid</option>
           <option value={1} disabled={!supportedResolutions.includes(1)}>USGS 3DEP · 1 m grid</option>
         </select>
+     </div>
+     {budget?.warning&&<small role="alert" className="discovery-error terrain-fetch-warning">{budget.warning}</small>}
+     <div className="area-fields terrain-fetch-actions">
        <button disabled={!p.connected||!fetchArea||!!budget?.warning||fetching||importing} className="terrain-fetch-primary" title="Download the explicitly displayed area, not a previous selection" onClick={()=>void fetchDEM()}>{fetching?'Fetching…':'Fetch DEM'}</button>
        {fetching&&<button aria-label="Cancel DEM download" onClick={()=>{sourceIntent.current++;fetchAbort.current?.abort();setInfo('Cancelling the previous download…');}}>Cancel</button>}
      </div>

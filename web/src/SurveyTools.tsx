@@ -3,7 +3,7 @@ import { useState, type FormEvent } from 'react';
 import {createPortal} from 'react-dom';
 import {
   Check, Circle, Copy, Eraser, MapPin, Minus, MousePointer2,
-  Pencil, Pentagon, Redo2, Route, Ruler, Scissors, Square, Undo2, X, type LucideIcon,
+  Pencil, Pentagon, Redo2, Route, Ruler, Scissors, Split, Square, Undo2, X, type LucideIcon,
 } from 'lucide-react';
 
 import type { ShapeMode, Position } from './editing';
@@ -41,6 +41,8 @@ interface Props {
   locked?:boolean;
   onLinked: (enabled:boolean) => void;
   sketchError?:string|null;
+  cuttingEdge?:boolean;
+  onCutEdge?:()=>void;
 }
 
 // Keep the accessible operation names stable while giving each compact tool
@@ -55,7 +57,7 @@ const buttonModes: Array<{
   { mode: 'rectangle', title: 'Rectangle', caption: 'Rectangle', hint: 'Draw rectangle (R)', icon: Square },
   { mode: 'circle', title: 'Circle', caption: 'Circle', hint: 'Draw circle (C)', icon: Circle },
   { mode: 'hole', title: 'Cut hole', caption: 'Hole', hint: 'Cut polygon hole', icon: Eraser },
-  { mode: 'split', title: 'Split line', caption: 'Split', hint: 'Split polygon by line', icon: Scissors },
+  { mode: 'split', title: 'Split line', caption: 'Split', hint: 'Split polygon by line', icon: Split },
   { mode: 'trace-along', title: 'Trace network', caption: 'Trace', hint: 'Trace saved network', icon: Route },
 ];
 
@@ -63,7 +65,7 @@ export default function SurveyTools({
   mode, geometry, points, editing, moving, snapping, canUndo, canRedo, saved,
   onStart, onFinish, onCancel, onUndoPoint, onUndo, onRedo, onEdit,
   onSnapping, onAddPoint, onNumeric, onOverlay, onDuplicate, linked, onLinked,
-  toolbarTarget,busy=false,locked=false,edgeMoving=false,onEdgeMove,sketchError,
+  toolbarTarget,busy=false,locked=false,edgeMoving=false,onEdgeMove,sketchError,cuttingEdge=false,onCutEdge,
 }: Props) {
   const [longitude, setLongitude] = useState('');
   const [latitude, setLatitude] = useState('');
@@ -121,7 +123,9 @@ export default function SurveyTools({
           {buttonModes.slice(0,5).map(renderMode)}
         </div>
         <div className="survey-mode-family survey-topology-tools" role="group" aria-label="Topology tools">
-          {buttonModes.slice(5).map(renderMode)}
+          {renderMode(buttonModes[5])}
+          {onCutEdge&&<span className="survey-mode-item" title="Cut segment between two vertices"><button type="button" aria-label="Cut edge" title="Cut segment between two vertices" aria-pressed={cuttingEdge} className={cuttingEdge?'active':''} disabled={busy||locked||Boolean(mode)||!geometry||!['LineString','MultiLineString','Polygon','MultiPolygon'].includes(geometry.type)} onClick={onCutEdge}><Scissors size={15} aria-hidden="true"/><span className="survey-button-caption">Cut</span></button></span>}
+          {buttonModes.slice(6).map(renderMode)}
         </div>
       </div>
       {mode && (

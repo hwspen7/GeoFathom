@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import {
   GeometryTimeline, addVertex, approximateMeasurement, moveVertex,
   removeVertex, shiftGeometry, snapPixels, snapToPaths, verticesOf, previewEdgeLengths,
-  geodesicDrag, translateSpherical, pathsOf, singleMovedVertex,
+  geodesicDrag, translateSpherical, pathsOf, singleMovedVertex, cutGeometryEdge, nearestMeasuredEdge,
 } from './editing';
 
 import type { Position } from './editing';
@@ -157,4 +157,15 @@ test('line measurements, terminal vertices, empty paths and repeated edges',()=>
   expect(snapToPaths([50,20],[[[0,0],[0,0]]],p=>p,10)).toEqual({position:[50,20],kind:'none'});
   expect(snapToPaths([1,0],[[[0,0],[100,0]]],p=>p,10)).toEqual({position:[0,0],kind:'vertex'});
   expect(()=>removeVertex(line,{polygon:0,ring:0,vertex:1})).toThrow('Cannot delete');
+});
+
+
+test('cut deletes exactly one segment and drops isolated endpoints',()=>{
+ const line:GeoJSON.LineString={type:'LineString',coordinates:[[0,0],[1,0],[2,0],[3,0]]};
+ expect(cutGeometryEdge(line,1)).toEqual({type:'MultiLineString',coordinates:[[[0,0],[1,0]],[[2,0],[3,0]]]});
+ expect(cutGeometryEdge(line,0)).toEqual({type:'LineString',coordinates:[[1,0],[2,0],[3,0]]});
+ expect(cutGeometryEdge({type:'LineString',coordinates:[[0,0],[1,0]]},0)).toBeNull();
+ expect(cutGeometryEdge(box,0)).toEqual({type:'LineString',coordinates:[[.01,0],[.01,.01],[0,.01],[0,0]]});
+ expect(nearestMeasuredEdge(line,[15,2],p=>[p[0]*10,p[1]*10])).toBe(1);
+ expect(nearestMeasuredEdge(line,[15,30],p=>[p[0]*10,p[1]*10])).toBeNull();
 });

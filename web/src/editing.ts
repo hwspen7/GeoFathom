@@ -247,6 +247,44 @@ export function snapToPaths(
 
 
 export type MeasuredEdge={index:number;label:string;length_m:number;a:Position;b:Position};
+// Delete one real segment; isolated vertices are not standalone objects.
+export function cutGeometryEdge(geometry:GeoJSON.Geometry,index:number):GeoJSON.LineString|GeoJSON.MultiLineString|null{
+  if(!Number.isInteger(index)||index<0)throw Error('Invalid edge');
+  let remaining=index,found=false;
+  const pieces:Position[][]=[];
+  const polygon=geometry.type==='Polygon'||geometry.type==='MultiPolygon';
+  for(const path of pathsOf(geometry)){
+    const count=Math.max(0,path.length-1);
+    if(!found&&remaining<count){
+      found=true;
+      if(polygon){
+        // Removing a closing or interior ring segment opens the boundary.
+        // Rotate at the gap so every other segment remains connected.
+        const opened=[...path.slice(remaining+1,-1),...path.slice(0,remaining+1)];
+        if(opened.length>=2)pieces.push(opened);
+      }else{
+        const left=path.slice(0,remaining+1),right=path.slice(remaining+1);
+        if(left.length>=2)pieces.push(left);
+        if(right.length>=2)pieces.push(right);
+      }
+    }else pieces.push(path);
+    remaining-=count;
+  }
+  if(!found)throw Error('Edge does not exist');
+  const valid=pieces.filter(p=>p.length>=2);
+  return valid.length===0?null:valid.length===1?{type:'LineString',coordinates:valid[0]}:{type:'MultiLineString',coordinates:valid};
+}
+export function nearestMeasuredEdge(geometry:GeoJSON.Geometry,point:Position,project:(p:Position)=>Position,tolerance=10):number|null{
+  let best=tolerance,chosen:number|null=null,index=0;
+  for(const path of pathsOf(geometry))for(let i=1;i<path.length;i++,index++){
+    const a=project(path[i-1]),b=project(path[i]),dx=b[0]-a[0],dy=b[1]-a[1],len=dx*dx+dy*dy;
+    if(!len)continue;
+    const t=Math.max(0,Math.min(1,((point[0]-a[0])*dx+(point[1]-a[1])*dy)/len));
+    const d=Math.hypot(point[0]-a[0]-t*dx,point[1]-a[1]-t*dy);
+    if(d<best){best=d;chosen=index;}
+  }
+  return chosen;
+}
 export const MIN_MAP_EDGE_METERS=50;
 export function shouldShowEdgeLength(meters:number,pixels:number,labelWidth:number,selected=false){
   return selected||(meters>=MIN_MAP_EDGE_METERS&&pixels>=Math.max(64,labelWidth+12));
