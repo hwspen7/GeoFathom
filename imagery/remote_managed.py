@@ -9,6 +9,7 @@ from .remote_catalog import BY_ID,WINDOWED_IDS,windowed_roles
 from .remote_windowed import process
 from analysis.science_raster import require
 from storage.snapshots import copy_verified
+from .remote_semantics import TimeContext
 
 class DiskBand(BaseModel):
     model_config=ConfigDict(extra='forbid',allow_inf_nan=False)
@@ -32,6 +33,7 @@ class DiskInput(BaseModel):
     bindings:dict[str,DiskBand]=Field(min_length=1,max_length=64)
     quality:list[DiskQuality]=Field(default_factory=list,max_length=64)
     times:list[float]=Field(default_factory=list,max_length=64)
+    time_context:TimeContext|None=None
     parameters:dict[str,float]=Field(default_factory=dict,max_length=12)
     tile:int=Field(default=512,ge=64,le=1024)
 
@@ -64,7 +66,8 @@ def run_managed(payload,job_id,progress,check):
         def tick(fraction):
             progress(fraction);check()
         result=process(p.operation,{role:spec(b) for role,b in p.bindings.items()},output,p.parameters,
-                       [spec(q) for q in p.quality],p.tile,progress=tick,times=p.times)
+                       [spec(q) for q in p.quality],p.tile,progress=tick,times=p.times,
+                       time_context=p.time_context.model_dump(mode='json') if p.time_context else None)
         for role,entry in result['bands'].items():
             uid=str(p.bindings[role].image_id);require(entry['sha256']==hashes[uid],'Snapshot hash changed.')
             entry.pop('path',None);entry['image_id']=uid

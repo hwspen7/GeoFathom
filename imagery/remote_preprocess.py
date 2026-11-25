@@ -71,7 +71,8 @@ def prepare(body):
                   dst_nodata=np.nan, resampling=getattr(Resampling, interpolation))
         require(np.isfinite(out).any(), 'No valid prepared cells for role: ' + role)
         common &= np.isfinite(out)
-        product = raster_product('prepared_' + role, out, target.transform, target.crs, grid.unit)
+        product = raster_product('prepared_' + role, out, target.transform, target.crs, grid.unit,
+            tags={'ACQUISITION_DATETIME':grid.acquired_at} if getattr(grid,'acquired_at',None) else None)
         total += len(product['data'])
         require(total <= 48_000_000, "Prepared output exceeds inline budget; use disk preparation.")
         products.append({'role': role, **product})

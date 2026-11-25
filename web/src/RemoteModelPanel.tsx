@@ -1,4 +1,5 @@
-import {useEffect,useState} from 'react';
+import {useCallback,useEffect,useState} from 'react';
+import RemoteFeatureBuilder,{type ModelFeatureBand} from './RemoteFeatureBuilder';
 import {getGISJobs,getGISJob,queueRemoteModelJob,queueRemoteEvaluationJob,type GISJob} from './api';
 import ScientificFigureStudio from './ScientificFigureStudio';
 
@@ -14,6 +15,8 @@ export default function RemoteModelPanel({projectId,features,quality,assets,job,
  const [models,setModels]=useState<GISJob[]>([]),[modelId,setModelId]=useState(''),[model,setModel]=useState<GISJob|null>(null);
  const [minimum,setMinimum]=useState(0),[busy,setBusy]=useState(false),[error,setError]=useState(''),[studio,setStudio]=useState(false);
  const [plot,setPlot]=useState<'class'|'reliability'|'interval'>('class');
+ const [customFeatures,setCustomFeatures]=useState<Record<string,ModelFeatureBand>|null>(features);
+ const featureChange=useCallback((value:Record<string,ModelFeatureBand>|null)=>setCustomFeatures(value),[]);
  const [predictions,setPredictions]=useState<GISJob[]>([]),[predictionId,setPredictionId]=useState(''),[reference,setReference]=useState(''),[referenceDescription,setReferenceDescription]=useState(''),[separation,setSeparation]=useState(1000);
  useEffect(()=>{if(!projectId)return;let live=true;getGISJobs(projectId).then(out=>{if(live){setModels(out.jobs.filter(j=>j.kind==='remote_model_train'&&j.status==='completed'));setPredictions(out.jobs.filter(j=>j.kind==='remote_model_predict'&&j.status==='completed'));}}).catch(e=>{if(live)setError((e as Error).message);});return()=>{live=false;};},[projectId,job?.id,job?.status]);
  useEffect(()=>{if(job?.kind==='remote_model_train'&&job.status==='completed')setModelId(job.id);},[job?.id,job?.status]);
@@ -21,8 +24,8 @@ export default function RemoteModelPanel({projectId,features,quality,assets,job,
  const validation=model?.result?(model.result as {validation:Validation}).validation:null;
  const evaluation=job?.kind==='remote_model_evaluate'&&job.status==='completed'?job.result as {metrics:Validation&{training_excluded_cells:number;coverage:number;interval95:Record<string,number[]>;reliability:number[][]}}:null;
  const running=!!job&&['queued','running'].includes(job.status);
- async function submit(training:boolean){if(!projectId||!features||!quality)return;setBusy(true);setError('');try{
-  const common={features,quality};
+ async function submit(training:boolean){if(!projectId||!customFeatures||!quality)return;setBusy(true);setError('');try{
+  const common={features:customFeatures,quality};
   onJob(await queueRemoteModelJob(projectId,training?{...common,labels:{image_id:labels,band:1},parameters:{block_m:block,folds,buffer_blocks:buffer?1:0}}:{...common,model_job_id:modelId,minimum_probability:minimum},training));
  }catch(e){setError((e as Error).message);}finally{setBusy(false);}}
  async function evaluate(){if(!projectId)return;setBusy(true);setError('');try{onJob(await queueRemoteEvaluationJob(projectId,{prediction_job_id:predictionId,reference_image_id:reference,reference_description:referenceDescription,block_m:block,training_buffer_m:separation}));}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
@@ -30,15 +33,16 @@ export default function RemoteModelPanel({projectId,features,quality,assets,job,
  const csv=shown?['class,precision,recall,f1,iou,support',...shown.classes.map((c,i)=>[c,shown.precision[i],shown.recall[i],shown.f1[i],shown.iou[i],shown.support[i]].join(','))].join('\n'):'';
  const chartCsv=plot==='reliability'&&evaluation?['predicted,observed,cells',...evaluation.metrics.reliability.map(r=>r.join(','))].join('\n'):plot==='interval'&&evaluation?['metric,value,low,high',...(['overall_accuracy','macro_f1','mean_iou'] as const).map(k=>[k,evaluation.metrics[k],...evaluation.metrics.interval95[k]].join(','))].join('\n'):csv;
  return <fieldset disabled={busy}><legend>Train and reuse a classifier</legend>
+ <RemoteFeatureBuilder assets={assets} bound={features} onChange={featureChange}/>
  <p>The selected managed reflectance bands are model features. Labels use positive class IDs and zero for unlabeled pixels.</p>
  <label>Training label raster<select value={labels} onChange={e=>setLabels(e.target.value)}><option value="">Choose labels</option>{assets.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>
  <label>Validation block width (m)<input type="number" min="1" max="100000" value={block} onChange={e=>setBlock(Number(e.target.value))}/></label>
  <label>Spatial validation folds<input type="number" min="3" max="10" value={folds} onChange={e=>setFolds(Number(e.target.value))}/></label>
  <label><input type="checkbox" checked={buffer} onChange={e=>setBuffer(e.target.checked)}/>Exclude neighboring validation blocks</label>
- <button disabled={!projectId||!features||!quality||!labels||running} onClick={()=>void submit(true)}>Train and save random forest</button>
+ <button disabled={!projectId||!customFeatures||!quality||!labels||running} onClick={()=>void submit(true)}>Train and save random forest</button>
  <label>Saved project model<select value={modelId} onChange={e=>setModelId(e.target.value)}><option value="">Choose a trained model</option>{models.map(m=><option key={m.id} value={m.id}>{m.created_at} · {m.id.slice(0,8)}</option>)}</select></label>
  <label>Minimum vote probability<input type="number" min="0" max="1" step=".05" value={minimum} onChange={e=>setMinimum(Number(e.target.value))}/></label>
- <button disabled={!projectId||!features||!quality||!modelId||running} onClick={()=>void submit(false)}>Classify full-resolution imagery</button>
+ <button disabled={!projectId||!customFeatures||!quality||!modelId||running} onClick={()=>void submit(false)}>Classify full-resolution imagery</button>
  {validation&&<><p>Spatial holdout: accuracy {validation.overall_accuracy.toFixed(4)} · macro F1 {validation.macro_f1.toFixed(4)} · mIoU {validation.mean_iou.toFixed(4)} · {validation.cells} samples</p><button onClick={()=>{setPlot('class');setStudio(true);}}>Model validation figures</button></>}
  <details><summary>Independent reference evaluation</summary>
  <label>Completed classification<select value={predictionId} onChange={e=>setPredictionId(e.target.value)}><option value="">Choose predictions</option>{predictions.map(p=><option key={p.id} value={p.id}>{p.created_at} · {p.id.slice(0,8)}</option>)}</select></label>

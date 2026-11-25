@@ -27,6 +27,7 @@ class Inputs:
         require(1 <= len(features) <= 16, 'Use 1–16 explicitly named model features.')
         self.roles = list(features)
         self.bands = {}
+        self.details = {}
         self.hashes = {}
         self.grid = None
         def band(spec, quantity):
@@ -44,8 +45,13 @@ class Inputs:
             if path not in self.hashes:self.hashes[path]=digest(path)
             return ds, binding, quantity, unit
         for r, spec in features.items():
-            require(spec.get('quantity', 'reflectance') in ('reflectance', 'numeric'), 'Use reflectance or declared numeric features.')
+            require(spec.get('quantity', 'reflectance') in ('reflectance','numeric','power','db','slope','aspect','kelvin','distance_m','fraction'), 'Declare a supported physical model feature quantity.')
             self.bands[r] = band(spec, spec.get('quantity', 'reflectance'))
+            ds,b,q,unit=self.bands[r]
+            self.details[r]={'band':b.band,'quantity':q,'unit':unit,'crs':str(ds.crs),
+                'transform':list(ds.transform)[:6],'shape':[ds.height,ds.width],
+                'acquisition_datetime':ds.tags(b.band).get('ACQUISITION_DATETIME'),
+                'source_sha256':self.hashes[str(Path(spec['path']).resolve())]}
         self.labels = band({**labels, 'encoding':'raw'}, 'class') if labels else None
         self.quality = []
         for q in quality:
@@ -180,7 +186,7 @@ def train(config, output, progress=None, check=lambda:None):
         covariance=.95*cov+.05*scale*np.eye(len(mean))
         identities={config.get('source_names',{}).get(p,p):h for p,h in inputs.hashes.items()}
         artifact={'schema':'geofathom-random-forest-1','classes':classes.tolist(),
-            'features':[{'role':r,'unit':inputs.bands[r][3],'quantity':inputs.bands[r][2]} for r in inputs.roles],
+            'features':[{'role':r,'unit':inputs.bands[r][3],'quantity':inputs.bands[r][2],'training_source':inputs.details[r]} for r in inputs.roles],
             'trees':export_forest(model),'validation':validation,'source_sha256':identities,
             'training_label_sha256':digest(config['labels']['path']),
             'training_grid':{'crs':str(grid.crs),'transform':list(grid.transform)[:6],'shape':[grid.height,grid.width]},

@@ -1,5 +1,22 @@
 # Remote Sensing scientific computing
 
+## Physical feature sets and acquisition semantics
+
+Saved models accept explicitly typed reflectance, terrain slope/aspect,
+metre elevation/height, SAR power/dB, temperature, fraction and other declared
+numeric features. The custom feature editor is independent of the selected
+optical operation. Training retains each feature's physical quantity, unit,
+source hash, band, grid and available acquisition metadata. Prediction rejects
+quantity/unit mismatches and still requires exact common grids.
+
+Variable-date inline and disk results retain verified UTC dates, time origin,
+time unit and upstream hashes. Cube band timestamps are inferred when complete;
+explicit contexts must agree with them. Numeric coordinates inconsistent with
+the dates/units fail instead of silently changing a trend's interpretation.
+Trend GeoTIFFs carry TIME_ORIGIN/TIME_UNIT and physical units such as
+reflectance/day. A declared year is exactly 365.25 days. This metadata does not
+perform sensor harmonization or infer missing acquisition times.
+
 ## Physical validation on native QA support
 
 Inline analysis, common-grid preparation, disk operators, optical cubes and

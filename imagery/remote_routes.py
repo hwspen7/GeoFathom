@@ -26,6 +26,7 @@ from .remote_quality_composite import QUALITY_IDS,quality_composite
 from .remote_satellite import gamma_change, area_overlap, SAR_GAMMA_IDS
 from .remote_validation import aggregate_nested,continuous_reference,binary_reference
 from .remote_band import read_calibrated
+from .remote_semantics import TimeContext,resolve_time_context
 from .remote_fusion import fusion,canopy,unsupervised
 from .remote_sar_complex import complex_products,calibrated_power,cloud_candidates,cloud_shadow
 from .remote_temporal_models import seasonal_metrics,segmented_means
@@ -68,6 +69,7 @@ class RemoteInput(BaseModel):
     quality:list[Quality]=Field(default_factory=list,max_length=64)
     parameters:dict[str,float]=Field(default_factory=dict,max_length=12)
     times:list[float]=Field(default_factory=list,max_length=64)
+    time_context:TimeContext|None=None
     library:list[tuple[float,...]]=Field(default_factory=list,max_length=2048)
 
 
@@ -101,6 +103,7 @@ def read_band(source,binding,quantity,raw,sha,validity=None):
         if validity is not None:require(validity.shape==(ds.height,ds.width),'All bands and QA rasters must be explicitly aligned to the same grid.')
         b=binding.band;z,unit,scale,offset=read_calibrated(ds,binding,quantity,validity=validity)
         g=Grid(source.name,z,a,ds.crs,unit,sha,b,ds.count,scale,offset)
+        g.acquired_at=ds.tags(b).get('ACQUISITION_DATETIME')
         return g
 
 def execute(body):
@@ -161,6 +164,8 @@ def execute(body):
         for name in targets:grids[name].values[~mask]=np.nan
         quality.append({'sha256':g.sha256,'band':g.band,'scheme':q.scheme,'roles':targets,'retained_mask_cells':int(mask.sum())})
     v={name:g.values for name,g in grids.items()};kind=method.id
+    require(body.time_context is None or kind in SERIES_IDS,'Time context requires a variable-date method.')
+    axis=resolve_time_context(body.time_context,body.times,[getattr(g,'acquired_at',None) for g in grids.values()]) if kind in SERIES_IDS else None
     if any(q=='numeric' for q in roles.values()):
         units={grids[r].unit for r,q in roles.items() if q=='numeric'}
         require(len(units)==1,'Comparable numerical bands must share physical units.')
@@ -183,6 +188,7 @@ def execute(body):
     common=np.logical_and.reduce([np.isfinite(z) for z in v.values()])
     unit=method.unit;rows=[];headers=[];meta={};out=None;rgb=None
     if unit in {'source','source/time'}:unit=next(iter(grids.values())).unit+('/time' if unit=='source/time' else '')
+    if axis and method.unit=='source/time':unit=next(iter(grids.values())).unit+'/'+axis['time_unit']
     if kind in {'true_color','false_color'}:
         rgb=rgb_product(kind,np.stack(list(v.values())),first,list(v));meta['display_channel_order']=list(v)
     elif aligning:
@@ -301,13 +307,15 @@ def execute(body):
         require(common.any(),'No common valid reference cells.')
         headers,rows,meta=agreement(v['prediction'][common],v['reference'][common])
     else:raise FigureInputError('Unimplemented remote method.')
-    product=rgb[0] if rgb else raster_product(kind,out,first.transform,first.crs,unit) if out is not None else None
+    time_tags={'TIME_ORIGIN':axis['time_origin'],'TIME_UNIT':axis['time_unit'],'ACQUISITION_DATETIMES':json.dumps(axis['acquisition_datetimes'])} if axis else None
+    product=rgb[0] if rgb else raster_product(kind,out,first.transform,first.crs,unit,tags=time_tags) if out is not None else None
     meta.update(input_valid_cells={r:int(np.isfinite(z).sum()) for r,z in v.items()},common_valid_cells=int(common.sum()))
     csv=csv_output(headers,rows)
     receipt={'schema':'geofathom-remote-sensing-1','operation':kind,'assumption':method.assumption,'parameters':params,
              'crs':str(first.crs),'grid_shape':list(first.values.shape),'transform':list(first.transform)[:6],
              'bands':provenance,'quality_masks':quality,'metrics':meta,'table_sha256':hashlib.sha256(csv.encode()).hexdigest(),
-             'raster_sha256':product['sha256'] if product else None,'raster_summary':product['summary'] if product else None}
+             'raster_sha256':product['sha256'] if product else None,'raster_summary':product['summary'] if product else None,
+             'time_context':axis,'upstream_sha256':sorted(set(hashes))}
     result={'operation':kind,'receipt':receipt,'features':None,'raster':product,'preview':rgb[1] if rgb else raster_preview(product) if product else None,'columns':headers,'rows':rows,'csv':csv}
     plots=[{'title':'Publication RGB composite','recipe':'spectral_rgb','bindings':{},'csv':None,'raster':True,'bands':[1,2,3]}] if rgb else figure_sources(result,[])
     def add(title,recipe,bindings,table=None):

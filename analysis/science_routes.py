@@ -45,7 +45,7 @@ class SpatialInput(BaseModel):
     neighborhood:Literal['rook','queen']='rook'
     regression_view:Literal['prediction','residual']='prediction'
 
-def raster_product(name,z,transform,crs,unit):
+def raster_product(name,z,transform,crs,unit,tags=None):
     require(not np.isinf(z).any(),'Numerical overflow in derived raster; rescale the input quantities.')
     valid=np.isfinite(z);require(valid.any(),'Operation produced no valid cells.')
     require(np.max(np.abs(z[valid]))<=1e100,'Output exceeds numerical range.')
@@ -61,6 +61,7 @@ def raster_product(name,z,transform,crs,unit):
         with mem.open(driver='GTiff',width=z.shape[1],height=z.shape[0],count=1,dtype='float64',crs=crs,
                       transform=transform,nodata=float('nan'),compress='deflate') as ds:
             ds.write(z,1);ds.update_tags(TERRAIN_UNIT=unit,SPATIAL_METHOD=name)
+            if tags:ds.update_tags(**tags)
         raw=mem.read()
     require(len(raw)<=24_000_000,'Derived raster exceeds the inline export budget.')
     return {'name':name,'data':base64.b64encode(raw).decode(),'unit':unit,'sha256':hashlib.sha256(raw).hexdigest(),'band':1,'summary':summary}

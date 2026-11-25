@@ -126,6 +126,7 @@ def build_cube(config, output, progress=None, check=lambda: None):
         with rasterio.open(staged, 'w', **profiles, width=target.width, height=target.height,
                            count=len(layout)+len(roles), crs=target.crs, transform=target.transform) as dst:
             dst.update_tags(REMOTE_SCHEMA='geofathom-optical-cube-1', TIME_UNIT='UTC',
+                TIME_ORIGIN=dates[0].isoformat(),AXIS_UNIT='day',
                 QUALITY_ORDER='native_screen_then_reproject', HARMONIZATION=harmonization)
             for entry in layout:
                 b = entry['band']

@@ -11,10 +11,11 @@ from pydantic import BaseModel, ConfigDict, Field
 from analysis.science_raster import require
 from storage.snapshots import copy_verified
 from .remote_managed import DiskBand, DiskQuality, result_path
+from .remote_semantics import FeatureQuantity
 
 
 class ModelBand(DiskBand):
-    quantity: Literal['reflectance','numeric']='reflectance'
+    quantity: FeatureQuantity='reflectance'
 
 
 class TrainingParameters(BaseModel):

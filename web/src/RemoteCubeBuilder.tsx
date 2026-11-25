@@ -1,7 +1,7 @@
 import {useRef,useState} from 'react';
 import {queueRemoteCubeJob,registerRemoteJobImagery,type GISJob,type RasterAsset} from './api';
 
-export interface CubeReceipt {roles:string[];times:number[];time_origin:string;band_layout:Array<{band:number;role:string}>}
+export interface CubeReceipt {roles:string[];times:number[];time_origin:string;utc_datetimes?:string[];band_layout:Array<{band:number;role:string}>}
 interface Band {image_id:string;band:number;encoding:string;scale:number;offset:number;unit:string}
 interface Quality {image_id:string;band:number;scheme:string;roles:string[]}
 interface Acquisition {id:string;datetime:string;sensor:string;bands:Record<string,Band>;quality:Quality[]}

@@ -23,6 +23,7 @@ from .remote_band import read_calibrated
 from .remote_tile_kernels import compute
 from .remote_quality_composite import QUALITY_IDS
 from types import SimpleNamespace
+from .remote_semantics import resolve_time_context
 
 def digest(path):
     h=hashlib.sha256()
@@ -38,7 +39,7 @@ def windows(width,height,tile):
         for col in range(0,width,tile):
             yield Window(col,row,min(tile,width-col),min(tile,height-row))
 
-def process(operation,bindings,output,parameters=None,quality=(),tile=512,progress=None,times=()):
+def process(operation,bindings,output,parameters=None,quality=(),tile=512,progress=None,times=(),time_context=None):
     method=BY_ID.get(operation)
     require(operation in WINDOWED_IDS,'Operation is not certified for finite-neighborhood disk processing.')
     times=list(times);roles=windowed_roles(operation,times)
@@ -78,8 +79,11 @@ def process(operation,bindings,output,parameters=None,quality=(),tile=512,progre
             item=open_band(bindings[role],quantity);bands[role]=item
             provenance[role]={'path':item[-1],'band':item[1].band,'quantity':quantity,'unit':item[3],'scale':item[4],'offset':item[5],'sha256':digest(item[-1])}
         numeric_units={item[3] for item in bands.values() if item[2]=='numeric'}
+        require(time_context is None or operation in SERIES_IDS,'Time context requires a variable-date method.')
+        axis=resolve_time_context(time_context,times,[ds.tags(binding.band).get('ACQUISITION_DATETIME') for ds,binding,*_ in bands.values()]) if operation in SERIES_IDS else None
         require(len(numeric_units)<=1,'Comparable numerical bands must share physical units.')
         unit=next(iter(bands.values()))[3]+('/time' if method.unit=='source/time' else '') if method.unit in {'source','source/time'} else method.unit
+        if axis and method.unit=='source/time':unit=next(iter(bands.values()))[3]+'/'+axis['time_unit']
         for spec in quality:
             require(spec['scheme'] in {'binary','sentinel_clear','landsat_clear','landsat_unsaturated'},'Unknown quality scheme.')
             roles=spec.get('roles',[]) or list(bindings)
@@ -95,6 +99,7 @@ def process(operation,bindings,output,parameters=None,quality=(),tile=512,progre
                          transform=first.transform,nodata=np.nan,compress='deflate',tiled=True,blockxsize=256,blockysize=256,BIGTIFF='IF_SAFER')
             with rasterio.open(tmp,'w',**profile) as dst:
                 dst.update_tags(TERRAIN_UNIT=unit,REMOTE_METHOD=operation,PROCESSING='windowed')
+                if axis:dst.update_tags(TIME_ORIGIN=axis['time_origin'],TIME_UNIT=axis['time_unit'],ACQUISITION_DATETIMES=json.dumps(axis['acquisition_datetimes']))
                 for window in windows(first.width,first.height,tile):
                     # Read the exact finite support including halo; clip only
                     # at scene boundaries, never at artificial tile boundaries.
@@ -124,7 +129,8 @@ def process(operation,bindings,output,parameters=None,quality=(),tile=512,progre
             receipt={'operation':operation,'parameters':params,'bands':provenance,'quality_masks':quality_receipt,
                      'width':first.width,'height':first.height,'tile_size':tile,'halo_cells':halo,'axis_values':times,'unit':unit,'windows':tiles,'valid_cells':count,
                      'nodata_cells':first.width*first.height-count,'minimum':minimum,'maximum':maximum,'mean':total/count,
-                     'sha256':digest(tmp),'crs':str(first.crs),'transform':list(first.transform)[:6]}
+                     'sha256':digest(tmp),'crs':str(first.crs),'transform':list(first.transform)[:6],
+                     'time_context':axis,'upstream_sha256':sorted({b['sha256'] for b in provenance.values()})}
             # A hard link creates the destination without overwriting an existing
             # file, even if another process created it during the analysis.
             os.link(tmp,output);return receipt
