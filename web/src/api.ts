@@ -953,7 +953,7 @@ export function getVisionModels():Promise<VisionModels>{
 
 export type GISJobKind='topology_qa'|'spatial_select'|'export_geojson'|
   'postgis_sync'|'rebuild_index'|'spectral_index'|'spectral_change'|
-  'semantic_segmentation'|'stac_ndvi'|'vector_import'|'vector_export'|'remote_windowed';
+  'semantic_segmentation'|'stac_ndvi'|'vector_import'|'vector_export'|'remote_windowed'|'remote_cube';
 export interface GISJob {
   id:string;project_id:string;kind:GISJobKind;
   status:'queued'|'running'|'completed'|'failed'|'cancelled'|'interrupted';
@@ -1309,6 +1309,12 @@ export function prepareRemoteBands(body:{sources:RemoteSource[];bindings:Record<
 
 export function queueRemoteDiskJob(projectId:string,payload:Record<string,unknown>):Promise<GISJob>{
  return request('/projects/'+encodeURIComponent(projectId)+'/jobs',{method:'POST',headers:{'Content-Type':'application/json','X-GeoFathom-Local-Import':'1'},body:JSON.stringify({kind:'remote_windowed',payload})});
+}
+export function queueRemoteCubeJob(projectId:string,payload:Record<string,unknown>):Promise<GISJob>{
+ return request('/projects/'+encodeURIComponent(projectId)+'/jobs',{method:'POST',headers:{'Content-Type':'application/json','X-GeoFathom-Local-Import':'1'},body:JSON.stringify({kind:'remote_cube',payload})});
+}
+export function registerRemoteJobImagery(projectId:string,id:string):Promise<RasterAsset>{
+ return request('/projects/'+encodeURIComponent(projectId)+'/jobs/'+encodeURIComponent(id)+'/imagery',{method:'POST',headers:{'X-GeoFathom-Local-Import':'1'}});
 }
 export async function downloadRemoteDiskJob(projectId:string,id:string):Promise<void>{
  const response=await rawRequest('/projects/'+encodeURIComponent(projectId)+'/jobs/'+encodeURIComponent(id)+'/download');

@@ -13,7 +13,7 @@ router=APIRouter(prefix="/projects",tags=["background-jobs"])
 class SubmitJob(BaseModel):
     kind:Literal["topology_qa","spatial_select","export_geojson",
                  "postgis_sync","rebuild_index","spectral_index",
-                 "spectral_change","semantic_segmentation","stac_ndvi","remote_windowed"]
+                 "spectral_change","semantic_segmentation","stac_ndvi","remote_windowed","remote_cube"]
     payload:dict[str,Any]=Field(default_factory=dict)
 
 def fail(error):
@@ -25,7 +25,7 @@ def submit(project_id:str,body:SubmitJob,request:Request,
            token:str|None=Header(default=None,alias="X-GeoFathom-Admin-Token")):
     if getattr(request.state,"principal",None) and body.kind not in {"topology_qa","spatial_select","export_geojson"}:
         raise HTTPException(status_code=403,detail="Operator-only job.")
-    if body.kind=="remote_windowed":
+    if body.kind in {"remote_windowed","remote_cube"}:
         from imagery.routes import require_raster_import
         require_raster_import(request,token)
     if body.kind in {"postgis_sync","rebuild_index","spectral_index",
@@ -55,7 +55,7 @@ def cancel(project_id:str,job_id:str):
 def download_result(project_id:str,job_id:str):
     try:
         job=get_job(project_id,job_id)
-        if job["kind"]=="remote_windowed" and job["status"]=="completed":
+        if job["kind"] in {"remote_windowed","remote_cube"} and job["status"]=="completed":
             from imagery.remote_managed import result_path
             path=result_path(job_id)
             if not path.is_file():raise StorageError("Remote raster result not found.")
@@ -68,3 +68,22 @@ def download_result(project_id:str,job_id:str):
                 "Cache-Control":"no-store",
             })
     except StorageError as error:raise fail(error) from error
+
+
+@router.post("/{project_id}/jobs/{job_id}/imagery",status_code=201)
+def register_result(project_id:str,job_id:str,request:Request,
+                    token:str|None=Header(default=None,alias="X-GeoFathom-Admin-Token")):
+    from imagery.routes import require_raster_import
+    from imagery.remote_managed import result_path
+    from imagery.remote_windowed import digest
+    from imagery.cli import import_local_image
+    require_raster_import(request,token)
+    try:
+        job=get_job(project_id,job_id)
+        if job['kind'] not in {'remote_cube','remote_windowed'} or job['status']!='completed':
+            raise StorageError('A completed scientific raster job is required.')
+        path=result_path(job_id)
+        if not path.is_file() or digest(path)!=job['result']['sha256']:
+            raise StorageError('Scientific raster result is missing or changed.')
+        return import_local_image(path,job['kind']+'-'+job_id+'.tif')
+    except (StorageError,ValueError,OSError) as error:raise fail(error) from error

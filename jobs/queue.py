@@ -24,7 +24,7 @@ from .leases import (PROCESS_ID,LEASE_SECONDS,ensure_lease_schema,
 
 KINDS={"vector_import","vector_export","topology_qa","spatial_select","export_geojson","postgis_sync",
        "rebuild_index","spectral_index","spectral_change","semantic_segmentation",
-       "stac_ndvi","remote_windowed"}
+       "stac_ndvi","remote_windowed","remote_cube"}
 _POOL=ThreadPoolExecutor(max_workers=2,thread_name_prefix="geofathom-gis")
 _LOCK=Lock()
 _INITIALIZED=set()
@@ -147,6 +147,9 @@ def queue_job(project_id,kind,payload):
         payload={**payload,"full_resolution":True}
     if kind=="remote_windowed":
         from imagery.remote_managed import validate
+        payload=validate(payload).model_dump(mode="json")
+    if kind=="remote_cube":
+        from imagery.remote_cube_managed import validate
         payload=validate(payload).model_dump(mode="json")
     serialized=json.dumps(payload,allow_nan=False)
     if len(serialized.encode("utf-8"))>100_000:
@@ -277,6 +280,9 @@ def _execute_impl(kind,project_id,payload):
     if kind=="vector_export":
         from storage.exchange import execute_export
         return execute_export(project_id,payload,_progress,check_cancelled)
+    if kind=="remote_cube":
+        from imagery.remote_cube_managed import run_managed
+        return run_managed(payload,_ACTIVE_JOB.get(),_progress,check_cancelled)
     if kind=="remote_windowed":
         from imagery.remote_managed import run_managed
         return run_managed(payload,_ACTIVE_JOB.get(),_progress,check_cancelled)
@@ -435,8 +441,8 @@ def _worker(uid,path):
             owner_token=_ACTIVE_OWNER.set(owner)
             try:
                 if (kind in {"spectral_index","spectral_change",
-                             "semantic_segmentation","stac_ndvi","remote_windowed"}
-                        and (((payload.get("full_resolution") is True or kind=="remote_windowed")
+                             "semantic_segmentation","stac_ndvi","remote_windowed","remote_cube"}
+                        and (((payload.get("full_resolution") is True or kind in {"remote_windowed","remote_cube"})
                              and os.getenv("GEOFATHOM_RASTER_ISOLATE","1")=="1")
                              or os.getenv("GEOFATHOM_WORKER_MEMORY_MB","0")!="0")):
                     from .isolation import run_isolated
@@ -504,9 +510,16 @@ def _worker(uid,path):
                 with _connect() as c:
                     release_slot(c,owner)
                     row=c.execute('SELECT kind,status FROM gis_jobs WHERE id=?',(uid,)).fetchone()
-                    if row and row['kind']=='remote_windowed' and row['status']!='completed':
+                    if row and row['kind'] in {'remote_windowed','remote_cube'} and row['status']!='completed':
                         from imagery.remote_managed import result_path
                         result_path(uid).unlink(missing_ok=True)
+                        if row['kind']=='remote_cube':
+                            import shutil
+                            root=result_path(uid).parent
+                            # Reap job-owned scratch after a killed subprocess too.
+                            for pattern in ('.cube-'+uid+'-*','cube-input-'+uid+'-*'):
+                                for directory in root.glob(pattern):
+                                    shutil.rmtree(directory,ignore_errors=False)
         finally:
             # Even a database failure during slot cleanup must not poison the
             # next job's ContextVar on this executor thread.

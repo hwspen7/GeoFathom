@@ -1,5 +1,26 @@
 # Remote Sensing scientific computing
 
+## Managed acquisition cubes
+
+The workbench's **Multi-date optical cube** collects explicit UTC datetimes,
+sensor identities, managed disk reflectance bands and per-acquisition QA.
+The first retained acquisition supplies the target geometry. The background
+`remote_cube` job builds 2–64 date, 1–12 role cubes with a full-resolution
+band/time layout and one valid-observation-count band per role. Each source
+is calibrated and QA-screened before its continuous reprojection. Missing
+observations remain NoData. Cross-sensor inputs require an external
+harmonization record; a declaration does not establish physical equivalence.
+
+Execution uses verified input snapshots, the existing global raster lease,
+isolated process budgets, cooperative cancellation and completed-only output.
+Target grids support up to 150 million cells subject to explicit disk and
+work budgets. The local CLI is `python -m imagery.remote_cube config.json cube.tif`;
+its config uses target_path and acquisition bands/quality path bindings.
+HTTP jobs accept opaque image IDs exclusively. A completed cube can be
+registered as managed imagery and used for windowed trend/season/change-point
+methods. UTC offsets become actual elapsed days, preserving the time origin
+in the cube receipt. No regular acquisition interval or gap filling is assumed.
+
 ## Common-grid preparation and scene discovery
 
 The workbench searches the approved public Sentinel-2 catalog by WGS84 region

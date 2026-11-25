@@ -27,8 +27,10 @@ def _check(src) -> None:
         raise RasterError("Only GeoTIFF images are supported.")
     if not src.crs:
         raise RasterError("Raster lacks a coordinate reference system.")
-    if not 1 <= src.count <= 20:
-        raise RasterError("Raster must contain between 1 and 20 bands.")
+    # Scientific cubes preserve acquisition-band identities in per-band tags.
+    band_limit = 1024 if src.tags().get('REMOTE_SCHEMA') == 'geofathom-optical-cube-1' else 20
+    if not 1 <= src.count <= band_limit:
+        raise RasterError(f"Raster must contain between 1 and {band_limit} bands.")
     if not (1 <= src.width <= MAX_DIMENSION and 1 <= src.height <= MAX_DIMENSION):
         raise RasterError("Raster dimensions exceed the supported limit.")
     if abs(src.transform.a * src.transform.e - src.transform.b * src.transform.d) < 1e-18:
