@@ -1353,7 +1353,9 @@ export async function materializeScientificRaster<T extends ScientificRasterInpu
  const chunks:Uint8Array[]=[];let bytes=0;
  try{for(;;){const {done,value}=await reader.read();if(done)break;bytes+=value.byteLength;if(bytes>limit){await reader.cancel();throw Error('Exact terrain raster exceeds the inline scientific input limit. Export the GeoTIFF and use a bounded study area or disk workflow.');}chunks.push(value);}}finally{reader.releaseLock();}
  const raw=new Uint8Array(bytes);let offset=0;for(const chunk of chunks){raw.set(chunk,offset);offset+=chunk.byteLength;}
- const data=await new Promise<string>((resolve,reject)=>{const fr=new FileReader();fr.onerror=()=>reject(Error('Raster encoding failed.'));fr.onload=()=>resolve(String(fr.result).split(',')[1]);fr.readAsDataURL(new Blob([raw],{type:'image/tiff'}));});
+ // Use multiples of three so chunked encoding preserves the exact base64 byte stream.
+ const encoded:string[]=[];for(let start=0;start<raw.length;start+=32766)encoded.push(btoa(String.fromCharCode(...raw.subarray(start,start+32766))));
+ const data=encoded.join('');
  if(!data)throw Error('Raster product is empty.');
  return {...r,data};
 }

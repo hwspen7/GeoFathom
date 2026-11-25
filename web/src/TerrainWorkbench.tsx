@@ -955,7 +955,7 @@ export default function TerrainWorkbench(p:Props){
        <button className={leftTab==='source'?'terrain-linked-active':''} type="button"
          aria-label="Get DEM" aria-pressed={leftTab==='source'} onClick={()=>setLeftTab('source')}>Get DEM</button>
        <button type="button" aria-label="Research analysis" onClick={()=>setResearchOpen(true)}>Research</button>
-       <button type="button" onClick={()=>{const r=selected?.advanced?.raster;setStudioRasters([]);if(!r){setStudioOpen(true);return;}void materializeScientificRaster({name:selected.title,data:r.geotiff,unit:r.unit??'',product_id:r.product_id}).then(x=>{if(alive.current){setStudioRasters([{name:x.name,data:x.data,unit:x.unit}]);setStudioOpen(true);}}).catch(e=>{if(alive.current)setError(String(e.message??e));});}}>Figure studio</button>
+       <button type="button" onClick={()=>{const r=selected?.advanced?.raster;setStudioRasters([]);if(!r){setStudioOpen(true);return;}void materializeScientificRaster({name:selected?.title??'Terrain result',data:r.geotiff,unit:r.unit??'',product_id:r.product_id}).then(x=>{if(alive.current){setStudioRasters([{name:x.name,data:x.data,unit:x.unit}]);setStudioOpen(true);}}).catch(e=>{if(alive.current){setError(String(e.message??e));setStudioRasters([]);setStudioOpen(true);}});}}>Figure studio</button>
      </div>
      <div className="terrain-linked-row">
        <label className="terrain-linked-select">Analysis

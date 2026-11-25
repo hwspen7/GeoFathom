@@ -118,3 +118,37 @@ describe('protected API transport',()=>{
     }finally{create.mockRestore();revoke.mockRestore();}
   });
 });
+
+describe('disk-backed scientific raster bridge',()=>{
+ const fetchMock=vi.fn<typeof fetch>();
+ beforeEach(()=>{fetchMock.mockReset();vi.stubGlobal('fetch',fetchMock);vi.stubGlobal('window',{sessionStorage:{getItem:()=> 'session-key'}});});
+ afterEach(()=>vi.unstubAllGlobals());
+ it('keeps existing inline data unchanged without downloading again',async()=>{
+  const raster={name:'inline',data:'AQID',unit:'m'};
+  expect(await api.materializeScientificRaster(raster)).toBe(raster);
+  expect(fetchMock).not.toHaveBeenCalled();
+ });
+ it('authenticates and preserves the exact bytes across encoding chunk boundaries',async()=>{
+  const raw=Uint8Array.from({length:65539},(_,i)=>i%251);
+  fetchMock.mockResolvedValueOnce(new Response(raw,{headers:{'Content-Length':String(raw.length)}}));
+  const result=await api.materializeScientificRaster({name:'disk',data:'',unit:'m',product_id:'abc/def'},100000);
+  expect(Uint8Array.from(atob(result.data),c=>c.charCodeAt(0))).toEqual(raw);
+  expect(result.unit).toBe('m');
+  const [url,init]=fetchMock.mock.calls[0];expect(String(url)).toContain('/terrain/products/abc%2Fdef');
+  expect(new Headers(init?.headers).get('X-GeoFathom-API-Key')).toBe('session-key');
+ });
+ it('rejects both known-length and streamed oversized rasters without truncating data',async()=>{
+  fetchMock.mockResolvedValueOnce(new Response(new Uint8Array(8),{headers:{'Content-Length':'8'}}));
+  fetchMock.mockResolvedValueOnce(new Response(new Uint8Array(8)));
+  const raster={name:'disk',data:'',product_id:'abc'};
+  await expect(api.materializeScientificRaster(raster,4)).rejects.toThrow('inline scientific input limit');
+  await expect(api.materializeScientificRaster(raster,4)).rejects.toThrow('inline scientific input limit');
+ });
+ it('reports deleted disk products and empty responses rather than inventing pixels',async()=>{
+  fetchMock.mockResolvedValueOnce(Response.json({detail:'Terrain product is unavailable.'},{status:404}));
+  fetchMock.mockResolvedValueOnce(new Response(new Uint8Array(0)));
+  const raster={name:'disk',data:'',product_id:'abc'};
+  await expect(api.materializeScientificRaster(raster)).rejects.toThrow('Terrain product is unavailable.');
+  await expect(api.materializeScientificRaster(raster)).rejects.toThrow('Raster product is empty');
+ });
+});
