@@ -1319,6 +1319,12 @@ export function queueRemoteModelJob(projectId:string,payload:Record<string,unkno
 export function queueRemoteEvaluationJob(projectId:string,payload:Record<string,unknown>):Promise<GISJob>{
  return request('/projects/'+encodeURIComponent(projectId)+'/jobs',{method:'POST',headers:{'Content-Type':'application/json','X-GeoFathom-Local-Import':'1'},body:JSON.stringify({kind:'remote_model_evaluate',payload})});
 }
+export function getScientificJobRecipe(projectId:string,id:string):Promise<Record<string,unknown>>{
+ return request('/projects/'+encodeURIComponent(projectId)+'/jobs/'+encodeURIComponent(id)+'/recipe');
+}
+export function repeatScientificJob(projectId:string,id:string,allow_software_change=false):Promise<GISJob>{
+ return request('/projects/'+encodeURIComponent(projectId)+'/jobs/'+encodeURIComponent(id)+'/repeat',{method:'POST',headers:{'Content-Type':'application/json','X-GeoFathom-Local-Import':'1'},body:JSON.stringify({allow_software_change})});
+}
 export function registerRemoteJobImagery(projectId:string,id:string):Promise<RasterAsset>{
  return request('/projects/'+encodeURIComponent(projectId)+'/jobs/'+encodeURIComponent(id)+'/imagery',{method:'POST',headers:{'X-GeoFathom-Local-Import':'1'}});
 }

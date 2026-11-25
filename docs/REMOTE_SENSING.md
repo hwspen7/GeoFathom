@@ -1,5 +1,24 @@
 # Remote Sensing scientific computing
 
+## Verified experiment recipes
+
+All new managed scientific raster, cube, training, prediction and reference
+evaluation jobs record canonical request/input hashes, output hash, algorithm
+source fingerprint, Git revision, dependency/GDAL/Python versions and numeric
+thread configuration. The workbench exports a verified recipe and repeats a
+completed job with the original input identities. It checks current input
+checksums before scheduling and checks execution-snapshot hashes again before
+accepting the result, so a change between queueing and execution cannot silently
+become a successful reproduction. Original jobs and artifacts remain available.
+
+Algorithm/runtime changes require an explicit opt-in and are disclosed in the
+new execution receipt. The worker checks its own numeric thread environment;
+the API process does not pretend to have the isolated worker's thread settings.
+`GET /projects/{project}/jobs/{job}/recipe` exports a recipe and authenticated
+`POST .../repeat` queues a new run. Recipes identify managed inputs and existing
+model/prediction jobs; they are not standalone data archives. Cross-platform
+bitwise identity or scientific ground-truth accuracy is not implied.
+
 ## Independent-reference diagnostics and spatial intervals
 
 The saved-model workbench evaluates completed predictions against separately

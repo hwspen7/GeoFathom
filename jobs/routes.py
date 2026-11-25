@@ -16,6 +16,26 @@ class SubmitJob(BaseModel):
                  "spectral_change","semantic_segmentation","stac_ndvi","remote_windowed","remote_cube","remote_model_train","remote_model_predict","remote_model_evaluate"]
     payload:dict[str,Any]=Field(default_factory=dict)
 
+class RepeatScientificJob(BaseModel):
+    allow_software_change:bool=False
+
+
+@router.get('/{project_id}/jobs/{job_id}/recipe')
+def scientific_recipe(project_id:str,job_id:str):
+    from .reproducibility import recipe
+    try:return recipe(project_id,job_id)
+    except (StorageError,ValueError,OSError) as error:raise fail(error) from error
+
+
+@router.post('/{project_id}/jobs/{job_id}/repeat',status_code=202)
+def repeat_scientific_job(project_id:str,job_id:str,body:RepeatScientificJob,request:Request,
+                         token:str|None=Header(default=None,alias='X-GeoFathom-Admin-Token')):
+    from imagery.routes import require_raster_import
+    from .reproducibility import repeat
+    require_raster_import(request,token)
+    try:return repeat(project_id,job_id,body.allow_software_change)
+    except (StorageError,ValueError,OSError) as error:raise fail(error) from error
+
 def fail(error):
     return HTTPException(status_code=404 if "not found" in str(error).lower()
         else 422,detail=str(error))

@@ -139,7 +139,7 @@ def _ensure():
             for uid in pending:_POOL.submit(_worker,uid,path)
 
 
-def queue_job(project_id,kind,payload):
+def queue_job(project_id,kind,payload,reproduction=None):
     _ensure()
     if kind not in KINDS:raise StorageError("Unsupported background GIS operation.")
     if not isinstance(payload,dict):raise StorageError("Job payload must be a JSON object.")
@@ -164,6 +164,7 @@ def queue_job(project_id,kind,payload):
         prediction=get_job(project_id,payload["prediction_job_id"])
         if prediction["kind"]!="remote_model_predict" or prediction["status"]!="completed":
             raise StorageError("Choose completed predictions from this project.")
+    if reproduction is not None:payload={**payload,'_reproduction':reproduction}
     serialized=json.dumps(payload,allow_nan=False)
     if len(serialized.encode("utf-8"))>100_000:
         raise StorageError("Job request exceeds 100 KB.")
@@ -255,6 +256,9 @@ def cancel_job(project_id,job_id):
 
 
 def _execute(kind,project_id,payload):
+    from .reproducibility import SCIENTIFIC_KINDS,recorded_execute
+    if kind in SCIENTIFIC_KINDS:
+        return recorded_execute(kind,payload,lambda clean:_execute_impl(kind,project_id,clean))
     if kind in {"spectral_index","spectral_change","semantic_segmentation"}:
         from storage.snapshots import analysis_snapshot
         with analysis_snapshot(kind,payload) as provenance:
