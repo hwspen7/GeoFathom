@@ -1384,3 +1384,7 @@ export async function materializeScientificRaster<T extends ScientificRasterInpu
  if(!data)throw Error('Raster product is empty.');
  return {...r,data};
 }
+
+export function remoteSampleRequest<T>(projectId:string,path='',body?:unknown):Promise<T>{
+ return request('/projects/'+encodeURIComponent(projectId)+'/remote-samples'+path,body===undefined?undefined:{method:'POST',headers:{'Content-Type':'application/json','X-GeoFathom-Local-Import':'1'},body:JSON.stringify(body)});
+}

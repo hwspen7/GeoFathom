@@ -146,6 +146,8 @@ def train(config, output, progress=None, check=lambda:None):
         require(grid.crs.is_projected and grid.crs.linear_units in ('metre','meter'),'Spatial training requires a projected metre grid.')
         samples=[];labels=[];rows=[];cols=[];count=0
         ds,binding,quantity,_=inputs.labels
+        require(ds.tags().get('SAMPLE_SPLIT')!='reference','Reference-only sample rasters cannot train a model.')
+        label_provenance={k:ds.tags()[k] for k in ('SAMPLE_REVISION_SHA256','SAMPLE_SPLIT','CLASS_CODEBOOK') if k in ds.tags()}
         for window in windows(grid.width,grid.height,tile):
             check();target=read_calibrated(ds,binding,quantity,window)[0]
             if not np.any(np.isfinite(target)&(target>0)):continue
@@ -202,7 +204,7 @@ def train(config, output, progress=None, check=lambda:None):
         artifact={'schema':'geofathom-random-forest-1','classes':classes.tolist(),
             'features':[{'role':r,'unit':inputs.bands[r][3],'quantity':inputs.bands[r][2],'training_source':inputs.details[r]} for r in inputs.roles],
             'trees':export_forest(model),'validation':validation,'source_sha256':identities,
-            'training_label_sha256':digest(config['labels']['path']),
+            'training_label_sha256':digest(config['labels']['path']),'label_provenance':label_provenance,
             'training_grid':{'crs':str(grid.crs),'transform':list(grid.transform)[:6],'shape':[grid.height,grid.width]},
             'training_samples':{'rows':rows,'cols':cols},'training_mean':mean.tolist(),'training_covariance':covariance.tolist(),
             'feature_support':feature_support(x),'probability_calibration':{'method':'spatial_oof_temperature' if p['calibrate'] else 'identity','temperature':temperature},

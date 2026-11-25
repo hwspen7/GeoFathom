@@ -26,6 +26,7 @@ from storage.attribute_routes import router as attribute_router
 from storage.cartography_routes import router as cartography_router
 from storage.vector_routes import router as vector_router
 from imagery.routes import router as imagery_router
+from imagery.remote_sample_routes import router as remote_sample_router
 from imagery.remote_routes import router as remote_sensing_router
 from terrain.routes import router as terrain_router
 from terrain.research_routes import router as terrain_research_router
@@ -80,6 +81,7 @@ app.include_router(cartography_router)
 app.include_router(vector_router)
 app.include_router(imagery_router)
 app.include_router(remote_sensing_router)
+app.include_router(remote_sample_router)
 app.include_router(terrain_router)
 app.include_router(terrain_research_router)
 app.include_router(terrain_figure_router)

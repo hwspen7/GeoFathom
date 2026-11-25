@@ -1,4 +1,5 @@
 import {useCallback,useEffect,useState} from 'react';
+import RemoteSampleManager from './RemoteSampleManager';
 import RemoteFeatureBuilder,{type ModelFeatureBand} from './RemoteFeatureBuilder';
 import {getGISJobs,getGISJob,queueRemoteModelJob,queueRemoteEvaluationJob,type GISJob} from './api';
 import ScientificFigureStudio from './ScientificFigureStudio';
@@ -11,6 +12,8 @@ export default function RemoteModelPanel({projectId,features,quality,assets,job,
  projectId?:string|null;features:Record<string,Band>|null;quality:Quality[]|null;
  assets:Array<{id:string;name:string}>;job:GISJob|null;onJob:(job:GISJob)=>void;
 }){
+ const [sampleAssets,setSampleAssets]=useState<Array<{id:string;name:string}>>([]);
+ const allAssets=[...assets,...sampleAssets.filter(s=>!assets.some(a=>a.id===s.id))];
  const [labels,setLabels]=useState(''),[block,setBlock]=useState(1000),[folds,setFolds]=useState(5),[buffer,setBuffer]=useState(true);
  const [models,setModels]=useState<GISJob[]>([]),[modelId,setModelId]=useState(''),[model,setModel]=useState<GISJob|null>(null);
  const [minimum,setMinimum]=useState(0),[busy,setBusy]=useState(false),[error,setError]=useState(''),[studio,setStudio]=useState(false);
@@ -34,9 +37,10 @@ export default function RemoteModelPanel({projectId,features,quality,assets,job,
  const csv=shown?['class,precision,recall,f1,iou,support',...shown.classes.map((c,i)=>[c,shown.precision[i],shown.recall[i],shown.f1[i],shown.iou[i],shown.support[i]].join(','))].join('\n'):'';
  const chartCsv=plot==='coverage'&&evaluation?['coverage,accuracy,accepted',...evaluation.metrics.selective_accuracy.filter(r=>r.accuracy!==null).map(r=>[r.coverage,r.accuracy,r.accepted_cells].join(','))].join('\n'):plot==='reliability'&&evaluation?['predicted,observed,cells',...evaluation.metrics.reliability.map(r=>r.join(','))].join('\n'):plot==='interval'&&evaluation?['metric,value,low,high',...(['overall_accuracy','macro_f1','mean_iou'] as const).map(k=>[k,evaluation.metrics[k],...evaluation.metrics.interval95[k]].join(','))].join('\n'):csv;
  return <fieldset disabled={busy}><legend>Train and reuse a classifier</legend>
- <RemoteFeatureBuilder assets={assets} bound={features} onChange={featureChange}/>
+ <RemoteSampleManager projectId={projectId} assets={allAssets} features={customFeatures} quality={quality} parameters={{block_m:block,folds,buffer_blocks:buffer?1:0,calibrate}} onLabels={rasters=>{setSampleAssets(old=>[...old,...Object.values(rasters)]);if(rasters.train)setLabels(rasters.train.id);if(rasters.reference)setReference(rasters.reference.id);}}/>
+ <RemoteFeatureBuilder assets={allAssets} bound={features} onChange={featureChange}/>
  <p>The selected managed reflectance bands are model features. Labels use positive class IDs and zero for unlabeled pixels.</p>
- <label>Training label raster<select value={labels} onChange={e=>setLabels(e.target.value)}><option value="">Choose labels</option>{assets.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>
+ <label>Training label raster<select value={labels} onChange={e=>setLabels(e.target.value)}><option value="">Choose labels</option>{allAssets.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>
  <label>Validation block width (m)<input type="number" min="1" max="100000" value={block} onChange={e=>setBlock(Number(e.target.value))}/></label>
  <label>Spatial validation folds<input type="number" min="3" max="10" value={folds} onChange={e=>setFolds(Number(e.target.value))}/></label>
  <label><input type="checkbox" checked={buffer} onChange={e=>setBuffer(e.target.checked)}/>Exclude neighboring validation blocks</label>
@@ -49,7 +53,7 @@ export default function RemoteModelPanel({projectId,features,quality,assets,job,
  {validation&&<><p>Spatial holdout: accuracy {validation.overall_accuracy.toFixed(4)} · macro F1 {validation.macro_f1.toFixed(4)} · mIoU {validation.mean_iou.toFixed(4)} · {validation.cells} samples</p><button onClick={()=>{setPlot('class');setStudio(true);}}>Model validation figures</button></>}
  <details><summary>Independent reference evaluation</summary>
  <label>Completed classification<select value={predictionId} onChange={e=>setPredictionId(e.target.value)}><option value="">Choose predictions</option>{predictions.map(p=><option key={p.id} value={p.id}>{p.created_at} · {p.id.slice(0,8)}</option>)}</select></label>
- <label>Independent reference labels<select value={reference} onChange={e=>setReference(e.target.value)}><option value="">Choose reference</option>{assets.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>
+ <label>Independent reference labels<select value={reference} onChange={e=>setReference(e.target.value)}><option value="">Choose reference</option>{allAssets.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>
  <label>Reference source and annotation procedure<textarea value={referenceDescription} onChange={e=>setReferenceDescription(e.target.value)}/></label>
  <label>Training-location exclusion distance (m)<input type="number" min="0" max="100000" value={separation} onChange={e=>setSeparation(Number(e.target.value))}/></label>
  <button disabled={!projectId||!predictionId||!reference||referenceDescription.trim().length<10||running} onClick={()=>void evaluate()}>Evaluate independent reference</button>
