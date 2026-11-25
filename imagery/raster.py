@@ -27,10 +27,8 @@ def _check(src) -> None:
         raise RasterError("Only GeoTIFF images are supported.")
     if not src.crs:
         raise RasterError("Raster lacks a coordinate reference system.")
-    # Scientific cubes preserve acquisition-band identities in per-band tags.
-    band_limit = 1024 if src.tags().get('REMOTE_SCHEMA') in {'geofathom-optical-cube-1','geofathom-rf-prediction-1'} else 20
-    if not 1 <= src.count <= band_limit:
-        raise RasterError(f"Raster must contain between 1 and {band_limit} bands.")
+    if not 1 <= src.count <= 1024:
+        raise RasterError("Raster must contain between 1 and 1024 bands.")
     if not (1 <= src.width <= MAX_DIMENSION and 1 <= src.height <= MAX_DIMENSION):
         raise RasterError("Raster dimensions exceed the supported limit.")
     if abs(src.transform.a * src.transform.e - src.transform.b * src.transform.d) < 1e-18:
@@ -38,6 +36,13 @@ def _check(src) -> None:
     # A default identity pixel transform is not a georeferencing solution.
     if src.transform.is_identity:
         raise RasterError("Raster lacks a meaningful georeferencing transform.")
+    # Optional scientific schema tags only extend the ordinary band limit.
+    # Validate structural metadata first; lightweight descriptors need no tag API.
+    if src.count > 20:
+        read_tags = getattr(src, "tags", None)
+        schema = read_tags().get("REMOTE_SCHEMA") if callable(read_tags) else None
+        if schema not in {"geofathom-optical-cube-1", "geofathom-rf-prediction-1"}:
+            raise RasterError("Raster must contain between 1 and 20 bands unless it declares a supported scientific schema.")
 
 
 def _corners(src) -> list[list[float]]:

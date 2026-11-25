@@ -190,3 +190,18 @@ def test_zero_tolerance_exact_vertex_and_native_fallback_parity(monkeypatch):
         assert actual["coordinate"]==pytest.approx(expected["coordinate"],abs=1e-8)
         assert actual["distance_m"]==pytest.approx(expected["distance_m"],abs=1e-7) if expected["distance_m"] is not None else actual["distance_m"] is None
     assert editing.snap([0,0],[path],0)["snapped"]
+
+
+def test_raster_structure_precedes_optional_tags_and_scientific_band_extension():
+    fields={'driver':'GTiff','crs':'EPSG:4326','count':3,'width':64,'height':64,
+            'transform':Affine.translation(10,20) @ Affine.scale(.001,-.001)}
+    def unreadable():raise AssertionError('Optional tags must not precede structural validation.')
+    for override,message in [({'width':20001},'dimensions'),({'transform':Affine.identity()},'meaningful'),
+                             ({'count':0},'bands'),({'count':1025},'bands')]:
+        with pytest.raises(raster.RasterError,match=message):
+            raster._check(SimpleNamespace(**{**fields,**override,'tags':unreadable}))
+    raster._check(SimpleNamespace(**{**fields,'tags':unreadable}))
+    for schema in ('geofathom-optical-cube-1','geofathom-rf-prediction-1'):
+        raster._check(SimpleNamespace(**{**fields,'count':32,'tags':lambda:{'REMOTE_SCHEMA':schema}}))
+    with pytest.raises(raster.RasterError,match='supported scientific schema'):
+        raster._check(SimpleNamespace(**{**fields,'count':32,'tags':lambda:{'REMOTE_SCHEMA':'unknown'}}))

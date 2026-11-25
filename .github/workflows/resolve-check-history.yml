@@ -1,0 +1,66 @@
+name: Resolve verified historical failures
+on:
+  workflow_run:
+    workflows:
+      - Checks
+      - Tagged release
+      - Terrain scientific reference gate
+      - LiDAR scientific reference gate
+      - Remote sensing real-scene reference
+      - Remote sensing scientific reference gate
+      - ARM native acceptance
+      - Linux hard memory acceptance
+      - CUDA compile acceptance
+      - Repository file check audit
+    types: [completed]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: write
+concurrency:
+  group: resolve-fixed-historical-failures
+  cancel-in-progress: false
+jobs:
+  resolve:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.head_repository.full_name == github.repository &&
+       github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Check all current acceptance and prepare the fixed archive
+        id: eligibility
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/resolve_check_history.py prepare
+      - name: Preserve failed-run metadata and available recent failure logs
+        if: steps.eligibility.outputs.ready == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: resolved-historical-failure-evidence-${{ github.run_id }}
+          path: resolved-check-evidence/
+          if-no-files-found: error
+          retention-days: 90
+      - name: Remove only the explicitly archived historical failures
+        if: steps.eligibility.outputs.ready == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GEOFATHOM_ARCHIVE_UPLOADED: '1'
+        run: python scripts/resolve_check_history.py delete
+      - name: Preserve the exact cleanup receipt
+        if: always() && steps.eligibility.outputs.ready == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: resolved-historical-failure-receipt-${{ github.run_id }}
+          path: resolved-check-evidence/result.json
+          if-no-files-found: warn
+          retention-days: 90
