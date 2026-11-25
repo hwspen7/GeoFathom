@@ -1,3 +1,4 @@
+import EnglishFileInput from './EnglishFileInput';
 import {useEffect,useRef,useState} from 'react';
 import {inspectDatasetFiles,inspectDatasetOptions,discardDatasetUpload,startDatasetImport,
  getGISJob,cancelGISJob,downloadExchangeJob,restoreProjectPackage,
@@ -87,7 +88,7 @@ export default function DatasetImport(p:Props){
   </div>
   {!p.projectId&&<small>Create or select a project first.</small>}
   {mode==='batch'?<>
-   <input aria-label="Batch dataset files" type="file" multiple disabled={!p.projectId||active}
+   <EnglishFileInput aria-label="Batch dataset files" type="file" multiple disabled={!p.projectId||active}
     accept=".json,.geojson,.csv,.gpkg,.kml,.gpx,.zip" onChange={e=>{void inspect(Array.from(e.target.files??[]));e.target.value='';}}/>
    {!upload&&!job&&<small>Inspect up to 20 files · 128 MB/file · 100,000 features/batch. Strict validation commits the whole batch together.</small>}
    {upload&&current&&<>
@@ -152,7 +153,7 @@ export default function DatasetImport(p:Props){
   </>:<>
    <small>Restore saved features, layers, styles, CRS and history into a new empty project. Included GeoTIFFs are validated and assigned new IDs.</small>
    <label>Operator import token<input type="password" autoComplete="off" aria-label="Package import token" value={token} onChange={e=>setToken(e.target.value)}/></label>
-   <input aria-label="Restore project package" type="file" accept=".zip" disabled={!p.projectId||active||Boolean(p.workspace?.total)} onChange={e=>{
+   <EnglishFileInput aria-label="Restore project package" type="file" accept=".zip" disabled={!p.projectId||active||Boolean(p.workspace?.total)} onChange={e=>{
     const file=e.target.files?.[0];e.target.value='';if(!file||!p.projectId)return;
     if(file.size>128*1024*1024){setError('Compressed packages must be at most 128 MB.');return;}
     const generation=epoch.current;controller.current?.abort();controller.current=new AbortController();setBusy(true);setError('');

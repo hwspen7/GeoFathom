@@ -1,3 +1,4 @@
+import EnglishFileInput from './EnglishFileInput';
 import { useEffect, useState, type ChangeEvent } from 'react';
 import { FileImage, Crosshair, UploadCloud } from 'lucide-react';
 
@@ -83,7 +84,7 @@ export default function RasterPanel({
         onChange={event => setToken(event.target.value)} /></details>}
       <label className="raster-upload" title="Import a georeferenced GeoTIFF, up to 64 MB">
         <UploadCloud size={15} /> {uploading ? 'Importing…' : 'Import GeoTIFF'}
-        <input type="file" accept=".tif,.tiff,image/tiff" disabled={uploading}
+        <EnglishFileInput type="file" accept=".tif,.tiff,image/tiff" disabled={uploading}
           onChange={event => void importFile(event)} />
       </label>
       {(

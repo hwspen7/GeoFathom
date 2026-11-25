@@ -1,3 +1,4 @@
+import EnglishFileInput from './EnglishFileInput';
 import {useEffect,useRef,useState} from 'react';
 import ScientificFigureStudio from './ScientificFigureStudio';
 import {cancelGISJob,downloadBuildingArtifact,getBuildingResearch,getGISJob,installBuildingModel,
@@ -56,7 +57,7 @@ export default function BuildingResearchPanel(p:{projectId:string|null;token:str
     <p className="project-hint">Use frozen data with separate training, validation and test regions.
       Parameters and model choice are fixed on validation data before any test evaluation.</p>
     <label>Frozen study package
-      <input aria-label="Building study ZIP" type="file" accept=".zip" disabled={!p.token||processing}
+      <EnglishFileInput aria-label="Building study ZIP" type="file" accept=".zip" disabled={!p.token||processing}
         onChange={e=>{const file=e.target.files?.[0];if(file)void run(async()=>{
           const value=await uploadBuildingStudy(file,p.token);const updated=await getBuildingResearch(p.token);
           setCatalog(updated);setDataset(value.id);setMessage('Imported a verified, region-disjoint building study.');

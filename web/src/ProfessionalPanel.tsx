@@ -1,3 +1,4 @@
+import EnglishFileInput from './EnglishFileInput';
 import {SectionIcon} from './SectionIcon';
 import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react';
 import {createPortal} from 'react-dom';
@@ -205,7 +206,7 @@ export default function ProfessionalPanel({
         <h3 className="gis-tool-heading"><SectionIcon role="exchange" size={14}/> Import / Export</h3>
         <div className="professional-form gis-file-row">
           <label className="raster-upload" title="Import GIS file · up to 100 features · transformed to WGS84"><FileUp size={12}/> Import
-            <input aria-label="Import GIS vector file" disabled={busy||!projectId}
+            <EnglishFileInput aria-label="Import GIS vector file" disabled={busy||!projectId}
               type="file" accept=".geojson,.gpkg,.kml,.gpx,.zip"
               onChange={e=>void upload(e)}/>
           </label>

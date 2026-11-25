@@ -1,3 +1,4 @@
+import EnglishFileInput from './EnglishFileInput';
 import {useEffect,useRef,useState,type ChangeEvent} from 'react';
 import {importVectorFile,uploadImagery,saveFeatureBatch,
  bufferGeometry,applyOverlay,transformProjectCoordinates,
@@ -108,7 +109,7 @@ export default function DataWorkbench(p:Props){
     <button type="button" aria-pressed={kind==='batch'} onClick={()=>{setKind('batch');setFile(null);}}>Advanced import</button>
    </div>
    {kind==='batch'?<DatasetImport projectId={p.projectId} workspace={p.workspace} onRefresh={p.onRefresh} onRasterAdded={p.onRasterAdded}/>:<>
-   <input aria-label="Import dataset file" type="file" value="" onChange={acceptFile}
+   <EnglishFileInput aria-label="Import dataset file" type="file" value="" onChange={acceptFile}
     accept={kind==='vector'?'.json,.geojson,.csv,.gpkg,.kml,.gpx,.zip':
       '.tif,.tiff,image/tiff'}/>
    {file&&<small>{file.name} · {fmt(file.size/1024/1024)} MB</small>}
