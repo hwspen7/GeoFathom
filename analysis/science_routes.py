@@ -67,12 +67,13 @@ def raster_product(name,z,transform,crs,unit,tags=None):
     return {'name':name,'data':base64.b64encode(raw).decode(),'unit':unit,'sha256':hashlib.sha256(raw).hexdigest(),'band':1,'summary':summary}
 
 
-def raster_preview(product):
+def raster_preview(product, signed=False):
     """Render a separate Mercator-aligned display image; never resample the scientific product."""
     from rasterio.transform import array_bounds,from_bounds
     from rasterio.warp import calculate_default_transform,reproject,Resampling
     from PIL import Image
     from matplotlib import colormaps
+    from matplotlib.colors import LinearSegmentedColormap
     try:
         with MemoryFile(base64.b64decode(product['data'])) as mem,mem.open() as ds:
             transform,w,h=calculate_default_transform(ds.crs,'EPSG:3857',ds.width,ds.height,*ds.bounds)
@@ -89,11 +90,18 @@ def raster_preview(product):
             valid=np.isfinite(out)
             if not valid.any():return None
             lo=float(np.nanmin(out));hi=float(np.nanmax(out))
-            normalized=np.divide(out-lo,hi-lo,out=np.zeros_like(out),where=valid) if hi>lo else np.full_like(out,.5)
-            rgba=colormaps['viridis'](np.where(valid,np.clip(normalized,0,1),0),bytes=True)
+            # Use the full native product to set the color domain.
+            minimum=product['summary']['minimum'];maximum=product['summary']['maximum']
+            extent=max(abs(minimum),abs(maximum))
+            a,b=(-extent,extent) if signed else (minimum,maximum)
+            colors=['#b63d44','#f1f2ef','#237a54'] if signed else ['#440154','#21918c','#fde725']
+            cmap=LinearSegmentedColormap.from_list('signed_trend',colors,N=257) if signed else colormaps['viridis']
+            normalized=np.divide(out-a,b-a,out=np.zeros_like(out),where=valid) if b>a else np.full_like(out,.5)
+            rgba=cmap(np.where(valid,np.clip(normalized,0,1),0),bytes=True)
             rgba[:,:,3]=np.where(valid,255,0);buffer=io.BytesIO();Image.fromarray(rgba).save(buffer,format='PNG')
             return {'png':'data:image/png;base64,'+base64.b64encode(buffer.getvalue()).decode(),'corners':[[lon0,lat1],[lon1,lat1],[lon1,lat0],[lon0,lat0]],
                     'width':ww,'height':hh,'valid_cells':int(valid.sum()),'minimum':lo,'maximum':hi,'unit':product['unit'],
+                    'scale':{'minimum':a,'maximum':b,'colors':colors,'signed':signed},
                     'method':'Nearest-neighbor display only; original GeoTIFF remains unchanged.'}
     except (ValueError,RuntimeError,OSError,ProjError):
         return None

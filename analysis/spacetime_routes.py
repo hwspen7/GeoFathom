@@ -320,7 +320,7 @@ def execute(body):
         if not rows:cols=['quantile','value'];rows=product['summary']['quantiles']
     csv=csv_text(cols,rows)
     receipt={'table_sha256':hashlib.sha256(csv.encode()).hexdigest(),'raster_sha256':product['sha256'] if product else None,'schema':'geofathom-spatiotemporal','operation':kind,'crs':str(first.crs),'unit':unit,'times':body.times,'time_unit':body.time_unit,'time_origin':body.time_origin,'parameters':p,'covariate_quality_policy':'Covariate data must be independently quality-masked before import; response QA is applied only to response dates.' if body.covariates else None,'observations':bindings,'covariates':covariate_receipt,'quality':quality_receipt,'metrics':meta}
-    result={'operation':kind,'receipt':receipt,'features':None,'raster':product,'preview':raster_preview(product) if product else None,'figures':figures,'columns':cols,'rows':rows,'csv':csv}
+    result={'operation':kind,'receipt':receipt,'features':None,'raster':product,'preview':raster_preview(product,signed=kind in ('series_slope','sen')) if product else None,'figures':figures,'columns':cols,'rows':rows,'csv':csv}
     json.dumps(result,allow_nan=False)
     return result
 

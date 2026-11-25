@@ -33,6 +33,7 @@ import SpatialSciencePanel from './SpatialSciencePanel';
 import RemoteSensingPanel from './RemoteSensingPanel';
 import NetworkSciencePanel from './NetworkSciencePanel';
 import SpacetimePanel from './SpacetimePanel';
+import {TemporalScale} from './TemporalResult';
 import LidarPanel from './LidarPanel';
 import CartographyProPanel from './CartographyProPanel';
 import type {ExternalTile} from './DataServicesPanel';
@@ -1727,6 +1728,7 @@ export default function App() {
               {scratch.some(f=>f.visible)&&<div className="map-legend-item"><span className="legend-swatch" style={{background:'#168047'}}/><span>Local drawings · {scratch.filter(f=>f.visible).length}</span></div>}
               {rasterLayers.filter(l=>l.visible).map(l=><div key={l.asset.id} className="map-legend-item"><span className="legend-swatch" style={{background:'#a8adb0'}}/><span>{l.kind==='dem'?'DEM':'Raster'} · {l.asset.name}</span></div>)}
               {terrainVisible&&(terrainFeatures.length+terrainRasters.length)>0&&<div className="map-legend-item"><span className="legend-swatch" style={{background:'#d7b65e'}}/><span>Terrain results · {terrainFeatures.length+terrainRasters.length}</span></div>}
+              {spacetimeVisible&&spacetimeRaster?.raster.scale&&<div className="temporal-map-legend"><strong>Temporal result</strong><TemporalScale scale={spacetimeRaster.raster.scale} unit={spacetimeRaster.raster.unit??''}/></div>}
               {terrainVisible&&terrainRasters.map(item=><details key={item.id} className="terrain-map-legend"><summary>{item.title}</summary>{item.raster.legend.map(bin=><div key={bin.label} className="map-legend-item"><span className="legend-swatch" style={{background:bin.color}}/><span>{bin.label}</span></div>)}</details>)}
               {!(projectWorkspace?.layers??[]).some(layer=>Boolean(layer.visible))&&!scratch.some(f=>f.visible)&&!rasterLayers.some(l=>l.visible)&&!(terrainFeatures.length+terrainRasters.length)&&
                 <small>No visible overlays</small>}
@@ -2117,7 +2119,7 @@ export default function App() {
           </section>
           <section id="tools-spacetime" hidden={activeTool!=='tools-spacetime'} className="panel-section">
             <div className="section-heading"><Layers3 size={16}/><span>Spatiotemporal Analysis</span></div>
-            <SpacetimePanel key={activeProjectId??'no-project'} active={activeTool==='tools-spacetime'} connected={Boolean(capabilities)} resultsTarget={resultsTarget} assets={rasterLayers.map(l=>l.asset)} derivedRasters={[...terrainRasters,...(spatialRaster?[spatialRaster]:[]),...(remoteRaster?[remoteRaster]:[])].map(l=>({name:l.title,data:l.raster.geotiff,product_id:l.raster.product_id,unit:l.raster.unit??''}))} onPreview={layer=>{if(projectCurrent()){setSpacetimeRaster(layer);setSpacetimeVisible(true);}}}/>
+            <SpacetimePanel key={activeProjectId??'no-project'} active={activeTool==='tools-spacetime'} connected={Boolean(capabilities)} resultsTarget={resultsTarget} assets={rasterLayers.map(l=>l.asset)} derivedRasters={[...terrainRasters,...(spatialRaster?[spatialRaster]:[]),...(remoteRaster?[remoteRaster]:[])].map(l=>({name:l.title,data:l.raster.geotiff,product_id:l.raster.product_id,unit:l.raster.unit??''}))} onPreview={layer=>{if(projectCurrent()){setSpacetimeRaster(layer);setSpacetimeVisible(true);const xs=layer.raster.corners.map(p=>p[0]),ys=layer.raster.corners.map(p=>p[1]);const west=Math.min(...xs),east=Math.max(...xs),south=Math.min(...ys),north=Math.max(...ys);setFocus({longitude:(west+east)/2,latitude:(south+north)/2,bbox:[west,south,east,north],key:Date.now()});}}}/>
           </section>
           <section id="tools-network-science" hidden={activeTool!=='tools-network-science'} className="panel-section">
             <div className="section-heading"><Layers3 size={16}/><span>Network Analysis</span></div>
