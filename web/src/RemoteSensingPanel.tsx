@@ -1,3 +1,4 @@
+import ScienceLaunch from './ScienceLaunch';
 import {resultSource,type ScienceRaster} from './scienceRegistry';
 import {useEffect,useRef,useState} from 'react';
 import {createPortal} from 'react-dom';
@@ -80,7 +81,7 @@ export default function RemoteSensingPanel({active,connected,resultsTarget,asset
  }
  function options(){return <><option value="-1">Select source</option>{sources.map((s,i)=><option value={i} key={i}>{s.name}</option>)}</>;}
  function updateQuality(i:number,patch:Partial<RemoteQuality>){setQuality(old=>old.map((q,j)=>i===j?{...q,...patch}:q));setResult(null);}
- return <><div className="spatial-launch"><button disabled={!connected} onClick={()=>setOpen(true)}>Open Remote Sensing</button>{result&&<button onClick={()=>setOpen(true)}>Review remote sensing result</button>}</div>
+ return <><ScienceLaunch label="Open Remote Sensing" disabled={!connected&&!result} onOpen={()=>setOpen(true)}/>
  {active&&resultsTarget&&result&&createPortal(<section className="panel-section spatial-monitor"><h3>{resultTitle}</h3>{result.preview&&<img src={result.preview.png} alt="Remote sensing result"/>}<p>{result.receipt.crs} · {result.rows.length} records</p><button onClick={()=>setOpen(true)}>Review remote sensing result</button></section>,resultsTarget)}
  {open&&createPortal(<div className="figure-studio-backdrop"><div ref={dialog} role="dialog" aria-modal="true" aria-label="Remote sensing workbench" tabIndex={-1} className="spatial-science-dialog" onKeyDown={e=>{if(e.key==='Escape'&&!studio){e.stopPropagation();close();}if(e.key==='Tab'&&!studio){const nodes=Array.from(e.currentTarget.querySelectorAll<HTMLElement>('button:enabled,input:enabled,select:enabled')).filter(n=>n.getClientRects().length);if(e.shiftKey&&(document.activeElement===nodes[0]||document.activeElement===dialog.current)){e.preventDefault();nodes.at(-1)?.focus();}else if(!e.shiftKey&&document.activeElement===nodes.at(-1)){e.preventDefault();nodes[0]?.focus();}}}}>
  <header><strong>Remote Sensing · {methods.length||'…'} scientific methods</strong><button onClick={close}>Close</button></header>

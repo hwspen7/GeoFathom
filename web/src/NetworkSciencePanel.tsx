@@ -1,3 +1,4 @@
+import ScienceLaunch from './ScienceLaunch';
 import {useEffect,useRef,useState} from 'react';
 import {createPortal} from 'react-dom';
 import {materializeScientificRaster,getNetworkScienceCatalog,runNetworkScience,buildOSMNetwork,getSpatialLayerSource,getSpatialRasterSource,type NetworkMethod,type NetworkScienceResult,type NetworkScienceInput,type SpatialFigureSource} from './api';
@@ -51,7 +52,7 @@ export default function NetworkSciencePanel({active,connected,resultsTarget,proj
    setResult(out);if(kind==='topology'){setNodeIds(out.rows.map(r=>String(r[0])));setOperation('topology');}
   }catch(e){if(!ac.signal.aborted&&mounted.current)setError(String((e as Error).message));}finally{if(request.current===ac){request.current=null;setBusy(false);}}
  }
- return <><div className="spatial-launch"><button disabled={!connected} onClick={()=>setOpen(true)}>Open Network Analysis</button></div>
+ return <><ScienceLaunch label="Open Network Analysis" disabled={!connected} onOpen={()=>setOpen(true)}/>
  {active&&resultsTarget&&result&&createPortal(<section className="panel-section spatial-monitor"><h3>{methods.find(m=>m.id===result.operation)?.title??result.operation}</h3><p>{result.receipt.nodes} nodes · {result.receipt.edges} edges · {result.rows.length} records</p><button onClick={()=>setOpen(true)}>Review network results</button></section>,resultsTarget)}
  {open&&createPortal(<div className="figure-studio-backdrop"><div ref={dialog} role="dialog" aria-modal="true" aria-label="Network science workbench" tabIndex={-1} className="spatial-science-dialog" onKeyDown={e=>{if(e.key==='Escape'&&!studio){e.stopPropagation();close();}if(e.key==='Tab'&&!studio){const nodes=Array.from(e.currentTarget.querySelectorAll<HTMLElement>('button:enabled,input:enabled,select:enabled,textarea:enabled')).filter(n=>n.getClientRects().length);if(e.shiftKey&&(document.activeElement===nodes[0]||document.activeElement===dialog.current)){e.preventDefault();nodes.at(-1)?.focus();}else if(!e.shiftKey&&document.activeElement===nodes.at(-1)){e.preventDefault();nodes[0]?.focus();}}}}>
  <header><strong>Network Analysis · {methods.length} scientific methods</strong><button onClick={close}>Close</button></header>

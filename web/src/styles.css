@@ -2415,3 +2415,35 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .desktop-gis .gis-operations .terrain-fetch-actions{display:flex;gap:5px}
 .desktop-gis .gis-operations .terrain-fetch-actions>.terrain-fetch-primary{flex:1;min-height:30px;width:100%}
 .desktop-gis .gis-operations .terrain-fetch-warning{margin:0;padding:3px 0;font-size:10px;line-height:14px}
+
+
+/* One shared entry style for Spatial, Network, Temporal and Sensing.
+   The Objects section owns the sole divider above these launch controls. */
+.desktop-gis .gis-operations .workspace-module-content>.science-launch-section{
+ border:0;margin:0;padding:3px 0 0;min-width:0;
+}
+.desktop-gis .gis-operations .science-launch-section>.section-heading{
+ display:flex;align-items:center;gap:6px;margin:0 0 8px;padding:0;border:0;
+ font:650 12px/17px 'Segoe UI',system-ui,sans-serif;color:#304d62;
+}
+.desktop-gis .gis-operations .science-launch-section>.section-heading>svg{
+ flex:0 0 13px;width:13px;height:13px;color:#526f85;stroke-width:1.7;
+}
+.science-launch{display:block;min-width:0}
+.desktop-gis .gis-operations .science-launch .science-launch-button{
+ box-sizing:border-box;display:flex;align-items:center;justify-content:space-between;
+ gap:8px;width:100%;min-height:36px;padding:8px 10px;border:1px solid #aac7d8;
+ border-radius:5px;background:#e9f3f8;color:#245b7d;text-align:left;
+ font:600 11px/1.4 'Segoe UI',system-ui,sans-serif;cursor:pointer;
+}
+.science-launch-button>span{min-width:0;overflow-wrap:anywhere}
+.science-launch-button>svg{flex:none}
+.desktop-gis .gis-operations .science-launch .science-launch-button:hover:not(:disabled){
+ background:#dcecf6;border-color:#83adc7;color:#174d71;
+}
+.desktop-gis .gis-operations .science-launch .science-launch-button:focus-visible{
+ outline:2px solid #337fa7;outline-offset:2px;
+}
+.desktop-gis .gis-operations .science-launch .science-launch-button:disabled{
+ opacity:.48;cursor:not-allowed;
+}

@@ -2206,7 +2206,7 @@ export default function App() {
               onSaved={()=>{if(projectCurrent())setRefreshToken(v=>v+1);}}/>
           </section>
 
-          <section id="tools-spatial-science" hidden={activeTool!=='tools-spatial-science'} className="panel-section">
+          <section id="tools-spatial-science" hidden={activeTool!=='tools-spatial-science'} className="panel-section science-launch-section">
             <div className="section-heading"><SectionIcon role="spatial" size={16}/><span>Spatial Analysis</span></div>
             <SpatialSciencePanel key={activeProjectId??'no-project'} active={activeTool==='tools-spatial-science'} resultsTarget={resultsTarget} geometry={preview||drawingMode?null:geometry} connected={Boolean(capabilities)} projectId={activeProjectId} layers={projectWorkspace?.layers??[]} assets={rasterLayers.map(l=>l.asset)} terrainProducts={registrySources(scienceRegistry,'Spatial')} onScientificRaster={r=>publishScience('Spatial',[r])} onPreview={features=>{if(projectCurrent()){setSpatialResults(features);setSpatialVisible(true);}}} onRasterPreview={layer=>{if(projectCurrent()){setSpatialRaster(layer);setSpatialVisible(true);}}}/>
           </section>
@@ -2215,15 +2215,15 @@ export default function App() {
             <div className="section-heading"><SectionIcon role="lidar" size={16}/><span>3D &amp; LiDAR</span></div>
             <LidarPanel key={'lidar-'+(activeProjectId??'no-project')} active={activeTool==='tools-lidar'} connected={Boolean(capabilities)} resultsTarget={resultsTarget}/>
           </section>
-          <section id="tools-spacetime" hidden={activeTool!=='tools-spacetime'} className="panel-section">
+          <section id="tools-spacetime" hidden={activeTool!=='tools-spacetime'} className="panel-section science-launch-section">
             <div className="section-heading"><SectionIcon role="temporal" size={16}/><span>Spatiotemporal Analysis</span></div>
             <SpacetimePanel key={activeProjectId??'no-project'} active={activeTool==='tools-spacetime'} connected={Boolean(capabilities)} resultsTarget={resultsTarget} assets={rasterLayers.map(l=>l.asset)} derivedRasters={registrySources(scienceRegistry,'Temporal')} onScientificRaster={r=>publishScience('Temporal',[r])} onPreview={layer=>{if(projectCurrent()){setSpacetimeRaster(layer);setSpacetimeVisible(true);const xs=layer.raster.corners.map(p=>p[0]),ys=layer.raster.corners.map(p=>p[1]);const west=Math.min(...xs),east=Math.max(...xs),south=Math.min(...ys),north=Math.max(...ys);setFocus({longitude:(west+east)/2,latitude:(south+north)/2,bbox:[west,south,east,north],key:Date.now()});}}}/>
           </section>
-          <section id="tools-network-science" hidden={activeTool!=='tools-network-science'} className="panel-section">
+          <section id="tools-network-science" hidden={activeTool!=='tools-network-science'} className="panel-section science-launch-section">
             <div className="section-heading"><SectionIcon role="network" size={16}/><span>Network Analysis</span></div>
             <NetworkSciencePanel key={activeProjectId??'no-project'} active={activeTool==='tools-network-science'} connected={Boolean(capabilities)} resultsTarget={resultsTarget} projectId={activeProjectId} layers={projectWorkspace?.layers??[]} assets={rasterLayers.map(l=>l.asset)} derivedRasters={scientificRasters} onPreview={features=>{if(projectCurrent()){setNetworkResults(features);setNetworkVisible(true);}}}/>
           </section>
-          <section id="tools-remote-sensing" hidden={activeTool!=='tools-remote-sensing'} className="panel-section">
+          <section id="tools-remote-sensing" hidden={activeTool!=='tools-remote-sensing'} className="panel-section science-launch-section">
             <div className="section-heading"><SectionIcon role="sensing" size={16}/><span>Remote Sensing</span></div>
             <RemoteSensingPanel key={activeProjectId??'no-project'} projectId={activeProjectId} active={activeTool==='tools-remote-sensing'} connected={Boolean(capabilities)} resultsTarget={resultsTarget} assets={rasterLayers.map(l=>l.asset)} derivedRasters={registrySources(scienceRegistry,'Sensing')} onScientificRaster={r=>publishScience('Sensing',[r])} onPreview={layer=>{if(projectCurrent()){setRemoteRaster(layer);setRemoteVisible(true);}}}/>
           </section>

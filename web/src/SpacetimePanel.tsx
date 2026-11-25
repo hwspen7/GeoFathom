@@ -1,3 +1,4 @@
+import ScienceLaunch from './ScienceLaunch';
 import {resultSource,type ScienceRaster} from './scienceRegistry';
 import {useEffect,useRef,useState} from 'react';
 import {createPortal} from 'react-dom';
@@ -52,7 +53,7 @@ export default function SpacetimePanel({active,connected,resultsTarget,assets,de
   else if(kind==='csv')save(result.csv,'spacetime-result.csv','text/csv');
   else if(kind==='receipt')save(JSON.stringify(result.receipt,null,2),'spacetime-receipt.json','application/json');
  }
- return <><div className="spatial-launch temporal-launch"><button disabled={!connected} onClick={()=>setOpen(true)}>Open Spatiotemporal Analysis</button></div>
+ return <><ScienceLaunch label="Open Spatiotemporal Analysis" disabled={!connected} onOpen={()=>setOpen(true)}/>
  {active&&!open&&resultsTarget&&result&&createPortal(<TemporalMonitor key={result.raster?.sha256??result.operation} result={result} title={method?.title??result.operation} onDetails={()=>setOpen(true)} onMap={showResultMap} onExport={exportResult}/>,resultsTarget)}
 
  {open&&createPortal(<div className="figure-studio-backdrop"><div role="dialog" aria-modal="true" aria-label="Spatiotemporal science workbench" className="spatial-science-dialog temporal-dialog" ref={dialog} tabIndex={-1} onKeyDown={e=>{if(e.key==='Escape'&&!studio){e.stopPropagation();close();}if(e.key==='Tab'&&!studio){const nodes=Array.from(e.currentTarget.querySelectorAll<HTMLElement>('button:enabled,input:enabled,select:enabled,textarea:enabled')).filter(n=>n.getClientRects().length);if(e.shiftKey&&(document.activeElement===nodes[0]||document.activeElement===dialog.current)){e.preventDefault();nodes.at(-1)?.focus();}else if(!e.shiftKey&&document.activeElement===nodes.at(-1)){e.preventDefault();nodes[0]?.focus();}}}}>
