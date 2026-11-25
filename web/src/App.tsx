@@ -1645,7 +1645,9 @@ export default function App() {
               const points=drawingVerticesRef.current;
               void finishDrawing(closeLine&&drawingMode==='line'&&points.length>=3?[...points,points[0]]:points);
             }}
-            rasterLayers={rasterLayers} onRasterError={setError}
+            rasterLayers={rasterLayers}
+            demClipGeometry={!extentMode&&!drawingMode&&(geometry?.type==='Polygon'||geometry?.type==='MultiPolygon')?geometry:null}
+            onRasterError={setError}
             traceMode={traceMode||promptMode!==null}
             promptPositive={positivePoints} promptNegative={negativePoints}
             promptBox={boxPoints}

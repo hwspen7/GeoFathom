@@ -49,6 +49,24 @@ def image_preview(image_id: str) -> Response:
         raise HTTPException(status_code=422, detail=str(error)) from error
 
 
+class PreviewClipRequest(BaseModel):
+    geometry: dict
+
+
+@router.post("/{image_id}/preview/clip")
+def clipped_image_preview(image_id: str, body: PreviewClipRequest) -> Response:
+    """Display-only geographic mask; never overwrite the raster or its metadata."""
+    from geometry.measure import GeometryError
+    from .raster import preview_png
+    try:
+        png = preview_png(image_file(image_id), body.geometry)
+        return Response(png, media_type="image/png", headers={"Cache-Control": "no-store"})
+    except FileNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except (RasterError, GeometryError, ValueError) as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
 @router.get("/{image_id}/pyramid")
 def image_pyramid(image_id:str):
     from .pyramid import pyramid_info

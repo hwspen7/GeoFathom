@@ -5,7 +5,7 @@ import {nearestEditableHandle} from './vertexHit';
 import {boundaryNodeVisible} from './boundaryDensity';
 import type {ProfileSample} from './TerrainCharts';
 
-import { rasterPreviewUrl, protectedRasterPreview } from './api';
+import { rasterPreviewUrl, protectedRasterPreview, clippedRasterPreview } from './api';
 import { PixelSnapIndex } from './spatialIndex';
 import {BASEMAPS,type BasemapId,type CustomBasemap} from './basemaps';
 import {OFFLINE_METHOD} from './scratch';
@@ -56,6 +56,7 @@ interface Props {
   display:DisplaySettings;
   selectedFeatureId:string|null;
   rasterLayers:RasterLayerView[];
+  demClipGeometry?:GeoJSON.Polygon|GeoJSON.MultiPolygon|null;
   onRasterError:(message:string)=>void;
   onMapClick: (position: Position) => void;
   onFinishDrawing:(closeLine?:boolean)=>void;
@@ -293,7 +294,7 @@ type Drag = {
 };
 
 export default function MapCanvas({
-  selected,drawingMode,vertices,networkFaces=[],onSelectNetworkFace,focus,basemap,customBasemap,onBasemapStatus,measurement,showMeasurements,display,selectedFeatureId,rasterLayers,onRasterError,onMapClick,onFinishDrawing,
+  selected,drawingMode,vertices,networkFaces=[],onSelectNetworkFace,focus,basemap,customBasemap,onBasemapStatus,measurement,showMeasurements,display,selectedFeatureId,rasterLayers,demClipGeometry,onRasterError,onMapClick,onFinishDrawing,
   terrainPicking,terrainMarker,profileSamples=[],onProfileCursor,terrainResults,spatialResults,networkResults,terrainRasters,terrainFetchTarget,onTerrainPick,onContextMenu,onEditingError,
   onViewportChange, discovered, traceMode, onTraceClick,
   editing, moving,edgeMoving, snapping, selectedLocked, layerFeatures,
@@ -1252,13 +1253,16 @@ export default function MapCanvas({
 
   // Maintain independent image sources. Updating opacity or visibility never
   // recreates tiles, and removing a source invalidates its pending fetch.
-  const attachedRasters=useRef(new Map<string,{cancelled:boolean;url?:string}>());
+  type AttachedRaster={cancelled:boolean;url?:string;clipKey:string;controller?:AbortController};
+  const attachedRasters=useRef(new Map<string,AttachedRaster>());
+  // Equal geometry must not reload imagery on cursor movement or rerender.
+  const demClipKey=demClipGeometry?JSON.stringify(demClipGeometry):'';
   const rasterErrors=useRef(onRasterError);rasterErrors.current=onRasterError;
   useEffect(()=>{
     const map=mapRef.current;if(!ready||!map)return;
     const attached=attachedRasters.current;
-    const remove=(id:string,entry:{cancelled:boolean;url?:string})=>{
-      entry.cancelled=true;
+    const remove=(id:string,entry:AttachedRaster)=>{
+      entry.cancelled=true;entry.controller?.abort();
       const name='imported-'+id;
       if(map.getLayer(name))map.removeLayer(name);
       if(map.getSource(name))map.removeSource(name);
@@ -1267,12 +1271,14 @@ export default function MapCanvas({
     for(const [id,entry] of attached)if(!rasterLayers.some(l=>l.asset.id===id)){remove(id,entry);attached.delete(id);}
     for(const layer of rasterLayers){
       const asset=layer.asset,name='imported-'+asset.id;
-      const current=attached.get(asset.id);
+      const clipKey=layer.kind==='dem'&&layer.visible?demClipKey:'';
+      let current=attached.get(asset.id);
+      if(current&&current.clipKey!==clipKey){remove(asset.id,current);attached.delete(asset.id);current=undefined;}
       if(current){
         if(map.getLayer(name)){map.setPaintProperty(name,'raster-opacity',layer.opacity);map.setLayoutProperty(name,'visibility',layer.visible?'visible':'none');}
         continue;
       }
-      const entry:{cancelled:boolean;url?:string}={cancelled:false};attached.set(asset.id,entry);
+      const entry:AttachedRaster={cancelled:false,clipKey};attached.set(asset.id,entry);
       const add=(url:string)=>{
         if(entry.cancelled)return;
         try{
@@ -1280,22 +1286,32 @@ export default function MapCanvas({
           map.addLayer({id:name,type:'raster',source:name,layout:{visibility:layer.visible?'visible':'none'},paint:{'raster-opacity':layer.opacity,'raster-fade-duration':0}},'terrain-result-fill');
         }catch(e){rasterErrors.current('Raster '+asset.name+': '+String(e));}
       };
-      if(window.sessionStorage.getItem('geofathom-api-token')){
+      if(clipKey){
+        const controller=new AbortController();entry.controller=controller;
+        clippedRasterPreview(asset,JSON.parse(clipKey),controller.signal).then(url=>{
+          if(entry.cancelled){URL.revokeObjectURL(url);return;}
+          entry.url=url;add(url);
+          container.current?.setAttribute('data-dem-preview-clipped','true');
+        }).catch(e=>{
+          if(!entry.cancelled)rasterErrors.current('DEM preview: '+String(e));
+        });
+      }else if(window.sessionStorage.getItem('geofathom-api-token')){
         protectedRasterPreview(asset).then(url=>{if(entry.cancelled){URL.revokeObjectURL(url);return;}entry.url=url;add(url);}).catch(e=>{
           if(!entry.cancelled)rasterErrors.current('Raster '+asset.name+': '+String(e));
         });
       }else add(rasterPreviewUrl(asset));
     }
+    if(!demClipKey||!rasterLayers.some(l=>l.kind==='dem'&&l.visible))container.current?.setAttribute('data-dem-preview-clipped','false');
     // Layer order is the layer panel order, irrespective of request completion.
     for(const layer of rasterLayers){const name='imported-'+layer.asset.id;if(map.getLayer(name))map.moveLayer(name,'terrain-result-fill');}
-  },[rasterLayers,ready]);
+  },[rasterLayers,ready,demClipKey]);
   useEffect(()=>{
     const map=mapRef.current;if(!map||!ready)return;
     const handler=(event:unknown)=>{
       const e=event as {sourceId?:string;error?:Error};if(e.sourceId?.startsWith('imported-'))rasterErrors.current('Raster preview failed: '+(e.error?.message??e.sourceId));
     };
     map.on('error',handler);
-    return()=>{map.off('error',handler);for(const entry of attachedRasters.current.values()){entry.cancelled=true;if(entry.url)URL.revokeObjectURL(entry.url);}attachedRasters.current.clear();};
+    return()=>{map.off('error',handler);for(const entry of attachedRasters.current.values()){entry.cancelled=true;entry.controller?.abort();if(entry.url)URL.revokeObjectURL(entry.url);}attachedRasters.current.clear();};
   },[ready]);
   useEffect(()=>{
     const map=mapRef.current;if(!ready||!map)return;

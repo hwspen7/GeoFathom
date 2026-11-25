@@ -121,12 +121,15 @@ def _rgb(data: np.ndarray, valid: np.ndarray | None = None) -> np.ndarray:
     return np.ascontiguousarray(np.moveaxis(converted, 0, -1))
 
 
-def preview_png(path: Path) -> bytes:
+def preview_png(path: Path, geometry: dict | None = None) -> bytes:
     with rasterio.open(path) as src:
         _check(src)
         scale = min(1, PREVIEW_SIZE / max(src.width, src.height))
         width = max(1, int(src.width * scale))
         height = max(1, int(src.height * scale))
+        # Keep the full source grid intact; clipping applies only to the PNG.
+        native_transform, native_crs = src.transform, src.crs
+        native_width, native_height = src.width, src.height
         indexes = [1, 2, 3] if src.count >= 3 else [1]
         data = src.read(
             indexes,
@@ -140,8 +143,33 @@ def preview_png(path: Path) -> bytes:
            & np.isfinite(data.data).all(axis=0))
     rgba=np.dstack((_rgb(data.filled(0),valid=valid),
                     valid.astype(np.uint8)*255))
+    image = Image.fromarray(rgba, "RGBA")
+    if geometry is not None:
+        from geometry.measure import measure_geometry
+        from rasterio.features import geometry_mask
+        from rasterio.warp import transform_geom
+        from affine import Affine
+
+        if geometry.get("type") not in {"Polygon", "MultiPolygon"}:
+            raise RasterError("Preview clipping requires a polygon or multipolygon.")
+        measure_geometry(geometry)
+        projected = transform_geom("EPSG:4326", native_crs, geometry)
+        # Rasterize the visual mask at display resolution even for coarse DEMs.
+        # Nearest upsampling does not invent a finer elevation grid.
+        display_scale = PREVIEW_SIZE / max(native_width, native_height)
+        mask_width = max(1, int(native_width * display_scale))
+        mask_height = max(1, int(native_height * display_scale))
+        image = image.resize((mask_width, mask_height), Image.Resampling.NEAREST)
+        mask_transform = native_transform * Affine.scale(
+            native_width / mask_width, native_height / mask_height
+        )
+        inside = geometry_mask([projected], out_shape=(mask_height, mask_width),
+                               transform=mask_transform, invert=True)
+        clipped = np.array(image)
+        clipped[:, :, 3] = np.where(inside, clipped[:, :, 3], 0)
+        image = Image.fromarray(clipped, "RGBA")
     output = BytesIO()
-    Image.fromarray(rgba,"RGBA").save(output, format="PNG")
+    image.save(output, format="PNG")
     return output.getvalue()
 
 

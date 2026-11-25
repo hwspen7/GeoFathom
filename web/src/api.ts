@@ -347,6 +347,14 @@ export function rasterPreviewUrl(asset: RasterAsset): string {
   return API_URL + asset.preview_url;
 }
 
+/** Fetch a display-only geographic mask; the source and its extent stay unchanged. */
+export async function clippedRasterPreview(asset: RasterAsset, geometry: GeoJSON.Polygon|GeoJSON.MultiPolygon, signal?:AbortSignal): Promise<string> {
+  const response = await rawRequest('/imagery/'+encodeURIComponent(asset.id)+'/preview/clip',{
+    method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({geometry}),signal});
+  if(!response.ok)throw await responseError(response);
+  return URL.createObjectURL(await response.blob());
+}
+
 /** Fetch protected imagery with the session credential; caller revokes blob URL. */
 export async function protectedRasterPreview(asset: RasterAsset): Promise<string> {
   const response = await rawRequest(asset.preview_url);

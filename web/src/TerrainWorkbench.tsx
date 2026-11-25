@@ -1067,7 +1067,7 @@ export default function TerrainWorkbench(p:Props){
        {p.extentMode&&<button onClick={p.onUseSelection}>Use selection</button>}
      </div>
      {!dem&&<button type="button" className="terrain-fetch-primary" onClick={()=>setLeftTab('source')}>Acquire elevation data</button>}
-     <small className="compact-notice">{correctShape?(lineOperation?'✓ Independent profile line':p.extentMode?'✓ DEM footprint':'✓ Geometry selected'):lineOperation?'Draw profile line':'Select study area'}</small>
+     <small className="compact-notice terrain-selection-status">{correctShape?(lineOperation?'Profile line selected':p.extentMode?'DEM footprint selected':'Study area selected'):lineOperation?'Select profile line':'Select study area'}</small>
      {operation==='contours'&&<label>Interval (m)<input aria-label="Contour interval" type="number" min=".01" step="any" value={interval} onChange={e=>setInterval(e.target.value)}/></label>}
      {operation==='dem_difference'&&<label>Reference DEM<select aria-label="Reference comparison DEM" value={comparisonId} onChange={e=>setComparisonId(e.target.value)}><option value="">Select second DEM</option>{assets.filter(a=>a.bands===1&&a.id!==dem?.id).map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>}
      {(operation==='volume'||operation==='cutfill_map')&&<label>Reference elevation (m)<input aria-label="Reference elevation" type="number" step="any" value={reference} onChange={e=>setReference(e.target.value)}/></label>}
@@ -1271,12 +1271,7 @@ export default function TerrainWorkbench(p:Props){
       </small>}
     </>}
     {!p.operationsFooterTarget&&runActions}
-     {!p.connected&&<small className="compact-notice">API offline</small>}
-     {!dem&&<small className="compact-notice">DEM required</small>}
-     {sourceMismatch&&<small className="discovery-error">Selected analysis area is not fully covered by the DEM</small>}
-     {mapMismatch&&<small className="discovery-error">DEM outside map. Use Fit or fetch a new DEM.</small>}
-     {dem&&!verified&&<small className="compact-notice">Confirm elevation units before analysis</small>}
-     {!parametersValid&&<small className="discovery-error">Check numeric parameters</small>}
+     {/* Prerequisites are reported once in the fixed status slot, not repeated per form. */}
    </TerrainPagedForm>}
    </section>
    <section id="terrain-panel-process" className="terrain-step terrain-process-page terrain-control-page"

@@ -286,3 +286,29 @@ def test_desktop_raster_opt_in_preserves_model_and_deployment_auth(geotiff, monk
     assert client.post("/imagery/upload", files=files, headers={
         **headers, "X-GeoFathom-API-Key": "x" * 32
     }).status_code == 403
+
+
+def test_clipped_dem_preview_preserves_source_and_holes(tmp_path):
+    from io import BytesIO
+    from PIL import Image
+    from imagery.store import store_upload, image_file
+    path = tmp_path / "clip-dem.tif"
+    with rasterio.open(path, "w", driver="GTiff", width=20, height=20,
+                       count=1, dtype="float32", crs="EPSG:4326",
+                       transform=from_origin(0, .02, .001, .001)) as dst:
+        dst.write(np.arange(400, dtype=np.float32).reshape(20, 20), 1)
+    asset = store_upload(path, "Clip DEM")
+    original = image_file(asset["id"]).read_bytes()
+    geometry = {"type": "Polygon", "coordinates": [
+        [[.002,.002],[.018,.002],[.018,.018],[.002,.018],[.002,.002]],
+        [[.008,.008],[.008,.012],[.012,.012],[.012,.008],[.008,.008]],
+    ]}
+    response = client.post(f"/imagery/{asset['id']}/preview/clip", json={"geometry": geometry})
+    assert response.status_code == 200, response.text
+    rgba = np.array(Image.open(BytesIO(response.content)))
+    assert rgba.shape == (1024, 1024, 4)
+    assert rgba[0,0,3] == 0 and rgba[512,512,3] == 0
+    assert rgba[256,256,3] == 255
+    assert image_file(asset["id"]).read_bytes() == original
+    assert client.post(f"/imagery/{asset['id']}/preview/clip",
+                       json={"geometry":{"type":"Point","coordinates":[0,0]}}).status_code == 422
