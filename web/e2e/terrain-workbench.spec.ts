@@ -57,7 +57,14 @@ with tempfile.TemporaryDirectory() as directory:
  await page.getByRole('button',{name:/DEM study area/}).click();
  await expect(page.getByLabel('DEM fetch area')).toHaveValue('selection');
  await expect(page.getByLabel('DEM download target')).toContainText('Selected geometry');
+ // The study boundary remains the only default outline; extent inspection is opt-in.
+ await expect(page.getByLabel('Interactive geospatial map')).toHaveAttribute('data-dem-target-visible','false');
+ const extent=page.getByRole('button',{name:'Show DEM download extent'});
+ await revealTerrainControl(page,extent);
+ await extent.click();
  await expect(page.getByLabel('Interactive geospatial map')).toHaveAttribute('data-dem-target-visible','true');
+ await extent.click();
+ await expect(page.getByLabel('Interactive geospatial map')).toHaveAttribute('data-dem-target-visible','false');
  await revealTerrainControl(page,page.getByLabel('DEM fetch area'));
  await page.getByLabel('DEM fetch area').selectOption('viewport');
  await expect(page.getByLabel('DEM download target')).toContainText('Current map');

@@ -2234,3 +2234,21 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .terrain-result-dialog .terrain-result-tabs button[aria-selected=true]{background:#e9f3f9;color:#175f8a;border-color:#83b4d0}
 .terrain-result-dialog .terrain-tab-content .section-heading{display:flex;justify-content:space-between}
 .terrain-history-entry{min-height:28px;border:1px solid #cbd8e1;border-radius:4px;color:#36576c;background:white}
+
+/* Terrain shares the flat workspace rhythm: one separator per group, no
+   persistent source boilerplate, and an optional extent preview. */
+.desktop-gis .gis-operations[data-active-module="tools-terrain"] .terrain-control-page{border:0!important}
+.desktop-gis .gis-operations[data-active-module="tools-terrain"] .workspace-objects{border-bottom:0}
+.desktop-gis .gis-operations .terrain-linked-controls{padding-bottom:7px}
+.terrain-target-row{display:flex;align-items:center;justify-content:space-between;gap:6px;min-width:0}
+.terrain-target-detail{color:#587185;font-size:11px;min-width:0}
+.terrain-target-row button[aria-pressed=true]{background:#eaf4fa!important;border-color:#89b1c8!important}
+.terrain-accessible-detail{position:absolute!important;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.desktop-gis .terrain-status-slot{flex:0 0 17px;min-height:17px;min-width:0;overflow:hidden}
+.desktop-gis .terrain-status-slot :is(.terrain-inline-status,.terrain-inline-error){margin:0;padding:1px 0;font-size:10px;line-height:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.desktop-gis .terrain-summary-monitor{display:flex;flex-direction:column;gap:8px;overflow:hidden}
+.desktop-gis .terrain-summary-monitor .terrain-key-metrics{grid-template-columns:repeat(2,minmax(0,1fr));gap:5px}
+.desktop-gis .terrain-summary-monitor .terrain-key-metrics>div{padding:7px;min-width:0}
+.desktop-gis .terrain-summary-monitor .terrain-overview-preview{max-height:150px}
+.desktop-gis .terrain-summary-monitor .terrain-run-selector{margin:0}
+.desktop-gis .gis-results-monitor .terrain-result-footer button{min-height:30px;padding:4px 7px}

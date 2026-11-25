@@ -2114,7 +2114,7 @@ export default function App() {
               active={activeTool==='tools-terrain'}
               geometry={preview||drawingMode&&!terrainLineDrawing?null:extentMode?extentGeometry:geometry}
               profileGeometry={terrainProfileLine} raster={demLayer} imageRaster={imageLayer} viewport={viewport}
-              connected={Boolean(capabilities)} localImport={capabilities?.local_raster_import===true}
+              connected={Boolean(capabilities)} localImport={capabilities?.local_raster_import}
               refreshToken={refreshToken+connectionRetry} origin={terrainOrigin} picking={terrainPicking}
               onSelectRaster={asset=>{
                 if(!projectCurrent())return;

@@ -107,7 +107,7 @@ interface Props{
  resultsFooterTarget?:HTMLElement|null;
  exportTarget?:HTMLElement|null;
  viewport:[number,number,number,number]|null;
- localImport:boolean;refreshToken:number;origin:Position|null;picking:boolean;
+ localImport:boolean|undefined;refreshToken:number;origin:Position|null;picking:boolean;
  onSelectRaster:(r:RasterAsset|null)=>void;onDraw:(line:boolean)=>void;onClearProfile?:()=>void;onUseExtent:()=>void;onPick:()=>void;
  onFetchTarget?:(bbox:TerrainBBox|null)=>void;
  onFitSelectedArea?:()=>void;
@@ -128,6 +128,8 @@ export default function TerrainWorkbench(p:Props){
  const [leftTab,setLeftTab]=useState<'source'|'tools'|'setup'|'process'>('source');
  const [assets,setAssets]=useState<RasterAsset[]>([]),[token,setToken]=useState('');
  const [resolution,setResolution]=useState<1|3|10|30|90>(30),[fetching,setFetching]=useState(false),[sourceInfo,setSourceInfo]=useState('');
+ // The rectangular download footprint is an optional diagnostic, not the study polygon.
+ const [showFetchExtent,setShowFetchExtent]=useState(false);
  // The displayed fetch choice tracks a genuine selected area automatically.
  // An explicit dropdown choice takes precedence until the user changes it again.
  const [fetchChoice,setFetchChoice]=useState<'auto'|FetchScope>('auto');
@@ -282,6 +284,7 @@ export default function TerrainWorkbench(p:Props){
    if(previousAreaKey.current!==selectedAreaKey){
      previousAreaKey.current=selectedAreaKey;
      setFetchChoice('auto');
+     setShowFetchExtent(false);
    }
  },[selectedAreaKey]);
  const fetchArea=useMemo(()=>terrainFetchBounds(p.viewport,p.geometry,fetchScope),[p.viewport,p.geometry,fetchScope]);
@@ -366,7 +369,7 @@ export default function TerrainWorkbench(p:Props){
  // A map move to an unrelated location must not publish a stale analysis result.
  useEffect(()=>{if(mapMismatch&&analysisRequest.current)cancelAnalysis();},[mapMismatch]);
  // Map extent outline and request coordinates always derive from the same explicit target.
- useEffect(()=>{latest.current.onFetchTarget?.(p.active?fetchArea:null);},[fetchKey,p.active]);
+ useEffect(()=>{latest.current.onFetchTarget?.(p.active&&leftTab==='source'&&showFetchExtent?fetchArea:null);},[fetchKey,p.active,leftTab,showFetchExtent]);
  // Changing the download target aborts the old request rather than selecting stale data.
  useEffect(()=>()=>{fetchAbort.current?.abort();},[fetchKey]);
  useEffect(()=>()=>{latest.current.onFetchTarget?.(null);},[]);
@@ -495,8 +498,8 @@ export default function TerrainWorkbench(p:Props){
    const ticket=++sourceIntent.current;
    setImporting(true);setError('');
    try{
-     if(!p.localImport&&!token.trim())throw Error('Enter import access token.');
-     const item=await uploadImagery(file,token);
+     // The API, not a stale capability flag, decides whether local import is authorized.
+     const item=await uploadImagery(file,token.trim());
      if(!alive.current||ticket!==sourceIntent.current)return;
      if(item.bands!==1)throw Error('Select a single-band DEM, not RGB imagery.');
      setAssets(old=>[item,...old.filter(v=>v.id!==item.id)]);
@@ -514,12 +517,11 @@ export default function TerrainWorkbench(p:Props){
    const ticket=++sourceIntent.current;
    setImporting(true);setError('');setInfo('');
    try{
-     if(!p.localImport&&!token.trim())throw Error('Enter import access token.');
      const data=await prepareDEM({
        image_ids:demProcessMode==='mosaic'?[dem.id,processSecond]:[dem.id],
        mode:demProcessMode,resolution_m:spacing,sampling:processSampling,
        geometry:demProcessMode==='clip'?polygon:null
-     },token);
+     },token.trim());
      if(!alive.current||ticket!==sourceIntent.current)return;
      setAssets(old=>[data.asset,...old.filter(a=>a.id!==data.asset.id)]);
      latest.current.onSelectRaster(data.asset);
@@ -536,8 +538,8 @@ export default function TerrainWorkbench(p:Props){
    const controller=new AbortController();fetchAbort.current=controller;
    setFetching(true);setError('');setSourceInfo('');
    try{
-     if(!p.localImport&&!token.trim())throw Error('Enter import access token.');
-     const data=await fetchPublicDEM(bbox,resolution,token,controller.signal);
+     // A missing capability must not block a valid local download; protected APIs still reject it.
+     const data=await fetchPublicDEM(bbox,resolution,token.trim(),controller.signal);
      if(!alive.current||ticket!==sourceIntent.current)return;
      if(currentFetchKey.current!==requestKey){
        setInfo('Download completed, but the target changed. Old DEM was not selected.');
@@ -547,6 +549,7 @@ export default function TerrainWorkbench(p:Props){
        throw Error('Downloaded DEM does not cover the displayed target coordinates. Source rejected.');
      }
      setAssets(old=>[data.asset,...old.filter(item=>item.id!==data.asset.id)]);
+     setShowFetchExtent(false);
      latest.current.onSelectRaster(data.asset);
      setSourceInfo((resolution<30?'USGS 3DEP · requested '+resolution+' m grid':'GLO-'+resolution+' · DSM')+
        ' · '+data.valid_cells+'/'+data.total_cells+' cells'+(data.missing_tiles.length?' · partial coverage':'')+
@@ -665,14 +668,13 @@ export default function TerrainWorkbench(p:Props){
      </select>
    </div>}
    <h3>{selected.title}</h3>
-   <small className="terrain-summary-source" title={selected.source.name}>{selected.source.name}</small>
+   <small className="terrain-summary-source" title={selected.source.name}>{inputsChanged?'Previous result':selected.source.name}</small>
    {result?.raster?.png&&<img className="terrain-overview-preview" src={result.raster.png} alt="Terrain overview preview"/>}
    {profile&&!expanded&&<ProfilePlot samples={profile.samples} length={profile.length_m} onHover={p.onHover} mapIndex={p.profileMapIndex??null}/>}
    {result&&<div className="terrain-metrics terrain-key-metrics">{featuredMetrics.slice(0,3).map(([key,value])=><div key={key}><span>{names[key]??key.replaceAll('_',' ')}</span><strong>{fmt(value)} {units[key]??(['product_min','product_max','product_mean','product_std','product_p10','product_p50','product_p90'].includes(key)?result.raster?.unit??'':'')}</strong></div>)}</div>}
    {slope&&<div className="terrain-metrics terrain-key-metrics"><div><span>Mean slope</span><strong>{fmt(slope.mean_slope_deg)}°</strong></div><div><span>Mean elevation</span><strong>{fmt(slope.elevation_mean_m)} m</strong></div></div>}
    {profile&&<small>{fmt(profile.length_m)} m · {profile.samples.length} samples</small>}
    {result&&<small>{result.valid_cells.toLocaleString()} valid cells{result.features.length?' · '+result.features.length+' features':''}</small>}
-   {inputsChanged&&<small className="terrain-summary-source">Previous analysis</small>}
  </section>:null;
  const reviewContent=<div className="terrain-monitor-content">
    {!selected&&<div className="section-heading">Terrain history <button type="button" onClick={()=>setExpanded(false)}>Close review</button></div>}
@@ -954,7 +956,7 @@ export default function TerrainWorkbench(p:Props){
    {researchLayer&&<div className="survey-action-bar"><button type="button" onClick={()=>setResearchLayer(null)}>Clear research map</button></div>}
    <div className="terrain-linked-controls" aria-label="Terrain analysis inputs">
     <h3 className="terrain-flat-heading"><SectionIcon role="demSource"/> Elevation</h3>
-    <div className="terrain-linked-row"><label className="terrain-linked-select" title="Digital elevation model">
+    <div className="terrain-linked-row"><label className="terrain-linked-select" title={sourceInfo||dem?.provenance||'Digital elevation model'}>
          <select aria-label="DEM elevation layer" value={dem?.id??''} disabled={fetching||importing}
            onChange={e=>{
              sourceIntent.current++;
@@ -989,32 +991,31 @@ export default function TerrainWorkbench(p:Props){
    <section id="terrain-panel-source" className="terrain-source terrain-step terrain-control-page"
      role="region" aria-label="Source settings" hidden={leftTab!=='source'}>
      <TerrainPagedForm active={p.active&&leftTab==='source'} name="DEM source pages">
-     {!p.localImport&&<label className="terrain-access-row"><SectionIcon role="demAccess"/> Import token<input type="password" aria-label="DEM import token" value={token} onChange={e=>setToken(e.target.value)}/></label>}
+     {p.localImport!==true&&<label className="terrain-access-row" title="Required only when the server requires administrator authorization"><SectionIcon role="demAccess"/> Access token<input type="password" aria-label="DEM import token" value={token} onChange={e=>setToken(e.target.value)} autoComplete="off"/></label>}
      <label className="raster-upload" title="Single-band DEM GeoTIFF, projected in meters, with meter elevations"><Mountain size={14}/> {importing?'Importing…':'Import DEM'}
        <input type="file" aria-label="Import DEM" accept=".tif,.tiff" disabled={importing||fetching||!p.connected} onChange={e=>void importDEM(e)}/></label>
      {dem&&!/Copernicus DEM GLO-|USGS 3DEP Bare Earth DEM/.test(dem.provenance)&&<label className="gis-check"><input aria-label="Confirm DEM meter elevations" type="checkbox" checked={verticalConfirmed} onChange={e=>setVerticalConfirmed(e.target.checked)}/> Elevations in meters</label>}
-     <label>Download area <select aria-label="DEM fetch area" value={fetchScope} onChange={e=>{setFetchChoice(e.target.value as FetchScope);setInfo('');}}>
+     <label>Area <select aria-label="DEM fetch area" value={fetchScope} onChange={e=>{setFetchChoice(e.target.value as FetchScope);setInfo('');}}>
        <option value="viewport">Current map view</option><option value="selection" disabled={!selectedGeometry}>Selected geometry</option>
      </select></label>
      {selectedGeometry&&<div className="survey-action-bar">
-       <button onClick={()=>{setFetchChoice('selection');setInfo('DEM will use the selected geometry bounds, not the previous map view.');}}>Use selected area</button>
+       <button disabled={fetchScope==='selection'} onClick={()=>{setFetchChoice('selection');setInfo('');}}>Use selected area</button>
        {p.onFitSelectedArea&&<button onClick={()=>{setFetchChoice('selection');p.onFitSelectedArea?.();}}>Fit selected area</button>}
      </div>}
-     <small className="compact-notice" aria-label="DEM download target" title={fetchArea?describeTerrainBounds(fetchArea):'No valid download area'}>
-       {fetchArea?(fetchScope==='viewport'?'Current map · ':'Selected geometry · ')+describeTerrainBounds(fetchArea):'No valid download area'}
-       {budget?' · ~'+budget.approximateCells.toLocaleString()+' grid cells':''}
-     </small>
+     <div className="terrain-target-row">
+       <small className="terrain-target-detail" aria-label="DEM download target" title={fetchArea?describeTerrainBounds(fetchArea):'No valid download area'}>
+         {fetchArea?<><span>{budget?'~'+budget.approximateCells.toLocaleString()+' cells':fetchScope==='viewport'?'Current map':'Selected geometry'}</span><span className="terrain-accessible-detail">{(fetchScope==='viewport'?'Current map · ':'Selected geometry · ')+describeTerrainBounds(fetchArea)}</span></>:'No valid download area'}
+       </small>
+       <button type="button" disabled={!fetchArea} aria-label="Show DEM download extent" aria-pressed={showFetchExtent} title="Preview rectangular download bounds; analysis still uses the selected geometry" onClick={()=>setShowFetchExtent(v=>!v)}>Extent</button>
+     </div>
      {budget?.warning&&<small role="alert" className="discovery-error">{budget.warning}</small>}
      {fetchArea&&<div className="survey-action-bar">
        <button aria-label="Auto-fit DEM resolution" disabled={!recommendedResolution||fetching}
          onClick={()=>{if(!recommendedResolution)return;setResolution(recommendedResolution);
-           setInfo('Finest supported output grid fitting this study area: '+recommendedResolution+
-             ' m. This does not guarantee native source accuracy.');}}>
+           setInfo('');}}>
          Auto resolution{recommendedResolution?' · '+recommendedResolution+' m':''}
        </button>
-       <small className="compact-notice" aria-label="DEM source coverage">
-         Up to 8M cells, 4096 px/side · {supportsUSGS?'USGS 3DEP / Copernicus':'Copernicus global'}
-       </small>
+       <small className="terrain-accessible-detail" aria-label="DEM source coverage">Up to 8M cells, 4096 px/side · {supportsUSGS?'USGS 3DEP / Copernicus':'Copernicus global'}</small>
      </div>}
      <div className="area-fields">
        <select aria-label="Public DEM resolution" value={resolution}
@@ -1028,11 +1029,6 @@ export default function TerrainWorkbench(p:Props){
        <button disabled={!p.connected||!fetchArea||!!budget?.warning||fetching||importing} title="Download the explicitly displayed area, not a previous selection" onClick={()=>void fetchDEM()}>{fetching?'Fetching…':'Fetch DEM'}</button>
        {fetching&&<button aria-label="Cancel DEM download" onClick={()=>{sourceIntent.current++;fetchAbort.current?.abort();setInfo('Cancelling the previous download…');}}>Cancel</button>}
      </div>
-     {(sourceInfo||dem||!supportsUSGS&&fetchArea)&&<section className="terrain-source-metadata"><h3 className="terrain-flat-heading"><SectionIcon role="demMetadata"/> Source</h3>
-       {sourceInfo&&<small className="compact-notice terrain-source-note" title={sourceInfo}>{sourceInfo}</small>}
-       {!supportsUSGS&&fetchArea&&<small className="compact-notice">Copernicus global</small>}
-       {dem&&<small className="compact-notice" title={dem.provenance}>{dem.width} × {dem.height} · {dem.crs} · m</small>}
-     </section>}
      {mapMismatch&&<small className="discovery-error" role="status">DEM outside map. Use Fit or change source.</small>}
      {sourceMismatch&&<small className="discovery-error" role="status">Study area outside DEM.</small>}
      
@@ -1289,7 +1285,8 @@ export default function TerrainWorkbench(p:Props){
          <small className="compact-notice" title="Native input resolution and vertical datum are unchanged.">Output grid only</small>
        </TerrainPagedForm></>:<span>No DEM selected</span>}
    </section>
-   {info&&<p className="project-info terrain-inline-status" title={info}>{info}</p>}{error&&<p className="discovery-error terrain-inline-error" role="alert" title={error}>{error}</p>}
+   {/* Reserve a single status line so messages never move the controls or pager. */}
+   <div className="terrain-status-slot">{error?<p className="discovery-error terrain-inline-error" role="alert" title={error}>{error}</p>:info?<p className="project-info terrain-inline-status" title={info}>{info}</p>:null}</div>
  </div>
  {p.resultsTarget?(p.active&&monitor?createPortal(monitor,p.resultsTarget):null):monitor}
  {p.operationsFooterTarget?(p.active&&runActions?createPortal(runActions,p.operationsFooterTarget):null):null}
