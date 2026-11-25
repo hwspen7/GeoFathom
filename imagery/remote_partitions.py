@@ -22,6 +22,21 @@ def spatial_partitions(shape, transform, block_m, folds, buffer_blocks=0):
     # Anchor blocks to projected coordinates rather than an arbitrary crop origin.
     bx = np.floor((transform.c + (col + .5) * transform.a) / block_m).astype(np.int64)
     by = np.floor((transform.f + (row + .5) * transform.e) / block_m).astype(np.int64)
+    return _partition_blocks(bx, by, folds, buffer_blocks)
+
+
+def sample_partitions(rows, cols, transform, block_m, folds, buffer_blocks=0):
+    """Use only labeled sample coordinates when a full scene cannot fit in RAM."""
+    require(3 <= folds <= 10 and float(folds).is_integer(), "Use 3–10 spatial folds.")
+    require(np.isfinite(block_m) and block_m > 0 and buffer_blocks in (0,1), "Invalid block width or buffer.")
+    require(transform.a > 0 and transform.e < 0 and transform.b == transform.d == 0, "Use a north-up grid.")
+    bx=np.floor((transform.c+(cols+.5)*transform.a)/block_m).astype(np.int64)
+    by=np.floor((transform.f+(rows+.5)*transform.e)/block_m).astype(np.int64)
+    return _partition_blocks(bx,by,folds,buffer_blocks)
+
+
+def _partition_blocks(bx, by, folds, buffer_blocks):
+    shape=bx.shape
     blocks, inverse = np.unique(np.column_stack((bx.ravel(), by.ravel())), axis=0,
                                 return_inverse=True)
     require(len(blocks) >= folds, "Each spatial fold needs an occupied block; reduce block size.")

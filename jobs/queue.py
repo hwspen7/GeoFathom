@@ -24,7 +24,7 @@ from .leases import (PROCESS_ID,LEASE_SECONDS,ensure_lease_schema,
 
 KINDS={"vector_import","vector_export","topology_qa","spatial_select","export_geojson","postgis_sync",
        "rebuild_index","spectral_index","spectral_change","semantic_segmentation",
-       "stac_ndvi","remote_windowed","remote_cube"}
+       "stac_ndvi","remote_windowed","remote_cube","remote_model_train","remote_model_predict"}
 _POOL=ThreadPoolExecutor(max_workers=2,thread_name_prefix="geofathom-gis")
 _LOCK=Lock()
 _INITIALIZED=set()
@@ -151,6 +151,13 @@ def queue_job(project_id,kind,payload):
     if kind=="remote_cube":
         from imagery.remote_cube_managed import validate
         payload=validate(payload).model_dump(mode="json")
+    if kind in {"remote_model_train","remote_model_predict"}:
+        from imagery.remote_model_managed import validate
+        payload=validate(payload,kind=="remote_model_train").model_dump(mode="json")
+        if kind=="remote_model_predict":
+            model=get_job(project_id,payload["model_job_id"])
+            if model["kind"]!="remote_model_train" or model["status"]!="completed":
+                raise StorageError("Choose a completed model from this project.")
     serialized=json.dumps(payload,allow_nan=False)
     if len(serialized.encode("utf-8"))>100_000:
         raise StorageError("Job request exceeds 100 KB.")
@@ -280,6 +287,9 @@ def _execute_impl(kind,project_id,payload):
     if kind=="vector_export":
         from storage.exchange import execute_export
         return execute_export(project_id,payload,_progress,check_cancelled)
+    if kind in {"remote_model_train","remote_model_predict"}:
+        from imagery.remote_model_managed import run_managed
+        return run_managed(payload,_ACTIVE_JOB.get(),project_id,kind=="remote_model_train",_progress,check_cancelled)
     if kind=="remote_cube":
         from imagery.remote_cube_managed import run_managed
         return run_managed(payload,_ACTIVE_JOB.get(),_progress,check_cancelled)
@@ -441,8 +451,8 @@ def _worker(uid,path):
             owner_token=_ACTIVE_OWNER.set(owner)
             try:
                 if (kind in {"spectral_index","spectral_change",
-                             "semantic_segmentation","stac_ndvi","remote_windowed","remote_cube"}
-                        and (((payload.get("full_resolution") is True or kind in {"remote_windowed","remote_cube"})
+                             "semantic_segmentation","stac_ndvi","remote_windowed","remote_cube","remote_model_train","remote_model_predict"}
+                        and (((payload.get("full_resolution") is True or kind in {"remote_windowed","remote_cube","remote_model_train","remote_model_predict"})
                              and os.getenv("GEOFATHOM_RASTER_ISOLATE","1")=="1")
                              or os.getenv("GEOFATHOM_WORKER_MEMORY_MB","0")!="0")):
                     from .isolation import run_isolated
@@ -510,6 +520,16 @@ def _worker(uid,path):
                 with _connect() as c:
                     release_slot(c,owner)
                     row=c.execute('SELECT kind,status FROM gis_jobs WHERE id=?',(uid,)).fetchone()
+                    if row and row['kind'] in {'remote_model_train','remote_model_predict'} and row['status']!='completed':
+                        import shutil
+                        from imagery.remote_model_managed import model_path
+                        from imagery.remote_managed import result_path
+                        target=model_path(uid) if row['kind']=='remote_model_train' else result_path(uid)
+                        target.unlink(missing_ok=True)
+                        for pattern in ('model-input-'+uid+'-*','.model-'+target.stem+'-*','.prediction-'+uid+'-*'):
+                            for item in target.parent.glob(pattern):
+                                if item.is_dir():shutil.rmtree(item)
+                                else:item.unlink(missing_ok=True)
                     if row and row['kind'] in {'remote_windowed','remote_cube'} and row['status']!='completed':
                         from imagery.remote_managed import result_path
                         result_path(uid).unlink(missing_ok=True)

@@ -13,7 +13,7 @@ router=APIRouter(prefix="/projects",tags=["background-jobs"])
 class SubmitJob(BaseModel):
     kind:Literal["topology_qa","spatial_select","export_geojson",
                  "postgis_sync","rebuild_index","spectral_index",
-                 "spectral_change","semantic_segmentation","stac_ndvi","remote_windowed","remote_cube"]
+                 "spectral_change","semantic_segmentation","stac_ndvi","remote_windowed","remote_cube","remote_model_train","remote_model_predict"]
     payload:dict[str,Any]=Field(default_factory=dict)
 
 def fail(error):
@@ -25,7 +25,7 @@ def submit(project_id:str,body:SubmitJob,request:Request,
            token:str|None=Header(default=None,alias="X-GeoFathom-Admin-Token")):
     if getattr(request.state,"principal",None) and body.kind not in {"topology_qa","spatial_select","export_geojson"}:
         raise HTTPException(status_code=403,detail="Operator-only job.")
-    if body.kind in {"remote_windowed","remote_cube"}:
+    if body.kind in {"remote_windowed","remote_cube","remote_model_train","remote_model_predict"}:
         from imagery.routes import require_raster_import
         require_raster_import(request,token)
     if body.kind in {"postgis_sync","rebuild_index","spectral_index",
@@ -55,7 +55,13 @@ def cancel(project_id:str,job_id:str):
 def download_result(project_id:str,job_id:str):
     try:
         job=get_job(project_id,job_id)
-        if job["kind"] in {"remote_windowed","remote_cube"} and job["status"]=="completed":
+        if job["kind"]=="remote_model_train" and job["status"]=="completed":
+            from imagery.remote_model_managed import model_path
+            from imagery.remote_windowed import digest
+            path=model_path(job_id)
+            if not path.is_file() or digest(path)!=job['result']['sha256']:raise StorageError('Saved model is missing or changed.')
+            return FileResponse(path,media_type='application/json',filename='remote-model.json',headers={'Cache-Control':'no-store'})
+        if job["kind"] in {"remote_windowed","remote_cube","remote_model_predict"} and job["status"]=="completed":
             from imagery.remote_managed import result_path
             path=result_path(job_id)
             if not path.is_file():raise StorageError("Remote raster result not found.")
@@ -80,7 +86,7 @@ def register_result(project_id:str,job_id:str,request:Request,
     require_raster_import(request,token)
     try:
         job=get_job(project_id,job_id)
-        if job['kind'] not in {'remote_cube','remote_windowed'} or job['status']!='completed':
+        if job['kind'] not in {'remote_cube','remote_windowed','remote_model_predict'} or job['status']!='completed':
             raise StorageError('A completed scientific raster job is required.')
         path=result_path(job_id)
         if not path.is_file() or digest(path)!=job['result']['sha256']:

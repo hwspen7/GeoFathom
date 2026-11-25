@@ -1,5 +1,33 @@
 # Remote Sensing scientific computing
 
+## Persistent classifiers and full-resolution prediction
+
+The workbench trains a random forest from explicit managed reflectance features
+and a positive-integer label raster. Training scans windows and retains at most
+10,000 explicitly labeled complete observations. It uses spatial block OOF
+evaluation with optional neighbor exclusion, then refits the saved model on all
+labels. Sample order is canonical, so changing I/O tile size does not change
+bootstrap training. Reported accuracy, class F1/IoU, Brier score and log loss
+come from held-out samples. Fixed parameters are disclosed; this is not nested
+hyperparameter selection or independent external-site accuracy.
+
+Models are portable numeric JSON tree arrays with explicit feature order,
+physical units, source hashes and training geometry, never executable pickle.
+The portable evaluator is checked against the fitted scikit-learn estimator.
+Saved project models classify other aligned imagery in windows, producing full
+class maps, per-class vote probabilities, maximum vote, entropy and descriptive
+training-spectral Mahalanobis distance. An optional minimum vote threshold
+abstains from classification while retaining diagnostic bands. Votes are not
+calibrated probabilities; spectral distance is not calibrated out-of-domain
+probability or epistemic uncertainty.
+
+`remote_model_train` and `remote_model_predict` use project-scoped background
+jobs, input/model hash verification, snapshots, global raster leases, isolation
+and cancellation. Inference supports grids up to 150 million cells within the
+configured execution budgets. The local CLI is `python -m imagery.remote_model
+train|predict config.json output`; managed HTTP requests accept image/model job
+IDs, not filesystem paths. Validation tables open in the shared figure studio.
+
 ## Managed acquisition cubes
 
 The workbench's **Multi-date optical cube** collects explicit UTC datetimes,

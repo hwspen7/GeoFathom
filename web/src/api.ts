@@ -953,7 +953,7 @@ export function getVisionModels():Promise<VisionModels>{
 
 export type GISJobKind='topology_qa'|'spatial_select'|'export_geojson'|
   'postgis_sync'|'rebuild_index'|'spectral_index'|'spectral_change'|
-  'semantic_segmentation'|'stac_ndvi'|'vector_import'|'vector_export'|'remote_windowed'|'remote_cube';
+  'semantic_segmentation'|'stac_ndvi'|'vector_import'|'vector_export'|'remote_windowed'|'remote_cube'|'remote_model_train'|'remote_model_predict';
 export interface GISJob {
   id:string;project_id:string;kind:GISJobKind;
   status:'queued'|'running'|'completed'|'failed'|'cancelled'|'interrupted';
@@ -1313,14 +1313,17 @@ export function queueRemoteDiskJob(projectId:string,payload:Record<string,unknow
 export function queueRemoteCubeJob(projectId:string,payload:Record<string,unknown>):Promise<GISJob>{
  return request('/projects/'+encodeURIComponent(projectId)+'/jobs',{method:'POST',headers:{'Content-Type':'application/json','X-GeoFathom-Local-Import':'1'},body:JSON.stringify({kind:'remote_cube',payload})});
 }
+export function queueRemoteModelJob(projectId:string,payload:Record<string,unknown>,training:boolean):Promise<GISJob>{
+ return request('/projects/'+encodeURIComponent(projectId)+'/jobs',{method:'POST',headers:{'Content-Type':'application/json','X-GeoFathom-Local-Import':'1'},body:JSON.stringify({kind:training?'remote_model_train':'remote_model_predict',payload})});
+}
 export function registerRemoteJobImagery(projectId:string,id:string):Promise<RasterAsset>{
  return request('/projects/'+encodeURIComponent(projectId)+'/jobs/'+encodeURIComponent(id)+'/imagery',{method:'POST',headers:{'X-GeoFathom-Local-Import':'1'}});
 }
-export async function downloadRemoteDiskJob(projectId:string,id:string):Promise<void>{
+export async function downloadRemoteDiskJob(projectId:string,id:string,filename='remote-sensing.tif'):Promise<void>{
  const response=await rawRequest('/projects/'+encodeURIComponent(projectId)+'/jobs/'+encodeURIComponent(id)+'/download');
  if(!response.ok)throw Error('Completed remote raster required.');
  const url=URL.createObjectURL(await response.blob());
- try{const a=document.createElement('a');a.href=url;a.download='remote-sensing.tif';document.body.appendChild(a);a.click();a.remove();}finally{window.setTimeout(()=>URL.revokeObjectURL(url),1000);}
+ try{const a=document.createElement('a');a.href=url;a.download=filename;document.body.appendChild(a);a.click();a.remove();}finally{window.setTimeout(()=>URL.revokeObjectURL(url),1000);}
 }
 
 export function readRemoteSceneCrop(body:{collection:'sentinel-2-l2a'|'sentinel-2-c1-l2a';item_id:string;bbox:[number,number,number,number];roles:string[]}):Promise<{bands:Array<RemoteSource&{role:string;unit:string;shape:number[];transform:number[];crs:string}>;warning:string}>{

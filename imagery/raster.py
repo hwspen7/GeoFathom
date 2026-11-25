@@ -28,7 +28,7 @@ def _check(src) -> None:
     if not src.crs:
         raise RasterError("Raster lacks a coordinate reference system.")
     # Scientific cubes preserve acquisition-band identities in per-band tags.
-    band_limit = 1024 if src.tags().get('REMOTE_SCHEMA') == 'geofathom-optical-cube-1' else 20
+    band_limit = 1024 if src.tags().get('REMOTE_SCHEMA') in {'geofathom-optical-cube-1','geofathom-rf-prediction-1'} else 20
     if not 1 <= src.count <= band_limit:
         raise RasterError(f"Raster must contain between 1 and {band_limit} bands.")
     if not (1 <= src.width <= MAX_DIMENSION and 1 <= src.height <= MAX_DIMENSION):
