@@ -2267,7 +2267,6 @@ export default function App() {
         </aside>
         <aside className="gis-results-monitor" aria-label="Results monitor">
           <div className="sidebar-scroll" ref={setResultsTarget} tabIndex={0} aria-label="Results scrolling region">
-            {!measurement&&activeTool==='tools-survey'&&<div className="workspace-monitor-empty">No selection</div>}
           </div>
           <div className="workspace-fixed-footer" ref={setResultsFooterTarget}/>
         </aside>

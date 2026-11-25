@@ -49,18 +49,15 @@ with tempfile.TemporaryDirectory() as directory:
  await expect(page.getByLabel('DEM download target')).toContainText('Selected geometry');
  await expectWorkspaceModule(page,'Terrain');
  await expect(page.getByRole('complementary',{name:'Operations'})).toBeVisible();
- await expect(page.getByLabel('Results monitor')).toBeVisible();
+ await expect(page.getByLabel('Results monitor')).toBeHidden();
  await expect(page.getByLabel('Project and layers',{exact:true})).toBeHidden();
- // Real browser desktop contract: two docks flank a full-height map.
+ // Before the first result, the map uses the entire remaining workspace.
  const left=await page.getByRole('complementary',{name:'Operations'}).boundingBox();
  const center=await page.getByLabel('Interactive geospatial map').boundingBox();
- const right=await page.getByLabel('Results monitor').boundingBox();
- expect(left&&center&&right).toBeTruthy();
+ expect(left&&center).toBeTruthy();
  expect(left!.x+left!.width).toBeLessThan(center!.x+10);
- expect(center!.x+center!.width).toBeLessThan(right!.x+10);
  expect(center!.height).toBeGreaterThan(400);
  expect(Math.round(left!.width)).toBe(318);
- expect(Math.round(right!.width)).toBe(364);
  await expect(page.getByLabel('Terrain analysis inputs')).toBeVisible();
  await expect(page.getByRole('button',{name:'Get DEM',exact:true})).toHaveAttribute('aria-pressed','true');
  await expect(page.getByLabel('Terrain analysis inputs')).not.toContainText('01');
@@ -101,6 +98,11 @@ with tempfile.TemporaryDirectory() as directory:
  await visual();
  await expect(page.getByRole('img',{name:'Slope (degrees)'})).toBeVisible();
  await expect(page.getByLabel('Results monitor').getByLabel('Terrain results')).toBeVisible();
+ const right=await page.getByLabel('Results monitor').boundingBox();
+ const resultMap=await map.boundingBox();
+ expect(Math.round(right!.width)).toBe(364);
+ expect(resultMap!.x+resultMap!.width).toBeLessThan(right!.x+10);
+ expect(resultMap!.width).toBeLessThan(center!.width);
  await page.getByRole('button',{name:'Browse terrain tools',exact:true}).click();
  await tools.getByRole('button',{name:'Elevation distribution',exact:true}).click();
  await page.getByRole('button',{name:'Run terrain operation'}).click();

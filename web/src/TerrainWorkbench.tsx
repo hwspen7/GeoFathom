@@ -1299,7 +1299,7 @@ export default function TerrainWorkbench(p:Props){
    </section>
    {info&&<p className="project-info">{info}</p>}{error&&<p className="discovery-error" role="alert">{error}</p>}
  </div>
- {p.resultsTarget?(p.active?createPortal(monitor,p.resultsTarget):null):monitor}
+ {p.resultsTarget?(p.active&&(records.length>0||runHistory.length>0||resultCacheError)?createPortal(monitor,p.resultsTarget):null):monitor}
  {p.operationsFooterTarget?(p.active&&runActions?createPortal(runActions,p.operationsFooterTarget):null):null}
  {p.resultsFooterTarget?(p.active&&resultActions?createPortal(resultActions,p.resultsFooterTarget):null):resultActions}
  {/* Export owns a separate module; its actions must survive leaving Terrain. */}

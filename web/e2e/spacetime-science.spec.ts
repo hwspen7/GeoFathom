@@ -51,11 +51,13 @@ test('dated multiband cube produces real trend raster and export',async({page})=
  await expect(monitor.getByRole('button',{name:'CSV',exact:true})).toBeInViewport();
  // The shared scientific product remains available independently of map visibility.
  await activateWorkspaceModule(page,'Sensing');
+ await expect(page.getByLabel('Results monitor',{exact:true})).toBeHidden();
  await page.getByRole('button',{name:'Open Remote Sensing'}).click();
  const source=page.getByLabel('Current scientific raster');
  await expect(source.locator('option').filter({hasText:'Temporal · OLS slope'})).toHaveCount(1);
  await page.keyboard.press('Escape');
  await activateWorkspaceModule(page,'Temporal');
+ await expect(page.getByLabel('Results monitor',{exact:true})).toBeVisible();
  await openProjectDrawer(page,'layers');
  await expect(page.getByLabel('Spatiotemporal result layer')).toBeVisible();
  await expect(page.getByLabel('Spatiotemporal result layer')).toBeChecked();

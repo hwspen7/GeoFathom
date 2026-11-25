@@ -51,7 +51,7 @@ test('global survey toolbar persists across all research modules',async({page})=
   // Fixed side panels start directly with their content, without title bars.
   for(const panel of [page.getByLabel('Operations',{exact:true}),page.getByLabel('Results monitor',{exact:true})]){
    await expect(panel.locator(':scope > .workspace-dock-heading')).toHaveCount(0);
-   await expect(panel.locator(':scope > .sidebar-scroll')).toBeVisible();
+   await expect(panel.locator(':scope > .sidebar-scroll')).toBeAttached();
    const top=await panel.evaluate(el=>el.firstElementChild===el.querySelector(':scope > .sidebar-scroll'));
    expect(top).toBe(true);
   }
@@ -109,4 +109,32 @@ test('GIS tools and object browser stay open without collapsible sections',async
   const region=tools.getByLabel('Operations scrolling region');
   await expect.poll(()=>region.evaluate(e=>e.scrollHeight-e.clientHeight)).toBeLessThanOrEqual(1);
  }
+});
+
+test('empty results dock releases map width and returns only when results exist',async({page})=>{
+ await page.setViewportSize({width:1680,height:900});
+ await page.route('**/tile.openstreetmap.org/**',r=>r.fulfill({contentType:'image/png',body:tile}));
+ await page.goto('/');
+ const nav=page.getByRole('navigation',{name:'Workspace tools'});
+ const monitor=page.getByLabel('Results monitor',{exact:true});
+ const map=page.getByLabel('Interactive geospatial map');
+ await nav.getByRole('button',{name:'LiDAR',exact:true}).click();
+ await expect(monitor).toBeHidden();
+ const wide=(await map.boundingBox())!.width;
+ await nav.getByRole('button',{name:'Survey',exact:true}).click();
+ await expect(monitor).toBeHidden();
+ await expect(map).toHaveAttribute('data-label-layer-ready','true',{timeout:25000});
+ const box=(await map.boundingBox())!;
+ await page.getByLabel('Survey toolbar').getByRole('button',{name:'Polygon',exact:true}).click();
+ for(const [x,y] of [[.25,.35],[.35,.35],[.35,.45],[.25,.45]])await page.mouse.click(box.x+x*box.width,box.y+y*box.height);
+ await page.keyboard.press('Enter');
+ await expect(monitor).toBeVisible();
+ await expect.poll(async()=>Math.round((await map.boundingBox())!.width)).toBeLessThan(Math.round(wide)-200);
+ await nav.getByRole('button',{name:'LiDAR',exact:true}).click();
+ await expect(monitor).toBeHidden();
+ await expect.poll(async()=>Math.round((await map.boundingBox())!.width)).toBe(Math.round(wide));
+ await nav.getByRole('button',{name:'Survey',exact:true}).click();
+ await expect(monitor).toBeVisible();
+ await page.getByLabel('Survey toolbar').getByRole('button',{name:'Deselect',exact:true}).click();
+ await expect(monitor).toBeHidden();
 });

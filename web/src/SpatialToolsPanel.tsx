@@ -188,6 +188,6 @@ export default function SpatialToolsPanel(p:Props){
     </details>
     {notice&&<p className="project-info">{notice}</p>}
     {error&&<p className="discovery-error">{error}</p>}
-    {p.resultsTarget?(p.active?createPortal(resultPanel,p.resultsTarget):null):resultPanel}
+    {p.resultsTarget?(p.active&&(result||issueCount!==null)?createPortal(resultPanel,p.resultsTarget):null):resultPanel}
   </div>;
 }

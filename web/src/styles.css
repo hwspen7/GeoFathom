@@ -2033,3 +2033,7 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .desktop-gis [data-active-module="tools-gis"] .gis-file-row .area-fields{grid-template-columns:minmax(0,1fr) auto}
 .desktop-gis [data-active-module="tools-gis"] .gis-file-row .raster-upload{box-sizing:border-box;height:25px;min-height:25px;padding:3px 5px;font-size:10px;gap:4px;white-space:nowrap}
 .desktop-gis [data-active-module="tools-gis"] .gis-terrain-row .gis-tool-heading,.desktop-gis [data-active-module="tools-gis"] .gis-terrain-row .professional-form{margin:0}
+
+/* Keep portal hosts mounted, but release the entire dock when no module has
+   published a result or a result action. MapCanvas observes its new size. */
+.desktop-gis .gis-body>.gis-results-monitor:not(:has(>.sidebar-scroll>:not([hidden]),>.workspace-fixed-footer>:not([hidden]))){display:none!important}

@@ -39,6 +39,7 @@ export default function ProfessionalPanel({
   const [operator,setOperator]=useState<'contains'|'equals'|'gte'|'lte'|'exists'>('contains');
   const [result,setResult]=useState<AttributeResult|null>(null);
   const [selection,setSelection]=useState<string[]>([]);
+  const [searched,setSearched]=useState(false);
   const [editField,setEditField]=useState('category');
   const [editValue,setEditValue]=useState('');
   const [editType,setEditType]=useState<'text'|'number'|'boolean'>('text');
@@ -50,7 +51,7 @@ export default function ProfessionalPanel({
   const [error,setError]=useState('');
 
   useEffect(()=>{
-    if(!projectId){setResult(null);setSelection([]);return;}
+    if(!projectId){setResult(null);setSelection([]);setSearched(false);return;}
     queryAttributes(projectId,{limit:100}).then(setResult).catch(()=>setResult(null));
   },[projectId,refreshToken]);
 
@@ -62,7 +63,7 @@ export default function ProfessionalPanel({
       setResult(await queryAttributes(projectId,{
         field:field||undefined,operator,value:query,limit:100,
       }));
-      setSelection([]);
+      setSelection([]);setSearched(true);
     } catch(e){setError(e instanceof Error?e.message:'Attribute search failed.');}
     finally{setBusy(false);}
   }
@@ -133,7 +134,7 @@ export default function ProfessionalPanel({
   }).join(' '):'';
 
   const resultPanel=<div className="gis-professional-results">
-    <section className="gis-attribute-results" aria-label="Attribute results">
+    {result&&(result.total>0||searched)&&<section className="gis-attribute-results" aria-label="Attribute results">
       <strong>Attributes · {result?.total??0}</strong>
         <div className="attribute-table-scroll">
           <table className="attribute-table">
@@ -148,7 +149,7 @@ export default function ProfessionalPanel({
           </table>
         </div>
 
-    </section>
+    </section>}
           {terrain&&<div className="terrain-metrics">
             <div><span>Elevation</span><strong>{terrain.elevation_min_m.toFixed(1)}–{terrain.elevation_max_m.toFixed(1)} m</strong></div>
             <div><span>Relief</span><strong>{terrain.elevation_relief_m.toFixed(1)} m</strong></div>
@@ -234,7 +235,7 @@ export default function ProfessionalPanel({
       </section>
       {notice&&<p className="project-info">{notice}</p>}
       {error&&<p className="discovery-error">{error}</p>}
-      {resultsTarget?(active?createPortal(resultPanel,resultsTarget):null):resultPanel}
+      {resultsTarget?(active&&(terrain||profile||(result&&(result.total>0||searched)))?createPortal(resultPanel,resultsTarget):null):resultPanel}
     </div>
   );
 }
