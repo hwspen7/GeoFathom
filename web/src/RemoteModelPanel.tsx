@@ -1,4 +1,5 @@
 import {useCallback,useEffect,useState} from 'react';
+import RemoteModelExperiments from './RemoteModelExperiments';
 import RemoteSampleManager from './RemoteSampleManager';
 import RemoteFeatureBuilder,{type ModelFeatureBand} from './RemoteFeatureBuilder';
 import {getGISJobs,getGISJob,queueRemoteModelJob,queueRemoteEvaluationJob,type GISJob} from './api';
@@ -46,6 +47,7 @@ export default function RemoteModelPanel({projectId,features,quality,assets,job,
  <label><input type="checkbox" checked={buffer} onChange={e=>setBuffer(e.target.checked)}/>Exclude neighboring validation blocks</label>
  <label><input type="checkbox" checked={calibrate} onChange={e=>setCalibrate(e.target.checked)}/>Calibrate probabilities with nested spatial separation</label>
  <button disabled={!projectId||!customFeatures||!quality||!labels||running} onClick={()=>void submit(true)}>Train and save random forest</button>
+ <RemoteModelExperiments projectId={projectId} features={customFeatures} quality={quality} labels={labels} parameters={{block_m:block,folds,buffer_blocks:buffer?1:0,calibrate}} job={job} onJob={onJob}/>
  <label>Saved project model<select value={modelId} onChange={e=>setModelId(e.target.value)}><option value="">Choose a trained model</option>{models.map(m=><option key={m.id} value={m.id}>{m.created_at} · {m.id.slice(0,8)}</option>)}</select></label>
  <label>Minimum class probability<input type="number" min="0" max="1" step=".05" value={minimum} onChange={e=>setMinimum(Number(e.target.value))}/></label>
  <label>Maximum standardized training distance (optional)<input type="number" min="0" step=".5" value={maximumDistance} onChange={e=>setMaximumDistance(e.target.value)}/></label>

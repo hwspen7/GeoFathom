@@ -24,7 +24,7 @@ from .leases import (PROCESS_ID,LEASE_SECONDS,ensure_lease_schema,
 
 KINDS={"vector_import","vector_export","topology_qa","spatial_select","export_geojson","postgis_sync",
        "rebuild_index","spectral_index","spectral_change","semantic_segmentation",
-       "stac_ndvi","remote_windowed","remote_cube","remote_model_train","remote_model_predict","remote_model_evaluate"}
+       "stac_ndvi","remote_windowed","remote_cube","remote_model_train","remote_model_predict","remote_model_evaluate","remote_experiment"}
 _POOL=ThreadPoolExecutor(max_workers=2,thread_name_prefix="geofathom-gis")
 _LOCK=Lock()
 _INITIALIZED=set()
@@ -147,6 +147,9 @@ def queue_job(project_id,kind,payload,reproduction=None):
         payload={**payload,"full_resolution":True}
     if kind=="remote_windowed":
         from imagery.remote_managed import validate
+        payload=validate(payload).model_dump(mode="json")
+    if kind=="remote_experiment":
+        from imagery.remote_experiments import validate
         payload=validate(payload).model_dump(mode="json")
     if kind=="remote_cube":
         from imagery.remote_cube_managed import validate
@@ -297,6 +300,9 @@ def _execute_impl(kind,project_id,payload):
     if kind=="vector_export":
         from storage.exchange import execute_export
         return execute_export(project_id,payload,_progress,check_cancelled)
+    if kind=="remote_experiment":
+        from imagery.remote_experiments import run_managed
+        return run_managed(payload,_ACTIVE_JOB.get(),_progress,check_cancelled)
     if kind=="remote_model_evaluate":
         from imagery.remote_model_managed import run_evaluation
         return run_evaluation(payload,_ACTIVE_JOB.get(),project_id,_progress,check_cancelled)
@@ -464,8 +470,8 @@ def _worker(uid,path):
             owner_token=_ACTIVE_OWNER.set(owner)
             try:
                 if (kind in {"spectral_index","spectral_change",
-                             "semantic_segmentation","stac_ndvi","remote_windowed","remote_cube","remote_model_train","remote_model_predict","remote_model_evaluate"}
-                        and (((payload.get("full_resolution") is True or kind in {"remote_windowed","remote_cube","remote_model_train","remote_model_predict","remote_model_evaluate"})
+                             "semantic_segmentation","stac_ndvi","remote_windowed","remote_cube","remote_model_train","remote_model_predict","remote_model_evaluate","remote_experiment"}
+                        and (((payload.get("full_resolution") is True or kind in {"remote_windowed","remote_cube","remote_model_train","remote_model_predict","remote_model_evaluate","remote_experiment"})
                              and os.getenv("GEOFATHOM_RASTER_ISOLATE","1")=="1")
                              or os.getenv("GEOFATHOM_WORKER_MEMORY_MB","0")!="0")):
                     from .isolation import run_isolated
@@ -533,13 +539,14 @@ def _worker(uid,path):
                 with _connect() as c:
                     release_slot(c,owner)
                     row=c.execute('SELECT kind,status FROM gis_jobs WHERE id=?',(uid,)).fetchone()
-                    if row and row['kind'] in {'remote_model_train','remote_model_predict','remote_model_evaluate'} and row['status']!='completed':
+                    if row and row['kind'] in {'remote_model_train','remote_model_predict','remote_model_evaluate','remote_experiment'} and row['status']!='completed':
                         import shutil
                         from imagery.remote_model_managed import model_path
                         from imagery.remote_managed import result_path
-                        target=model_path(uid) if row['kind']=='remote_model_train' else result_path(uid)
+                        from imagery.remote_experiments import experiment_path
+                        target=experiment_path(uid) if row['kind']=='remote_experiment' else model_path(uid) if row['kind']=='remote_model_train' else result_path(uid)
                         target.unlink(missing_ok=True)
-                        for pattern in ('model-input-'+uid+'-*','.model-'+target.stem+'-*','.prediction-'+uid+'-*','evaluation-input-'+uid+'-*','.evaluation-'+uid+'-*'):
+                        for pattern in ('.experiment-'+target.stem+'-*','model-input-'+uid+'-*','.model-'+target.stem+'-*','.prediction-'+uid+'-*','evaluation-input-'+uid+'-*','.evaluation-'+uid+'-*'):
                             for item in target.parent.glob(pattern):
                                 if item.is_dir():shutil.rmtree(item)
                                 else:item.unlink(missing_ok=True)

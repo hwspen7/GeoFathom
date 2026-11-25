@@ -953,7 +953,7 @@ export function getVisionModels():Promise<VisionModels>{
 
 export type GISJobKind='topology_qa'|'spatial_select'|'export_geojson'|
   'postgis_sync'|'rebuild_index'|'spectral_index'|'spectral_change'|
-  'semantic_segmentation'|'stac_ndvi'|'vector_import'|'vector_export'|'remote_windowed'|'remote_cube'|'remote_model_train'|'remote_model_predict'|'remote_model_evaluate';
+  'semantic_segmentation'|'stac_ndvi'|'vector_import'|'vector_export'|'remote_windowed'|'remote_cube'|'remote_model_train'|'remote_model_predict'|'remote_model_evaluate'|'remote_experiment';
 export interface GISJob {
   id:string;project_id:string;kind:GISJobKind;
   status:'queued'|'running'|'completed'|'failed'|'cancelled'|'interrupted';
@@ -1387,4 +1387,8 @@ export async function materializeScientificRaster<T extends ScientificRasterInpu
 
 export function remoteSampleRequest<T>(projectId:string,path='',body?:unknown):Promise<T>{
  return request('/projects/'+encodeURIComponent(projectId)+'/remote-samples'+path,body===undefined?undefined:{method:'POST',headers:{'Content-Type':'application/json','X-GeoFathom-Local-Import':'1'},body:JSON.stringify(body)});
+}
+
+export function queueRemoteExperiment(projectId:string,payload:Record<string,unknown>):Promise<GISJob>{
+ return request('/projects/'+encodeURIComponent(projectId)+'/jobs',{method:'POST',headers:{'Content-Type':'application/json','X-GeoFathom-Local-Import':'1'},body:JSON.stringify({kind:'remote_experiment',payload})});
 }

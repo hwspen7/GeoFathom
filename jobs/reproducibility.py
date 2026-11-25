@@ -8,7 +8,7 @@ import platform
 
 from analysis.science_raster import require
 
-SCIENTIFIC_KINDS={'remote_windowed','remote_cube','remote_model_train','remote_model_predict','remote_model_evaluate'}
+SCIENTIFIC_KINDS={'remote_windowed','remote_cube','remote_model_train','remote_model_predict','remote_model_evaluate','remote_experiment'}
 
 
 def canonical_hash(value):

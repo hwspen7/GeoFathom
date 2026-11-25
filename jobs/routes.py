@@ -13,7 +13,7 @@ router=APIRouter(prefix="/projects",tags=["background-jobs"])
 class SubmitJob(BaseModel):
     kind:Literal["topology_qa","spatial_select","export_geojson",
                  "postgis_sync","rebuild_index","spectral_index",
-                 "spectral_change","semantic_segmentation","stac_ndvi","remote_windowed","remote_cube","remote_model_train","remote_model_predict","remote_model_evaluate"]
+                 "spectral_change","semantic_segmentation","stac_ndvi","remote_windowed","remote_cube","remote_model_train","remote_model_predict","remote_model_evaluate","remote_experiment"]
     payload:dict[str,Any]=Field(default_factory=dict)
 
 class RepeatScientificJob(BaseModel):
@@ -45,7 +45,7 @@ def submit(project_id:str,body:SubmitJob,request:Request,
            token:str|None=Header(default=None,alias="X-GeoFathom-Admin-Token")):
     if getattr(request.state,"principal",None) and body.kind not in {"topology_qa","spatial_select","export_geojson"}:
         raise HTTPException(status_code=403,detail="Operator-only job.")
-    if body.kind in {"remote_windowed","remote_cube","remote_model_train","remote_model_predict","remote_model_evaluate"}:
+    if body.kind in {"remote_windowed","remote_cube","remote_model_train","remote_model_predict","remote_model_evaluate","remote_experiment"}:
         from imagery.routes import require_raster_import
         require_raster_import(request,token)
     if body.kind in {"postgis_sync","rebuild_index","spectral_index",
@@ -75,6 +75,12 @@ def cancel(project_id:str,job_id:str):
 def download_result(project_id:str,job_id:str):
     try:
         job=get_job(project_id,job_id)
+        if job['kind']=='remote_experiment' and job['status']=='completed':
+            from imagery.remote_experiments import experiment_path
+            from imagery.remote_windowed import digest
+            path=experiment_path(job_id)
+            if not path.is_file() or digest(path)!=job['result']['sha256']:raise StorageError('Experiment archive is missing or changed.')
+            return FileResponse(path,media_type='application/zip',filename='remote-experiment.zip',headers={'Cache-Control':'no-store'})
         if job["kind"]=="remote_model_train" and job["status"]=="completed":
             from imagery.remote_model_managed import model_path
             from imagery.remote_windowed import digest

@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event';
 import RemoteModelPanel from './RemoteModelPanel';
 import {getGISJobs,queueRemoteModelJob} from './api';
 
-vi.mock('./api',()=>({getGISJobs:vi.fn(),getGISJob:vi.fn(),queueRemoteModelJob:vi.fn(),queueRemoteEvaluationJob:vi.fn(),remoteSampleRequest:vi.fn().mockResolvedValue({revisions:[]})}));
+vi.mock('./api',()=>({getGISJobs:vi.fn(),getGISJob:vi.fn(),queueRemoteModelJob:vi.fn(),queueRemoteEvaluationJob:vi.fn(),queueRemoteExperiment:vi.fn(),downloadRemoteDiskJob:vi.fn(),remoteSampleRequest:vi.fn().mockResolvedValue({revisions:[]})}));
 vi.mock('./ScientificFigureStudio',()=>({default:()=>null}));
 afterEach(()=>{cleanup();vi.resetAllMocks();});
 it('trains with selected label imagery and explicit buffered spatial validation',async()=>{
