@@ -2,7 +2,7 @@ import {SectionIcon} from './SectionIcon';
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import {createPortal} from 'react-dom';
 import {
-  ArrowRight, Command, Globe2, Map, Bookmark, Maximize2, Minimize2,
+  ArrowRight, Command, Globe2, Map as BasemapIcon, Bookmark, Maximize2, Minimize2,
   RotateCcw, Send,
   Wifi, WifiOff,
 } from 'lucide-react';
@@ -1329,7 +1329,7 @@ export default function App() {
         </div>
         <div className="gis-survey-commands" ref={setToolbarTarget}/>
         <label className="gis-quick-basemap" aria-label="Basemap picker">
-          <Map size={15} aria-hidden="true"/>
+          <BasemapIcon size={15} aria-hidden="true"/>
           <select aria-label="Map type" value={basemap}
             title={BASEMAPS.find(item=>item.id===basemap)?.note??mapStatus}
             onChange={event=>setBasemap(event.target.value as BasemapId)}>
