@@ -11,7 +11,7 @@ import {BASEMAPS,type BasemapId,type CustomBasemap} from './basemaps';
 import {OFFLINE_METHOD} from './scratch';
 import type {RasterLayerView} from './rasterLayers';
 import {areaText,distanceText,mapPalette,type DisplaySettings} from './displaySettings';
-import {drawingPreview,measurementAnchor,approximateMeasurement,geodesicDrag as edgeDistance} from './editing';
+import {drawingPreview,measurementAnchor,approximateMeasurement,previewEdgeLengths,shouldShowEdgeLength,MIN_MAP_EDGE_METERS,type MeasuredEdge} from './editing';
 import { featureLabel } from './labels';
 import type { ExternalTile } from './DataServicesPanel';
 import type { Measurement,LayerStyle,TerrainRasterLayer,NetworkFace } from './api';
@@ -105,6 +105,7 @@ interface Props {
   pinnedPlaces?:Array<{id:string;geometry:GeoJSON.Geometry}>;
   onSelectPinnedPlace?:(id:string)=>void;
   selectedBoundaryNode?:GeometryPath|null;
+  selectedMeasuredEdge?:MeasuredEdge|null;
   onSelectBoundaryNode?:(path:GeometryPath)=>void;
 }
 
@@ -302,7 +303,7 @@ export default function MapCanvas({
   selectionBoxMode,onSelectionBox,selectedIds,qualityIssues,projectGrid,externalTiles,
   labelMoveMode,onLabelMove,
   onGeometryPreview, onGeometryCommit, onSelectSavedFeature,onDeselect,preservePlaceSelection=false,
-  pinnedPlaces=[],onSelectPinnedPlace,selectedBoundaryNode=null,onSelectBoundaryNode,
+  pinnedPlaces=[],onSelectPinnedPlace,selectedBoundaryNode=null,onSelectBoundaryNode,selectedMeasuredEdge=null,
 }: Props) {
   const container = useRef<HTMLDivElement>(null);
   const coordinateRef = useRef<HTMLDivElement>(null);
@@ -1370,6 +1371,21 @@ export default function MapCanvas({
   },[terrainMarker,ready]);
 
 
+  // A separate overlay highlights exactly one boundary segment without changing geometry.
+  useEffect(()=>{
+    const map=mapRef.current;if(!ready||!map)return;
+    const name='measurement-selected-edge';
+    const data:GeoJSON.FeatureCollection={type:'FeatureCollection',features:selectedMeasuredEdge?[{type:'Feature',properties:{},geometry:{type:'LineString',coordinates:[selectedMeasuredEdge.a,selectedMeasuredEdge.b]}}]:[]};
+    const source=map.getSource(name) as GeoJSONSource|undefined;
+    if(source)source.setData(data);
+    else{
+      map.addSource(name,{type:'geojson',data});
+      map.addLayer({id:name+'-halo',type:'line',source:name,layout:{'line-cap':'round'},paint:{'line-color':'#fff','line-width':8}});
+      map.addLayer({id:name,type:'line',source:name,layout:{'line-cap':'round'},paint:{'line-color':'#f28c18','line-width':5}});
+    }
+    container.current?.setAttribute('data-selected-measurement-edge',selectedMeasuredEdge?String(selectedMeasuredEdge.index+1):'');
+  },[ready,selectedMeasuredEdge]);
+
   // HTML dimension labels do not depend on a remote glyph server.
   // Reproject on every map movement; never intercept editing gestures.
   useEffect(()=>{
@@ -1384,11 +1400,12 @@ export default function MapCanvas({
     const prefix=exact?'':'~ ';
     const palette=mapPalette(basemap,display.contrast);
     overlay.style.setProperty('--dimension-text',palette.text);overlay.style.setProperty('--dimension-halo',palette.halo);
-    const labels:Array<{a:Position;b?:Position;node:HTMLDivElement}>=[];
-    function label(text:string,a:Position,b?:Position){
+    const labels:Array<{a:Position;b?:Position;node:HTMLDivElement;meters?:number;selected?:boolean}>=[];
+    function label(text:string,a:Position,b?:Position,meters?:number,selected=false){
       const node=document.createElement('div');
       node.className=b?'map-edge-value':'map-dimension-total';
-      node.textContent=text;overlay!.appendChild(node);labels.push({a,b,node});
+      node.textContent=text;if(selected)node.classList.add('map-edge-selected');
+      overlay!.appendChild(node);labels.push({a,b,node,meters,selected});
     }
     // Region labels use a guaranteed interior point produced by GEOS;
     // their values come from the server's ellipsoidal measurement, never
@@ -1414,14 +1431,15 @@ export default function MapCanvas({
         else if(totals.length_m!==null)label(prefix+distanceText(totals.length_m??0,display.distance)+' total',anchor);
         else if(g.type==='Point')label(anchor[0].toFixed(6)+'°, '+anchor[1].toFixed(6)+'°',anchor);
       }
-      let index=0;
-      for(const path of pathsOf(g)){
-        for(let i=1;i<path.length&&index<48;i++,index++){
-          const a=path[i-1],b=path[i];
-          const value=exact?.edge_lengths_m?.[index];
-          label((value===undefined?'~ ':'')+distanceText(value??edgeDistance(a,b).distance_m,display.distance),a,b);
-        }
-        if(index>=48)break;
+      // Rank by length instead of truncating the first 48 vertices. A user-selected
+      // short edge bypasses both the physical threshold and collision suppression.
+      const candidates=previewEdgeLengths(g).edges.map(edge=>({...edge,
+        value:exact?.edge_lengths_m?.[edge.index]??edge.length_m,
+        approximate:exact?.edge_lengths_m?.[edge.index]===undefined,
+        chosen:!draft&&selectedMeasuredEdge?.index===edge.index}));
+      candidates.sort((a,b)=>Number(b.chosen)-Number(a.chosen)||b.value-a.value);
+      for(const edge of candidates.filter(e=>e.chosen||e.value>=MIN_MAP_EDGE_METERS).slice(0,48)){
+        label((edge.chosen?edge.label+' · ':'')+(edge.approximate?'~ ':'')+distanceText(edge.value,display.distance),edge.a,edge.b,edge.value,edge.chosen);
       }
     }
     const layout=()=>{
@@ -1437,14 +1455,14 @@ export default function MapCanvas({
         const rect={left:x-w/2,right:x+w/2,top:y-h/2,bottom:y+h/2};
         const collision=placed.some(p=>rect.left<p.right&&rect.right>p.left&&rect.top<p.bottom&&rect.bottom>p.top);
         const hidden=rect.left<3||rect.top<3||rect.right>width-3||rect.bottom>height-3||
-          !!(b&&(Math.hypot(a.x-b.x,a.y-b.y)<Math.min(w,42)||collision));
+          !!(b&&(!shouldShowEdgeLength(item.meters??0,Math.hypot(a.x-b.x,a.y-b.y),w,item.selected)||(!item.selected&&collision)));
         item.node.style.visibility=hidden?'hidden':'visible';
         if(!hidden){item.node.style.transform='translate('+x+'px,'+y+'px) translate(-50%,-50%)';placed.push(rect);}
       }
     };
     layout();map.on('render',layout);
     return ()=>{map.off('render',layout);overlay.replaceChildren();};
-  },[ready,selected,drawingMode,vertices,cursor,measurement,showMeasurements,display,basemap,networkFaces]);
+  },[ready,selected,drawingMode,vertices,cursor,measurement,showMeasurements,display,basemap,networkFaces,selectedMeasuredEdge]);
 
   return <>
     <div aria-label="Interactive geospatial map" data-label-layer-ready={ready ? "true" : "false"} className="map-canvas" ref={container}/>

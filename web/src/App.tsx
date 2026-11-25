@@ -72,6 +72,11 @@ export default function App() {
   const [geometry, setGeometry] = useState<GeoJSON.Geometry | null>(null);
   const [selectedParcel,setSelectedParcel]=useState<number|'all'>('all');
   const [selectedBoundaryNode,setSelectedBoundaryNode]=useState<GeometryPath|null>(null);
+  const [edgeSelection,setEdgeSelection]=useState<{geometry:GeoJSON.Geometry;index:number}|null>(null);
+  const [edgePage,setEdgePage]=useState(0);
+  const selectedEdgeIndex=edgeSelection?.geometry===geometry?edgeSelection.index:null;
+  const measuredEdges=useMemo(()=>geometry?previewEdgeLengths(geometry):{edges:[],total:0},[geometry]);
+  useEffect(()=>{setEdgeSelection(null);setEdgePage(0);},[geometry]);
   const scratchScope=useRef<string|null>(null);
   const [pins,setPins]=useState(()=>({scope:null as string|null,places:readPinnedPlaces(null)}));
   const [pinStorageError,setPinStorageError]=useState(false);
@@ -1587,6 +1592,7 @@ export default function App() {
             onTerrainPick={position=>{setTerrainOrigin(position);setTerrainPicking(false);setMessage('Terrain point selected.');}}
             onContextMenu={(x,y)=>setContextMenu({x,y})} onDeselect={deselect}
             selectedBoundaryNode={selectedBoundaryNode} onSelectBoundaryNode={setSelectedBoundaryNode}
+            selectedMeasuredEdge={drawingMode?null:measuredEdges.edges[selectedEdgeIndex??-1]??null}
             onEditingError={setError}
             editing={editing} moving={moving} edgeMoving={edgeMoving} snapping={snapping}
             selectedLocked={selectedLocked}
@@ -1888,11 +1894,25 @@ export default function App() {
               })()}
               {geometry && ['Polygon','MultiPolygon','LineString','MultiLineString'].includes(geometry.type) && (
                 <details className="edge-measurements">
-                  <summary><span>Edge lengths</span><small>{previewEdgeLengths(geometry).total} segments</small></summary>
-                  <div>
-                    {previewEdgeLengths(geometry).edges.map((edge, index) =>
-                      <div key={index}><span>{edge.label}</span><strong>{!preview&&measurement?.method!==OFFLINE_METHOD&&measurement?.edge_lengths_m?.[index]!==undefined?'':'~ '}{number(!preview?(measurement?.edge_lengths_m?.[index]??edge.length_m):edge.length_m,2)} m</strong></div>)}
+                  <summary><span>Edge lengths</span><small>{measuredEdges.total} segments</small></summary>
+                  <div className="measurement-edge-list">
+                    {measuredEdges.edges.slice(edgePage*6,(edgePage+1)*6).map(edge=>
+                      <button type="button" key={edge.index} aria-label={edge.label} aria-pressed={selectedEdgeIndex===edge.index}
+                        onClick={()=>{
+                          if(drawingMode||!geometry)return;
+                          setEdgeSelection({geometry,index:edge.index});
+                          const [a,b]=[edge.a,edge.b],pad=.000001;
+                          setFocus({longitude:(a[0]+b[0])/2,latitude:(a[1]+b[1])/2,
+                            bbox:[Math.min(a[0],b[0])-pad,Math.min(a[1],b[1])-pad,Math.max(a[0],b[0])+pad,Math.max(a[1],b[1])+pad],key:Date.now()});
+                        }} disabled={Boolean(drawingMode)}>
+                        <span>{edge.label}</span><strong>{!preview&&measurement?.method!==OFFLINE_METHOD&&measurement?.edge_lengths_m?.[edge.index]!==undefined?'':'~ '}{number(!preview?(measurement?.edge_lengths_m?.[edge.index]??edge.length_m):edge.length_m,2)} m</strong>
+                      </button>)}
                   </div>
+                  {measuredEdges.edges.length>6&&<nav className="measurement-edge-pager" aria-label="Edge pages">
+                    <button type="button" aria-label="Previous edges" disabled={edgePage===0} onClick={()=>setEdgePage(v=>v-1)}>‹</button>
+                    <span>{edgePage+1} / {Math.ceil(measuredEdges.edges.length/6)}</span>
+                    <button type="button" aria-label="Next edges" disabled={(edgePage+1)*6>=measuredEdges.edges.length} onClick={()=>setEdgePage(v=>v+1)}>›</button>
+                  </nav>}
                 </details>
               )}
 

@@ -121,8 +121,8 @@ def measure_geometry(geometry: dict[str, Any]) -> dict[str, Any]:
     if any(v is not None and not math.isfinite(v) for v in (area, perimeter, length)):
         raise GeometryError("Geometry measurement is outside the supported numerical domain.")
 
-    # Bounded edge measurements for on-map dimension labels. The ordering
-    # matches GeoJSON parts/rings, including closing edges and holes.
+    # Measure every segment in the already bounded 20,000-coordinate geometry.
+    # The ordering matches GeoJSON parts, including closing edges and holes.
     if kind in {"Polygon", "MultiPolygon"}:
         boundaries = [ring.coords for polygon in polygons for ring in
                       (polygon.exterior, *polygon.interiors)]
@@ -134,10 +134,8 @@ def measure_geometry(geometry: dict[str, Any]) -> dict[str, Any]:
         boundaries = []
     segments = []
     for boundary in boundaries:
-        for i in range(min(len(boundary)-1, 48-len(segments))):
+        for i in range(len(boundary)-1):
             segments.append((boundary[i], boundary[i+1]))
-        if len(segments) == 48:
-            break
     edges = []
     if segments:
         _, _, distances = _GEOD.inv(

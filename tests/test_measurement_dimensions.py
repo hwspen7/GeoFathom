@@ -10,4 +10,5 @@ def test_map_dimension_labels_use_ellipsoid():
 
 def test_dimension_label_payload_is_bounded():
     result=measure_geometry({"type":"LineString","coordinates":[[i/10000,0] for i in range(100)]})
-    assert len(result["edge_lengths_m"])==48
+    assert len(result["edge_lengths_m"])==99
+    assert sum(result["edge_lengths_m"])==pytest.approx(result["length_m"],abs=.001)

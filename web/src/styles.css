@@ -2332,3 +2332,16 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .desktop-gis .measurement-card .edge-measurements>div>div{padding:5px 3px;border-bottom:1px solid #edf1f4;font-size:11px}
 .desktop-gis .measurement-card .edge-measurements strong{font-variant-numeric:tabular-nums}
 .desktop-gis .data-network-results .data-network-result-row{border:1px solid #dce6ed;border-radius:4px;padding:7px 9px;margin:5px 0;font-variant-numeric:tabular-nums}
+
+
+/* Fixed edge pages replace the scrolling ring list. The selected line is
+   visually linked to the orange map highlight without changing its geometry. */
+.desktop-gis .measurement-card .edge-measurements>.measurement-edge-list{overflow:visible;max-height:none;gap:0}
+.measurement-edge-list>button{display:flex;align-items:center;justify-content:space-between;gap:6px;min-height:26px;padding:4px 5px;border:0;border-bottom:1px solid #edf1f4;background:transparent;color:#4b6a80;text-align:left;font-size:11px;cursor:pointer}
+.measurement-edge-list>button:hover{background:#edf4f8}
+.measurement-edge-list>button[aria-pressed=true]{background:#fff1df;box-shadow:inset 2px 0 #f28c18;color:#a65710}
+.measurement-edge-list>button[aria-pressed=true] strong{color:#a65710}
+.measurement-edge-pager{display:flex;align-items:center;justify-content:space-between;gap:6px;padding-top:5px;font-size:10px;color:#657d8f}
+.measurement-edge-pager button{border:1px solid #dce6ed;border-radius:3px;background:#fff;color:#365b75;min-width:25px;min-height:23px;font-size:15px}
+.measurement-edge-pager button:disabled{opacity:.35}
+.map-edge-value.map-edge-selected{color:#a65710!important;background:#fff8ee;border:1px solid #f28c18;border-radius:3px;padding:2px 4px;text-shadow:none!important;z-index:5}

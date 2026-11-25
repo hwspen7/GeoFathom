@@ -53,6 +53,12 @@ for(const width of [1100,1280,1600])test(`drawing exits and error recovery stay 
  expect(styles).toHaveLength(2);
  expect(styles[0]).toEqual(styles[1]);
  await expect(inspector.locator('.edge-measurements summary')).toContainText('segments');
+ await inspector.locator('.edge-measurements summary').click();
+ const edge=inspector.getByRole('button',{name:'Edge 1',exact:true});
+ await edge.click();
+ await expect(edge).toHaveAttribute('aria-pressed','true');
+ await expect(map).toHaveAttribute('data-selected-measurement-edge','1');
+ await inspector.locator('.edge-measurements summary').click();
  await page.screenshot({path:testInfo.outputPath('survey-objects-'+width+'.png')});
  // The map ends above the dedicated status row; dock footers do not overlap it.
  const chrome=await toolbar.boundingBox();

@@ -246,18 +246,23 @@ export function snapToPaths(
 }
 
 
-export function previewEdgeLengths(geometry: GeoJSON.Geometry, limit = 30): {
-  edges: Array<{ label: string; length_m: number }>; total: number;
+export type MeasuredEdge={index:number;label:string;length_m:number;a:Position;b:Position};
+export const MIN_MAP_EDGE_METERS=50;
+export function shouldShowEdgeLength(meters:number,pixels:number,labelWidth:number,selected=false){
+  return selected||(meters>=MIN_MAP_EDGE_METERS&&pixels>=Math.max(64,labelWidth+12));
+}
+export function previewEdgeLengths(geometry: GeoJSON.Geometry, limit = 20000): {
+  edges: MeasuredEdge[]; total: number;
 } {
   const paths = pathsOf(geometry);
   const total = paths.reduce((sum, path) => sum + Math.max(0,path.length - 1), 0);
-  const edges: Array<{ label: string; length_m: number }> = [];
-  for (const [ringIndex, path] of paths.entries()) {
+  const edges: MeasuredEdge[] = [];
+  for (const path of paths) {
     for (let i = 0; i + 1 < path.length; i++) {
       if (edges.length >= limit) return { edges, total };
       const a=path[i],b=path[i+1];
       edges.push({
-        label: 'Ring '+(ringIndex+1)+' · edge '+(i+1),
+        index:edges.length,label:'Edge '+(edges.length+1),a,b,
         length_m: geodesicDrag(a,b).distance_m,
       });
     }

@@ -104,6 +104,8 @@ test('P0 live edge-length labels enumerate every polygon edge', () => {
   expect(measured.edges[0].length_m).toBeGreaterThan(1000);
   expect(measured.edges[0].length_m).toBeLessThan(1200);
   expect(previewEdgeLengths(box,2).total).toBe(4);
+  expect(measured.edges.map(e=>e.label)).toEqual(['Edge 1','Edge 2','Edge 3','Edge 4']);
+  expect(measured.edges[0].a).toEqual(box.coordinates[0][0]);
 });
 
 
