@@ -39,6 +39,7 @@ test('dated multiband cube produces real trend raster and export',async({page})=
  const download=page.waitForEvent('download');await d.getByRole('button',{name:'GeoTIFF',exact:true}).click();expect((await download).suggestedFilename()).toBe('series_slope.tif');
  await d.getByRole('button',{name:'Show space-time raster on map'}).click();await expect(d).not.toBeVisible();
  await expect(page.getByLabel('Interactive geospatial map')).toHaveAttribute('data-terrain-raster-count','1');
+ await expect(page.getByRole('button',{name:/full results view/})).toHaveCount(0);
  const monitor=page.getByRole('region',{name:'Temporal results'});
  await expect(monitor.getByAltText('Temporal result overview')).toBeVisible();
  const inline=monitor.getByAltText('Observed spatial median and interquartile range');

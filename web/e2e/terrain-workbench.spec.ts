@@ -69,7 +69,7 @@ with tempfile.TemporaryDirectory() as directory:
    .evaluateAll(elements=>elements.map(element=>getComputedStyle(element).overflowY));
  expect(scrollModes).toEqual(['hidden','hidden']);
  await expect(page.getByRole('button',{name:'Open full operations view'})).toBeVisible();
- await expect(page.getByRole('button',{name:'Open full results view'})).toBeVisible();
+ await expect(page.getByRole('button',{name:/full results view/})).toHaveCount(0);
  await expect(page.getByRole('separator',{name:/Resize (operations|results)/})).toHaveCount(0);
  const visual=async()=>{
   // New records intentionally select Overview after the cache commit. Wait

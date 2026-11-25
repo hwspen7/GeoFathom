@@ -175,7 +175,7 @@ export default function App() {
   // Fixed-size workbench docks: map takes all remaining viewport width.
   // No draggable splitters, scrolling side panels, or stored widths.
   // Exceptional long controls open as an expanded workspace, not as a scrolling sidebar.
-  const [expandedDock,setExpandedDock]=useState<'operations'|'results'|'project'|null>(null);
+  const [expandedDock,setExpandedDock]=useState<'operations'|'project'|null>(null);
   useEffect(()=>{
     if(!expandedDock)return;
     const onKey=(event:KeyboardEvent)=>{if(event.key==='Escape')setExpandedDock(null);};
@@ -2256,13 +2256,8 @@ export default function App() {
           </div>
           <div className="workspace-fixed-footer" ref={setOperationsFooterTarget}/>
         </aside>
-        <aside className={'gis-results-monitor'+(expandedDock==='results'?' workspace-dock-expanded':'')} aria-label="Results monitor">
-          <WorkspaceDockHeading actions={<button className="workspace-dock-expand-button"
-            aria-label={expandedDock==='results'?'Close full results view':'Open full results view'}
-            title={expandedDock==='results'?'Return to workspace':'Open larger workspace'}
-            onClick={()=>setExpandedDock(v=>v==='results'?null:'results')}>
-            {expandedDock==='results'?<Minimize2 size={14}/>:<Maximize2 size={14}/>}
-          </button>}><Layers3 size={15}/> Results</WorkspaceDockHeading>
+        <aside className="gis-results-monitor" aria-label="Results monitor">
+          <WorkspaceDockHeading><Layers3 size={15}/> Results</WorkspaceDockHeading>
           <div className="sidebar-scroll" ref={setResultsTarget} tabIndex={0} aria-label="Results scrolling region">
             {!measurement&&activeTool==='tools-survey'&&<div className="workspace-monitor-empty">No selection</div>}
           </div>
