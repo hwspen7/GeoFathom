@@ -9,7 +9,7 @@ test('remote sensing maps two calibrated bands and exports actual NDVI',async({p
  await activateWorkspaceModule(page,'Sensing');
  await page.getByRole('button',{name:'Open Remote Sensing'}).click();
  const dialog=page.getByRole('dialog',{name:'Remote sensing workbench'});
- await expect(dialog).toContainText('157 scientific methods');
+ await expect(dialog.locator('header').first()).toHaveText('Remote SensingClose');
  await expect(dialog.getByRole('combobox',{name:'Remote sensing method',exact:true})).toHaveValue('ndvi');
  await dialog.getByLabel('GeoTIFF source').setInputFiles({name:'two-band.tif',mimeType:'image/tiff',buffer:Buffer.from(scene,'base64')});
  await dialog.getByLabel('nir source',{exact:true}).selectOption('0');

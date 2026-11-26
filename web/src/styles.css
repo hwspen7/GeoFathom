@@ -2644,3 +2644,34 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .studio-output-actions{display:flex;align-items:center;flex-wrap:wrap;gap:5px;justify-content:flex-end;flex:1}
 @media(max-width:1050px){.figure-studio-layout{grid-template-columns:205px minmax(0,1fr) 250px}.studio-canvas-content{padding:14px}}
 @media(max-width:650px){.figure-studio-layout{display:flex;flex-direction:column}.figure-studio-layout>.studio-editor-preview{flex:none;min-height:350px}.studio-canvas-content{min-height:250px}.studio-output-actions{justify-content:flex-start}}
+
+
+/* Temporal is the canonical shell for every scientific workbench. */
+.science-workbench-dialog{box-sizing:border-box;width:min(1480px,97vw);height:min(900px,94dvh);max-width:100%;max-height:100%;font:13px/1.45 system-ui,sans-serif;border-radius:10px;box-shadow:0 20px 70px #102a3a44}
+.science-workbench-dialog>header{padding:10px 18px;background:white;color:#203c50}
+.science-workbench-dialog>header>strong{font-size:14px;font-weight:650}
+.science-workbench-dialog>.science-workbench-columns{display:grid;grid-template-columns:minmax(340px,35%) minmax(0,1fr);min-height:0}
+.science-workbench-columns>.science-workbench-input{box-sizing:border-box;display:flex;flex-direction:column;gap:0;padding:12px 16px!important;background:#f6f8fa;overflow:auto;min-height:0;border-right:1px solid #dce4e8}
+.science-workbench-input fieldset{box-sizing:border-box;flex:none;min-width:0;max-width:100%;border:0;border-top:1px solid #dce5eb;padding:8px 0 2px;margin:0 0 8px}
+.science-workbench-input legend{font-weight:650;color:#294b60;padding:0 7px 0 0;font-size:13px}
+.science-workbench-input label{min-width:0;font-size:11px;margin:0 0 6px;gap:4px}
+.science-workbench-input :is(input:not([type=checkbox]):not([type=file]),select,textarea){box-sizing:border-box;width:100%;max-width:100%;min-width:0;min-height:30px;border:1px solid #cbd8e1;border-radius:4px;padding:5px 7px;color:#233e50;background:#fff;font:inherit}
+.science-workbench-input textarea{min-height:60px}
+.science-workbench-input fieldset>button{width:100%;margin:0 0 6px;min-height:30px}
+.science-workbench-input details{padding:5px 0;border-bottom:1px solid #e1e8ed}
+.science-workbench-input details>summary{color:#365b75;font-size:12px;cursor:pointer}
+.science-workbench-input .temporal-run{flex:none;margin-top:auto;bottom:-12px;background:#f6f8fa}
+.science-workbench-input .temporal-run>button{width:100%}
+.science-workbench-input .temporal-run>p{margin:0;font-size:11px}
+.science-workbench-columns>.science-workbench-output{min-height:0;min-width:0;overflow:auto;background:white;padding:16px 20px}
+.science-workbench-output .temporal-result-header h2{font-size:16px;margin:0 0 8px}
+.science-workbench-output .temporal-tabs>button{flex:1}
+.science-workbench-output .temporal-metrics>div{min-width:0;background:#f7fafc}
+.science-workbench-output .temporal-metrics strong{overflow-wrap:anywhere}
+.science-workbench-output .temporal-raster-body img{max-width:100%;max-height:440px;object-fit:contain}
+.spatial-monitor .science-metrics{grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;margin:5px 0}
+.spatial-monitor .science-metrics strong{font-size:16px;overflow-wrap:anywhere}
+.spatial-monitor .science-review{width:100%;min-height:32px;background:#eaf3f8;color:#245b7d;font-weight:600}
+@media(max-width:850px){.science-workbench-dialog>.science-workbench-columns{grid-template-columns:minmax(0,1fr);overflow:auto}.science-workbench-columns>.science-workbench-input,.science-workbench-columns>.science-workbench-output{overflow:visible}.science-workbench-input .temporal-run{position:static}}
+/* Decorative captions do not enter the surrounding label's accessible text. */
+.english-file-button::before,.english-file-name::before{content:attr(data-caption)}

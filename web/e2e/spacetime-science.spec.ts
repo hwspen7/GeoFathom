@@ -6,7 +6,7 @@ test('dated multiband cube produces real trend raster and export',async({page})=
  await page.goto('/');await activateWorkspaceModule(page,'Temporal');
  await page.getByRole('button',{name:'Open Spatiotemporal Analysis'}).click();
  const d=page.getByRole('dialog',{name:'Spatiotemporal science workbench'});
- await expect(d).toContainText('88 scientific methods');
+ await expect(d.locator('header').first()).toHaveText('Spatiotemporal AnalysisClose');
  await d.getByLabel('Additional cube or QA sources').setInputFiles({name:'cube.tif',mimeType:'image/tiff',buffer:Buffer.from(cube,'base64')});
  await d.getByText('Multiband cube binding',{exact:true}).click();
  await expect(d.getByRole('button',{name:'Bind bands as dated observations'})).toBeEnabled();
