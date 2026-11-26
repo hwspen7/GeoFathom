@@ -105,18 +105,31 @@ if($Mode -eq 'Start'){
         if($null -eq $previousRasterImport){Remove-Item Env:\GEOFATHOM_LOCAL_RASTER_IMPORT -ErrorAction SilentlyContinue}
         else{$env:GEOFATHOM_LOCAL_RASTER_IMPORT=$previousRasterImport}
     }
-    Launch-Window 'GeoFathom Web (5173)' $web $npm @(
-        'run','dev','--','--host','127.0.0.1','--port','5173','--strictPort'
-    )
+    # Wait for the API before exposing the frontend to existing browser tabs.
+    Write-Host 'Waiting for GeoFathom API readiness...' -ForegroundColor Cyan
     $ready=$false
     for($i=0;$i -lt 80;$i++){
-        if((Http-Ready 'http://127.0.0.1:8000/health/ready') -and (Http-Ready 'http://127.0.0.1:5173/')){
+        if(Http-Ready 'http://127.0.0.1:8000/health/ready'){
             $ready=$true;break
         }
         Start-Sleep -Milliseconds 750
     }
     if(-not $ready){
-        throw 'API or frontend not ready. Inspect both new server windows; no stored projects were deleted.'
+        throw 'API not ready on port 8000. Inspect the GeoFathom API console for the startup error. The frontend was not started; no stored projects were deleted.'
+    }
+    Launch-Window 'GeoFathom Web (5173)' $web $npm @(
+        'run','dev','--','--host','127.0.0.1','--port','5173','--strictPort'
+    )
+    # Verify the actual Vite proxy path, not just the frontend HTML response.
+    $ready=$false
+    for($i=0;$i -lt 80;$i++){
+        if(Http-Ready 'http://127.0.0.1:5173/api/health/ready'){
+            $ready=$true;break
+        }
+        Start-Sleep -Milliseconds 750
+    }
+    if(-not $ready){
+        throw 'Frontend API proxy not ready. Inspect both server windows; no stored projects were deleted.'
     }
     Write-Host 'Workspace ready: http://127.0.0.1:5173' -ForegroundColor Green
     Write-Host 'Close the API and Web console windows to stop GeoFathom.'
