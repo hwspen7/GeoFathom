@@ -2511,3 +2511,23 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .desktop-gis .map-legend-select:hover:not(:disabled){text-decoration:underline;color:#17648b}
 .desktop-gis .map-legend-select:focus-visible{outline:1px solid #397d9e}
 .desktop-gis .map-legend-raster-title{font-weight:650}
+
+
+/* Spatial shares the Temporal shell, input controls and result tabs. */
+.spatial-workbench-columns{grid-template-columns:minmax(340px,35%) minmax(0,1fr)}
+.spatial-workbench-input{display:flex;flex-direction:column;gap:0;min-height:0}
+.spatial-workbench-input fieldset{flex:none;margin:4px 0 6px;padding:9px 0}
+.spatial-workbench-input label{margin-bottom:7px}
+.spatial-workbench-input fieldset>button{width:100%;min-height:30px;margin:0 0 7px}
+.spatial-workbench-input textarea{box-sizing:border-box;min-height:70px;border:1px solid #cbd8e1;border-radius:4px;padding:6px 7px;font:inherit;color:#233e50;background:white}
+.spatial-workbench-input .spatial-science-source{display:grid;gap:5px;padding:8px;margin:5px 0;background:white;border:1px solid #dce5eb;border-radius:4px;overflow-wrap:anywhere}
+.spatial-workbench-input .spatial-run{margin-top:auto;flex:none}
+.spatial-run p{margin:0;font-size:11px;color:#ab3434}
+.spatial-workbench-output{min-width:0;min-height:0}
+.spatial-workbench-output .temporal-tabs>button{flex:1}
+.spatial-workbench-output .temporal-raster-body img{max-width:100%;max-height:420px;object-fit:contain}
+.spatial-summary .temporal-metrics{grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;margin:5px 0}
+.spatial-summary .temporal-metrics strong{font-size:16px;overflow-wrap:anywhere}
+.spatial-summary .spatial-review{width:100%;background:#eaf3f8;min-height:32px;font-weight:600;color:#245b7d}
+.spatial-visually-hidden{position:absolute;width:1px;height:1px;clip-path:inset(50%);overflow:hidden;white-space:nowrap}
+@media(max-width:850px){.spatial-workbench-columns{grid-template-columns:minmax(0,1fr)}}
