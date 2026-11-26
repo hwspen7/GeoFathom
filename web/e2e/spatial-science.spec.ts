@@ -13,11 +13,14 @@ test('spatial science workbench computes actual sample points, exports and previ
  await expect(dialog.getByRole('button',{name:'Close',exact:true})).toBeVisible();
  await dialog.getByLabel('Spatial algorithm group').selectOption('Sampling');
  await dialog.getByLabel('Spatial algorithm',{exact:true}).selectOption('sample_polygon');
- const polygon={type:'Polygon',coordinates:[[[-81,40.6],[-80.999,40.6],[-80.999,40.601],[-81,40.601],[-81,40.6]]]};
+ const polygon={type:'Polygon',coordinates:[[[120.07,36.35],[120.08,36.35],[120.08,36.36],[120.07,36.36],[120.07,36.35]]]};
  await dialog.getByLabel('WGS84 vector layer').setInputFiles({name:'study.geojson',mimeType:'application/geo+json',buffer:Buffer.from(JSON.stringify(polygon))});
+ await expect(dialog.getByLabel('Projected EPSG (metres)')).toHaveValue('32651');
  await dialog.getByLabel('Sample count').fill('5');
  await dialog.getByRole('button',{name:'Run analysis',exact:true}).click();
  await expect(dialog.locator('.temporal-metrics')).toContainText('5');
+ await expect(dialog.locator('.temporal-metrics')).toContainText('Study area');
+ await expect(dialog.locator('.temporal-metrics').getByText('Records',{exact:true})).toHaveCount(0);
  await dialog.getByRole('button',{name:'Figures',exact:true}).click();
  const after=await dialog.boundingBox();
  expect(after!.width).toBeCloseTo(initial!.width,0);

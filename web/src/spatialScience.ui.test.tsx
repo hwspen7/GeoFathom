@@ -19,7 +19,7 @@ it('uses exact catalog parameters and returns only actual result geometry',async
  fireEvent.change(screen.getByLabelText('Distance (m)'),{target:{value:'25'}});
  fireEvent.click(run);
  await screen.findByText(/1 features/);
- expect(mocked.run).toHaveBeenCalledWith(expect.objectContaining({operation:'buffer',parameters:{distance_m:25},vectors:[{type:'FeatureCollection',features:[feature]}]}),expect.any(AbortSignal));
+ expect(mocked.run).toHaveBeenCalledWith(expect.objectContaining({operation:'buffer',epsg:32617,parameters:{distance_m:25},vectors:[{type:'FeatureCollection',features:[feature]}]}),expect.any(AbortSignal));
  fireEvent.click(screen.getByRole('button',{name:'Show vectors on map'}));expect(onPreview).toHaveBeenCalledWith([feature]);
  await waitFor(()=>expect(screen.queryByRole('dialog',{name:'Spatial science workbench'})).toBeNull());
 });
@@ -37,4 +37,25 @@ it('distinguishes structural fits from held-out predictions',async()=>{
  fireEvent.change(screen.getByLabelText('Spatial algorithm'),{target:{value:'geographically_weighted_regression'}});
  expect(screen.getByRole('option',{name:'Leave-one-out prediction'})).toBeTruthy();
  expect(screen.queryByRole('option',{name:'Out-of-fold prediction'})).toBeNull();
+});
+
+
+it('recommends Qingdao UTM and preserves an explicit CRS override',async()=>{
+ const geometry:GeoJSON.Polygon={type:'Polygon',coordinates:[[[120.07,36.35],[120.08,36.35],[120.08,36.36],[120.07,36.35]]]};
+ mocked.catalog.mockResolvedValue({operations:[{id:'sample_polygon',group:'Vector',title:'Uniform polygon point sample',source:'vector',minimum:1,maximum:1,parameters:[]}]});
+ mocked.run.mockResolvedValue({operation:'sample_polygon',receipt:{metrics:{study_area_m2:11530000}},features:{type:'FeatureCollection',features:[{type:'Feature',geometry:{type:'Point',coordinates:[120.075,36.355]},properties:{}}]},rows:[],columns:[],csv:''});
+ render(<SpatialSciencePanel geometry={geometry} connected onPreview={vi.fn()}/>);
+ fireEvent.click(screen.getByRole('button',{name:'Open Spatial Analysis'}));
+ await screen.findByRole('option',{name:'Uniform polygon point sample'});
+ const epsg=screen.getByLabelText('Projected EPSG (metres)') as HTMLInputElement;
+ expect(epsg.value).toBe('32651');
+ fireEvent.click(screen.getByRole('button',{name:'Use current map geometry'}));
+ fireEvent.change(epsg,{target:{value:'32650'}});
+ expect(epsg.value).toBe('32650');
+ fireEvent.click(screen.getByRole('button',{name:'Automatic projected EPSG'}));
+ expect(epsg.value).toBe('32651');
+ fireEvent.click(screen.getByRole('button',{name:'Run analysis'}));
+ await screen.findByText('11.53 km²');
+ expect(screen.queryByText('Records',{exact:true})).toBeNull();
+ expect(mocked.run).toHaveBeenCalledWith(expect.objectContaining({epsg:32651}),expect.any(AbortSignal));
 });
