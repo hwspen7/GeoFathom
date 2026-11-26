@@ -1185,7 +1185,7 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .desktop-gis .workspace-module-bar button{flex:none;padding:7px 9px;min-height:34px;font-size:11px;font-weight:590}
 .desktop-gis .workspace-module-compact{display:none}
 .desktop-gis .gis-active-project{order:2;flex:0 1 136px;min-width:104px;max-width:145px}
-.desktop-gis .gis-header .gis-workspace-menu{order:3}
+.desktop-gis .gis-header .gis-workspace-menu{order:1;margin-right:-6px}
 .desktop-gis .gis-header .gis-file-menu{order:4}
 .desktop-gis .gis-settings{order:5}
 .desktop-gis .gis-command-trigger{order:6;flex:none;border-radius:6px;min-height:29px}
@@ -1278,8 +1278,6 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 @media(max-width:850px){
   .desktop-gis .gis-active-project{min-width:80px;flex-basis:90px}
   .desktop-gis .gis-command-trigger kbd{display:none}
-  .desktop-gis .gis-workspace-menu>summary{font-size:0}
-  .desktop-gis .gis-workspace-menu>summary::before{content:"Work";font-size:11px}
   .desktop-gis .gis-connection{font-size:0}
 }
 
@@ -2783,4 +2781,28 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 }
 .desktop-gis .export-specialized-actions .terrain-file-actions>button:hover:not(:disabled){
   background:#eaf3f8;border-color:#8db4cc;color:#245b7d;
+}
+
+
+/* Workspace is the first tool in the header, directly beside Survey.
+   Keep the menu outside the clipped module strip so the popover stays visible. */
+.desktop-gis .gis-header .gis-workspace-menu>summary{
+  position:relative;box-sizing:border-box;min-height:34px;height:34px;
+  padding:7px 7px;border:0;border-radius:0;background:transparent;
+  color:#526779;line-height:normal;white-space:nowrap;
+  font-family:inherit;font-weight:600;font-size:11px;
+}
+.desktop-gis .gis-header .gis-workspace-menu>summary:hover{background:#dce8ef}
+.desktop-gis .gis-header .gis-workspace-menu[open]>summary{color:#145779;background:#f0f6fa}
+.desktop-gis .gis-header .gis-workspace-menu[open]>summary::after{
+  content:"";position:absolute;bottom:0;left:7px;right:7px;height:2px;background:#277aa6;
+}
+.desktop-gis .gis-header .gis-workspace-menu>summary:focus-visible{outline:2px solid #397d9e;outline-offset:-2px}
+.desktop-gis .gis-header .gis-workspace-menu>.gis-header-popover{left:0;right:auto}
+@media(max-width:1500px){
+  .desktop-gis .gis-header .gis-workspace-menu{margin-right:-3px}
+  .desktop-gis .gis-header .gis-workspace-menu>summary{padding:7px 6px;font-size:10px}
+}
+@media(max-width:1280px){
+  .desktop-gis .gis-header .gis-workspace-menu{margin-right:0}
 }

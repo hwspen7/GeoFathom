@@ -1287,6 +1287,14 @@ export default function App() {
     <div className="workspace desktop-gis">
       <header className="gis-header">
         <div className="gis-brand"><Globe2 size={19}/> <strong>GeoFathom</strong></div>
+        <details className="gis-header-menu gis-workspace-menu" name="gis-header-menu">
+          <summary aria-label="Workspace menu" title="Projects, layers, search and shortcuts">Workspace</summary>
+          <div className="gis-header-popover">
+            <button type="button" aria-expanded={showLayers} onClick={()=>{setDrawerTab('project');setShowLayers(v=>!v);}}>Project / Layers</button>
+            <button type="button" onClick={()=>{setDrawerTab('search');setShowLayers(true);}}>Find a place</button>
+            <button type="button" onClick={()=>setShortcutHelp(true)}>Shortcuts</button>
+          </div>
+        </details>
         <WorkspaceModuleBar active={activeTool} open={true}
           onActivate={id=>revealPanel(id)}/>
 
@@ -1335,14 +1343,6 @@ export default function App() {
           <Command size={14}/> <span>Commands</span><kbd>Ctrl K</kbd>
         </button>
         <div className="gis-active-project" ref={setProjectToolbarTarget} aria-label="Active workspace"/>
-        <details className="gis-header-menu gis-workspace-menu" name="gis-header-menu">
-          <summary aria-label="Workspace menu">Workspace</summary>
-          <div className="gis-header-popover">
-            <button type="button" aria-expanded={showLayers} onClick={()=>{setDrawerTab('project');setShowLayers(v=>!v);}}>Project / Layers</button>
-            <button type="button" onClick={()=>{setDrawerTab('search');setShowLayers(true);}}>Find a place</button>
-            <button type="button" onClick={()=>setShortcutHelp(true)}>Shortcuts</button>
-          </div>
-        </details>
         <details className="gis-header-menu gis-file-menu" name="gis-header-menu">
           <summary aria-label="File actions">File</summary>
           <div className="gis-header-popover" aria-label="Unified save and export actions">
