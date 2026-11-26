@@ -2550,3 +2550,48 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 /* All visible geometry inspectors share the flat, expanded Boundary layout. */
 .desktop-gis .gis-operations .workspace-module-content>.geometry-edit-controls{flex:none;border:0;padding:4px 0;margin:0}
 .desktop-gis .gis-operations .geometry-edit-controls>.compact-boundary{border:0;padding:0;margin:0;gap:4px}
+
+
+/* Scientific Figure Studio: one stable shell, fixed library filters and separate
+   data/style controls. Numerical provenance remains available on demand. */
+.figure-studio{width:min(1480px,97vw);height:min(900px,94dvh);max-width:100%;max-height:100%;font:12px/1.4 'Segoe UI',system-ui,sans-serif}
+.figure-studio>.studio-header{flex:none;padding:10px 16px;min-height:34px;gap:12px}
+.figure-studio>.studio-header>strong{font-size:14px;font-weight:650;white-space:nowrap;color:#203c50}
+.studio-header-actions{display:flex;align-items:center;justify-content:flex-end;gap:6px;min-width:0}
+.studio-header-actions button{white-space:nowrap;min-height:31px}
+.studio-open-reproduction{position:relative;display:flex;align-items:center;min-height:31px;box-sizing:border-box;padding:5px 10px;border:1px solid #c8d4dc;border-radius:5px;background:#fff;cursor:pointer;white-space:nowrap}
+.studio-open-reproduction .english-file-input{position:absolute;inset:0;width:100%;height:100%;opacity:0}
+.studio-open-reproduction:focus-within{outline:2px solid #337fa7}
+.figure-studio-layout{grid-template-columns:minmax(190px,230px) minmax(260px,310px) minmax(0,1fr)}
+.figure-studio-layout>.studio-recipes,.figure-studio-layout>.studio-editor-config{display:flex;flex-direction:column;min-height:0;padding:0;overflow:hidden;background:#f5f8fa}
+.studio-library-filters{flex:none;padding:12px 12px 5px;border-bottom:1px solid #dce5eb}
+.studio-library-filters h3,.studio-config-body h3{font-size:12px;font-weight:650;color:#294b60;margin:0 0 9px}
+.studio-library-filters label{display:grid;gap:4px;font-size:11px;margin:0 0 7px}
+.studio-library-filters :is(select,input),.studio-config-body :is(select,input:not([type=checkbox]):not([type=file]),textarea){width:100%;min-width:0;box-sizing:border-box;min-height:30px;font:inherit}
+.studio-recipe-list{flex:1 1 0;min-height:0;overflow:auto;overscroll-behavior:contain;margin:0;padding:5px 8px;gap:2px}
+.figure-studio .studio-recipe-list button{flex:none;border:1px solid transparent;border-radius:4px;background:transparent;padding:7px 8px}
+.figure-studio .studio-recipe-list button[aria-pressed=true]{background:#e4eff6;border-color:#b4cede;box-shadow:inset 2px 0 #397d9e}
+.figure-studio .studio-recipe-list button:hover:not(:disabled){background:#e9f3f9}
+.studio-recipe-list small{font-size:10px;margin-top:2px}
+.studio-library-empty{padding:8px;color:#657d8f}
+.studio-config-tabs{flex:none;display:flex;gap:0;border-bottom:1px solid #dce5eb;background:#fff;padding:0 10px}
+.figure-studio .studio-config-tabs>button{flex:1;min-width:0;border:0;border-radius:0;border-bottom:2px solid transparent;padding:9px 6px}
+.figure-studio .studio-config-tabs>button[aria-pressed=true]{color:#175f8a;background:#e9f3f9;border-bottom-color:#237aaa}
+.studio-config-body{flex:1 1 0;min-height:0;overflow:auto;padding:12px;overscroll-behavior:contain}
+.studio-config-body fieldset[hidden]{display:none}
+.studio-config-body label{margin-bottom:7px}
+.studio-config-body input[type=checkbox]{width:14px;height:14px;flex:0 0 14px;margin:0;padding:0;accent-color:#276d91}
+.studio-data-file{display:block;font-size:11px;overflow-wrap:anywhere;color:#526f85;margin-bottom:7px}
+.studio-data-diagnostics{margin-bottom:6px}
+.figure-studio .studio-preview{min-height:0;background:#eef3f6;padding:16px;gap:8px}
+.figure-studio .studio-preview img{max-height:min(72dvh,100%);object-fit:contain}
+.studio-empty{font-size:12px;color:#8497a5}
+.figure-studio .studio-receipt{border:1px solid #dce4e8;padding:8px}
+.figure-studio .studio-editor-footer{flex:none;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 12px}
+.studio-render-actions,.studio-export-actions{display:flex;flex-wrap:wrap;gap:5px;align-items:center}
+.studio-render-actions{flex:none}.studio-export-actions{flex:1;justify-content:flex-end}
+.figure-studio .studio-render-actions>button:nth-child(2){background:#176ca5;border-color:#176ca5;color:white;font-weight:600}
+.figure-studio .studio-render-actions>button:nth-child(2):disabled{opacity:.45}
+.figure-studio .studio-editor-footer button{font-size:11px;min-height:30px;padding:5px 8px}
+@media(max-width:1050px){.figure-studio-layout{grid-template-columns:minmax(165px,20%) minmax(225px,29%) minmax(0,1fr)}}
+@media(max-width:650px){.figure-studio>.studio-header{flex-wrap:wrap}.studio-header-actions{flex-wrap:wrap;justify-content:flex-start}.figure-studio-layout{display:flex;flex-direction:column;overflow:auto}.figure-studio-layout>.studio-recipes,.figure-studio-layout>.studio-editor-config{flex:none;max-height:330px}.studio-config-body,.studio-recipe-list{min-height:100px}.figure-studio .studio-editor-footer{justify-content:flex-start}.studio-export-actions{justify-content:flex-start}}

@@ -41,9 +41,9 @@ it('collects two actual render receipts and composes them without image stitchin
  fireEvent.change(screen.getByLabelText('Figure field x'),{target:{value:'cost'}});
  fireEvent.change(screen.getByLabelText('Figure field y'),{target:{value:'benefit'}});
  fireEvent.click(screen.getByRole('button',{name:'Render figure'}));await screen.findByAltText('Pareto dominance preview');
- fireEvent.click(screen.getByRole('button',{name:'Add to composition (0/12)'}));
- fireEvent.click(screen.getByRole('button',{name:'Add to composition (1/12)'}));
- fireEvent.click(screen.getByRole('button',{name:'Figure composer (2)'}));
+ fireEvent.click(screen.getByRole('button',{name:'Add to composition'}));
+ fireEvent.click(screen.getByRole('button',{name:'Add to composition'}));
+ fireEvent.click(screen.getByRole('button',{name:'Figure composer'}));
  fireEvent.change(screen.getByLabelText('Composition title'),{target:{value:'Study'}});
  fireEvent.click(screen.getByRole('button',{name:'Render composition'}));await screen.findByAltText('Publication composition preview');
  expect(mocked.composeStudio).toHaveBeenCalledWith(expect.objectContaining({title:'Study',panels:[expect.objectContaining({recipe:'pareto',x:'cost'}),expect.objectContaining({recipe:'pareto',y:'benefit'})]}),expect.any(AbortSignal));
@@ -58,4 +58,20 @@ it('separates basic and professional recipes with a compatible initial selection
  fireEvent.change(screen.getByLabelText('Figure library tier'),{target:{value:'professional'}});
  expect(screen.getByRole('button',{name:/Binary ROC/}).getAttribute('aria-pressed')).toBe('true');
  expect(screen.queryByRole('button',{name:/Simple numeric line/})).toBeNull();
+});
+
+
+it('keeps data and style settings separate without showing library counts',async()=>{
+ mocked.getStudioCatalog.mockResolvedValue({recipes:[{id:'pareto',title:'Pareto dominance',family:'Scenarios',source:'table',fields:['x','y'],note:'Observed designs',minimum_rasters:1,option:null}]});
+ render(<ScientificFigureStudio source={{name:'Experiment',csv:'cost,benefit\n1,2\n2,3'}} onClose={()=>{}}/>);
+ await screen.findByRole('button',{name:/Pareto dominance/});
+ expect(screen.queryByText(/\d+\s*\/\s*\d+ recipes/)).toBeNull();
+ expect(screen.queryByText(/Basic: 24 native/)).toBeNull();
+ expect(screen.getByRole('button',{name:'Data',exact:true}).getAttribute('aria-pressed')).toBe('true');
+ fireEvent.change(screen.getByLabelText('Figure field x'),{target:{value:'cost'}});
+ fireEvent.click(screen.getByRole('button',{name:'Style',exact:true}));
+ expect(screen.getByRole('group',{name:'Figure style settings'})).toBeTruthy();
+ fireEvent.change(screen.getByLabelText('Studio figure title'),{target:{value:'Study'}});
+ fireEvent.click(screen.getByRole('button',{name:'Data',exact:true}));
+ expect((screen.getByLabelText('Figure field x') as HTMLSelectElement).value).toBe('cost');
 });
