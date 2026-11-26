@@ -75,13 +75,18 @@ with tempfile.TemporaryDirectory() as directory:
  await dialog.getByRole('button',{name:'Extended figure studio'}).click();
  const studio=page.getByRole('dialog',{name:'Scientific figure studio'});
  await expect(studio).toBeVisible();
+ await studio.getByLabel('Search figures').fill('Continuous georeferenced map');
  await studio.getByRole('button',{name:/Continuous georeferenced map/}).click();
+ await studio.getByLabel('Search figures').fill('');
  await studio.getByRole('button',{name:'Render figure'}).click();
  await expect(studio.getByAltText('Continuous georeferenced map preview')).toBeVisible({timeout:30000});
  await expect(studio.getByRole('button',{name:'Figure composer'})).toBeVisible();
  await studio.getByRole('button',{name:'Add to composition',exact:true}).click();
  await studio.getByLabel('Figure category').selectOption('Scenarios');
+ await studio.getByLabel('Search figures').fill('Pareto dominance and trade-offs');
  await studio.getByRole('button',{name:/Pareto dominance and trade-offs/}).click();
+ const csvEditor=studio.getByRole('button',{name:'Edit CSV',exact:true});
+ if(await csvEditor.isVisible())await csvEditor.click();
  await studio.getByLabel('Figure CSV data').fill('cost,benefit\n1,1\n2,3\n3,2\n4,5');
  await studio.getByLabel('Figure field x').selectOption('cost');
  await studio.getByLabel('Figure field y').selectOption('benefit');

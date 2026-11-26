@@ -67,11 +67,32 @@ it('keeps data and style settings separate without showing library counts',async
  await screen.findByRole('button',{name:/Pareto dominance/});
  expect(screen.queryByText(/\d+\s*\/\s*\d+ recipes/)).toBeNull();
  expect(screen.queryByText(/Basic: 24 native/)).toBeNull();
- expect(screen.getByRole('button',{name:'Data',exact:true}).getAttribute('aria-pressed')).toBe('true');
+ expect(screen.getByRole('button',{name:/^Data$/}).getAttribute('aria-pressed')).toBe('true');
  fireEvent.change(screen.getByLabelText('Figure field x'),{target:{value:'cost'}});
- fireEvent.click(screen.getByRole('button',{name:'Style',exact:true}));
+ fireEvent.click(screen.getByRole('button',{name:/^Style$/}));
  expect(screen.getByRole('group',{name:'Figure style settings'})).toBeTruthy();
  fireEvent.change(screen.getByLabelText('Studio figure title'),{target:{value:'Study'}});
- fireEvent.click(screen.getByRole('button',{name:'Data',exact:true}));
+ fireEvent.click(screen.getByRole('button',{name:/^Data$/}));
  expect((screen.getByLabelText('Figure field x') as HTMLSelectElement).value).toBe('cost');
+});
+
+
+it('pages the figure library and keeps the selected item in its original position',async()=>{
+ const recipes=Array.from({length:19},(_,i)=>({id:'figure_'+i,title:'Figure '+i,family:'Statistics',source:'table',fields:['x','y'],minimum_rasters:1,option:null}));
+ mocked.getStudioCatalog.mockResolvedValue({recipes});
+ render(<ScientificFigureStudio source={{name:'Study',csv:'x,y\n1,2'}} onClose={()=>{}}/>);
+ await screen.findByRole('button',{name:/^Figure 0 Statistics$/});
+ expect(screen.getAllByRole('button',{name:/^Figure \d+ Statistics$/})).toHaveLength(8);
+ fireEvent.click(screen.getByRole('button',{name:'Next figure page'}));
+ const item=screen.getByRole('button',{name:/^Figure 9 Statistics$/});
+ fireEvent.click(item);
+ expect(item.getAttribute('aria-pressed')).toBe('true');
+ expect(screen.getByText('Page 2 of 3')).toBeTruthy();
+ fireEvent.click(screen.getByRole('button',{name:'Next figure page'}));
+ expect(screen.getAllByRole('button',{name:/^Figure \d+ Statistics$/})).toHaveLength(3);
+ fireEvent.change(screen.getByLabelText('Search figures'),{target:{value:'Figure 18'}});
+ expect(screen.getAllByRole('button',{name:/^Figure \d+ Statistics$/})).toHaveLength(1);
+ expect(screen.queryByRole('button',{name:'Next figure page'})).toBeNull();
+ fireEvent.click(screen.getByRole('button',{name:'Edit CSV'}));
+ expect(screen.getByLabelText('Figure CSV data')).toBeTruthy();
 });
