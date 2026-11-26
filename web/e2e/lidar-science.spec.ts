@@ -11,7 +11,18 @@ test('LiDAR workbench imports real XYZ bytes, measures voxel counts and exports 
  await panel.getByLabel('Point cloud (LAS or XYZ CSV)').setInputFiles({name:'cloud.csv',mimeType:'text/csv',buffer:Buffer.from('x,y,z\n0.1,0.1,0.1\n0.3,0.3,0.3\n1.2,0.1,0.1\n')});
  await panel.getByLabel('Projected EPSG (metres)').fill('32617');
  await panel.getByLabel('Vertical datum / height reference').fill('local');
- await panel.getByRole('checkbox').check();
+ // The checkbox and its caption must occupy the same row, not separate blocks.
+ const confirmation=panel.locator('.lidar-confirm');
+ await expect(confirmation).toHaveCSS('flex-direction','row');
+ const checkbox=confirmation.getByRole('checkbox');
+ const caption=confirmation.locator('span');
+ const controlBox=(await checkbox.boundingBox())!;
+ const captionBox=(await caption.boundingBox())!;
+ expect(controlBox.width).toBeCloseTo(14,0);
+ expect(captionBox.x).toBeGreaterThan(controlBox.x+controlBox.width);
+ expect(Math.abs(captionBox.y-controlBox.y)).toBeLessThan(5);
+ await caption.click();
+ await expect(checkbox).toBeChecked();
  const pending=page.waitForResponse(r=>r.url().includes('/analysis/lidar/run?')&&r.request().method()==='POST');
  await panel.getByRole('button',{name:'Run 3D analysis'}).click();
  const res=await pending;expect(res.ok()).toBeTruthy();

@@ -2489,10 +2489,13 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .lidar-columns{min-height:0;grid-template-columns:minmax(250px,320px) minmax(0,1fr)}
 .lidar-input,.lidar-output{min-height:0;min-width:0;overflow:auto}
 .lidar-input{display:flex;flex-direction:column;gap:9px;padding:14px}
-.lidar-input>label:not(.lidar-confirm){display:grid;gap:4px;font-size:12px}
+.lidar-input>label:not(.lidar-confirm){display:grid;gap:4px;margin:0;font-size:12px}
 .lidar-input>label>input:not([type=checkbox]),.lidar-input>label>select{width:100%;min-width:0;box-sizing:border-box}
-.lidar-input .lidar-confirm{display:flex;align-items:flex-start;gap:7px;font-size:11px}
-.lidar-confirm input{width:14px;height:14px;flex:none;margin:1px 0}
+/* Checkbox labels must not inherit the vertical layout or text-input dimensions. */
+.spatial-science-input label:has(>input[type=checkbox]){display:flex;flex-direction:row;align-items:flex-start;justify-content:flex-start;gap:7px}
+.spatial-science-input input[type=checkbox]{box-sizing:border-box;flex:0 0 14px;width:14px;min-width:14px;max-width:14px;height:14px;min-height:14px;max-height:14px;padding:0;margin:1px 0 0;accent-color:#276d91}
+.lidar-input .lidar-confirm{display:flex;flex-direction:row;align-items:flex-start;gap:7px;margin:3px 0;font-size:11px;line-height:16px}
+.lidar-confirm>span{flex:1;min-width:0;overflow-wrap:anywhere}
 .lidar-output{padding:14px}
 .lidar-output>.panel-section{border:0;padding:0;margin:0}
 .lidar-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:7px;margin:0 0 9px}
