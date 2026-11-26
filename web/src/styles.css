@@ -13,6 +13,21 @@ body { margin: 0; min-width: 360px; }
 button, input, textarea { font: inherit; }
 button { cursor: pointer; }
 button:disabled { opacity: .45; cursor: not-allowed; }
+
+/* Application button fallback: low specificity preserves specialized controls
+   while every otherwise unstyled action avoids the browser's native chrome.
+   MapLibre's own controls keep their vendor-provided appearance. */
+:where(button:not(.maplibregl-ctrl button),input[type=button],input[type=submit],input[type=reset]){
+  appearance:none;box-sizing:border-box;border:1px solid #cbdce7;border-radius:4px;
+  background:#fff;color:#365b75;padding:5px 8px;cursor:pointer;
+}
+:where(button:not(.maplibregl-ctrl button):hover:not(:disabled),input:is([type=button],[type=submit],[type=reset]):hover:not(:disabled)){
+  background:#eaf3f8;border-color:#8db4cc;
+}
+:where(button:not(.maplibregl-ctrl button):focus-visible,input:is([type=button],[type=submit],[type=reset]):focus-visible){
+  outline:2px solid #397d9e;outline-offset:2px;
+}
+
 .workspace { display: flex; height: 100dvh; min-height: 600px; overflow: hidden; }
 .sidebar { display: flex; flex-direction: column; width: 382px; min-width: 340px; z-index: 2; background: #fff; border-right: 1px solid #e8ebf0; box-shadow: 6px 0 30px rgba(18,37,68,.025); }
 .brand { height: 80px; padding: 19px 27px; display: flex; align-items: center; gap: 13px; border-bottom: 1px solid #f0f1f3; }
@@ -2743,3 +2758,29 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .desktop-gis .mapping-workbench .professional-form{gap:6px}
 .desktop-gis .mapping-workbench .professional-form>button{min-height:30px}
 .desktop-gis .mapping-classification{font-size:11px;color:#365b75;overflow-wrap:anywhere;margin:0}
+
+
+/* Shared dock actions: keep secondary commands visually consistent with GIS
+   and Analysis, including actions rendered through the Terrain export portal. */
+.desktop-gis :is(.data-workbench,.export-workbench) button:where(:not(.data-primary,.data-page-buttons button,.data-choice-buttons button,.gis-record-pager button,[aria-pressed])){
+  min-height:30px;max-width:100%;border:1px solid #cbdce7;border-radius:4px;
+  background:#fff;color:#365b75;padding:5px 8px;font:600 11px/1.4 'Segoe UI',system-ui,sans-serif;
+}
+.desktop-gis :is(.data-workbench,.export-workbench) button:where(:not(.data-primary,.data-page-buttons button,.data-choice-buttons button,.gis-record-pager button,[aria-pressed])):hover:not(:disabled){
+  background:#eaf3f8;border-color:#8db4cc;color:#245b7d;
+}
+.desktop-gis :is(.data-workbench,.export-workbench) .data-primary{border-radius:4px}
+.desktop-gis :is(.data-workbench,.export-workbench) .data-primary:hover:not(:disabled){background:#205f85;border-color:#205f85}
+.desktop-gis .export-specialized-actions:has(.terrain-file-actions:empty){display:none}
+.desktop-gis .export-specialized-actions .terrain-file-actions{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(min(130px,100%),1fr));
+  gap:6px;width:100%;min-width:0;margin:6px 0 0;
+}
+.desktop-gis .export-specialized-actions .terrain-file-actions>button{
+  min-width:0;min-height:30px;white-space:normal;overflow-wrap:anywhere;
+  border:1px solid #cbdce7;border-radius:4px;background:#fff;color:#365b75;
+  padding:5px 6px;font:600 11px/1.4 'Segoe UI',system-ui,sans-serif;
+}
+.desktop-gis .export-specialized-actions .terrain-file-actions>button:hover:not(:disabled){
+  background:#eaf3f8;border-color:#8db4cc;color:#245b7d;
+}
