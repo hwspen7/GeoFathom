@@ -54,7 +54,7 @@ with tempfile.TemporaryDirectory() as directory:
  await page.getByLabel('DEM elevation layer').selectOption(fixture.id);
  await revealTerrainControl(page,page.getByLabel('Confirm DEM meter elevations'));
  await page.getByLabel('Confirm DEM meter elevations').check();
- await page.getByRole('button',{name:/DEM study area/}).click();
+ await page.getByRole('complementary',{name:'Operations'}).getByRole('button',{name:'DEM study area',exact:true}).click();
  await expect(page.getByLabel('Interactive geospatial map')).toHaveAttribute('data-dem-preview-clipped','true',{timeout:25000});
  await expect(page.getByLabel('DEM fetch area')).toHaveValue('selection');
  await expect(page.getByLabel('DEM download target')).toContainText('Selected geometry');

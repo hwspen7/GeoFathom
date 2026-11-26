@@ -1,5 +1,6 @@
 import {SectionIcon} from './SectionIcon';
 import {useEffect,useState} from 'react';
+import {createPortal} from 'react-dom';
 import {getProjectCRS,getProjectGrid,patchLayerStyle,saveGraduatedStyle,
   saveProjectCRS,transformProjectCoordinates,
   type GeoLayer,type GeoWorkspace,type ProjectCRS} from './api';
@@ -14,11 +15,13 @@ interface Props {
   onGrid:(grid:GeoJSON.FeatureCollection|null)=>void;
   labelMoveMode:boolean;
   onLabelMoveMode:(active:boolean)=>void;
+  resultsTarget?:HTMLElement|null;
 }
 const palette=['#f7fbff','#c6dbef','#9ecae1','#6baed6','#4292c6',
   '#2171b5','#08519c','#08306b','#041e42'];
 export default function CartographyProPanel(p:Props){
   const [layerId,setLayerId]=useState('');
+  const [page,setPage]=useState<'colors'|'labels'|'crs'>('colors');
   const [field,setField]=useState('population');
   const [method,setMethod]=useState<'quantile'|'equal_interval'|'jenks'>('quantile');
   const [classes,setClasses]=useState(5);
@@ -111,9 +114,11 @@ export default function CartographyProPanel(p:Props){
     });
   }
 
-  return <div className="professional-panel">
-    <details>
-      <summary><SectionIcon role="choropleth" size={14}/> Graduated numeric choropleth</summary>
+  const result=<section className="unified-result-summary" aria-label="Mapping results"><div className="section-heading"><SectionIcon role="mapping" size={14}/> Mapping</div>{layer&&<strong className="unified-result-name">{layer.name}</strong>}{crs&&<div className="data-metric-band"><div><small>CRS</small><strong>{crs.epsg}</strong></div><div><small>Grid</small><strong>{crs.grid_visible?'On':'Off'}</strong></div></div>}{classification&&<p className="mapping-classification">{classification}</p>}{projected&&<p aria-label="Projected coordinates" className="project-info">{projected}</p>}</section>;
+  return <div className="professional-panel mapping-workbench">
+    <nav className="data-page-buttons" aria-label="Mapping operations">{([['colors','Colors'],['labels','Labels'],['crs','CRS']] as const).map(([id,label])=><button type="button" key={id} aria-pressed={page===id} onClick={()=>setPage(id)}>{label}</button>)}</nav>
+    <section className="mapping-page" hidden={page!=='colors'}>
+      <h4 className="unified-tool-heading"><SectionIcon role="choropleth" size={14}/> Choropleth</h4>
       <div className="professional-form">
         <label>Map layer
           <select aria-label="Graduated map layer" value={layer?.id||''}
@@ -148,14 +153,11 @@ export default function CartographyProPanel(p:Props){
         <button onClick={()=>void classify()} disabled={busy||!layer||!p.projectId}>
           Calculate & save color classes
         </button>
-        {classification&&<p className="project-hint">{classification}</p>}
-        <p className="project-hint">Uses all numeric values from the target project
-          layer (up to 10,000). Server computes real class thresholds and
-          persists the legend with revision checks.</p>
+        {!p.resultsTarget&&classification&&<p className="project-info">{classification}</p>}
       </div>
-    </details>
-    <details>
-      <summary><SectionIcon role="labelPlacement" size={14}/> Advanced label placement & callouts</summary>
+    </section>
+    <section className="mapping-page" hidden={page!=='labels'}>
+      <h4 className="unified-tool-heading"><SectionIcon role="labelPlacement" size={14}/> Label placement</h4>
       <div className="professional-form">
         <label>Map layer
           <select aria-label="Advanced label layer" value={layer?.id||''}
@@ -239,9 +241,7 @@ export default function CartographyProPanel(p:Props){
               onClick={()=>p.onLabelMoveMode(!p.labelMoveMode)}>
               {p.labelMoveMode?'Stop moving labels':'Move labels by dragging on map'}
             </button>
-            <p className="project-hint">Drag a saved label and release to store a
-              feature-specific X/Y offset in its revision history.
-              Field rules use plain comparisons, never code expressions.</p>
+ 
           </div>
           <label>Label prefix
             <input aria-label="Label prefix" maxLength={24}
@@ -269,9 +269,9 @@ export default function CartographyProPanel(p:Props){
           </label>
         </>}
       </div>
-    </details>
-    <details>
-      <summary><SectionIcon role="projection" size={14}/> Project EPSG coordinates & grid</summary>
+    </section>
+    <section className="mapping-page" hidden={page!=='crs'}>
+      <h4 className="unified-tool-heading"><SectionIcon role="projection" size={14}/> Coordinates &amp; grid</h4>
       <div className="professional-form">
         <label>Project CRS (EPSG)
           <input aria-label="Project EPSG code" value={epsg}
@@ -288,13 +288,10 @@ export default function CartographyProPanel(p:Props){
           onClick={()=>void storeCRS(Boolean(crs?.grid_visible))}>Save project CRS</button>
         <button disabled={busy||!p.projectId||!crs}
           onClick={()=>void projectCoords()}>Transform map/point coordinates</button>
-        {projected&&<p aria-label="Projected coordinates" className="project-info">
-          {projected}</p>}
-        <p className="project-hint">All saved geometry remains WGS84 GeoJSON.
-          The project CRS controls grid and coordinate transformations;
-          the MapLibre raster basemap remains Web Mercator.</p>
+        {!p.resultsTarget&&projected&&<p aria-label="Projected coordinates" className="project-info">{projected}</p>}
       </div>
-    </details>
+    </section>
+    {p.resultsTarget&&(layer||crs||classification||projected)&&createPortal(result,p.resultsTarget)}
     {notice&&<p className="project-info">{notice}</p>}
     {error&&<p className="discovery-error">{error}</p>}
   </div>;

@@ -1,5 +1,5 @@
 import {test,expect} from './coverage-fixture';
-import {openProjectDrawer} from './workspace-ui';
+import {openProjectDrawer,activateWorkspaceModule} from './workspace-ui';
 const tile=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/ZecAAAAASUVORK5CYII=','base64');
 test('keyboard drawing, right-click completion, selection context and cancel',async({page})=>{
  await page.route('**/tile.openstreetmap.org/**',r=>r.fulfill({contentType:'image/png',body:tile}));
@@ -162,7 +162,7 @@ test('Survey uses flat compact sections and keeps every construction control acc
  await page.setViewportSize({width:1280,height:720});
  await page.route('**/tile.openstreetmap.org/**',r=>r.fulfill({contentType:'image/png',body:tile}));
  await page.goto('/');
- await page.getByRole('navigation',{name:'Workspace tools'}).getByRole('button',{name:'Survey',exact:true}).click();
+ await activateWorkspaceModule(page,'Survey');
  const survey=page.locator('#tools-survey');
  await expect(survey.locator('details,summary')).toHaveCount(0);
  await expect(survey.locator('.survey-workflow-hint,.survey-vertex-help,.survey-main-heading')).toHaveCount(0);
@@ -195,7 +195,7 @@ test('Analysis has flat sections and the same persistent Objects host',async({pa
  await filter.fill('persistent search');
  const before=await objects.boundingBox();
  await filter.evaluate(el=>el.setAttribute('data-test-persistent-host','true'));
- for(const name of ['GIS','Analysis','Terrain','Spatial','Network','Temporal','LiDAR','Sensing','Raster','Mapping','Assistant','Survey']){
+ for(const name of ['GIS','Analysis','Terrain','Spatial','Network','Temporal','LiDAR','Sensing','Raster','Mapping','Data','Export','Assistant','Survey']){
   await nav.getByRole('button',{name,exact:true}).click();
   await expect(filter).toHaveValue('persistent search');
   await expect(filter).toHaveAttribute('data-test-persistent-host','true');
@@ -217,7 +217,6 @@ test('Survey GIS and Analysis use icons and fixed non-scrolling tools',async({pa
  await page.setViewportSize({width:1680,height:900});
  await page.route('**/tile.openstreetmap.org/**',r=>r.fulfill({contentType:'image/png',body:tile}));
  await page.goto('/');
- const nav=page.getByRole('navigation',{name:'Workspace tools'});
  const tools=page.getByRole('complementary',{name:'Operations'});
  const map=page.getByLabel('Interactive geospatial map');
  await expect(map).toHaveAttribute('data-label-layer-ready','true',{timeout:25000});
@@ -228,7 +227,7 @@ test('Survey GIS and Analysis use icons and fixed non-scrolling tools',async({pa
  for(const [width,height] of [[1680,900],[1280,720]]){
   await page.setViewportSize({width,height});
   for(const [name,id,action] of [['Survey','tools-survey','Intersect'],['GIS','tools-gis','Analyze selected terrain area'],['Analysis','tools-spatial','Export vector PDF']]){
-   await nav.getByRole('button',{name,exact:true}).click();
+   await activateWorkspaceModule(page,name);
    const panel=tools.locator('#'+id);
    await expect(panel).toBeVisible();
    const headings=tools.locator('.gis-static-heading,.compact-boundary-heading,#'+id+' h3');

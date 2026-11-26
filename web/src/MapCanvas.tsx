@@ -1078,7 +1078,15 @@ export default function MapCanvas({
         resizeFrame=0;
         const width=resizeHost.clientWidth,height=resizeHost.clientHeight;
         if(!width||!height||width===lastWidth&&height===lastHeight)return;
+        // Preserve existing screen coordinates when a results dock opens or
+        // closes; a geometry sketch must not jump underneath the pointer.
+        const preserveAnchor=height===lastHeight&&width!==lastWidth&&!map.isMoving();
+        const anchor=preserveAnchor?map.unproject([0,0]):null;
         lastWidth=width;lastHeight=height;map.resize();
+        if(anchor){
+          const pixel=map.project(anchor);
+          if(Math.abs(pixel.x)>.5||Math.abs(pixel.y)>.5)map.panBy([pixel.x,pixel.y],{duration:0});
+        }
       });
     });resize.observe(resizeHost);
     return () => {

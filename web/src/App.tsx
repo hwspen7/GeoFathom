@@ -2269,7 +2269,7 @@ export default function App() {
 
           <section id="tools-style" hidden={activeTool!=='tools-style'} className="panel-section unified-tool-panel">
             <div className="section-heading"><SectionIcon role="mapping" size={16}/><span>Mapping</span></div>
-            <CartographyProPanel
+            <CartographyProPanel resultsTarget={activeTool==='tools-style'?resultsTarget:null}
               key={activeProjectId ?? 'no-project'}
               projectId={activeProjectId}
               workspace={projectWorkspace}
@@ -2291,6 +2291,7 @@ export default function App() {
 
           <section id="tools-services" hidden={activeTool!=='tools-services'} className="panel-section unified-tool-panel">
             <div className="section-heading"><SectionIcon role="exchange" size={16}/><span>Data</span></div>
+            {activeTool==='tools-services'&&resultsTarget&&projectWorkspace&&createPortal(<section className="unified-result-summary" aria-label="Data results"><div className="section-heading"><SectionIcon role="exchange" size={14}/> Data</div><div className="data-metric-band"><div><small>Layers</small><strong>{projectWorkspace.layers.length}</strong></div><div><small>Features</small><strong>{projectWorkspace.total.toLocaleString('en-US')}</strong></div></div></section>,resultsTarget)}
             <DataWorkbench
               projectId={activeProjectId} workspace={projectWorkspace}
               geometry={geometry} viewport={viewport} connected={Boolean(capabilities)}

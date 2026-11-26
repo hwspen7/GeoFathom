@@ -76,8 +76,7 @@ test('graduated choropleth writes real breaks; CRS grid converts and persists',a
       {height});
   await page.reload();
   await activateWorkspaceModule(page,'Mapping');
-  await page.locator('details').filter({hasText:'Graduated numeric choropleth'})
-    .locator('summary').click();
+  await page.getByRole('navigation',{name:'Mapping operations'}).getByRole('button',{name:'Colors',exact:true}).click();
   await page.getByLabel('Graduated numeric field').fill('height');
   await page.getByLabel('Graduated class count').selectOption('4');
   await page.getByLabel('Graduated method').selectOption('jenks');
@@ -88,8 +87,7 @@ test('graduated choropleth writes real breaks; CRS grid converts and persists',a
   expect(workspace.layers[0].style.symbol.graduated_field).toBe('height');
   expect(workspace.layers[0].style.symbol.graduated_colors.length)
     .toBeGreaterThan(1);
-  await page.locator('details').filter({hasText:'Project EPSG coordinates & grid'})
-    .locator('summary').click();
+  await page.getByRole('navigation',{name:'Mapping operations'}).getByRole('button',{name:'CRS',exact:true}).click();
   await page.getByLabel('Project EPSG code').fill('EPSG:32631');
   await page.getByRole('button',{name:'Save project CRS'}).click();
   await expect(page.getByText('Project EPSG and coordinate grid settings saved.')).toBeVisible();
@@ -165,8 +163,7 @@ test('Cartographic drag a saved point label and commit revisioned offset fields'
     return (await r.json()).layers[0].style.labels.enabled;
   }).toBe(true);
   await activateWorkspaceModule(page,'Mapping');
-  await page.locator('details').filter({hasText:'Advanced label placement & callouts'})
-    .locator('summary').click();
+  await page.getByRole('navigation',{name:'Mapping operations'}).getByRole('button',{name:'Labels',exact:true}).click();
   await page.getByLabel('Label rule field').fill('category');
   await page.getByLabel('Label rule field').press('Tab');
   await expect.poll(async()=>{
