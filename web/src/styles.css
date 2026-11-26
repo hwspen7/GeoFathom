@@ -2545,3 +2545,8 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .spatial-crs-row>button[aria-pressed=true]{background:#e9f3f9;border-color:#a9c5d7;color:#175f8a}
 .spatial-workbench-output .temporal-metrics>div,.spatial-summary .temporal-metrics>div{min-width:0}
 .spatial-workbench-output .temporal-metrics strong{overflow-wrap:anywhere}
+
+
+/* All visible geometry inspectors share the flat, expanded Boundary layout. */
+.desktop-gis .gis-operations .workspace-module-content>.geometry-edit-controls{flex:none;border:0;padding:4px 0;margin:0}
+.desktop-gis .gis-operations .geometry-edit-controls>.compact-boundary{border:0;padding:0;margin:0;gap:4px}

@@ -1,6 +1,6 @@
 import {test,expect} from './coverage-fixture';
 import type {Page} from '@playwright/test';
-import {openFileMenu} from './workspace-ui';
+import {openFileMenu,activateWorkspaceModule} from './workspace-ui';
 
 const API='http://127.0.0.1:8000';
 const tile=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/ZecAAAAASUVORK5CYII=','base64');
@@ -233,4 +233,21 @@ test('local row actions undo correctly and cancelling a sketch retains the selec
  await expect(local.getByRole('button',{name:'Local study parcel',exact:true})).toHaveAttribute('aria-pressed','true');
  await page.reload();
  await expect(local.getByRole('button',{name:'Local study parcel',exact:true})).toBeVisible();
+});
+
+
+test('boundary coordinates stay expanded when switching scientific workspaces',async({page})=>{
+ await page.setViewportSize({width:1600,height:900});
+ await setup(page);
+ for(const module of ['Survey','GIS','Analysis','Spatial','Network','Temporal','LiDAR','Sensing']){
+   await activateWorkspaceModule(page,module);
+   const boundary=page.getByRole('region',{name:'Boundary vertices'});
+   await expect(boundary).toBeVisible();
+   await expect(boundary.getByLabel('Boundary node',{exact:true})).toBeVisible();
+   await expect(boundary.getByLabel('Boundary longitude',{exact:true})).toBeVisible();
+   await expect(boundary.getByLabel('Boundary latitude',{exact:true})).toBeVisible();
+   await expect(boundary.getByRole('button',{name:'Apply coordinates'})).toBeVisible();
+   await expect(page.locator('details.geometry-edit-controls')).toHaveCount(0);
+   await expect(boundary.locator('details.boundary-node-detail')).toHaveCount(0);
+ }
 });

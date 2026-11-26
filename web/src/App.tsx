@@ -1282,8 +1282,7 @@ export default function App() {
   namedLegend.push(...vectorLegend.values());
   if(terrainProfileLine)namedLegend.push({id:'profile-line',name:'Profile measurement line',onSelect:()=>{if(drawingMode||busy)return;focusGeometry(terrainProfileLine);revealPanel('tools-terrain');},color:'#d26b2f'});
   // Keep the object portal host stable across navigation; only module tools change.
-  const gisFlat=['tools-gis','tools-survey','tools-spatial','tools-terrain'].includes(activeTool);
-  const GeometryContainer=gisFlat?'section':'details';
+  // Geometry inspection uses the same always-visible compact controls in every workspace.
   return (
     <div className="workspace desktop-gis">
       <header className="gis-header">
@@ -1850,9 +1849,8 @@ export default function App() {
             <div ref={setObjectTreeTarget}/>
           </section>
           <div className="workspace-module-content">
-            {geometry&&(activeTool!=='tools-terrain'||editing)&&<GeometryContainer className="geometry-edit-controls">
-              {!gisFlat&&<summary>Geometry / vertices</summary>}
-              <BoundaryEditor compact={gisFlat} geometry={geometry} sourcePlace={selectedPlace} selectedParcel={selectedParcel}
+            {geometry&&(activeTool!=='tools-terrain'||editing)&&<section className="geometry-edit-controls">
+              <BoundaryEditor compact geometry={geometry} sourcePlace={selectedPlace} selectedParcel={selectedParcel}
                 onChooseParcel={value=>void chooseSelectedParcel(value)}
                 editing={editing&&!moving&&!edgeMoving} busy={busy} selectedNode={selectedBoundaryNode}
                 onSelectNode={setSelectedBoundaryNode}
@@ -1867,7 +1865,7 @@ export default function App() {
                   try{void commitGeometry(removeVertex(geometry,path),'Boundary node removed and validated.');}
                   catch(e){setError(e instanceof Error?e.message:String(e));}
                 }}/>
-            </GeometryContainer>}
+            </section>}
           {resultsTarget&&['tools-survey','tools-services'].includes(activeTool)&&
             (networkAreas?.count??0)>0&&createPortal(
             <section className="panel-section data-network-results" aria-label="Independent enclosed areas">
