@@ -1,6 +1,8 @@
 import EnglishFileInput from './EnglishFileInput';
 import { useEffect, useState, type ChangeEvent } from 'react';
-import { FileImage, Crosshair, UploadCloud } from 'lucide-react';
+import { Crosshair, UploadCloud } from 'lucide-react';
+import {createPortal} from 'react-dom';
+import {SectionIcon} from './SectionIcon';
 
 import {
   listImagery, searchPublicImagery, uploadImagery, type RasterAsset, type StacItem,
@@ -22,10 +24,11 @@ interface Props {
   viewport: [number, number, number, number] | null;
   localImport?:boolean;
   refreshToken?:number;
+  resultsTarget?:HTMLElement|null;
 }
 
 export default function RasterPanel({
-  asset, onSelect, tracing, onTracing, settings, onSettings, viewport,localImport=false,refreshToken=0,
+  asset, onSelect, tracing, onTracing, settings, onSettings, viewport,localImport=false,refreshToken=0,resultsTarget,
 }: Props) {
   const [assets, setAssets] = useState<RasterAsset[]>([]);
   const [token, setToken] = useState('');
@@ -82,8 +85,8 @@ export default function RasterPanel({
       <input type="password" autoComplete="off" aria-label="Image import administration token"
         placeholder="Server administration token" value={token}
         onChange={event => setToken(event.target.value)} /></details>}
-      <label className="raster-upload" title="Import a georeferenced GeoTIFF, up to 64 MB">
-        <UploadCloud size={15} /> {uploading ? 'Importing…' : 'Import GeoTIFF'}
+      <label className="raster-file-control" title="Import a georeferenced GeoTIFF, up to 64 MB">
+        <span><UploadCloud size={14} /> {uploading ? 'Importing…' : 'Import GeoTIFF'}</span>
         <EnglishFileInput type="file" accept=".tif,.tiff,image/tiff" disabled={uploading}
           onChange={event => void importFile(event)} />
       </label>
@@ -99,7 +102,7 @@ export default function RasterPanel({
       )}
       {asset && (
         <>
-          <div className="raster-details"><FileImage size={13}/><span>{asset.width} × {asset.height} px · {asset.crs}</span></div>
+          <h4 className="unified-tool-heading"><SectionIcon role="geometry" size={13}/> Outline</h4>
           <div className="area-fields">
             <div>
               <label htmlFor="trace-provider">Outline method</label>
@@ -132,15 +135,14 @@ export default function RasterPanel({
             <Crosshair size={15}/>
             {tracing ? 'Click your target on the map' : 'Start automatic outline'}
           </button>
-          <small className="compact-notice" title="An image-derived outline is not a surveyed or legal boundary. Regions extending past the analysis window are flagged.">Image-derived outline · review required</small>
+          {tracing&&<small className="compact-notice">Review the extracted outline before saving.</small>}
         </>
       )}
-      <div className="stac-search">
+      <div className="stac-search"><h4 className="unified-tool-heading"><SectionIcon role="imagerySources" size={13}/> Catalog</h4>
         <button title="Find public STAC scene metadata; not an imported raster" type="button" onClick={() => void searchCatalog()} disabled={!viewport || searching}>
           {searching ? 'Searching catalog…' : 'Find public satellite scenes in map view'}
         </button>
-        {catalogItems.length>0&&<small className="compact-notice">Catalog · {catalogItems.length} scenes</small>}
-        {catalogItems.length > 0 && (
+         {catalogItems.length > 0 && (
           <div className="stac-results">
             {catalogItems.map(item => (
               <div key={item.id} className="stac-item">
@@ -152,6 +154,7 @@ export default function RasterPanel({
         )}
       </div>
       {error && <p className="discovery-error">{error}</p>}
+      {asset&&resultsTarget&&createPortal(<section className="panel-section unified-result-summary" aria-label="Raster results"><div className="section-heading"><SectionIcon role="imagery" size={14}/> Raster</div><strong className="unified-result-name">{asset.name}</strong><div className="data-metric-band"><div><small>Width</small><strong>{asset.width.toLocaleString('en-US')} px</strong></div><div><small>Height</small><strong>{asset.height.toLocaleString('en-US')} px</strong></div><div><small>CRS</small><strong>{asset.crs}</strong></div><div><small>Pixels</small><strong>{(asset.width*asset.height).toLocaleString('en-US')}</strong></div></div></section>,resultsTarget)}
     </div>
   );
 }

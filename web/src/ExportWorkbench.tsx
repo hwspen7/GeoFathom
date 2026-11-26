@@ -1,4 +1,6 @@
 import {useEffect,useRef,useState} from 'react';
+import {createPortal} from 'react-dom';
+import {SectionIcon} from './SectionIcon';
 import {downloadTerrainRaster,downloadMapPDF,downloadDatasetExport,preflightDatasetExport,startDatasetExport,
  getGISJob,cancelGISJob,downloadExchangeJob,downloadProjectPackage,
  type DatasetExportOptions,type ExportPreflight,type GISJob,
@@ -13,6 +15,7 @@ interface Props{
  selectedProperties?:Record<string,unknown>;
  measurement:Measurement|null;scratch:ScratchFeature[];faces:NetworkFace[];
  rasterSources?:Array<{id:string;kind:'image'|'dem'}>;
+ resultsTarget?:HTMLElement|null;
  terrainRasters:TerrainRasterLayer[];scientificRasters?:ScienceRaster[];viewport:[number,number,number,number]|null;
 }
 const fileSave=(filename:string,blob:Blob)=>{
@@ -177,12 +180,14 @@ export default function ExportWorkbench(p:Props){
   }catch(e){if(epoch.current===generation)setError(e instanceof Error?e.message:String(e));}
   finally{if(epoch.current===generation)setBusy(false);}
  }
- return <div className="export-workbench">
-  <div className="data-metric-band">
+ const summary=<section className="unified-result-summary export-result-summary" aria-label="Export summary"><div className="section-heading"><SectionIcon role="exchange" size={14}/> Export</div><div className="data-metric-band">
    <div><small>Source</small><strong>{scope==='selection'?'Selection':
      scope==='local'?'Local drawings':scope==='areas'?'Enclosed areas':scope==='layer'?'Layer':scope==='viewport'?'Map view':'Project'}</strong></div>
-   <div><small>Features</small><strong>{savedScope&&!preview&&scope!=='project'?'Inspect scope':count}</strong></div>
-  </div>
+   <div><small>Features</small><strong>{savedScope&&!preview&&scope!=='project'?'—':count.toLocaleString('en-US')}</strong></div>
+   <div><small>Format</small><strong>{format.toUpperCase()}</strong></div><div><small>Status</small><strong>{job?.status??(busy||jobStarting?'Preparing':message?'Complete':'Ready')}</strong></div>
+  </div></section>;
+ return <div className="export-workbench">
+  {p.resultsTarget?createPortal(summary,p.resultsTarget):summary}
   <label>Export scope
    <select aria-label="Export scope" value={scope} onChange={e=>setScope(e.target.value as ExportScope)}>
     <option value="selection">Current selection</option>
@@ -224,7 +229,7 @@ export default function ExportWorkbench(p:Props){
     <label>Decimals<input aria-label="Export coordinate precision" type="number" min="0" max="15" placeholder="Full precision" value={precision} onChange={e=>setPrecision(e.target.value)}/></label>
    </div>}
    {setup==='fields'&&<>
-    <small>{fields===null?'All source attributes are included.':fields.length+' fields selected.'}</small>
+    <small>{fields===null?'All fields':fields.length+' fields'}</small>
     {preview&&<label>Fields<select aria-label="Export attribute fields" multiple size={3} value={fields??preview.schema.map(f=>f.name)}
      onChange={e=>setFields(Array.from(e.target.selectedOptions,o=>o.value))}>
      {preview.schema.map(f=><option key={f.name}>{f.name}</option>)}
@@ -241,7 +246,7 @@ export default function ExportWorkbench(p:Props){
    {preview?.warnings.map(w=><small key={w}>{w}</small>)}
   </>}
   {format==='package'&&<>
-   <small>Saved features, layers, styles, CRS and revisions. Restore into a new empty project. Local unsaved drawings and browser analysis caches are excluded.</small>
+   <small>Saved project data only</small>
    <label><input type="checkbox" aria-label="Include source GeoTIFFs" checked={includeRasters} onChange={e=>setIncludeRasters(e.target.checked)}/> Include loaded source GeoTIFFs ({p.rasterSources?.length??0})</label>
   </>}
   {format==='geotiff'&&<label>Raster result

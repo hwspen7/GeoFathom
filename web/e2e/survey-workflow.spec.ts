@@ -46,6 +46,8 @@ for(const width of [1100,1280,1600])test(`drawing exits and error recovery stay 
  await expect(inspector.locator('.measurement-perimeter strong')).toBeVisible();
  await expect(inspector.getByText('Method',{exact:true})).toHaveCount(0);
  await expect(inspector.getByText('Source',{exact:true})).toHaveCount(0);
+ const docks=await page.locator('.gis-body > .gis-operations, .gis-body > .gis-results-monitor').evaluateAll(nodes=>nodes.map(n=>n.getBoundingClientRect().width));
+ expect(docks[0]).toBeCloseTo(docks[1],0);
  const styles=await inspector.locator('.measurement-metric-grid .metric').evaluateAll(nodes=>nodes.map(node=>{
    const card=getComputedStyle(node),value=getComputedStyle(node.querySelector('strong')!);
    return [card.flexDirection,card.alignItems,card.backgroundColor,card.padding,value.fontSize,value.fontWeight];

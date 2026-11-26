@@ -2675,3 +2675,63 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 @media(max-width:850px){.science-workbench-dialog>.science-workbench-columns{grid-template-columns:minmax(0,1fr);overflow:auto}.science-workbench-columns>.science-workbench-input,.science-workbench-columns>.science-workbench-output{overflow:visible}.science-workbench-input .temporal-run{position:static}}
 /* Decorative captions do not enter the surrounding label's accessible text. */
 .english-file-button::before,.english-file-name::before{content:attr(data-caption)}
+
+
+/* Equal fixed docks: one shared size, with the map retaining the remaining width. */
+.desktop-gis{--workspace-dock-width:318px}
+.desktop-gis .gis-body>.gis-operations,.desktop-gis .gis-body>.gis-results-monitor{
+ box-sizing:border-box;flex:0 0 var(--workspace-dock-width);width:var(--workspace-dock-width)!important;
+ min-width:var(--workspace-dock-width)!important;max-width:var(--workspace-dock-width)!important;
+}
+.desktop-gis .gis-body>.gis-results-monitor>.sidebar-scroll{padding:6px 10px 7px;scrollbar-width:none}
+.desktop-gis .gis-body>.gis-results-monitor>.sidebar-scroll::-webkit-scrollbar{display:none}
+@media(max-width:1120px){.desktop-gis{--workspace-dock-width:294px}}
+@media(max-width:780px){.desktop-gis{--workspace-dock-width:min(294px,43vw)}}
+.desktop-gis .measurement-metric-grid.measurement-metric-pair{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.desktop-gis .gis-results-monitor .measurement-card .metric,
+.desktop-gis .gis-results-monitor .measurement-card .metric.secondary{display:flex;flex-direction:column;align-items:flex-start;justify-content:flex-start;min-width:0;min-height:0;padding:8px;gap:4px}
+.desktop-gis .gis-results-monitor .measurement-card .metric strong,
+.desktop-gis .gis-results-monitor .measurement-card .metric.secondary strong{font:650 16px/1.25 'Segoe UI',system-ui,sans-serif;letter-spacing:0;overflow-wrap:anywhere;text-align:left}
+.desktop-gis .measurement-object-name{margin:6px 0 7px}
+.desktop-gis .measurement-card .edge-measurements{padding:7px 8px}
+.desktop-gis .measurement-card .edge-measurements summary{cursor:pointer;line-height:20px}
+.desktop-gis .map-legend-select,.desktop-gis .map-legend-select:hover:not(:disabled),
+.desktop-gis .map-legend-select:focus-visible,.desktop-gis .map-legend-select:active{
+ text-decoration:none!important;border:0!important;background:transparent!important;box-shadow:none!important;
+}
+.desktop-gis .map-legend-select:hover:not(:disabled){color:#12678c}
+.desktop-gis .map-legend-select[aria-pressed=true]{font-weight:650;color:#174d71}
+.desktop-gis .map-legend-select .map-legend-name{text-decoration:none!important}
+.desktop-gis .gis-operations .workspace-module-content>.unified-tool-panel{padding:0;margin:0;border:0;min-width:0}
+.desktop-gis .unified-tool-panel>.section-heading,.desktop-gis .unified-tool-heading{
+ display:flex;align-items:center;gap:6px;margin:0 0 7px;padding:3px 0;color:#304d62;
+ font:650 12px/17px 'Segoe UI',system-ui,sans-serif;
+}
+.desktop-gis .unified-tool-heading{border-top:1px solid #d9e4eb;padding-top:7px;margin:3px 0 0}
+.desktop-gis .unified-tool-panel :is(.raster-panel,.professional-panel,.data-workbench,.export-workbench){gap:6px;min-width:0}
+.desktop-gis .unified-tool-panel :is(input:not([type=checkbox]):not([type=file]):not([type=range]),select,textarea){
+ box-sizing:border-box;width:100%;min-width:0;max-width:100%;border:1px solid #cbdce7;border-radius:4px;
+ background:white;padding:5px 7px;font:11px/1.4 'Segoe UI',system-ui,sans-serif;color:#294b60;min-height:30px;
+}
+.desktop-gis .unified-tool-panel label:has(>input[type=checkbox]){display:flex;flex-direction:row;align-items:flex-start;justify-content:flex-start;gap:6px}
+.desktop-gis .unified-tool-panel input[type=checkbox]{width:14px;height:14px;flex:0 0 14px;margin:1px 0;accent-color:#276d91}
+.desktop-gis .unified-tool-panel .professional-panel>details{border:0;border-top:1px solid #d9e4eb;border-radius:0;padding:5px 0;margin:0;background:transparent;box-shadow:none}
+.desktop-gis .unified-tool-panel .professional-panel>details>summary{font-size:11px;font-weight:600;color:#304d62;padding:5px 0}
+.desktop-gis .unified-tool-panel .project-hint{margin:3px 0;font-size:10px}
+.desktop-gis .unified-tool-panel .data-page-buttons{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px}
+.desktop-gis .unified-tool-panel .data-page{gap:6px;overflow:visible;flex:none}
+.desktop-gis .raster-file-control{display:flex;flex-direction:column;gap:5px}
+.desktop-gis .raster-file-control>span:first-child{display:flex;align-items:center;gap:5px;font-size:11px}
+.desktop-gis .unified-tool-panel .raster-panel select{margin:0}
+.desktop-gis .unified-tool-panel .stac-search>button{width:100%;min-height:30px}
+.desktop-gis .unified-tool-panel .prompt-form{border:0;background:transparent;display:flex;flex-direction:column;gap:6px}
+.desktop-gis .unified-tool-panel .prompt-form textarea{min-height:92px;resize:vertical}
+.desktop-gis .unified-tool-panel .prompt-footer{padding:0}
+.desktop-gis .unified-tool-panel .prompt-footer button{width:100%;justify-content:center;min-height:32px;border-radius:4px;background:#eaf3f8;border:1px solid #aac7d8;color:#245b7d}
+.desktop-gis .unified-result-summary{display:flex;flex-direction:column;gap:7px;padding:4px 0;margin:0;min-width:0}
+.desktop-gis .unified-result-summary .section-heading{padding:0 0 7px;margin:0;border-bottom:1px solid #dce6ed;font-size:12px}
+.desktop-gis .unified-result-name,.desktop-gis .assistant-result-query{font-size:12px;color:#294b60;overflow-wrap:anywhere}
+.desktop-gis .unified-result-summary .data-metric-band>div{border-radius:5px;padding:8px;background:#f7fafc;border-color:#dce6ed}
+.desktop-gis .unified-result-summary .data-metric-band strong{white-space:normal;overflow-wrap:anywhere}
+.desktop-gis .assistant-execution{font-size:11px;color:#526f85}
+.desktop-gis .assistant-execution-mode{font-size:10px;color:#526f85}

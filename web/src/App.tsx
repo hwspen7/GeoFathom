@@ -1820,7 +1820,7 @@ export default function App() {
               <SectionIcon role="legend" size={15}/> Legend
             </button>
             {showLegend&&!editing&&<div className="map-legend-items" aria-label="Map legend">
-              {namedLegend.map(item=><button type="button" key={item.id} className="map-legend-item map-legend-select" disabled={busy||Boolean(drawingMode)} onClick={item.onSelect} title={item.detail?item.name+' · '+item.detail:item.name}>
+              {namedLegend.map(item=><button type="button" key={item.id} className="map-legend-item map-legend-select" aria-pressed={item.id===(scratchId?'local:'+scratchId:selectedFeatureId?'saved:'+selectedFeatureId:geometry&&selectedPlace?'selection':'')} disabled={busy||Boolean(drawingMode)} onClick={item.onSelect} title={item.detail?item.name+' · '+item.detail:item.name}>
                 <span className="legend-swatch" style={{borderColor:item.color,backgroundColor:item.color}}/>
                 <span className="map-legend-name">{item.name}{item.detail&&<small> · {item.detail}</small>}</span>
               </button>)}
@@ -1842,9 +1842,8 @@ export default function App() {
         <aside ref={operationsDock} className="gis-inspector gis-operations" data-active-module={activeTool}
           data-dock-density={dockHeight<650?'compact':'regular'}
           aria-label="Operations">
-          <div className={'sidebar-scroll'+(['tools-services','tools-export'].includes(activeTool)?' data-fixed-operations':'')}
-            tabIndex={0} aria-label="Operations scrolling region">
-          <section className="workspace-objects" hidden={['tools-services','tools-export'].includes(activeTool)}>
+          <div className="sidebar-scroll" tabIndex={0} aria-label="Operations scrolling region">
+          <section className="workspace-objects">
             <h3 className="gis-static-heading"><SectionIcon role="objects" size={13}/> Objects</h3>
             <div ref={setObjectTreeTarget}/>
           </section>
@@ -1893,7 +1892,7 @@ export default function App() {
               
               {measurement && !preview && (
                 <>
-                  <div className="measurement-metric-grid">
+                  <div className={'measurement-metric-grid'+(measurement.perimeter_m!==null?' measurement-metric-pair':'')}>
                   <div className="metric measurement-primary">
                     <span>{measurement.area_m2 !== null ? 'Area' : measurement.length_m!==null?'Distance':'Location'}</span>
                     <strong>{measurement.method===OFFLINE_METHOD&&measurement.area_m2!==null?'~ ':measurement.method===OFFLINE_METHOD&&measurement.length_m!==null?'~ ':''}{measurement.area_m2 !== null
@@ -2052,9 +2051,9 @@ export default function App() {
          </section>
 
 
-          <section id="tools-raster" hidden={activeTool!=='tools-raster'} className="panel-section">
-            <div className="section-heading"><SectionIcon role="imagery" size={16}/><span>Georeferenced imagery</span></div>
-            <RasterPanel
+          <section id="tools-raster" hidden={activeTool!=='tools-raster'} className="panel-section unified-tool-panel">
+            <div className="section-heading"><SectionIcon role="imagery" size={16}/><span>Raster</span></div>
+            <RasterPanel resultsTarget={activeTool==='tools-raster'?resultsTarget:null}
               asset={imageLayer} localImport={capabilities?.local_raster_import===true} refreshToken={connectionRetry+refreshToken}
               onSelect={(asset) => {
                 geometrySequence.current++;
@@ -2268,8 +2267,8 @@ export default function App() {
             />
           </section>
 
-          <section id="tools-style" hidden={activeTool!=='tools-style'} className="panel-section">
-            <div className="section-heading"><SectionIcon role="mapping" size={16}/><span>Advanced cartography & EPSG</span></div>
+          <section id="tools-style" hidden={activeTool!=='tools-style'} className="panel-section unified-tool-panel">
+            <div className="section-heading"><SectionIcon role="mapping" size={16}/><span>Mapping</span></div>
             <CartographyProPanel
               key={activeProjectId ?? 'no-project'}
               projectId={activeProjectId}
@@ -2290,7 +2289,8 @@ export default function App() {
             />
           </section>
 
-          <section id="tools-services" hidden={activeTool!=='tools-services'} className="panel-section">
+          <section id="tools-services" hidden={activeTool!=='tools-services'} className="panel-section unified-tool-panel">
+            <div className="section-heading"><SectionIcon role="exchange" size={16}/><span>Data</span></div>
             <DataWorkbench
               projectId={activeProjectId} workspace={projectWorkspace}
               geometry={geometry} viewport={viewport} connected={Boolean(capabilities)}
@@ -2321,8 +2321,9 @@ export default function App() {
             />
           </section>
 
-          <section id="tools-export" hidden={activeTool!=='tools-export'} className="panel-section">
-            <ExportWorkbench
+          <section id="tools-export" hidden={activeTool!=='tools-export'} className="panel-section unified-tool-panel">
+            <div className="section-heading"><SectionIcon role="pdf" size={16}/><span>Export</span></div>
+            <ExportWorkbench resultsTarget={activeTool==='tools-export'?resultsTarget:null}
               projectId={activeProjectId} workspace={projectWorkspace}
               selected={geometry} measurement={measurement}
               selectedProperties={selectedSaved?{...selectedSaved.properties,name:selectedSaved.name,source:selectedSaved.source}:scratch.find(f=>f.id===scratchId)?.properties}
@@ -2334,21 +2335,19 @@ export default function App() {
           </section>
 
 
-          <section id="tools-ai" hidden={activeTool!=='tools-ai'} className="panel-section">
-            <div className="section-heading"><SectionIcon role="assistant" size={16}/><span>Ask GeoFathom</span><span className="section-pill">Assistant</span></div>
+          <section id="tools-ai" hidden={activeTool!=='tools-ai'} className="panel-section unified-tool-panel">
+            <div className="section-heading"><SectionIcon role="assistant" size={16}/><span>Assistant</span></div>
             <ModelControls modelId={modelId} onChange={setModelId} />
             <form onSubmit={runAssistant} className="prompt-form">
               <textarea aria-label="Ask the geospatial assistant" placeholder="Measure Shanghai Hongqiao Airport's mapped boundary" value={prompt}
                 onChange={event => setPrompt(event.target.value)} maxLength={500} rows={3} />
               <div className="prompt-footer">
-                <span>{modelUsed === null ? 'Selected model / GIS fallback' : modelUsed ? 'AI parsed the request' : 'GIS fallback interpretation'}</span>
-                <button type="submit" disabled={busy || prompt.trim().length < 2}>
+                 <button type="submit" disabled={busy || prompt.trim().length < 2}>
                   <Send size={15} /> Run
                 </button>
               </div>
             </form>
-            {assistantQuery && <div className="last-prompt">“{assistantQuery}” <span>{modelUsed ? 'AI parsed' : 'Rules parsed'}</span></div>}
-            {toolSteps.length > 0 && <div className="tool-trace"><strong>Execution trace</strong><span>{toolSteps.join(' → ')}</span></div>}
+            {activeTool==='tools-ai'&&resultsTarget&&assistantQuery&&createPortal(<section className="panel-section unified-result-summary" aria-label="Assistant result"><div className="section-heading"><SectionIcon role="assistant" size={14}/> Query</div><div className="assistant-result-query">{assistantQuery}</div>{toolSteps.length>0&&<details className="assistant-execution"><summary>Execution trace</summary><span>{toolSteps.join(' → ')}</span></details>}{modelUsed!==null&&<span className="assistant-execution-mode">{modelUsed?'AI':'GIS'}</span>}</section>,resultsTarget)}
           </section>
 
 
