@@ -68,3 +68,26 @@ it('pages terrain history eight at a time and selects older results',()=>{
  expect(select).toHaveBeenCalledWith('run-0');
  expect(screen.queryByRole('group',{name:'Terrain result history'})).toBeNull();
 });
+
+it('keeps pagination open when the focused control becomes disabled at either boundary',()=>{
+ const records=Array.from({length:9},(_,i)=>({id:'run-'+i,title:'Result '+i,createdAt:i*1000})) as PersistedTerrainResult[];
+ const select=vi.fn();
+ render(<TerrainResultPicker records={[...records].reverse()} selectedId="run-8" onSelect={select}/>);
+ const trigger=screen.getByRole('button',{name:'Choose terrain result'});
+ fireEvent.click(trigger);
+ const menu=within(screen.getByRole('group',{name:'Terrain result history'}));
+ expect(menu.getAllByRole('button',{name:/^Result /})[0].textContent).toMatch(/^Result 8 ·/);
+ const next=menu.getByRole('button',{name:'Next result page'});
+ next.focus();fireEvent.click(next);
+ expect(document.activeElement).toBe(trigger);
+ expect((next as HTMLButtonElement).disabled).toBe(true);
+ expect(menu.getAllByRole('button',{name:/^Result /})).toHaveLength(1);
+ const previous=menu.getByRole('button',{name:'Previous result page'});
+ previous.focus();fireEvent.click(previous);
+ expect(document.activeElement).toBe(trigger);
+ expect((previous as HTMLButtonElement).disabled).toBe(true);
+ expect(menu.getAllByRole('button',{name:/^Result /})).toHaveLength(8);
+ fireEvent.keyDown(trigger,{key:'Escape'});
+ expect(screen.queryByRole('group',{name:'Terrain result history'})).toBeNull();
+ expect(select).not.toHaveBeenCalled();
+});

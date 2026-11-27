@@ -414,6 +414,18 @@ with tempfile.TemporaryDirectory() as directory:
  await activateWorkspaceModule(page,'Terrain');
  const resultSelect=page.getByRole('button',{name:'Choose terrain result',exact:true});
  await expect(resultSelect).toBeVisible();
+ // The restored newest result must be selected and both pagination boundaries
+ // must keep the real Chromium popup open even when a button becomes disabled.
+ await expect(resultSelect).toContainText('Cross sections');
+ await resultSelect.click();
+ const historyMenu=page.getByRole('group',{name:'Terrain result history'});
+ const historyNext=historyMenu.getByRole('button',{name:'Next result page'});
+ const historyPrevious=historyMenu.getByRole('button',{name:'Previous result page'});
+ await expect(historyNext).toBeEnabled();
+ while(await historyNext.isEnabled()){await historyNext.click();await expect(historyMenu).toBeVisible();}
+ while(await historyPrevious.isEnabled()){await historyPrevious.click();await expect(historyMenu).toBeVisible();}
+ await resultSelect.press('Escape');
+ await expect(historyMenu).toHaveCount(0);
  const pickHistory=async(title:string,choose=true)=>{
    await resultSelect.click();
    const menu=page.getByRole('group',{name:'Terrain result history'});

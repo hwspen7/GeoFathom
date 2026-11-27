@@ -78,9 +78,12 @@ type TerrainRecord=PersistedTerrainResult;
 export function TerrainResultPicker({records,selectedId,onSelect}:{records:readonly TerrainRecord[];selectedId:string;onSelect:(id:string)=>void}){
  const [open,setOpen]=useState(false),[page,setPage]=useState(0);
  const trigger=useRef<HTMLButtonElement>(null);
- const ordered=[...records].reverse(),selected=ordered.find(r=>r.id===selectedId);
+ const ordered=[...records].sort((a,b)=>b.createdAt-a.createdAt),selected=ordered.find(r=>r.id===selectedId);
  const pages=Math.max(1,Math.ceil(ordered.length/8)),current=Math.min(page,pages-1);
  function close(){setOpen(false);trigger.current?.focus();}
+ // Keep focus inside the popup before a pagination control becomes disabled.
+ // Chromium otherwise blurs that control and the outside-focus handler closes the menu.
+ function changePage(next:number){trigger.current?.focus();setPage(next);}
  if(!selected||records.length<2)return null;
  const text=(r:TerrainRecord)=>r.title+' · '+new Date(r.createdAt).toLocaleTimeString();
  return <div className="terrain-history-picker" onBlur={e=>{if(!e.currentTarget.contains(e.relatedTarget as Node|null))setOpen(false);}}
@@ -90,7 +93,7 @@ export function TerrainResultPicker({records,selectedId,onSelect}:{records:reado
    </button>
    {open&&<div id="terrain-history-menu" className="terrain-history-menu" role="group" aria-label="Terrain result history">
      <div className="terrain-history-options">{ordered.slice(current*8,current*8+8).map(r=><button key={r.id} type="button" aria-pressed={r.id===selectedId} title={text(r)} onClick={()=>{onSelect(r.id);close();}}>{text(r)}</button>)}</div>
-     {pages>1&&<div className="terrain-history-pagination"><button type="button" aria-label="Previous result page" disabled={current===0} onClick={()=>setPage(current-1)}>‹</button><span>{current+1} / {pages}</span><button type="button" aria-label="Next result page" disabled={current===pages-1} onClick={()=>setPage(current+1)}>›</button></div>}
+     {pages>1&&<div className="terrain-history-pagination"><button type="button" aria-label="Previous result page" disabled={current===0} onClick={()=>changePage(current-1)}>‹</button><span>{current+1} / {pages}</span><button type="button" aria-label="Next result page" disabled={current===pages-1} onClick={()=>changePage(current+1)}>›</button></div>}
    </div>}
  </div>;
 }
@@ -212,7 +215,9 @@ export default function TerrainWorkbench(p:Props){
      if(!current)return;
      setRecords(old=>{
        const ids=new Set(old.map(r=>r.id));
-       return [...restored.filter(r=>!ids.has(r.id)),...old].slice(-24);
+       // IndexedDB returns newest first; live records are appended oldest first.
+       // Normalize the merged list so default selection and layer paging agree.
+       return [...restored.filter(r=>!ids.has(r.id)),...old].sort((a,b)=>a.createdAt-b.createdAt).slice(-24);
      });
    }).catch(error=>{
      if(current)setResultCacheError(error instanceof Error?error.message:'Unable to restore Terrain results.');
