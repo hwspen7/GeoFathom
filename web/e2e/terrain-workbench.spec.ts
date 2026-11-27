@@ -353,7 +353,8 @@ with tempfile.TemporaryDirectory() as directory:
  await revealTerrainControl(page,page.getByLabel('Confirm DEM meter elevations'));
  await page.getByLabel('Confirm DEM meter elevations').check();
  await page.getByLabel('Filter project features').fill('DEM profile line');
- await page.getByRole('button',{name:/DEM profile line/}).click();
+ // Select the filtered project object rather than its duplicate map legend entry.
+ await page.getByRole('region',{name:'Project feature tree'}).getByRole('button',{name:'DEM profile line',exact:true}).click();
  await closeReview();
  await page.getByRole('button',{name:'Browse terrain tools',exact:true}).click();
  await page.getByLabel('Terrain tools',{exact:true}).getByRole('button',{name:'Elevation profile',exact:true}).click();
