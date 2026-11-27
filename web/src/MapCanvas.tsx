@@ -348,7 +348,9 @@ export default function MapCanvas({
     if (!container.current) return;
     const map = new maplibregl.Map({
       container: container.current, style: mapStyle(), center: [0, 22],
-      zoom: 2.1, attributionControl: false,
+      // The workspace owns container resizing so MapLibre cannot recenter
+      // first and invalidate our geographic anchor when a dock opens.
+      zoom: 2.1, attributionControl: false, trackResize: false,
     });
     // Preserve provider credit without the opaque information badge.
     map.addControl(new maplibregl.AttributionControl({ compact: false }), 'bottom-right');
@@ -1083,6 +1085,8 @@ export default function MapCanvas({
         const preserveAnchor=height===lastHeight&&width!==lastWidth&&!map.isMoving();
         const anchor=preserveAnchor?map.unproject([0,0]):null;
         lastWidth=width;lastHeight=height;map.resize();
+        // Screen-space snapping must be rebuilt against the new transform.
+        spatialSnap.current=null;
         if(anchor){
           const pixel=map.project(anchor);
           if(Math.abs(pixel.x)>.5||Math.abs(pixel.y)>.5)map.panBy([pixel.x,pixel.y],{duration:0});

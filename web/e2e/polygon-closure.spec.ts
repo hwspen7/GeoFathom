@@ -140,7 +140,10 @@ test('four separate connected lines create a selectable independently measured a
  }
  const response=await polygonized;
  expect(response.ok(),await response.text()).toBe(true);
- expect((await response.json()).count).toBe(1);
+ const output=await response.json();
+ // Include actual geographic inputs and topology diagnostics on failure,
+ // rather than treating an empty result as a successful closed network.
+ expect(output.count,JSON.stringify({inputs:response.request().postDataJSON(),output})).toBe(1);
  const labels=page.getByLabel('Live map dimensions').locator('.map-face-dimension');
  await expect(labels.first()).toBeVisible({timeout:25000});
  await expect(labels.first()).toContainText(/km²|m²|ha/);
