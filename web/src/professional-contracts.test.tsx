@@ -90,11 +90,16 @@ describe('cartography',()=>{
     api.saveGraduatedStyle.mockResolvedValue({classification:{classes:3,samples:6,breaks:[10,20]},layer:{...layer,style_revision:4}});
     click('Calculate & save color classes');await screen.findByText('3 graduated classes using 6 values; breaks: 10.00, 20.00');
     expect(api.saveGraduatedStyle).toHaveBeenCalledWith('p',expect.objectContaining({layer_id:'layer',field:'population',classes:3,method:'jenks',expected_revision:3}));
+    // Open the visible Mapping page before exercising its label controls.
+    click('Labels');
+    expect(screen.getByRole('button',{name:'Labels'}).getAttribute('aria-pressed')).toBe('true');
     api.patchLayerStyle.mockResolvedValue({...layer,style_revision:5,style:{...layer.style,labels:{...layer.style.labels,priority:80}}});
     fireEvent.blur(screen.getByLabelText('Label priority'),{target:{value:'80'}});
     await screen.findByText('Advanced label placement saved.');
     expect(api.patchLayerStyle).toHaveBeenCalledWith('p','layer',{labels:{priority:80},expected_revision:4});
     click('Move map labels');expect(p.onLabelMoveMode).toHaveBeenCalledWith(true);
+    click('CRS');
+    expect(screen.getByRole('button',{name:'CRS'}).getAttribute('aria-pressed')).toBe('true');
     api.saveProjectCRS.mockResolvedValue({project_id:'p',epsg:'EPSG:26917',grid_visible:1,revision:3});
     api.getProjectGrid.mockResolvedValue({type:'FeatureCollection',features:[]});
     change('Project EPSG code','EPSG:26917');fireEvent.click(screen.getByLabelText('Show project CRS grid'));

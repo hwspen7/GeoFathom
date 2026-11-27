@@ -143,7 +143,8 @@ with tempfile.TemporaryDirectory() as directory:
  await expect(page.getByLabel('Results monitor').getByLabel('Terrain results')).toBeVisible();
  const right=await page.getByLabel('Results monitor').boundingBox();
  const resultMap=await map.boundingBox();
- expect(Math.round(right!.width)).toBe(364);
+ // Both fixed docks must use the same responsive width.
+ expect(Math.round(right!.width)).toBe(Math.round(left!.width));
  expect(resultMap!.x+resultMap!.width).toBeLessThan(right!.x+10);
  expect(resultMap!.width).toBeLessThan(center!.width);
  await closeReview();

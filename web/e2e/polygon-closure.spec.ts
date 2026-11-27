@@ -118,6 +118,8 @@ test('Line drawing closed at its starting node produces an area with exact measu
 });
 
 test('four separate connected lines create a selectable independently measured area',async({page})=>{
+ // Polygonization requires a ready backend; do not draw against the offline fallback.
+ await expect(page.locator('.gis-connection')).toHaveText('Connected',{timeout:25000});
  const toolbar=page.getByLabel('Survey toolbar');
  // Zoom to a local geography so the GEOS metric polygonizer receives a
  // realistic small-area network, independent of map tile availability.
@@ -127,6 +129,8 @@ test('four separate connected lines create a selectable independently measured a
  await page.mouse.wheel(0,-1600);
  await page.waitForTimeout(900);
  const p=await positions(page);
+ // Verify the real four-source polygonization response before checking its map label.
+ const polygonized=page.waitForResponse(r=>r.url().includes('/edit/polygonize')&&r.request().method()==='POST'&&r.request().postDataJSON()?.geometries?.length===4,{timeout:45000});
  for(const [from,to] of [[p.a,p.b],[p.b,p.c],[p.c,p.d],[p.d,p.a]] as const){
    await toolbar.getByRole('button',{name:'Line',exact:true}).click();
    await page.mouse.click(...from);
@@ -134,6 +138,9 @@ test('four separate connected lines create a selectable independently measured a
    await page.keyboard.press('Enter');
    await expect(toolbar.getByRole('button',{name:'Line',exact:true})).toHaveAttribute('aria-pressed','false');
  }
+ const response=await polygonized;
+ expect(response.ok(),await response.text()).toBe(true);
+ expect((await response.json()).count).toBe(1);
  const labels=page.getByLabel('Live map dimensions').locator('.map-face-dimension');
  await expect(labels.first()).toBeVisible({timeout:25000});
  await expect(labels.first()).toContainText(/km²|m²|ha/);
