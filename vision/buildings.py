@@ -20,7 +20,7 @@ from rasterio.windows import Window
 from geometry.measure import measure_geometry
 from imagery.raster import RasterError, _check
 from imagery.store import file_sha256
-from .semantic import _manifest, _predict_tile, predict_building_heads
+from .semantic import _manifest, _predict_tile, predict_building_heads, fuse_building_heads
 from .tiles import context_tiles
 from .tiled import TilePlan, _tile_bands, _disk_features, _check_scratch
 from .runtime import tensor_budget_mb
@@ -42,6 +42,7 @@ class BuildingInput(BaseModel):
     instance_mode: Literal["connected", "watershed"] = "connected"
     seed_distance: int = Field(default=6, ge=1, le=64)
     boundary_weight: float = Field(default=1., ge=0, le=4, allow_inf_nan=False)
+    augmentation: Literal["none", "flips"] = "none"
 
 
 def validate(payload):
@@ -204,7 +205,10 @@ def extract_buildings(path, options, output_dir, progress=None, cancelled=None):
                     normalized = (np.nan_to_num(raw, nan=0., posinf=0., neginf=0.) /
                                   config["input_scale"] - mean) / std
                     tensor = np.pad(normalized, pad, mode="edge")[None].astype(np.float32)
-                    if options.instance_mode == "watershed":
+                    if options.augmentation != "none":
+                        heads = fuse_building_heads(tensor, config, device, augmentation=options.augmentation)
+                        scores = heads["probability"][tile.crop]
+                    elif options.instance_mode == "watershed":
                         heads = predict_building_heads(tensor, config, device)
                         scores = heads["probability"][tile.crop]
                     else:
@@ -274,6 +278,7 @@ def extract_buildings(path, options, output_dir, progress=None, cancelled=None):
                 "geometry_crs": "EPSG:4326", "pixel_grid": [width, height],
                 "valid_pixels": valid_pixels, "classified_pixels": foreground_pixels,
                 "tile_count": tile_count, "context_halo": halo, "truncated": truncated,
+                "inference_passes_per_tile": 4 if options.augmentation == "flips" else 1,
                 "confidence_calibrated": False, "parameters": options.model_dump(),
                 "instance_separation": instance_summary,
                 "summary": {"candidate_count": len(retained),

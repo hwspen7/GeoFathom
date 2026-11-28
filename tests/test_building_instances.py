@@ -58,3 +58,35 @@ def test_global_component_and_nested_bounds_survive_disk_blocks(tmp_path):
         assert labels[130, 140] > 0 and labels[80, 80] == 0
     with pytest.raises(RasterError, match="memory"):
         instance_raster(a, b, tmp_path/"limited.tif", memory_mb=1)
+
+def test_component_local_normalization_matches_independent_roof_partitions():
+    from vision.building_instances import separate_components
+    mask = np.zeros((96, 160), bool)
+    mask[4:76, 4:76] = True
+    mask[80:92, 120:154] = True
+    boundary = np.zeros(mask.shape, np.float32)
+    boundary[80:92, 136:138] = .99
+    probability = mask.astype(np.float32)*.9
+    result = separate_components(mask, probability, boundary, seed_distance=4)
+    local = separate_instances(mask[80:92, 120:154], probability[80:92, 120:154],
+                               boundary[80:92, 120:154], seed_distance=4)
+    assert local.max() == 2
+    assert len(np.unique(result[80:92, 120:154])) == 2
+    np.testing.assert_array_equal(result > 0, mask)
+
+
+def test_four_view_fusion_inverts_all_heads_without_shifting_pixels(monkeypatch):
+    from vision import semantic
+    tensor = np.arange(60, dtype=np.float32).reshape(1, 3, 4, 5) / 60
+    calls = []
+    def predict(value, config, device):
+        assert value.flags.c_contiguous
+        calls.append(value.copy())
+        return {"probability": value[0, 0], "boundary": value[0, 1],
+                "distance": value[0, 2]*2-1}
+    monkeypatch.setattr(semantic, "predict_building_heads", predict)
+    result = semantic.fuse_building_heads(tensor, {}, "cpu", augmentation="flips")
+    assert len(calls) == 4
+    for name, expected in zip(("probability", "boundary", "distance"),
+                              (tensor[0, 0], tensor[0, 1], tensor[0, 2]*2-1)):
+        np.testing.assert_array_equal(result[name], expected)

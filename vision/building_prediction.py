@@ -10,11 +10,11 @@ import numpy as np
 import rasterio
 
 from imagery.raster import RasterError
-from .semantic import _manifest, predict_building_heads
+from .semantic import _manifest, predict_building_heads, fuse_building_heads
 from .tiles import context_tiles
 
 
-def predict_image(path, model_id, *, device=None, memory_mb=256, progress=None):
+def predict_image(path, model_id, *, device=None, memory_mb=256, progress=None, augmentation="none"):
     config = _manifest(model_id)
     if config["task"] != "building_extraction" or config["output_type"] == "logits":
         raise RasterError("Choose a building model with a declared binary head.")
@@ -46,7 +46,8 @@ def predict_image(path, model_id, *, device=None, memory_mb=256, progress=None):
             y, x = tile.input_row, tile.input_col
             h, w = valid.shape
             tensor = np.pad(normalized, ((0, 0), (y, size-h-y), (x, size-w-x)), mode="edge")[None]
-            heads = predict_building_heads(tensor.astype(np.float32), config, device)
+            heads = (predict_building_heads(tensor.astype(np.float32), config, device)
+                     if augmentation == "none" else fuse_building_heads(tensor.astype(np.float32), config, device, augmentation=augmentation))
             rows = slice(int(tile.core.row_off), int(tile.core.row_off+tile.core.height))
             cols = slice(int(tile.core.col_off), int(tile.core.col_off+tile.core.width))
             core_valid = valid[halo-y:halo-y+int(tile.core.height), halo-x:halo-x+int(tile.core.width)]

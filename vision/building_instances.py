@@ -109,6 +109,29 @@ def separate_instances(foreground, probability, boundary=None, distance=None,
         raise RasterError("Instance separation changed the foreground support.")
     return result
 
+    
+def separate_components(foreground, probability, boundary=None, distance=None, *, seed_distance=6,
+                        boundary_weight=1., max_instances=20000):
+    """Use component-local normalization, as in the production disk path."""
+    foreground = np.asarray(foreground, bool)
+    if foreground.ndim != 2 or any(np.shape(f) != foreground.shape for f in
+                                  (probability, boundary, distance) if f is not None):
+        raise RasterError("Component fields must share the foreground grid.")
+    components, _ = ndi.label(foreground)
+    output = np.zeros(foreground.shape, np.int32)
+    total = 0
+    for index, window in enumerate(ndi.find_objects(components), 1):
+        if window is None:
+            continue
+        local = components[window] == index
+        fields = [np.where(local, f[window], 0) if f is not None else None
+                  for f in (probability, boundary, distance)]
+        labels = separate_instances(local, *fields, seed_distance=seed_distance,
+                                    boundary_weight=boundary_weight, max_instances=max_instances-total)
+        output[window][local] = labels[local] + total
+        total += int(labels.max())
+    return output
+
 
 class InstanceClasses:
     """A lazy class-name mapping for positive instance IDs during polygonization."""

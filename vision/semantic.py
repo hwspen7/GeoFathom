@@ -296,6 +296,27 @@ def predict_building_heads(tensor, config, device):
     return {name: value[0] for name, value in heads.items()}
 
 
+def fuse_building_heads(tensor, config, device, *, augmentation="none"):
+    """Invert spatial flips before averaging native-grid heads; no resampling."""
+    if augmentation == "none":
+        return predict_building_heads(tensor, config, device)
+    if augmentation != "flips":
+        raise RasterError("Unsupported building inference augmentation.")
+    sums = {}
+    for axes in ((), (-1,), (-2,), (-2, -1)):
+        transformed = np.ascontiguousarray(np.flip(tensor, axis=axes))
+        heads = predict_building_heads(transformed, config, device)
+        if sums and heads.keys() != sums.keys():
+            raise RasterError("Augmented building predictions disagree on head roles.")
+        for name, field in heads.items():
+            aligned = np.flip(field, axis=axes)
+            if name not in sums:
+                sums[name] = aligned.astype(np.float64)
+            else:
+                sums[name] += aligned
+    return {name: (value / 4).astype(np.float32) for name, value in sums.items()}
+
+
 def semantic_segmentation(path: Path, image_id: str, model_id: str,
                           minimum_confidence: float = .55,
                           max_side: int = 512):

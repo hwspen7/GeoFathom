@@ -14,7 +14,7 @@ from imagery.raster import RasterError
 from imagery.store import file_sha256
 from .building_dataset import load_dataset, canonical_sha
 from .building_prediction import predict_image
-from .building_instances import separate_instances
+from .building_instances import separate_components
 from .building_evaluate import object_metrics
 from .quality import confusion_matrix, metrics_from_matrix
 from .semantic import _manifest
@@ -70,7 +70,7 @@ def score_fields(fields, row, threshold=.5, instance_mode="connected", seed_dist
         reference_ids = ndi.label(truth & valid)[0]
         reference_type = "connected_semantic_reference_not_true_instances"
     if instance_mode == "watershed":
-        predicted_ids = separate_instances(observed, np.maximum(fields["probability"], 0),
+        predicted_ids = separate_components(observed, np.maximum(fields["probability"], 0),
             fields.get("boundary"), fields.get("distance"), seed_distance=seed_distance)
     elif instance_mode == "connected":
         predicted_ids = ndi.label(observed)[0]
