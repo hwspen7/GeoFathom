@@ -183,6 +183,7 @@ def run_managed(kind, payload, job_id, progress=None, cancelled=None):
             "probability_diagnostics": {
                 split: {key: value["probability_diagnostics"] for key, value in report[split].items()}
                 for split in ("validation", "test")},
+            "paired_qualification": {key: value["paired_qualification"] for key, value in report["test"].items()},
             "seconds": report["seconds"]}
     else:
         raise RasterError("Unsupported building research task.")

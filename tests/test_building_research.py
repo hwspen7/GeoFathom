@@ -177,6 +177,10 @@ def test_selection_receipt_is_frozen_before_any_test_image_is_predicted(dataset,
     assert result["model_ranking_source"] == "validation only"
     assert result["test_evaluated"] and len(result["test"]) == 2
     assert result["selection"]["sha256"] == receipts[0]
+    assert result["selection"]["paired_baseline"]["probability_threshold"] == .5
+    for model in models:
+        assert result["test"][model]["paired_qualification"]["status"] == "insufficient_evidence"
+        assert len(result["test"][model]["fixed_baseline"]["records"]) == 2
 
 
 @pytest.mark.parametrize("isolate", ["0", "1"])
@@ -309,3 +313,27 @@ def test_instance_boundary_metric_penalizes_missed_shared_wall():
     assert boundary_scores(merged > 0, reference > 0, valid)["f1"] == 1.
     assert boundary_scores(merged, reference, valid, instances=True)["f1"] < 1.
     assert boundary_scores(reference, reference, valid, instances=True)["f1"] == 1.
+
+
+def test_paired_building_gate_uses_source_groups_and_rejects_regional_regression():
+    from vision.building_qualification import paired_gate
+    def record(region, group, suffix, tp):
+        return {"sample_id": f"{region}-{group}-{suffix}", "region": region, "group": f"{region}-{group}",
+                "metrics": {"confusion_matrix": [[90, 10], [10, 90]],
+                    "object_reference": "independently_supplied_instance_labels",
+                    **{key: {"true_positive": tp, "false_positive": 10-tp, "false_negative": 10-tp}
+                       for key in ("objects_50", "objects_75")}}}
+    baseline = [record(r, i, 0, 6) for r in ("a", "b") for i in range(10)]
+    candidate = [record(r, i, 0, 8) for r in ("a", "b") for i in range(10)]
+    report = paired_gate(baseline, candidate)
+    assert report["passed"] and report["metrics"]["object_f1"]["delta"] == pytest.approx(.2)
+    assert report["metrics"]["object_f1"]["paired_group_bootstrap_95_interval"] == pytest.approx([.2, .2])
+    assert paired_gate(baseline[:10], candidate[:10])["status"] == "insufficient_evidence"
+    worse = [record(r, i, 0, 9 if r == "a" else 5) for r in ("a", "b") for i in range(10)]
+    assert not paired_gate(baseline, worse)["checks"]["regional_noninferiority"]
+    with pytest.raises(ValueError, match="identical"):
+        paired_gate(baseline, candidate[:-1])
+    # Two chips from one source still count as only one source group.
+    repeat_a = [record(r, 0, i, 6) for r in ("a", "b") for i in range(10)]
+    repeat_b = [record(r, 0, i, 8) for r in ("a", "b") for i in range(10)]
+    assert paired_gate(repeat_a, repeat_b)["status"] == "insufficient_evidence"

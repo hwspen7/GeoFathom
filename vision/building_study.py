@@ -19,6 +19,7 @@ from .building_evaluate import object_metrics
 from .quality import confusion_matrix, metrics_from_matrix
 from .semantic import _manifest
 from .building_calibration import TemperatureFit, ProbabilityDiagnostics
+from .building_qualification import POLICY, paired_gate
 
 
 def polygons_from_ids(ids, minimum_pixels=1):
@@ -263,6 +264,8 @@ def compare_models(dataset_path, model_ids, destination, *, evaluate_test=True, 
             "selected_model_by_validation": best_model, "threshold_candidates": thresholds,
             "augmentation": augmentation, "calibration": calibrations,
             "calibration_scope": "Validation-only temperature fit; raw masks and thresholds unchanged.",
+            "paired_baseline": {"augmentation": "none", "probability_threshold": .5, "instance_mode": "connected", "seed_distance": 6},
+            "paired_qualification_policy": dict(POLICY),
             "selection_rule": "Joint threshold/postprocessor search; pooled pixel F1 within 0.03 of best candidate; maximize harmonic mean of region-macro pixel and object F1; rank models by the same balanced score.",
             "test_used_for_selection": False}
         plan["sha256"] = canonical_sha(plan)
@@ -273,7 +276,7 @@ def compare_models(dataset_path, model_ids, destination, *, evaluate_test=True, 
         test_rows = [r for r in dataset["samples"] if r["split"] == "test"]
         if evaluate_test:
             for model_index, identifier in enumerate(model_ids):
-                records = []
+                records, baseline_records = [], []
                 raw_diagnostics, calibrated_diagnostics = ProbabilityDiagnostics(), ProbabilityDiagnostics()
                 for index, row in enumerate(test_rows):
                     tick(.5+.45*(model_index+index/len(test_rows))/len(model_ids))
@@ -287,11 +290,22 @@ def compare_models(dataset_path, model_ids, destination, *, evaluate_test=True, 
                                                       calibrations[identifier]["temperature"])
                     metrics, ids = score_fields(fields, row, parameters["probability_threshold"],
                                                 parameters["instance_mode"], parameters["seed_distance"])
+                    # The fixed native baseline uses exactly the same imagery and
+                    # reference. Never use this paired test comparison to retune.
+                    baseline = fields if augmentation == "none" else predict_image(
+                        row["paths"]["image"], identifier, progress=lambda _: tick(reported_progress))
+                    if not np.array_equal(fields["valid"], baseline["valid"]):
+                        raise RasterError("Candidate and fixed baseline have different valid support.")
+                    baseline_metrics, _ = score_fields(baseline, row, .5, "connected", 6)
+                    baseline_records.append({"sample_id": row["id"], "region": row["region"], "group": row["group"],
+                                             "metrics": baseline_metrics})
                     # Keep per-scene evidence for both mask and object mistakes.
                     path = stage / f"test-{model_index}-{index}.npz"
                     np.savez_compressed(path, probability=fields["probability"], instances=ids, valid=fields["valid"])
                     records.append({"sample_id": row["id"], "region": row["region"], "group": row["group"], "metrics": metrics})
                 holdout[identifier] = {"aggregate": aggregate(records), "records": records,
+                    "fixed_baseline": {"aggregate": aggregate(baseline_records), "records": baseline_records},
+                    "paired_qualification": paired_gate(baseline_records, records),
                     "probability_diagnostics": {"raw": raw_diagnostics.result(), "temperature_scaled": calibrated_diagnostics.result()},
                     "by_region": {region: aggregate([r for r in records if r["region"] == region]) for region in sorted({r["region"] for r in records})}}
         if load_dataset(dataset_path, verify_pixels=False)["fingerprint"] != dataset["fingerprint"] or [_identity(identifier) for identifier in model_ids] != identities:

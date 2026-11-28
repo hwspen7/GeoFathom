@@ -208,3 +208,17 @@ always retained. Boundary and distance heads remain native-scale. Output CRS,
 validity mask and cell size do not change. Magnification does not recover missing
 source resolution. Use `--augmentation multiscale` for a separate frozen
 comparison. Three sequential model passes per tile are recorded and bounded.
+
+### Paired independent-test qualification
+
+Each model's selected candidate is compared against the same model at the fixed
+native 0.5 connected baseline on the exact same holdout chips. Both settings and
+the policy are frozen before test prediction. The gate requires independent
+instance labels, at least two regions and ten distinct source groups per region,
+object F1 improvement of at least 0.01, at most 0.01 pooled pixel/object@0.75 F1
+loss, at most 0.05 regional object F1 loss, and a positive lower endpoint of a
+paired 1000-draw source-group bootstrap interval for object F1 gain. A small
+or reused holdout cannot establish new blind qualification: the numerical gate
+is conditional on supplied regions, not an assertion that pretraining or prior
+experiments were independent. Neither the gate nor a successful comparison
+automatically installs or promotes any model.
