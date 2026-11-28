@@ -76,7 +76,7 @@ def accept(model_id, sample, repeats=5, *, output=None):
         from core.cuda_environment import prepare_onnx_cuda
         prepare_onnx_cuda(ort)
         session = ort.InferenceSession(str(config["model_path"]), sess_options=options,
-                                      providers=["CUDAExecutionProvider", "CPUExecutionProvider"])
+                                      providers=[("CUDAExecutionProvider", {"use_tf32": "0"}), "CPUExecutionProvider"])
         session.disable_fallback()
         if session.get_providers()[0] != "CUDAExecutionProvider":
             raise RuntimeError("Building graph did not create a CUDA-first session.")

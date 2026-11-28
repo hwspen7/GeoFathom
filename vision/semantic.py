@@ -161,6 +161,7 @@ def _session(path, modified_ns, device):
         providers = [("CUDAExecutionProvider", {
             "gpu_mem_limit": str(gpu_arena_budget_mb() * 1024 * 1024),
             "device_id": str(device_id),
+            "use_tf32": "0",
         })]
         if strict:
             # Strict mode rejects graphs with CPU-only node placement as well

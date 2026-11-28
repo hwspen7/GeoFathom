@@ -68,7 +68,7 @@ def boundary_scores(predicted, reference, valid, tolerance=2, *, instances=False
         "f1": 2*precision*recall/(precision+recall) if precision+recall else 0.}
 
 
-def score_fields(fields, row, threshold=.5, instance_mode="connected", seed_distance=6):
+def score_fields(fields, row, threshold=.5, instance_mode="connected", seed_distance=6, *, instance_override=None):
     with rasterio.open(row["paths"]["labels"]) as source:
         reference = source.read(1, masked=True)
     valid = fields["valid"] & ~np.ma.getmaskarray(reference)
@@ -92,6 +92,11 @@ def score_fields(fields, row, threshold=.5, instance_mode="connected", seed_dist
         predicted_ids = ndi.label(observed)[0]
     else:
         raise RasterError("Unsupported study instance mode.")
+    if instance_override is not None:
+        predicted_ids = np.asarray(instance_override)
+        if (predicted_ids.shape != observed.shape or not np.issubdtype(predicted_ids.dtype, np.integer)
+                or np.any(predicted_ids < 0) or not np.array_equal(predicted_ids > 0, observed)):
+            raise RasterError("Experimental partition must preserve the observed mask exactly.")
     # The same minimum-pixel filter is fixed for both postprocessors.
     predicted_polygons = polygons_from_ids(predicted_ids, minimum_pixels=9)
     reference_polygons = polygons_from_ids(reference_ids)
