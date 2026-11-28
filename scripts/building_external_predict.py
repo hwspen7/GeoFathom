@@ -147,6 +147,7 @@ def sam_predict(checkpoint,root,rows,stage,score_threshold):
 
 def run(name,upstream,checkpoint,dataset_path,output,device,authorized,limit=None):
     import torch
+    import importlib.metadata as metadata
     sys.dont_write_bytecode=True
     root=Path(upstream).resolve();checkpoint=Path(checkpoint).resolve()
     output=Path(output).resolve()
@@ -167,7 +168,14 @@ def run(name,upstream,checkpoint,dataset_path,output,device,authorized,limit=Non
     torch.manual_seed(731);np.random.seed(731)
     torch.backends.cuda.matmul.allow_tf32=False;torch.backends.cudnn.allow_tf32=False
     torch.backends.cudnn.benchmark=False
-    settings={"device":device,"torch":str(torch.__version__),"seed":731,
+    versions={}
+    for package in ("numpy","rasterio","torch","torchvision","transformers","timm","mmcv","mmengine",
+                    "lightning","pytorch-lightning","opencv-python","opencv-python-headless","shapely","scipy"):
+        try:
+            versions[package]=metadata.version(package)
+        except metadata.PackageNotFoundError:
+            pass
+    settings={"device":device,"torch":str(torch.__version__),"seed":731,"dependencies":versions,
               "tile_size":512 if name=="unibuild" else 224 if name=="pix2poly" else None,
               "stride":384 if name=="unibuild" else 168 if name=="pix2poly" else None,
               "sam_score_threshold":.3 if name=="sampolybuild" else None,

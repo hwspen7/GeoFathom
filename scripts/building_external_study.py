@@ -98,6 +98,8 @@ def evaluate(recipe,base,external,row):
                     semantic,agreement=recipe["agreement"],support=recipe["support"])
         fields=polygon_fields(ids,base["valid"])
         metrics,ids=score_fields(fields,row,.5,instance_override=ids)
+    if kind!="semantic":
+        metrics["probability_calibration"]="not_applicable_binary_instance_support"
     return metrics,ids,fields,diag
 
 
@@ -141,6 +143,14 @@ def run(dataset_path,baseline,bundles,output,device):
         raise ValueError("Choose two baseline models and one to three external bundles.")
     dataset=load_dataset(dataset_path)
     rows=[r for r in dataset["samples"] if r["split"]=="validation"]
+    # Explicit memory admission before importing all candidate arrays. This
+    # estimate bounds retained grids, not all temporary geometry allocations.
+    pixels=0
+    for row in rows:
+        with rasterio.open(row["paths"]["image"]) as src:
+            pixels+=src.width*src.height
+    if pixels*(24+12*len(bundles))>768*1024**2:
+        raise ValueError("External comparison retained grids exceed the 768 MiB allowance.")
     ids=[_identity(m) for m in baseline]
     upstream={};fields={}
     for bundle in bundles:

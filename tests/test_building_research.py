@@ -544,3 +544,43 @@ def test_learning_study_rejects_holdout_when_baseline_wins(dataset,monkeypatch,t
     with pytest.raises(ValueError,match="No new candidate"):
         learning.run(dataset,["old","secondary"],["trained"],tmp_path/"test","cpu",out/"selection.json")
     assert not seen
+
+
+def test_external_full_validation_import_compare_and_export(dataset,tmp_path,monkeypatch):
+    from scripts import building_external_study as study
+    from vision.building_external import CATALOG,write_prediction
+    d=load_dataset(dataset)
+    identity={"name":"sampolybuild","revision":CATALOG["sampolybuild"]["revision"],"checkpoint_sha256":"a"*64}
+    settings={"split":"validation","checkpoint_loading":"weights_only"}
+    root=tmp_path/"external";root.mkdir()
+    receipts=[]
+    for i,row in enumerate(r for r in d["samples"] if r["split"]=="validation"):
+        folder=f"sample-{i:06d}"
+        pred=write_prediction(root/folder,row["paths"]["image"],"sampolybuild",
+            [{"rings":[[16,16,32,16,32,48,16,48]],"score":.9},
+             {"rings":[[32,16,48,16,48,48,32,48]],"score":.9}],identity,settings)
+        receipts.append({"id":row["id"],"folder":folder,"prediction_sha256":pred["sha256"]})
+    manifest={"model":identity,"settings":settings,"dataset_fingerprint":d["fingerprint"],
+              "samples":receipts,"test_evaluated":False}
+    manifest["sha256"]=canonical_sha(manifest)
+    (root/"manifest.json").write_text(json.dumps(manifest))
+    seen=[]
+    def predict(path,model,**kw):
+        seen.append(path.name)
+        return {"valid":np.ones((64,64),bool),"probability":np.zeros((64,64),np.float32)}
+    monkeypatch.setattr(study,"predict_image",predict)
+    monkeypatch.setattr(study,"_identity",lambda m:{"id":m,"model_sha256":"a"*64})
+    result=study.run(dataset,["first","second"],[root],tmp_path/"comparison","cpu")
+    assert set(seen)=={"image-2.tif","image-3.tif"}
+    assert result["selection"]["candidate"]["name"]=="sampolybuild"
+    assert result["test_evaluated"] is False
+    native=next(r for r in result["validation"] if r["recipe"]["kind"]=="native_instances")
+    assert native["aggregate"]["objects_50"]["f1"]==1.
+    assert native["aggregate"]["brier_score"] is None
+    with rasterio.open(tmp_path/"comparison"/"selected"/"sample-000000"/"instances.tif") as ds:
+        assert ds.crs.to_epsg()==32617 and np.unique(ds.read(1)).tolist()==[0,1,2]
+    manifest["samples"]=receipts[:1]
+    manifest["sha256"]=canonical_sha({k:v for k,v in manifest.items() if k!="sha256"})
+    (root/"manifest.json").write_text(json.dumps(manifest))
+    with pytest.raises(ValueError,match="Incomplete"):
+        study.read_bundle(root,d)
