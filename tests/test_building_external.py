@@ -165,3 +165,16 @@ def test_transfer_grid_keeps_same_architecture_checkpoints_distinct():
     grid=recipe_grid(["pix-inria","pix-spacenet","pix-whu"])
     assert len(grid)==22 and grid[0]["name"]=="baseline"
     assert {r["name"] for r in grid if r["kind"]=="native_instances"}=={"pix-inria","pix-spacenet","pix-whu"}
+
+
+def test_sam_prediction_configuration_is_single_device():
+    from types import SimpleNamespace
+    from scripts.building_external_predict import sam_single_device_config
+    roi=SimpleNamespace(multi_process=True)
+    cfg=SimpleNamespace(datamodule_cfg={"predict_loader":{"batch_size":6,"num_workers":2,"persistent_workers":True}},
+                        trainer_cfg={"strategy":"ddp","devices":[0,1]},
+                        model_cfg=SimpleNamespace(panoptic_head=SimpleNamespace(roi_head=roi)))
+    sam_single_device_config(cfg)
+    assert cfg.datamodule_cfg["predict_loader"]=={"batch_size":1,"num_workers":0,"persistent_workers":False,"pin_memory":False}
+    assert cfg.trainer_cfg["devices"]==[0] and cfg.trainer_cfg["strategy"]=="auto"
+    assert not cfg.trainer_cfg["enable_checkpointing"] and not roi.multi_process

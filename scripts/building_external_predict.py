@@ -123,6 +123,19 @@ def pix2poly_loader(checkpoint,device,variant="inria",encoder_cache=False):
     return predict
 
 
+def sam_single_device_config(cfg):
+    """Bound official prediction to one GPU, one image, no spawned workers."""
+    loader=cfg.datamodule_cfg["predict_loader"]
+    loader.update(batch_size=1,num_workers=0,persistent_workers=False,pin_memory=False)
+    cfg.trainer_cfg.update(devices=[0],strategy="auto",accelerator="gpu",
+                           use_distributed_sampler=False,benchmark=False)
+    cfg.model_cfg.panoptic_head.roi_head.multi_process=False
+    # No training callbacks or checkpoint creation during prediction.
+    cfg.trainer_cfg["callbacks"]=[]
+    cfg.trainer_cfg["enable_checkpointing"]=False
+    return cfg
+
+
 def sam_predict(checkpoint,root,rows,stage,score_threshold):
     from PIL import Image
     import infer_auto
@@ -131,6 +144,12 @@ def sam_predict(checkpoint,root,rows,stage,score_threshold):
         Image.fromarray(source_rgb(row["paths"]["image"])).save(inputs/f"{row['index']:06d}.png")
     work=stage/"sam-work"
     old=sys.argv[:]
+    original=infer_auto.PLRunner
+    class SingleDeviceRunner(original):
+        @classmethod
+        def from_cfg(cls,cfg):
+            return super().from_cfg(sam_single_device_config(cfg))
+    infer_auto.PLRunner=SingleDeviceRunner
     try:
         sys.argv=["infer_auto.py","--config",str(root/"configs/auto_whumix.py"),"--ckpt_path",str(checkpoint),
                   "--img_dir",str(inputs),"--img_suffix",".png","--work_dir",str(work),
@@ -138,6 +157,7 @@ def sam_predict(checkpoint,root,rows,stage,score_threshold):
         infer_auto.main()
     finally:
         sys.argv=old
+        infer_auto.PLRunner=original
     path=work/"whumix_auto"/"results.json"
     data=json.loads(path.read_text(encoding="utf-8"))
     known={f"{r['index']:06d}" for r in rows}
@@ -183,6 +203,7 @@ def run(name,upstream,checkpoint,dataset_path,output,device,authorized,limit=Non
               "tile_size":512 if name=="unibuild" else 224 if name=="pix2poly" else None,
               "stride":384 if name=="unibuild" else 168 if name=="pix2poly" else None,
               "sam_score_threshold":.3 if name=="sampolybuild" else None,
+              "sam_execution":"single_gpu_batch1_workers0" if name=="sampolybuild" else None,
               "pix_variant":pix_variant if name=="pix2poly" else None,
               "encoder_cache":encoder_cache if name=="pix2poly" else None,
               "pix_adapter_sha256":file_sha256(Path(__file__).resolve().parents[1]/"vision/building_pix2poly.py") if name=="pix2poly" else None,

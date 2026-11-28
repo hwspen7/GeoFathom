@@ -584,3 +584,43 @@ def test_external_full_validation_import_compare_and_export(dataset,tmp_path,mon
     (root/"manifest.json").write_text(json.dumps(manifest))
     with pytest.raises(ValueError,match="Incomplete"):
         study.read_bundle(root,d)
+
+
+def test_transfer_study_multiple_same_model_receipts(dataset,tmp_path,monkeypatch):
+    from scripts import building_transfer_study as study
+    from vision.building_external import CATALOG,write_prediction
+    d=load_dataset(dataset)
+    bundles=[]
+    for alias,hash_char,polygons in (
+        ("inria","a",[{"rings":[[16,16,32,16,32,48,16,48]],"score":1.},
+                     {"rings":[[32,16,48,16,48,48,32,48]],"score":1.}]),
+        ("spacenet","b",[])):
+        root=tmp_path/alias;root.mkdir()
+        identity={"name":"pix2poly","revision":CATALOG["pix2poly"]["revision"],"checkpoint_sha256":hash_char*64}
+        settings={"split":"validation","checkpoint_loading":"weights_only"}
+        receipts=[]
+        for i,row in enumerate(r for r in d["samples"] if r["split"]=="validation"):
+            folder=f"sample-{i:06d}"
+            m=write_prediction(root/folder,row["paths"]["image"],"pix2poly",polygons,identity,settings)
+            receipts.append({"id":row["id"],"folder":folder,"prediction_sha256":m["sha256"]})
+        manifest={"model":identity,"settings":settings,"dataset_fingerprint":d["fingerprint"],
+                  "samples":receipts,"test_evaluated":False}
+        manifest["sha256"]=canonical_sha(manifest)
+        (root/"manifest.json").write_text(json.dumps(manifest))
+        bundles.append(f"{alias}={root}")
+    seen=[]
+    def predict(path,model,**kwargs):
+        seen.append(path.name)
+        with rasterio.open(path) as src:
+            p=(src.read(1)>128).astype(np.float32)
+        return {"valid":np.ones(p.shape,bool),"probability":p}
+    monkeypatch.setattr(study,"predict_image",predict)
+    monkeypatch.setattr(study,"_identity",lambda m:{"id":m,"model_sha256":"a"*64})
+    result=study.run(dataset,["first","second"],bundles,tmp_path/"transfer","cpu")
+    assert set(seen)=={"image-2.tif","image-3.tif"}
+    assert not result["test_evaluated"]
+    assert set(result["selection"]["external_receipts"])=={"inria","spacenet"}
+    native={r["recipe"]["name"]:r for r in result["validation"] if r["recipe"]["kind"]=="native_instances"}
+    assert native["inria"]["aggregate"]["objects_50"]["f1"]==1.
+    assert not native["spacenet"]["eligible"]
+    assert "pixel_f1_loss_exceeds_0.01" in native["spacenet"]["reasons"]
