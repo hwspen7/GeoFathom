@@ -28,13 +28,14 @@ def main():
     parser.add_argument("--cache-mb",type=int,default=8192)
     parser.add_argument("--patience",type=int,default=5)
     parser.add_argument("--distillation-weight",type=float,default=.2)
+    parser.add_argument("--warm-start",type=Path,help="Verified prior decoder or LoRA run on the same frozen dataset.")
     parser.add_argument("--install-as")
     args=parser.parse_args()
     from vision.building_dino_training import train_dino
     values=vars(args).copy()
-    for key in ("dataset","backbone","output","teachers","install_as"):
+    for key in ("dataset","backbone","output","teachers","warm_start","install_as"):
         values.pop(key)
-    report=train_dino(args.dataset,args.backbone,args.output,values,teachers=args.teachers or (),progress=lambda text:print(text,flush=True))
+    report=train_dino(args.dataset,args.backbone,args.output,values,teachers=args.teachers or (),warm_start=args.warm_start,progress=lambda text:print(text,flush=True))
     if args.install_as:
         from vision.building_research_store import install_training_model
         report["installed"]=install_training_model(args.output,args.install_as)

@@ -95,3 +95,59 @@ def test_tiny_real_dino_onnx_export(tmp_path):
     model=DinoBuilding(DINOv3ViTModel(config).eval(),width=32).eval()
     parity=export_model(model,tmp_path,{"tile_size":64})
     assert parity["passed"] and (tmp_path/"model.onnx").is_file()
+
+
+def test_exact_deterministic_upsampling_matches_torch():
+    from vision.building_dino import up
+    import torch.nn.functional as F
+    x=torch.randn(2,3,5,7,requires_grad=True)
+    ref=torch.empty(2,3,10,14)
+    y=up(x,ref)
+    z=F.interpolate(x,size=(10,14),mode="bilinear",align_corners=False)
+    torch.testing.assert_close(y,z,atol=1e-6,rtol=1e-6)
+    a=torch.autograd.grad(y.square().sum(),x)[0]
+    b=torch.autograd.grad(z.square().sum(),x)[0]
+    torch.testing.assert_close(a,b,atol=1e-5,rtol=1e-5)
+
+
+def test_tiny_dino_training_lifecycle_and_warm_start(tmp_path,monkeypatch):
+    import rasterio
+    from rasterio.transform import from_origin
+    from transformers import DINOv3ViTConfig,DINOv3ViTModel
+    from imagery.store import file_sha256
+    from vision.building_dataset import freeze_dataset
+    from vision import building_dino
+    from vision.building_dino_training import train_dino,DinoOptions
+    import json
+    root=tmp_path/"dataset";root.mkdir()
+    rows=[]
+    for i,(split,region) in enumerate((("train","a"),("train","b"),("validation","c"),("test","d"))):
+        ids=np.zeros((64,64),np.int32);ids[12:48,12:32]=1;ids[12:48,32:52]=2
+        rgb=np.full((3,64,64),i+10,np.uint8);rgb[0,ids>0]=240
+        row={"id":str(i),"split":split,"region":region,"group":region+"-source"}
+        for name,array in (("image",rgb),("labels",(ids>0).astype(np.uint8)[None]),("instances",ids[None])):
+            path=root/f"{i}-{name}.tif"
+            with rasterio.open(path,"w",driver="GTiff",height=64,width=64,count=len(array),dtype=array.dtype,
+                              crs="EPSG:32617",transform=from_origin(500000,4500000,1,1)) as dst:
+                dst.write(array)
+            row[name]=path.name;row[name+"_sha256"]=file_sha256(path)
+        rows.append(row)
+    dataset=freeze_dataset(root,rows,provenance={"fixture":True})
+    identity={"config.json":"a"*64,"model.safetensors":"b"*64}
+    monkeypatch.setattr(building_dino,"backbone_identity",lambda path:identity)
+    def load(path):
+        config=DINOv3ViTConfig(hidden_size=32,intermediate_size=64,num_hidden_layers=4,
+            num_attention_heads=4,patch_size=16,image_size=64,num_register_tokens=2,attn_implementation="eager")
+        return DINOv3ViTModel(config).eval(),identity
+    monkeypatch.setattr(building_dino,"load_backbone",load)
+    opt=DinoOptions(epochs=1,tile_size=64,batch_size=1,accumulation=2,crops_per_chip=1,
+                    min_train_chips=2,min_train_groups_per_region=1,cache_mb=128)
+    events=[]
+    first=tmp_path/"decoder"
+    report=train_dino(dataset,tmp_path/"backbone",first,opt,progress=events.append)
+    assert report["onnx_parity"]["passed"] and report["test_used_for_training"] is False
+    assert not any(" test " in event for event in events)
+    second=tmp_path/"lora"
+    report2=train_dino(dataset,tmp_path/"backbone",second,opt.model_copy(update={"mode":"lora","rank":4}),warm_start=first)
+    assert report2["onnx_parity"]["passed"] and report2["lora_modules"] and report2["warm_start"]
+    assert json.loads((second/"model.json").read_text())["training"]["warm_start"]

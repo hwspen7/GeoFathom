@@ -83,7 +83,19 @@ def conv(in_ch,out_ch,*,stride=1):
 
 
 def up(x,reference):
-    return F.interpolate(x,size=reference.shape[-2:],mode="bilinear",align_corners=False)
+    """Exact 2x align_corners=False bilinear via slice/stack arithmetic.
+
+    Avoid CUDA interpolate backward's version-dependent determinism support.
+    Every decoder level has exactly twice the previous spatial dimensions.
+    """
+    if not torch.jit.is_tracing() and (reference.shape[-2]!=2*x.shape[-2] or reference.shape[-1]!=2*x.shape[-1]):
+        raise ValueError("DINO feature pyramid requires exact doubled grids.")
+    left=torch.cat([x[...,:1],x[...,:-1]],dim=-1)
+    right=torch.cat([x[...,1:],x[...,-1:]],dim=-1)
+    horizontal=torch.stack([.75*x+.25*left,.75*x+.25*right],dim=-1).flatten(-2)
+    above=torch.cat([horizontal[...,:1,:],horizontal[...,:-1,:]],dim=-2)
+    below=torch.cat([horizontal[...,1:,:],horizontal[...,-1:,:]],dim=-2)
+    return torch.stack([.75*horizontal+.25*above,.75*horizontal+.25*below],dim=-2).flatten(-3,-2)
 
 
 class DinoBuilding(nn.Module):

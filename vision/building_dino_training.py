@@ -56,6 +56,27 @@ def audit_training_support(dataset,options):
     return {region:len(g) for region,g in sorted(groups.items())}
 
 
+def check_warm_start(directory,backbone,dataset_fingerprint,tile_size):
+    files=[directory/name for name in ("model.json","model.onnx","model.safetensors","training.json")]
+    if any(p.is_symlink() or not p.is_file() for p in files):
+        raise RasterError("Warm start requires a complete local DINO training artifact.")
+    manifest=json.loads(files[0].read_text(encoding="utf-8"))
+    training=json.loads(files[3].read_text(encoding="utf-8"))
+    identity={p.name:file_sha256(p) for p in files}
+    if (manifest.get("backbone_architecture")!="dinov3_vits16_pyramid"
+            or manifest.get("training",{}).get("backbone")!=backbone
+            or manifest.get("training",{}).get("dataset_fingerprint")!=dataset_fingerprint
+            or manifest.get("tile_size")!=tile_size
+            or manifest.get("weights_sha256")!=identity["model.onnx"]
+            or manifest.get("checkpoint_sha256")!=identity["model.safetensors"]
+            or training.get("model_sha256")!=identity["model.onnx"]
+            or training.get("checkpoint_sha256")!=identity["model.safetensors"]
+            or not training.get("onnx_parity",{}).get("passed")
+            or training.get("test_used_for_training") is not False):
+        raise RasterError("Warm-start provenance or model bytes do not match.")
+    return identity
+
+
 def crop_origins(shape,size):
     if min(shape)<size:
         raise RasterError("Training tile exceeds the native chip; select a smaller tile.")
@@ -74,7 +95,7 @@ def augment_crop(x,y,t,rng,config):
     return x,joined[:5],joined[5:] if t is not None else None
 
 
-def train_dino(dataset_path,backbone,destination,options,*,teachers=(),progress=None):
+def train_dino(dataset_path,backbone,destination,options,*,teachers=(),warm_start=None,progress=None):
     import torch
     from safetensors.torch import save_file,load_file
     from .building_dino import (DinoBuilding,load_backbone,backbone_identity,inject_lora,merge_lora)
@@ -104,6 +125,10 @@ def train_dino(dataset_path,backbone,destination,options,*,teachers=(),progress=
     groups=audit_training_support(dataset,options)
     source_id=backbone_identity(backbone)
     teacher_ids=[_identity(m) for m in teachers]
+    warm_identity=None
+    if warm_start is not None:
+        warm_start=Path(warm_start).resolve()
+        warm_identity=check_warm_start(warm_start,source_id,dataset["fingerprint"],options.tile_size)
     torch.set_num_threads(min(4,os.cpu_count() or 1))
     torch.manual_seed(options.seed)
     rng=np.random.default_rng(options.seed)
@@ -161,6 +186,10 @@ def train_dino(dataset_path,backbone,destination,options,*,teachers=(),progress=
             raise RasterError("Backbone changed before training.")
         encoder.requires_grad_(False)
         network=DinoBuilding(encoder)
+        if warm_start is not None:
+            network.load_state_dict(load_file(str(warm_start/"model.safetensors")),strict=True)
+            if check_warm_start(warm_start,source_id,dataset["fingerprint"],options.tile_size)!=warm_identity:
+                raise RasterError("Warm-start artifact changed while loading.")
         adapters=inject_lora(encoder,options.rank) if options.mode=="lora" else []
         network.to(device)
         network.encoder.eval()
@@ -261,15 +290,16 @@ def train_dino(dataset_path,backbone,destination,options,*,teachers=(),progress=
             "description":"Locally trained DINOv3 feature pyramid building candidate",
             "backbone_architecture":"dinov3_vits16_pyramid","backbone_config":backbone_config,
             "training":{"dataset_fingerprint":dataset["fingerprint"],"backbone":source_id,
-                        "teachers":teacher_ids,"parameters":options.model_dump(),"best_epoch":best_epoch,
+                        "teachers":teacher_ids,"warm_start":warm_identity,"parameters":options.model_dump(),"best_epoch":best_epoch,
                         "selection":"minimum supervised validation crop loss; no test fitting"}}
         output=stage/"output"
         parity=export_model(network,output,manifest)
         if (backbone_identity(backbone)!=source_id or [_identity(m) for m in teachers]!=teacher_ids
-                or load_dataset(dataset_path,verify_pixels=False)["fingerprint"]!=dataset["fingerprint"]):
+                or load_dataset(dataset_path,verify_pixels=False)["fingerprint"]!=dataset["fingerprint"]
+                or (warm_start is not None and check_warm_start(warm_start,source_id,dataset["fingerprint"],options.tile_size)!=warm_identity)):
             raise RasterError("Training input identities changed.")
         report={"dataset_fingerprint":dataset["fingerprint"],"counts":dataset["counts"],"train_groups":groups,
-            "parameters":options.model_dump(),"backbone":source_id,"teachers":teacher_ids,
+            "parameters":options.model_dump(),"backbone":source_id,"teachers":teacher_ids,"warm_start":warm_identity,
             "history":history,"best_epoch":best_epoch,"initial_validation_loss":history[0]["validation_loss"],
             "selected_validation_loss":best_loss,"validation_improved":best_epoch>0,
             "trainable_parameters":parameter_count,"lora_modules":adapters,"lora_merge_max_error":merge_error,
