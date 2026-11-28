@@ -142,7 +142,7 @@ def sam_predict(checkpoint,root,rows,stage,score_threshold):
 
 def run(name,upstream,checkpoint,dataset_path,output,device,authorized,limit=None):
     import torch
-    import importlib.metadata as metadata
+    sys.dont_write_bytecode=True
     root=Path(upstream).resolve();checkpoint=Path(checkpoint).resolve()
     output=Path(output).resolve()
     if output.exists():

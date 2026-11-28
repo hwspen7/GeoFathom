@@ -193,3 +193,67 @@ def read_prediction(directory,source,name):
             or m.get("polygon_sha256")!=file_sha256(directory/"polygons.json")):
         raise RasterError("Invalid native instance artifact.")
     return polygon_fields(value,valid),value,m
+
+
+def match_instances(a,b,*,minimum_iou=.5):
+    """Sparse exact native-pixel intersections and greedy one-to-one matches."""
+    if a.shape!=b.shape or a.ndim!=2 or np.any(a<0) or np.any(b<0):
+        raise RasterError("Invalid instance matching grids.")
+    aa=np.bincount(a.ravel());bb=np.bincount(b.ravel())
+    shared=(a>0)&(b>0)
+    pairs,counts=np.unique(np.stack([a[shared],b[shared]],axis=1),axis=0,return_counts=True)
+    candidates=[]
+    for (i,j),count in zip(pairs,counts):
+        i,j,count=int(i),int(j),int(count)
+        iou=count/(int(aa[i])+int(bb[j])-count)
+        if iou>=minimum_iou:
+            candidates.append((iou,i,j))
+    used_a=set();used_b=set();matches=[]
+    for iou,i,j in sorted(candidates,key=lambda x:(-x[0],x[1],x[2])):
+        if i not in used_a and j not in used_b:
+            used_a.add(i);used_b.add(j);matches.append({"primary":i,"secondary":j,"iou":iou})
+    return matches
+
+
+def supported_instances(ids,semantic,*,threshold=.5):
+    """Reject whole unsupported objects; never cut/merge otherwise accepted rings."""
+    if ids.shape!=semantic["valid"].shape:
+        raise RasterError("Semantic and instance grids differ.")
+    p=semantic["probability"];valid=semantic["valid"]
+    if np.any((ids>0)&~valid):
+        raise RasterError("Instance support exceeds semantic validity.")
+    counts=np.bincount(ids.ravel())
+    sums=np.bincount(ids.ravel(),weights=np.where(valid,p,0.).ravel(),minlength=len(counts))
+    keep=(counts>0)&(sums/np.maximum(counts,1)>=threshold)
+    keep[0]=False
+    return np.where(keep[ids],ids,0).astype(np.int32)
+
+
+def vector_consensus(primary,secondary,semantic,*,agreement=.5,support=.5):
+    """Keep matched primary shapes and strongly supported unmatched objects.
+
+    Secondary instances cannot overwrite primary ownership. A conflicting
+    unmatched secondary shape is rejected if more than 10% is already owned.
+    """
+    matches=match_instances(primary,secondary,minimum_iou=agreement)
+    a=supported_instances(primary,semantic,threshold=support)
+    b=supported_instances(secondary,semantic,threshold=support)
+    confirmed={m["primary"] for m in matches}
+    used_secondary={m["secondary"] for m in matches}
+    result=np.where(np.isin(primary,list(confirmed))|(a>0),primary,0).astype(np.int32)
+    next_id=int(result.max())+1
+    added=0;conflict=0
+    # Scan bounding boxes once rather than dense passes per object.
+    from scipy import ndimage as ndi
+    for j,window in enumerate(ndi.find_objects(b),1):
+        if window is None or j in used_secondary:
+            continue
+        shape=b[window]==j;region=result[window]
+        collision=int((shape&(region>0)).sum())
+        if collision>.1*int(shape.sum()):
+            conflict+=1;continue
+        owned=shape&(region==0)
+        if int(owned.sum())<9:
+            continue
+        region[owned]=next_id;next_id+=1;added+=1
+    return result,{"matched":len(matches),"added":added,"conflicting_secondary":conflict}
