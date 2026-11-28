@@ -21,6 +21,7 @@ def main():
     parser.add_argument("--device", choices=("cpu", "cuda"), default="cpu")
     parser.add_argument("--install-as")
     parser.add_argument("--validation-only", action="store_true")
+    parser.add_argument("--augmentation", choices=("none", "flips"), default="none", help="Comparison inference mode")
     parser.add_argument("--offline", action="store_true")
     args = parser.parse_args()
     if args.offline:
@@ -41,6 +42,7 @@ def main():
         if not args.models:
             raise SystemExit("Choose two or more --models.")
         result = compare_models(args.dataset, args.models, args.output, evaluate_test=not args.validation_only,
+            augmentation=args.augmentation,
             progress=lambda value: print("comparison_progress", round(value, 3), flush=True))
         print(json.dumps({"selection": result["selection"],
             "test": {key: value["aggregate"] for key, value in result["test"].items()}}, indent=2))

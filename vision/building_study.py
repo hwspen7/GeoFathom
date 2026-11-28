@@ -116,13 +116,36 @@ def aggregate(records):
     return result
 
 
+def balanced_validation_score(records):
+    """Equal weight per independent validation region; balance mask and object F1."""
+    regions = sorted({r["region"] for r in records})
+    scores = [aggregate([r for r in records if r["region"] == region]) for region in regions]
+    pixel = float(np.mean([s["classes"][1]["f1"] for s in scores]))
+    objects = float(np.mean([s["objects_50"]["f1"] for s in scores]))
+    return {"region_macro_pixel_f1": pixel, "region_macro_object_f1": objects,
+            "balanced_f1": 2*pixel*objects/(pixel+objects) if pixel+objects else 0.,
+            "regions": len(regions)}
+
+
+def choose_operating_point(alternatives):
+    """Joint selection with a three-point pooled pixel-F1 guard."""
+    best_pixel = max(a["aggregate"]["classes"][1]["f1"] for a in alternatives)
+    eligible = [a for a in alternatives if a["aggregate"]["classes"][1]["f1"] >= best_pixel-.03-1e-12]
+    return max(eligible, key=lambda a: (
+        a["balanced"]["balanced_f1"], a["balanced"]["region_macro_object_f1"],
+        a["aggregate"]["objects_75"]["f1"], a["instance_mode"] == "connected",
+        -abs(a["probability_threshold"]-.5), -a["seed_distance"]))
+
+
 def _identity(identifier):
     config = _manifest(identifier)
     return {"id": identifier, "model_sha256": file_sha256(config["model_path"]),
             "manifest_sha256": file_sha256(config["model_path"].with_suffix(".json"))}
 
 
-def compare_models(dataset_path, model_ids, destination, *, evaluate_test=True, progress=None, cancelled=None):
+def compare_models(dataset_path, model_ids, destination, *, evaluate_test=True, progress=None, cancelled=None, augmentation="none"):
+    if augmentation not in ("none", "flips"):
+        raise RasterError("Unsupported study inference augmentation.")
     if not isinstance(model_ids, list) or not 2 <= len(model_ids) <= 5 or len(set(model_ids)) != len(model_ids):
         raise RasterError("Compare two to five distinct installed building models.")
     dataset = load_dataset(dataset_path)
@@ -154,7 +177,7 @@ def compare_models(dataset_path, model_ids, destination, *, evaluate_test=True, 
             predictions = []
             for index, row in enumerate(validation_rows):
                 tick(.4*(model_index+index/len(validation_rows))/len(model_ids))
-                fields = predict_image(row["paths"]["image"], identifier, progress=lambda _: tick(reported_progress))
+                fields = predict_image(row["paths"]["image"], identifier, progress=lambda _: tick(reported_progress), augmentation=augmentation)
                 path = fields_root / f"validation-{model_index}-{index}.npz"
                 np.savez_compressed(path, **fields)
                 predictions.append(path)
@@ -167,27 +190,34 @@ def compare_models(dataset_path, model_ids, destination, *, evaluate_test=True, 
                         valid = fields["valid"] & ~np.ma.getmaskarray(truth)
                         matrix += confusion_matrix(truth.data, (fields["probability"] >= threshold).astype(np.uint8), 2, valid)
                 threshold_scores.append({"threshold": threshold, "building_f1": metrics_from_matrix(matrix, ["background", "building"])["classes"][1]["f1"]})
-            selected_threshold = max(threshold_scores, key=lambda s: (s["building_f1"], -abs(s["threshold"]-.5), s["threshold"]))["threshold"]
+            # Restrict expensive object scoring to the three best pixel thresholds
+            # plus the fixed .5 baseline. All choices use validation data only.
+            ranked = sorted(threshold_scores, key=lambda s: (-s["building_f1"], abs(s["threshold"]-.5), s["threshold"]))
+            shortlisted = sorted({.5, *(s["threshold"] for s in ranked[:3])})
             alternatives = []
-            for mode, seed_distance in [("connected", 6), ("watershed", 4), ("watershed", 6), ("watershed", 8)]:
-                records = []
-                for row, path in zip(validation_rows, predictions):
-                    tick(.45)
-                    with np.load(path) as fields:
-                        metrics, _ = score_fields(fields, row, selected_threshold, mode, seed_distance)
-                    records.append({"sample_id": row["id"], "region": row["region"], "metrics": metrics})
-                alternatives.append({"instance_mode": mode, "seed_distance": seed_distance,
-                    "aggregate": aggregate(records), "records": records})
-            selected = max(alternatives, key=lambda a: (a["aggregate"]["objects_50"]["f1"], a["instance_mode"] == "connected", -a["seed_distance"]))
-            selections[identifier] = {"probability_threshold": selected_threshold,
+            for threshold in shortlisted:
+                for mode, seed_distance in [("connected", 6), ("watershed", 4), ("watershed", 6), ("watershed", 8), ("watershed", 12)]:
+                    records = []
+                    for row, path in zip(validation_rows, predictions):
+                        tick(.45)
+                        with np.load(path) as fields:
+                            metrics, _ = score_fields(fields, row, threshold, mode, seed_distance)
+                        records.append({"sample_id": row["id"], "region": row["region"], "metrics": metrics})
+                    alternatives.append({"probability_threshold": threshold, "instance_mode": mode, "seed_distance": seed_distance,
+                        "aggregate": aggregate(records), "balanced": balanced_validation_score(records), "records": records})
+            selected = choose_operating_point(alternatives)
+            selections[identifier] = {"probability_threshold": selected["probability_threshold"],
                 "instance_mode": selected["instance_mode"], "seed_distance": selected["seed_distance"]}
             validation[identifier] = {"threshold_search": threshold_scores, "selected": selected,
                 "postprocess_search": [{k: v for k, v in item.items() if k != "records"} for item in alternatives]}
-        best_model = max(model_ids, key=lambda identifier: (validation[identifier]["selected"]["aggregate"]["classes"][1]["f1"],
-            validation[identifier]["selected"]["aggregate"]["objects_50"]["f1"]))
+        best_model = max(model_ids, key=lambda identifier: (
+            validation[identifier]["selected"]["balanced"]["balanced_f1"],
+            validation[identifier]["selected"]["balanced"]["region_macro_object_f1"],
+            validation[identifier]["selected"]["aggregate"]["classes"][1]["f1"]))
         plan = {"dataset_fingerprint": dataset["fingerprint"], "models": identities, "parameters": selections,
             "selected_model_by_validation": best_model, "threshold_candidates": thresholds,
-            "selection_rule": "validation building pixel F1; object F1 only breaks model ties and selects postprocessing",
+            "augmentation": augmentation,
+            "selection_rule": "Joint threshold/postprocessor search; pooled pixel F1 within 0.03 of best candidate; maximize harmonic mean of region-macro pixel and object F1; rank models by the same balanced score.",
             "test_used_for_selection": False}
         plan["sha256"] = canonical_sha(plan)
         # Selection is written before the first test image/label is scored.
@@ -200,7 +230,7 @@ def compare_models(dataset_path, model_ids, destination, *, evaluate_test=True, 
                 records = []
                 for index, row in enumerate(test_rows):
                     tick(.5+.45*(model_index+index/len(test_rows))/len(model_ids))
-                    fields = predict_image(row["paths"]["image"], identifier, progress=lambda _: tick(reported_progress))
+                    fields = predict_image(row["paths"]["image"], identifier, progress=lambda _: tick(reported_progress), augmentation=augmentation)
                     parameters = selections[identifier]
                     metrics, ids = score_fields(fields, row, parameters["probability_threshold"],
                                                 parameters["instance_mode"], parameters["seed_distance"])

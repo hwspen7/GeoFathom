@@ -20,6 +20,7 @@ class CompareRequest(BaseModel):
     dataset_id: str = Field(pattern=r"^[a-f0-9]{64}$")
     model_ids: list[str] = Field(min_length=2, max_length=5)
     evaluate_test: bool = False
+    augmentation: Literal["none", "flips"] = "none"
     full_resolution: Literal[True] = True
 
 

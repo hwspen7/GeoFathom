@@ -174,7 +174,7 @@ def run_managed(kind, payload, job_id, progress=None, cancelled=None):
     elif kind == "building_compare":
         from .building_study import compare_models
         report = compare_models(dataset, payload["model_ids"], destination, evaluate_test=payload.get("evaluate_test", True),
-                                progress=progress, cancelled=cancelled)
+                                progress=progress, cancelled=cancelled, augmentation=payload.get("augmentation", "none"))
         filename = "comparison.json"
         result = {"dataset_fingerprint": report["dataset_fingerprint"], "selection": report["selection"],
             "test_evaluated": report["test_evaluated"],

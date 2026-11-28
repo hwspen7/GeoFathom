@@ -237,3 +237,15 @@ def test_gpu_instance_partition_compares_geometry_not_ids():
     assert partition_agreement(a, b)["passed"]
     b[0, 0] = 0
     assert not partition_agreement(a, b)["passed"]
+
+
+def test_joint_operating_point_balances_objects_without_large_pixel_loss():
+    from vision.building_study import choose_operating_point
+    def candidate(threshold, pixel, objects, balanced):
+        return {"probability_threshold": threshold, "seed_distance": 6, "instance_mode": "connected",
+            "aggregate": {"classes": [{}, {"f1": pixel}], "objects_75": {"f1": objects}},
+            "balanced": {"balanced_f1": balanced, "region_macro_object_f1": objects}}
+    highest_pixel = candidate(.25, .82, .30, .44)
+    balanced = candidate(.5, .80, .65, .72)
+    unacceptable = candidate(.75, .70, .90, .79)
+    assert choose_operating_point([highest_pixel, balanced, unacceptable]) is balanced

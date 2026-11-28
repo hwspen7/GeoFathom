@@ -151,3 +151,17 @@ CPU fallback exits unsuccessfully and cannot qualify a GPU run.
   exact foreground-minus-background logit margin and the author's divide-by-255
   preprocessing. Initial auxiliary heads are disabled until adaptation.
 - [HOT DINOv3 source and prior integration acceptance](BUILDING_EXTRACTION.md).
+
+## Precision-focused experiments
+
+The current comparison searches the three best validation pixel thresholds plus
+the fixed 0.5 operating point jointly with connected regions and four watershed
+seed distances. It maximizes the harmonic mean of equally weighted regional
+pixel and object F1, subject to a 0.03 pooled pixel-F1 loss guard within each
+model. The evaluation now uses the same component-local watershed normalization
+as deployment. Historical reports above remain unchanged and are not comparable
+without recording the different selection protocol. For four-view fusion, run a
+separate validation-only comparison with `--augmentation flips`. Inference
+averages spatially restored probability, boundary and signed-distance heads;
+no source resampling is performed. It uses four sequential model passes per
+tile and is experimental until independent data demonstrate an improvement.
