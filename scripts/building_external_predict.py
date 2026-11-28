@@ -69,15 +69,16 @@ def unibuild_loader(checkpoint,device):
     return predict
 
 
-def pix2poly_loader(checkpoint,device):
+def pix2poly_loader(checkpoint,device,variant="inria",encoder_cache=False):
     import torch
     from config import CFG
     from tokenizer import Tokenizer
     from models.model import Encoder,Decoder,EncoderDecoder
     from utils import test_generate,postprocess,permutations_to_polygons
     CFG.DEVICE=torch.device(device)
-    if (CFG.INPUT_HEIGHT,CFG.INPUT_WIDTH,CFG.N_VERTICES)!=(224,224,192):
-        raise ValueError("Pinned Pix2Poly INRIA configuration changed.")
+    from vision.building_pix2poly import configure_variant,cached_encoder
+    from contextlib import nullcontext
+    configure_variant(CFG,variant)
     tokenizer=Tokenizer(num_classes=1,num_bins=CFG.NUM_BINS,width=CFG.INPUT_WIDTH,
                         height=CFG.INPUT_HEIGHT,max_len=CFG.MAX_LEN)
     CFG.PAD_IDX=tokenizer.PAD_code
@@ -98,7 +99,8 @@ def pix2poly_loader(checkpoint,device):
             for index,(y,x,h,w) in enumerate(tiles):
                 patch=np.zeros((size,size,3),np.uint8);patch[:h,:w]=rgb[y:y+h,x:x+w]
                 tensor=torch.from_numpy(patch.transpose(2,0,1).copy())[None].to(device).float()/255.
-                pred,conf,perm=test_generate(model,tensor,tokenizer,max_len=CFG.generation_steps,top_k=0,top_p=1)
+                with (cached_encoder(model,tensor) if encoder_cache else nullcontext()):
+                    pred,conf,perm=test_generate(model,tensor,tokenizer,max_len=CFG.generation_steps,top_k=0,top_p=1)
                 coords,_=postprocess(pred,conf,tokenizer)
                 coord=torch.as_tensor(coords[0],dtype=torch.float32) if coords[0] is not None else torch.empty((0,2))
                 if len(coord)>CFG.N_VERTICES:
@@ -145,7 +147,7 @@ def sam_predict(checkpoint,root,rows,stage,score_threshold):
                                     f"{r['index']:06d}") for r in rows}
 
 
-def run(name,upstream,checkpoint,dataset_path,output,device,authorized,limit=None):
+def run(name,upstream,checkpoint,dataset_path,output,device,authorized,limit=None,*,pix_variant="inria",encoder_cache=False):
     import torch
     import importlib.metadata as metadata
     sys.dont_write_bytecode=True
@@ -162,6 +164,8 @@ def run(name,upstream,checkpoint,dataset_path,output,device,authorized,limit=Non
         raise ValueError("No validation chips.")
     if device=="cuda" and not torch.cuda.is_available():
         raise ValueError("Requested CUDA is unavailable.")
+    if name!="pix2poly" and (pix_variant!="inria" or encoder_cache):
+        raise ValueError("Pix2Poly options require --model pix2poly.")
     if name=="sampolybuild" and device!="cuda":
         raise ValueError("The official SAMPolyBuild automatic runner requires CUDA.")
     safe_load(torch)
@@ -179,6 +183,9 @@ def run(name,upstream,checkpoint,dataset_path,output,device,authorized,limit=Non
               "tile_size":512 if name=="unibuild" else 224 if name=="pix2poly" else None,
               "stride":384 if name=="unibuild" else 168 if name=="pix2poly" else None,
               "sam_score_threshold":.3 if name=="sampolybuild" else None,
+              "pix_variant":pix_variant if name=="pix2poly" else None,
+              "encoder_cache":encoder_cache if name=="pix2poly" else None,
+              "pix_adapter_sha256":file_sha256(Path(__file__).resolve().parents[1]/"vision/building_pix2poly.py") if name=="pix2poly" else None,
               "checkpoint_loading":"weights_only","split":"validation","code_sha256":file_sha256(Path(__file__))}
     output.parent.mkdir(parents=True,exist_ok=True)
     start=time.monotonic()
@@ -190,7 +197,7 @@ def run(name,upstream,checkpoint,dataset_path,output,device,authorized,limit=Non
                 predictions=sam_predict(checkpoint,root,rows,stage,.3)
                 predict=None
             else:
-                predict=unibuild_loader(checkpoint,device) if name=="unibuild" else pix2poly_loader(checkpoint,device)
+                predict=unibuild_loader(checkpoint,device) if name=="unibuild" else pix2poly_loader(checkpoint,device,pix_variant,encoder_cache)
             receipts=[]
             for row in rows:
                 print(f"{name} validation {row['index']+1}: {row['id']}",flush=True)
@@ -222,5 +229,7 @@ if __name__=="__main__":
     p.add_argument("--device",choices=("cpu","cuda"),default="cuda")
     p.add_argument("--authorized",action="store_true")
     p.add_argument("--limit",type=int,choices=range(1,37))
+    p.add_argument("--pix-variant",choices=("inria","spacenet","whu"),default="inria")
+    p.add_argument("--encoder-cache",action="store_true",help="Opt-in cached image encoder; verify native prediction parity before ranking.")
     a=p.parse_args()
-    run(a.model,a.upstream,a.checkpoint,a.dataset,a.output,a.device,a.authorized,a.limit)
+    run(a.model,a.upstream,a.checkpoint,a.dataset,a.output,a.device,a.authorized,a.limit,pix_variant=a.pix_variant,encoder_cache=a.encoder_cache)

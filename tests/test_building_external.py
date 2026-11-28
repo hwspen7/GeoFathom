@@ -101,3 +101,48 @@ def test_native_export_keeps_original_grid(tmp_path):
     assert not (path/"probability.tif").exists()
     data=json.loads((path/"footprints.json").read_text())
     assert data["coordinate_space"]=="native_crs" and data["features"][0]["properties"]["instance_id"]==1
+
+
+def test_pix_encoder_cache_reuses_only_same_image_and_restores():
+    import torch
+    from torch import nn
+    from vision.building_pix2poly import cached_encoder
+    class Encoder(nn.Module):
+        def __init__(self):
+            super().__init__();self.calls=0
+        def forward(self,x):
+            self.calls+=1;return x*2
+    class Decoder(nn.Module):
+        def predict(self,features,tokens):
+            return features+tokens,features
+    class Model(nn.Module):
+        def __init__(self):
+            super().__init__();self.encoder=Encoder();self.decoder=Decoder()
+        def predict(self,x,tokens):
+            return self.decoder.predict(self.encoder(x),tokens)
+    model=Model().eval();x=torch.ones(1,2);t=torch.ones(1,2)
+    with torch.no_grad():
+        expected=model.predict(x,t);model.encoder.calls=0
+        with cached_encoder(model,x):
+            for _ in range(4):
+                actual=model.predict(x,t)
+                torch.testing.assert_close(actual[0],expected[0])
+            assert model.encoder.calls==1
+            with pytest.raises(ValueError,match="another image"):
+                model.predict(x.clone(),t)
+        model.predict(x,t)
+        assert model.encoder.calls==2
+        with pytest.raises(RuntimeError):
+            with cached_encoder(model,x):
+                raise RuntimeError("test")
+        assert model.predict.__func__ is Model.predict
+
+
+def test_pix_variant_config_capacity():
+    from types import SimpleNamespace
+    from vision.building_pix2poly import configure_variant
+    c=SimpleNamespace(INPUT_HEIGHT=224,INPUT_WIDTH=224,PATCH_SIZE=8,NUM_BINS=224)
+    configure_variant(c,"whu")
+    assert (c.N_VERTICES,c.MAX_LEN,c.generation_steps)==(144,290,289)
+    configure_variant(c,"spacenet")
+    assert (c.N_VERTICES,c.MAX_LEN,c.generation_steps)==(192,386,385)
