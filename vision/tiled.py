@@ -138,7 +138,7 @@ def _preflight_mask(src, progress):
 
 
 def _disk_features(path, classes, max_features=MAX_RESULTS, min_pixels=9,
-                   progress=None, *, guarded_building_outlines=False):
+                   progress=None, *, guarded_building_outlines=False, fitted_building_outlines=False):
     """GDAL stitches connected regions across disk blocks before polygonization."""
     heap = []
     count = 0
@@ -191,7 +191,10 @@ def _disk_features(path, classes, max_features=MAX_RESULTS, min_pixels=9,
     results = []
     for pixels, _, klass, polygon in sorted(heap, reverse=True):
         outline_metadata = {}
-        if guarded_building_outlines:
+        if fitted_building_outlines:
+            from .building_outline import fitted_outline
+            polygon, outline_metadata = fitted_outline(polygon, source_transform)
+        elif guarded_building_outlines:
             from .building_outline import guarded_outline
             polygon, outline_metadata = guarded_outline(polygon, source_transform)
         elif pixels > 100:

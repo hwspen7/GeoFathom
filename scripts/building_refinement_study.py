@@ -17,6 +17,7 @@ from vision.building_refinement import (merge_fragments, overlap_diagnostics, hy
                                         joint_ridge, refine_mask, grouped_temperature_nll, spatial_view_fusion)
 from vision.building_study import score_fields, aggregate, _identity
 from vision.building_calibration import TemperatureFit, TEMPERATURES
+from vision.building_instance_quality import instance_records, ranked_metrics
 
 
 def run(dataset_path, models, output, device):
@@ -34,8 +35,9 @@ def run(dataset_path, models, output, device):
         if repair:
             ids = merge_fragments(ids, np.maximum(fields["probability"], 0), fields.get("boundary"))
             metrics, _ = score_fields(fields, row, threshold, mode, 6, instance_override=ids, mask_override=mask)
-        records.setdefault(name, []).append({"sample_id": row["id"], "metrics": metrics,
-            "overlap": overlap_diagnostics(ids, reference)})
+        records.setdefault(name, []).append({"sample_id": row["id"], "region":row["region"], "group":row["group"], "metrics": metrics,
+            "overlap": overlap_diagnostics(ids, reference),
+            "instance_quality": instance_records(ids, reference, fields["probability"]) if name.endswith(("_graph","_adaptive")) else None})
 
     for index, row in enumerate(rows):
         print(f"Validation {index+1}/{len(rows)}: {row['id']}", flush=True)
@@ -82,7 +84,8 @@ def run(dataset_path, models, output, device):
                   "spatial_window_pixels": 9, "spatial_secondary_weight_range": [1/3, 2/3]},
               "calibration_validation_fit": {k: v.result() for k, v in calibration.items()},
               "calibration_group_crossfit": {k: grouped_temperature_nll(v, TEMPERATURES) for k, v in group_fits.items()},
-              "results": {k: {"aggregate": aggregate(v), "records": v} for k, v in records.items()},
+              "results": {k: {"aggregate": aggregate(v), "records": v,
+                  "ranked_instance_metrics": ranked_metrics([r["instance_quality"] for r in v]) if v[0]["instance_quality"] is not None else None} for k, v in records.items()},
               "note": "Exploratory validation only; oracle is not deployable. Overlap counts are diagnostic, not causal or mutually exclusive. Calibration fit is not independently verified."}
     output.parent.mkdir(parents=True, exist_ok=True)
     with output.open("x", encoding="utf-8") as f:
