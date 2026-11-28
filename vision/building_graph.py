@@ -50,7 +50,7 @@ def optimize_regions(labels, probability, ridge, *, rounds=4):
             small,large=sorted((a,c),key=lambda j:(area[j],j))
             ratio=area[small]/area[large]
             compact=lambda A,P: 4*np.pi*A/max(P*P,1)
-            before=max(compact(area[a],perimeter[a]),compact(area[c],perimeter[c]))
+            before=(area[a]*compact(area[a],perimeter[a])+area[c]*compact(area[c],perimeter[c]))/(area[a]+area[c])
             after=compact(area[a]+area[c],perimeter[a]+perimeter[c]-2*length)
             contact=length/max(min(perimeter[a],perimeter[c]),1)
             # Larger fragments require a measurable compactness improvement;

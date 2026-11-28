@@ -38,7 +38,7 @@ export default function GeoAIAnalysisPanel(p:Props){
   const [modelId,setModelId]=useState('');
   const [secondaryModelId,setSecondaryModelId]=useState('');
   const [secondaryWeight,setSecondaryWeight]=useState(.5);
-  const [fusionMode,setFusionMode]=useState<'fixed'|'confidence'>('fixed');
+  const [fusionMode,setFusionMode]=useState<'fixed'|'confidence'|'spatial'>('fixed');
   const [buildingProfile,setBuildingProfile]=useState<Record<string,unknown>|null>(null);
   const [index,setIndex]=useState<'ndvi'|'ndwi'>('ndvi');
   const [firstBand,setFirstBand]=useState(4);
@@ -218,7 +218,7 @@ export default function GeoAIAnalysisPanel(p:Props){
       !visibleModels.some(m=>m.id===q.model_id)||!visibleModels.some(m=>m.id===q.secondary_model_id)||
       q.model_id===q.secondary_model_id||!Number.isFinite(q.secondary_weight)||q.secondary_weight<.05||q.secondary_weight>.95||
       !Number.isFinite(q.probability_threshold)||q.probability_threshold<=0||q.probability_threshold>=1||
-      !['fixed','confidence'].includes(q.fusion_mode)||!['connected','watershed','adaptive','graph'].includes(q.instance_mode)||
+      !['fixed','confidence','spatial'].includes(q.fusion_mode)||!['connected','watershed','adaptive','graph'].includes(q.instance_mode)||
       !['none','flips','multiscale','hybrid'].includes(q.augmentation)||!Number.isInteger(q.seed_distance)||q.seed_distance<1||q.seed_distance>64)
       throw new Error('Invalid profile or missing installed building model.');
     setModelId(q.model_id);setSecondaryModelId(q.secondary_model_id);setSecondaryWeight(q.secondary_weight);
@@ -346,7 +346,7 @@ export default function GeoAIAnalysisPanel(p:Props){
             {secondaryModelId&&<><label>Secondary probability weight<input aria-label="Secondary building weight" type="number"
               min={.05} max={.95} step={.05} value={secondaryWeight} onChange={e=>setSecondaryWeight(Number(e.target.value))}/></label>
               <label>Fusion mode<select aria-label="Building fusion mode" value={fusionMode} onChange={e=>setFusionMode(e.target.value as typeof fusionMode)}>
-                <option value="fixed">Fixed weight</option><option value="confidence">Confidence-adaptive (experimental)</option>
+                <option value="fixed">Fixed weight</option><option value="confidence">Confidence-adaptive (experimental)</option><option value="spatial" disabled={buildingAugmentation!=='hybrid'}>Spatial reliability (hybrid views)</option>
               </select></label></>}
             </>}
             <label>Building probability threshold
@@ -358,7 +358,7 @@ export default function GeoAIAnalysisPanel(p:Props){
                 value={minimumArea} onChange={e=>setMinimumArea(Number(e.target.value))}/>
             </label>
             <label>Inference mode<select aria-label="Building inference augmentation" value={buildingAugmentation}
-              onChange={e=>setBuildingAugmentation(e.target.value as typeof buildingAugmentation)}>
+              onChange={e=>{const mode=e.target.value as typeof buildingAugmentation;setBuildingAugmentation(mode);if(mode!=='hybrid'&&fusionMode==='spatial')setFusionMode('fixed');}}>
               <option value="none">Standard</option>
               <option value="flips">Four-view fusion (experimental)</option>
               <option value="multiscale">Multi-scale fusion (experimental)</option>

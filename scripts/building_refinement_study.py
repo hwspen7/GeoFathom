@@ -18,6 +18,7 @@ from vision.building_refinement import (merge_fragments, overlap_diagnostics, hy
 from vision.building_study import score_fields, aggregate, _identity
 from vision.building_calibration import TemperatureFit, TEMPERATURES
 from vision.building_instance_quality import instance_records, ranked_metrics
+from vision.building_reliability import fuse_reliability
 
 
 def run(dataset_path, models, output, device):
@@ -51,6 +52,9 @@ def run(dataset_path, models, output, device):
         fields["hybrid"] = hybrid_fields(fields["flips"], fields["multiscale"])
         fields["spatial"] = spatial_view_fusion(views["flips"][0], views["multiscale"][0],
                                                 views["flips"][1], views["multiscale"][1])
+        a,b=[hybrid_fields(x,y) for x,y in zip(views["flips"],views["multiscale"])]
+        da,db=[np.abs(x["probability"]-y["probability"]) for x,y in zip(views["flips"],views["multiscale"])]
+        fields["reliability"]={**a,"probability":fuse_reliability(a["probability"],b["probability"],da,db,a["valid"])}
         with rasterio.open(row["paths"]["labels"]) as src:
             truth = src.read(1, masked=True)
         valid = fields["flips"]["valid"] & ~np.ma.getmaskarray(truth)

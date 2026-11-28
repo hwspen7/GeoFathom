@@ -47,6 +47,8 @@ def predict_image(path, model_id, *, device=None, memory_mb=256, progress=None, 
                 source.width * source.height * 48 > memory_mb * 1024**2):
             raise RasterError("Benchmark image exceeds the declared memory or band budget.")
         fields = {"probability": np.full(source.shape, -1., np.float32)}
+        if augmentation == "hybrid":
+            fields["view_disagreement"] = np.zeros(source.shape, np.float32)
         for name in ("boundary", "distance"):
             if config.get(name+"_channel") is not None:
                 fields[name] = np.zeros(source.shape, np.float32)

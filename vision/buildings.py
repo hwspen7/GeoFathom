@@ -35,7 +35,7 @@ class BuildingInput(BaseModel):
     model_id: str = Field(min_length=1, max_length=64)
     secondary_model_id: str | None = Field(default=None, min_length=1, max_length=64)
     secondary_weight: float = Field(default=.5, ge=.05, le=.95, allow_inf_nan=False)
-    fusion_mode: Literal["fixed", "confidence"] = "fixed"
+    fusion_mode: Literal["fixed", "confidence", "spatial"] = "fixed"
     profile: dict | None = None
     probability_threshold: float = Field(default=.5, gt=0, lt=1, allow_inf_nan=False)
     minimum_area_m2: float = Field(default=4., ge=0, le=100000, allow_inf_nan=False)
@@ -57,6 +57,8 @@ def validate(payload):
         raise RasterError("Choose two distinct ensemble models.")
     if options.fusion_mode != "fixed" and options.secondary_model_id is None:
         raise RasterError("Dynamic fusion requires a secondary building model.")
+    if options.fusion_mode == "spatial" and options.augmentation != "hybrid":
+        raise RasterError("Spatial reliability fusion requires hybrid views.")
     if options.profile is not None and options.secondary_model_id is None:
         raise RasterError("An ensemble profile requires both building models.")
     if not options.full_resolution:
@@ -135,6 +137,7 @@ def extract_buildings(path, options, output_dir, progress=None, cancelled=None):
     device = os.getenv("GEOFATHOM_VISION_DEVICE", "cpu").lower()
     if device not in ("cpu", "cuda"):
         raise RasterError("Vision device must be cpu or cuda.")
+    spatial = options.fusion_mode == "spatial"
     output_dir = Path(output_dir)
     output_dir.parent.mkdir(parents=True, exist_ok=True)
     if output_dir.exists():
@@ -187,6 +190,8 @@ def extract_buildings(path, options, output_dir, progress=None, cancelled=None):
             bytes_per_pixel = 17 if options.instance_mode in ("watershed", "adaptive", "graph") else 5
             if secondary is not None:
                 bytes_per_pixel += 12  # temporary secondary field and two diagnostic outputs
+            if spatial:
+                bytes_per_pixel += 12  # primary raw field and two instability fields
             if not 16 <= quota_mb <= 4096 or width * height * bytes_per_pixel + 8 * 1024**2 > quota:
                 raise RasterError("Building artifact budget is insufficient for this study area.")
             if shutil.disk_usage(stage).free < width * height * bytes_per_pixel + 32 * 1024**2:
@@ -210,7 +215,9 @@ def extract_buildings(path, options, output_dir, progress=None, cancelled=None):
                 other_stride = other_size-2*other_halo
                 secondary_tile_count = ((math.ceil((crop_left+width)/other_stride)-crop_left//other_stride) *
                                         (math.ceil((crop_top+height)/other_stride)-crop_top//other_stride))
-                with rasterio.open(stage/"secondary.tif", "w", **profile, dtype="float32", nodata=-1.) as other:
+                with ExitStack() as secondary_stack:
+                    other = secondary_stack.enter_context(rasterio.open(stage/"secondary.tif", "w", **profile, dtype="float32", nodata=-1.))
+                    other_delta = secondary_stack.enter_context(rasterio.open(stage/"secondary-delta.tif", "w", **profile, dtype="float32", nodata=-1.)) if spatial else None
                     for number, tile in enumerate(context_tiles_for_window(src.width, src.height, other_size, other_halo,
                                                          crop_left, crop_top, width, height)):
                         tick(.4*number/secondary_tile_count)
@@ -220,9 +227,15 @@ def extract_buildings(path, options, output_dir, progress=None, cancelled=None):
                         if not np.isfinite(scores).all() or np.any((scores < 0) | (scores > 1)):
                             raise RasterError("Secondary building model returned invalid probabilities.")
                         other.write(np.where(valid, scores, -1.).astype(np.float32), 1, window=tile.core)
+                        if other_delta is not None:
+                            other_delta.write(np.where(valid, heads["view_disagreement"][tile.crop], -1.).astype(np.float32), 1, window=tile.core)
                 _check_scratch(stage/"secondary.tif", quota)
             with ExitStack() as stack:
                 other = stack.enter_context(rasterio.open(stage/"secondary.tif")) if secondary is not None else None
+                if spatial:
+                    other_delta = stack.enter_context(rasterio.open(stage/"secondary-delta.tif"))
+                    raw = stack.enter_context(rasterio.open(stage/"primary-raw.tif", "w+", **profile, dtype="float32", nodata=-1.))
+                    raw_delta = stack.enter_context(rasterio.open(stage/"primary-delta.tif", "w+", **profile, dtype="float32", nodata=-1.))
                 mask = stack.enter_context(rasterio.open(stage / "mask.tif", "w",
                     **profile, dtype="uint8", nodata=255))
                 probability = stack.enter_context(rasterio.open(stage / "probability.tif", "w",
@@ -251,6 +264,12 @@ def extract_buildings(path, options, output_dir, progress=None, cancelled=None):
                             rasterio.windows.transform(tile.core, affine), invert=True)
                     if (not np.isfinite(scores).all() or np.any((scores < 0) | (scores > 1))):
                         raise RasterError("Building model returned invalid probabilities.")
+                    if spatial:
+                        raw.write(np.where(core_valid,scores,-1.).astype(np.float32),1,window=tile.core)
+                        raw_delta.write(np.where(core_valid,heads["view_disagreement"][tile.crop],-1.).astype(np.float32),1,window=tile.core)
+                        for name,target in auxiliary.items():
+                            target.write(np.where(core_valid,heads[name][tile.crop],-9999.).astype(np.float32),1,window=tile.core)
+                        continue
                     if other is not None:
                         secondary_scores = other.read(1, window=tile.core)
                         if np.any(core_valid & (secondary_scores < 0)):
@@ -274,8 +293,40 @@ def extract_buildings(path, options, output_dir, progress=None, cancelled=None):
                                      1, window=tile.core)
                     valid_pixels += int(core_valid.sum())
                     foreground_pixels += int(positive.sum())
+                if spatial:
+                    from .building_reliability import HALO, fuse_reliability
+                    # Separate source-grid pass supplies true neighborhood context
+                    # across member tile seams, bounded by the selected AOI support.
+                    for y in range(0,height,128):
+                        for x in range(0,width,128):
+                            tick(.81)
+                            h,w=min(128,height-y),min(128,width-x)
+                            top,left=max(0,y-HALO),max(0,x-HALO)
+                            bottom,right=min(height,y+h+HALO),min(width,x+w+HALO)
+                            context=Window(left,top,right-left,bottom-top)
+                            core=Window(x,y,w,h)
+                            crop_s=(slice(y-top,y-top+h),slice(x-left,x-left+w))
+                            a,b,da,db=[s.read(1,window=context) for s in (raw,other,raw_delta,other_delta)]
+                            support=a>=0
+                            if np.any(support & (b<0)):
+                                raise RasterError("Spatial member support differs.")
+                            fused=fuse_reliability(a,b,da,db,support,options.secondary_weight)
+                            valid=support[crop_s]; scores=fused[crop_s]
+                            disagreement,entropy=uncertainty_fields(a[crop_s],b[crop_s],scores,valid)
+                            diagnostics["disagreement"].write(disagreement,1,window=core)
+                            diagnostics["entropy"].write(entropy,1,window=core)
+                            positive=valid & (scores>=options.probability_threshold)
+                            mask.write(np.where(valid,positive,255).astype(np.uint8),1,window=core)
+                            probability.write(scores,1,window=core)
+                            valid_pixels+=int(valid.sum()); foreground_pixels+=int(positive.sum())
+                            disagreement_sum+=float(disagreement[valid].sum(dtype=np.float64))
+                            entropy_sum+=float(entropy[valid].sum(dtype=np.float64))
+                            high_disagreement_pixels+=int(np.count_nonzero(valid & (disagreement>=.3)))
             if secondary is not None:
                 (stage/"secondary.tif").unlink()
+            if spatial:
+                for name in ("secondary-delta","primary-raw","primary-delta"):
+                    (stage/(name+".tif")).unlink()
             if not valid_pixels:
                 raise RasterError("The study area contains no valid source pixels.")
             for name in ("mask.tif", "probability.tif"):
@@ -335,6 +386,8 @@ def extract_buildings(path, options, output_dir, progress=None, cancelled=None):
                         "high_disagreement_threshold": .3,
                         "interpretation": "Raw probability disagreement and entropy; not calibrated error probability."},
                     "auxiliary_heads": "primary_only",
+                    **({"spatial_windows_pixels":[5,9,17],"spatial_odds_multiplier_limit":2.,
+                        "spatial_support":"selected_valid_source_pixels"} if spatial else {}),
                     "secondary_model_sha256": file_sha256(secondary["model_path"]),
                     "secondary_manifest_sha256": file_sha256(secondary["model_path"].with_suffix(".json"))}
                     if secondary is not None else None),

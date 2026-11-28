@@ -64,3 +64,17 @@ def test_spatial_consistency_fusion():
     assert np.all(h["probability"][valid]>equal)
     assert np.all(h["probability"][valid]<=.8) and np.all(h["probability"][~valid]==-1)
     np.testing.assert_allclose(spatial_view_fusion(a,a,b,b)["probability"][valid],.85,atol=1e-7)
+
+
+def test_multiscale_reliability_has_bounded_prior_and_block_parity():
+    from vision.building_reliability import fuse_reliability, HALO
+    rng=np.random.default_rng(23)
+    a,b,da,db=[rng.random((40,50),dtype=np.float32) for _ in range(4)]
+    valid=rng.random(a.shape)>.1
+    full=fuse_reliability(a,b,da,db,valid)
+    part=fuse_reliability(a[:,15-HALO:35+HALO],b[:,15-HALO:35+HALO],da[:,15-HALO:35+HALO],
+                          db[:,15-HALO:35+HALO],valid[:,15-HALO:35+HALO])
+    np.testing.assert_allclose(part[:,HALO:-HALO],full[:,15:35],atol=1e-6)
+    assert np.all(full[~valid]==-1)
+    assert np.all(full[valid]>=np.minimum(a,b)[valid]-1e-7)
+    assert np.all(full[valid]<=np.maximum(a,b)[valid]+1e-7)
