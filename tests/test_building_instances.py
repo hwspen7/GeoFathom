@@ -138,3 +138,29 @@ def test_multiscale_fusion_has_native_fallback_outside_zoom_support(monkeypatch)
     assert result[0, 0] == pytest.approx(.2)
     assert result[32, 32] == pytest.approx(.5)
     assert np.all((result >= .2-1e-7) & (result <= .5+1e-7))
+
+
+def test_adaptive_seed_spacing_retains_nearby_small_roof_peak():
+    from vision.building_seeds import select_seeds
+    radii = np.ones((24, 24), np.float32)
+    radii[10,10]=8
+    radii[10,14]=2
+    candidates=[(.9,10,10),(.6,10,14)]
+    assert select_seeds(candidates,radii,6)==[(10,10)]
+    assert select_seeds(candidates,radii,6,adaptive=True)==[(10,10),(10,14)]
+
+
+def test_adaptive_instances_preserve_foreground_holes_and_separate_narrow_adjacent_roof():
+    from vision.building_instances import separate_components
+    mask=np.zeros((40,48),bool)
+    mask[8:32,4:28]=True
+    mask[17:23,28:36]=True
+    mask[12:15,8:11]=False
+    boundary=np.zeros(mask.shape,np.float32)
+    boundary[17:23,27:29]=.95
+    p=mask.astype(np.float32)*.9
+    labels=separate_components(mask,p,boundary,seed_distance=16,adaptive=True)
+    np.testing.assert_array_equal(labels>0,mask)
+    assert labels[20,32] != labels[20,20]
+    assert labels[20,32]>0
+    np.testing.assert_array_equal(labels,separate_components(mask,p,boundary,seed_distance=16,adaptive=True))

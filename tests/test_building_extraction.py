@@ -324,3 +324,17 @@ def test_two_real_onnx_members_with_distinct_tile_grids_fuse_native_probabilitie
     assert result["ensemble"]["secondary_model_sha256"]
     with pytest.raises(RasterError, match="distinct"):
         validate(options(secondary_model_id="numerical"))
+
+
+def test_adaptive_instance_raster_matches_study_partition(setup):
+    from vision.building_instances import separate_components
+    path,out,_,_=setup
+    result=extract_buildings(path,options(instance_mode="adaptive",memory_mb=64),out)
+    with rasterio.open(out/"mask.tif") as mask,rasterio.open(out/"probability.tif") as probability, rasterio.open(out/"instances.tif") as instance:
+        foreground=mask.read(1)==1
+        expected=separate_components(foreground,np.maximum(probability.read(1),0),adaptive=True)
+        actual=instance.read(1)
+        np.testing.assert_array_equal(actual>0,foreground)
+        from scripts.building_gpu_acceptance import partition_agreement
+        assert partition_agreement(actual,expected)["passed"]
+    assert result["instance_separation"]["adaptive"] is True

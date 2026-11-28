@@ -47,7 +47,7 @@ export default function GeoAIAnalysisPanel(p:Props){
   const [buildingAugmentation,setBuildingAugmentation]=useState<'none'|'flips'|'multiscale'>('none');
   const [minimumArea,setMinimumArea]=useState(4);
   const [useStudyArea,setUseStudyArea]=useState(false);
-  const [instanceMode,setInstanceMode]=useState<'connected'|'watershed'>('connected');
+  const [instanceMode,setInstanceMode]=useState<'connected'|'watershed'|'adaptive'>('connected');
   const [seedDistance,setSeedDistance]=useState(6);
   const [researchOpen,setResearchOpen]=useState(false);
   const [afterImageId,setAfterImageId]=useState('');
@@ -339,9 +339,10 @@ export default function GeoAIAnalysisPanel(p:Props){
             <label>Building separation<select aria-label="Building instance separation" value={instanceMode}
               onChange={e=>setInstanceMode(e.target.value as typeof instanceMode)}>
               <option value="watershed">Experimental instances · boundary / distance watershed</option>
+              <option value="adaptive">Adaptive instances (experimental)</option>
               <option value="connected">Connected foreground regions</option>
             </select></label>
-            {instanceMode==='watershed'&&<label>Minimum seed spacing (pixels)
+            {instanceMode!=='connected'&&<label>{instanceMode==='adaptive'?'Maximum adaptive seed spacing (pixels)':'Minimum seed spacing (pixels)'}
               <input aria-label="Building instance seed spacing" type="number" min={1} max={64} value={seedDistance}
                 onChange={e=>setSeedDistance(Number(e.target.value))}/></label>}
             <label><input aria-label="Limit buildings to selected study area" type="checkbox"

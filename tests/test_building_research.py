@@ -452,3 +452,13 @@ def test_confidence_fusion_is_bounded_and_preserves_unanimity_and_nodata():
     assert e[0,2]==e[0,3]==0 and d[0,4]==e[0,4]==-1
     with pytest.raises(RasterError,match="Unsupported"):
         fuse_probabilities(a,b,.5,valid,mode="unknown")
+
+
+def test_ensemble_candidate_grid_includes_adaptive_and_fixed_controls(dataset,models,tmp_path):
+    from vision.building_ensemble_study import compare_ensemble
+    report=compare_ensemble(dataset,models,tmp_path/"adaptive-grid")
+    grid=report["selection"]["candidate_grid"]
+    assert len(grid)==120
+    assert {r["instance_mode"] for r in grid}=={"connected","watershed","adaptive"}
+    assert {r["fusion_mode"] for r in grid}=={"fixed","confidence"}
+    assert not report["test_evaluated"] and report["holdout"] is None

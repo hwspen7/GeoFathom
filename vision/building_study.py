@@ -84,9 +84,10 @@ def score_fields(fields, row, threshold=.5, instance_mode="connected", seed_dist
     else:
         reference_ids = ndi.label(truth & valid)[0]
         reference_type = "connected_semantic_reference_not_true_instances"
-    if instance_mode == "watershed":
+    if instance_mode in ("watershed", "adaptive"):
         predicted_ids = separate_components(observed, np.maximum(fields["probability"], 0),
-            fields.get("boundary"), fields.get("distance"), seed_distance=seed_distance)
+            fields.get("boundary"), fields.get("distance"), seed_distance=seed_distance,
+            adaptive=instance_mode=="adaptive")
     elif instance_mode == "connected":
         predicted_ids = ndi.label(observed)[0]
     else:
@@ -255,7 +256,8 @@ def compare_models(dataset_path, model_ids, destination, *, evaluate_test=True, 
             shortlisted = sorted({.5, *(s["threshold"] for s in ranked[:3])})
             alternatives = []
             for threshold in shortlisted:
-                for mode, seed_distance in [("connected", 6), ("watershed", 4), ("watershed", 6), ("watershed", 8), ("watershed", 12)]:
+                for mode, seed_distance in [("connected", 6), ("watershed", 4), ("watershed", 6), ("watershed", 8), ("watershed", 12),
+                                            ("adaptive", 6), ("adaptive", 10)]:
                     records = []
                     for row, path in zip(validation_rows, predictions):
                         tick(.45)

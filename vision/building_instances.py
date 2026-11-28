@@ -16,7 +16,7 @@ from .tiled import _preflight_mask, MAX_COMPONENTS
 
 
 def separate_instances(foreground, probability, boundary=None, distance=None,
-                       seed_distance=6, boundary_weight=1., max_instances=20000):
+                       seed_distance=6, boundary_weight=1., max_instances=20000, *, adaptive=False):
     """Partition foreground pixels exactly; preserve background and courtyard holes.
 
     Predicted heads guide separation when present. A geometric distance field
@@ -41,13 +41,17 @@ def separate_instances(foreground, probability, boundary=None, distance=None,
     if not foreground.any():
         return np.zeros(foreground.shape, np.int32)
     # Padding exposes the real background at component/window borders to EDT.
-    geometric = ndi.distance_transform_edt(np.pad(foreground, 1))[1:-1, 1:-1].astype(np.float32)
-    geometric /= max(float(geometric.max()), 1.)
+    radius = ndi.distance_transform_edt(np.pad(foreground, 1))[1:-1, 1:-1].astype(np.float32)
+    geometric = radius / max(float(radius.max()), 1.)
     score = geometric if distance is None else .5 * geometric + .5 * np.maximum(distance, 0)
     score = np.where(foreground, score, 0).astype(np.float32)
     ridge = np.zeros_like(score) if boundary is None else np.asarray(boundary, np.float32)
     # h-maxima suppresses shallow numerical ripples, and each plateau receives one seed.
     peaks = h_maxima(score, .15) & foreground
+    if adaptive:
+        # Absolute prominence in source pixels preserves narrow attached roofs
+        # whose normalized peak is suppressed by a much wider neighbor.
+        peaks |= h_maxima(radius, .8) & foreground
     peak_labels, count = ndi.label(peaks)
     candidates = []
     for index, window in enumerate(ndi.find_objects(peak_labels), 1):
@@ -77,18 +81,13 @@ def separate_instances(foreground, probability, boundary=None, distance=None,
             if interior_count > component_count:
                 candidates.append((float(score[tuple(pos)]), int(pos[0]), int(pos[1])))
     markers = np.zeros(foreground.shape, np.int32)
-    selected = []
-    buckets = {}
-    for _, y, x in sorted(candidates, key=lambda t: (-t[0], t[1], t[2])):
-        by, bx = y // seed_distance, x // seed_distance
-        neighbors = [pos for dy in (-1, 0, 1) for dx in (-1, 0, 1)
-                     for pos in buckets.get((by+dy, bx+dx), [])]
-        if all((y-sy)**2 + (x-sx)**2 >= seed_distance**2 for sy, sx in neighbors):
-            selected.append((y, x))
-            buckets.setdefault((by, bx), []).append((y, x))
-            if len(selected) > max_instances:
-                raise RasterError("Too many instance seeds; reduce the study area.")
-            markers[y, x] = len(selected)
+    from .building_seeds import select_seeds
+    try:
+        selected = select_seeds(candidates, radius, seed_distance, adaptive=adaptive, limit=max_instances)
+    except ValueError as error:
+        raise RasterError(str(error)) from error
+    for index, (y, x) in enumerate(selected, 1):
+        markers[y, x] = index
     # Every connected component gets a seed, including small/thin low-confidence regions.
     components, _ = ndi.label(foreground)
     for index, window in enumerate(ndi.find_objects(components), 1):
@@ -103,7 +102,11 @@ def separate_instances(foreground, probability, boundary=None, distance=None,
             if len(selected) > max_instances:
                 raise RasterError("Too many connected building candidates.")
             markers[y, x] = len(selected)
-    result = watershed(-score + boundary_weight * ridge, markers, mask=foreground,
+    # Low mask probability is weak ridge evidence, never a mask erasure.
+    cost = -score + boundary_weight*ridge
+    if adaptive:
+        cost = cost + .2*(1-probability)
+    result = watershed(cost, markers, mask=foreground,
                        connectivity=1, watershed_line=False).astype(np.int32)
     if not np.array_equal(result > 0, foreground):
         raise RasterError("Instance separation changed the foreground support.")
@@ -111,7 +114,7 @@ def separate_instances(foreground, probability, boundary=None, distance=None,
 
     
 def separate_components(foreground, probability, boundary=None, distance=None, *, seed_distance=6,
-                        boundary_weight=1., max_instances=20000):
+                        boundary_weight=1., max_instances=20000, adaptive=False):
     """Use component-local normalization, as in the production disk path."""
     foreground = np.asarray(foreground, bool)
     if foreground.ndim != 2 or any(np.shape(f) != foreground.shape for f in
@@ -127,7 +130,7 @@ def separate_components(foreground, probability, boundary=None, distance=None, *
         fields = [np.where(local, f[window], 0) if f is not None else None
                   for f in (probability, boundary, distance)]
         labels = separate_instances(local, *fields, seed_distance=seed_distance,
-                                    boundary_weight=boundary_weight, max_instances=max_instances-total)
+                                    boundary_weight=boundary_weight, max_instances=max_instances-total, adaptive=adaptive)
         output[window][local] = labels[local] + total
         total += int(labels.max())
     return output
@@ -144,7 +147,7 @@ class InstanceClasses:
 
 def instance_raster(mask_path, probability_path, destination, *, boundary_path=None,
                     distance_path=None, seed_distance=6, boundary_weight=1., memory_mb=64,
-                    progress=None):
+                    progress=None, adaptive=False):
     """Separate one complete connected component at a time, across all tile seams."""
     total = 0
     with ExitStack() as stack:
@@ -184,7 +187,8 @@ def instance_raster(mask_path, probability_path, destination, *, boundary_path=N
             fields = [s.read(1, window=window) if s is not None else None for s in (probability, boundary, distance)]
             # Auxiliary nodata lies outside the component and is excluded explicitly.
             fields = [np.where(foreground, field, 0) if field is not None else None for field in fields]
-            labels = separate_instances(foreground, fields[0], fields[1], fields[2], seed_distance, boundary_weight)
+            labels = separate_instances(foreground, fields[0], fields[1], fields[2], seed_distance, boundary_weight,
+                                        adaptive=adaptive)
             count = int(labels.max())
             if total + count > MAX_COMPONENTS:
                 raise RasterError("Too many building instances; reduce the study area.")
@@ -198,4 +202,6 @@ def instance_raster(mask_path, probability_path, destination, *, boundary_path=N
             if progress is not None:
                 progress(.84)
     return {"instances": total, "connected_components": scanned,
-            "method": "boundary_distance_watershed" if boundary_path or distance_path else "geometric_distance_watershed"}
+            "adaptive": adaptive,
+            "method": ("adaptive_" if adaptive else "") + (
+                "boundary_distance_watershed" if boundary_path or distance_path else "geometric_distance_watershed")}

@@ -54,7 +54,7 @@ def compare_ensemble(dataset_path, model_ids, destination, *, augmentation="none
                for weight in (0., .25, .5, .75, 1.)
                for fusion in (("fixed",) if weight in (0., 1.) else ("fixed", "confidence"))
                for threshold in (.35, .5, .65)
-               for mode, seed in (("connected", 6), ("watershed", 6), ("watershed", 10))]
+               for mode, seed in (("connected", 6), ("watershed", 6), ("watershed", 10), ("adaptive", 6), ("adaptive", 10))]
     validation = [[] for _ in recipes]
     rows = [r for r in dataset["samples"] if r["split"] == "validation"]
 

@@ -291,3 +291,12 @@ stores |p1-p2|, entropy.tif stores normalized binary entropy of the fused score,
 both with source CRS, grid and -1 nodata. They are diagnostic layers, not
 calibrated error probabilities. High disagreement means >=0.3 raw probability
 difference, and its fraction is calculated over all valid pixels.
+
+Adaptive instance separation is an opt-in third postprocessor. It retains
+absolute EDT peaks (0.8 source-pixel prominence), uses local inscribed radius
+to reduce suppression spacing near narrow roofs, and adds weak mask-probability
+ridge evidence to watershed cost. Strong boundary-separated interiors retain
+priority. All foreground pixels and holes remain unchanged; the partition
+is experimental. Both benchmark and disk execution use the same algorithm.
+The ensemble search now contains 120 recipes, including adaptive separation;
+validation determines whether this mode is preferable to the fixed baseline.
