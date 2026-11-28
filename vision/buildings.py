@@ -282,6 +282,7 @@ def extract_buildings(path, options, output_dir, progress=None, cancelled=None):
                     props.update({"image_id": options.image_id, "model_id": options.model_id,
                         "provider": "onnxruntime", "method": "building_extraction",
                         "secondary_model_id": options.secondary_model_id,
+                        "secondary_weight": options.secondary_weight if secondary is not None else None,
                         "probability_threshold": options.probability_threshold,
                         "mean_building_probability": _region_probability(feature, str(src.crs), probability),
                         "confidence_calibrated": False,

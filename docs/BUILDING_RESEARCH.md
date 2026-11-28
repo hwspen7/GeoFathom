@@ -270,3 +270,10 @@ before that phase. The deployment parameters in ensemble.json can be manually
 applied in GeoAI. The primary supplies native auxiliary heads for fused recipes.
 No training or automatic promotion is performed. A gate pass is not evidence
 of independence from earlier experiments or model pretraining.
+
+Object evaluation at IoU 0.5 now retains size-stratified support from a single
+global one-to-one assignment: small below 64, medium 64–255, and large at
+least 256 source pixels. Recall is grouped by reference size, precision by
+predicted size. Cross-bin matches remain valid; undefined bin metrics are
+null and no invalid per-bin F1 is constructed. These are image-pixel sizes,
+not comparable ground areas across different ground sampling distances.

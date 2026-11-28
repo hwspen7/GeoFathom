@@ -15,14 +15,38 @@ from imagery.store import file_sha256
 from .quality import confusion_matrix, metrics_from_matrix
 
 
-def object_metrics(predicted, truth, iou_threshold=.5):
+
+def size_recall(predicted, truth, pairs):
+    """Recall by reference area, precision by predicted area from one global matching.
+
+    Areas must be in source pixel units; a cross-bin match remains a match in
+    each respective population. No misleading combined per-bin F1 is produced.
+    """
+    matched_predicted = {i for i, _ in pairs}
+    matched_truth = {j for _, j in pairs}
+    bins = (("small", 0, 64), ("medium", 64, 256), ("large", 256, float("inf")))
+    result = {}
+    for name, lower, upper in bins:
+        reference = [j for j, poly in enumerate(truth) if lower <= poly.area < upper]
+        observed = [i for i, poly in enumerate(predicted) if lower <= poly.area < upper]
+        tp_ref = sum(j in matched_truth for j in reference)
+        tp_pred = sum(i in matched_predicted for i in observed)
+        result[name] = {"minimum_pixels": lower, "maximum_pixels_exclusive": upper if np.isfinite(upper) else None,
+            "reference_count": len(reference), "matched_reference": tp_ref,
+            "predicted_count": len(observed), "matched_predicted": tp_pred,
+            "recall": tp_ref/len(reference) if reference else None,
+            "precision": tp_pred/len(observed) if observed else None}
+    return result
+
+
+def object_metrics(predicted, truth, iou_threshold=.5, *, pixel_size_breakdown=False):
     """Maximum-cardinality, one-to-one matching at a fixed polygon IoU threshold."""
     from scipy.optimize import linear_sum_assignment
     if not 0 < iou_threshold <= 1:
         raise ValueError("Invalid object IoU threshold.")
     if len(predicted) > 20000 or len(truth) > 20000:
         raise RasterError("Object evaluation exceeds the bounded matching budget.")
-    matches = []
+    matches, pairs = [], []
     if predicted and truth:
         # Use sparse spatial candidates for dense scenes instead of allocating N×M matrices.
         if len(predicted)*len(truth) > 1_000_000:
@@ -45,14 +69,16 @@ def object_metrics(predicted, truth, iou_threshold=.5):
                 rows, cols = zip(*edges)
                 graph = csr_matrix((np.ones(len(edges), np.uint8), (rows, cols)), shape=(len(predicted), len(truth)))
                 assignment = maximum_bipartite_matching(graph, perm_type="column")
-                matches = [scores[(i, int(j))] for i, j in enumerate(assignment) if j >= 0]
+                pairs = [(i, int(j)) for i, j in enumerate(assignment) if j >= 0]
+                matches = [scores[pair] for pair in pairs]
             tp = len(matches)
             fp, fn = len(predicted)-tp, len(truth)-tp
             return {"iou_threshold": iou_threshold, "true_positive": tp, "false_positive": fp, "false_negative": fn,
                 "precision": tp/(tp+fp) if tp+fp else 0., "recall": tp/(tp+fn) if tp+fn else 0.,
                 "f1": 2*tp/(2*tp+fp+fn) if 2*tp+fp+fn else 0.,
                 "mean_matched_iou": float(np.mean(matches)) if matches else None,
-                "matching": "sparse maximum cardinality; matched-IoU ties are not optimized"}
+                "matching": "sparse maximum cardinality; matched-IoU ties are not optimized",
+                **({"size_breakdown": size_recall(predicted, truth, pairs)} if pixel_size_breakdown else {})}
         ious = np.zeros((len(predicted), len(truth)), np.float64)
         for i, first in enumerate(predicted):
             for j, second in enumerate(truth):
@@ -63,7 +89,8 @@ def object_metrics(predicted, truth, iou_threshold=.5):
         eligible = ious >= iou_threshold
         score = eligible * (min(ious.shape) + 1 + ious)
         rows, cols = linear_sum_assignment(score, maximize=True)
-        matches = [float(ious[i, j]) for i, j in zip(rows, cols) if eligible[i, j]]
+        pairs = [(int(i), int(j)) for i, j in zip(rows, cols) if eligible[i, j]]
+        matches = [float(ious[i, j]) for i, j in pairs]
     tp = len(matches)
     fp, fn = len(predicted) - tp, len(truth) - tp
     return {"iou_threshold": iou_threshold, "true_positive": tp,
@@ -72,7 +99,8 @@ def object_metrics(predicted, truth, iou_threshold=.5):
         "recall": tp / (tp + fn) if tp + fn else 0.,
         "f1": 2 * tp / (2 * tp + fp + fn) if 2 * tp + fp + fn else 0.,
         "mean_matched_iou": float(np.mean(matches)) if matches else None,
-        "empty_scene_policy": "Undefined precision/recall/F1 reported as zero; counts retained."}
+        "empty_scene_policy": "Undefined precision/recall/F1 reported as zero; counts retained.",
+        **({"size_breakdown": size_recall(predicted, truth, pairs)} if pixel_size_breakdown else {})}
 
 
 def evaluate_outputs(output_dir, labels, reference_geojson=None):

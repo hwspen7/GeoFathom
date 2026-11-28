@@ -417,3 +417,19 @@ def test_ensemble_probability_contract_rejects_invalid_values_and_support():
         fuse_probabilities(a,np.full_like(b,np.nan),.5,valid)
     with pytest.raises(RasterError,match="inconsistent"):
         ensemble_fields({"probability":a,"valid":valid},{"probability":b,"valid":~valid},.5)
+
+
+def test_size_stratification_uses_global_matching_and_reference_support():
+    from shapely.geometry import box
+    from vision.building_evaluate import object_metrics
+    truth = [box(0,0,5,5),box(20,0,28,8),box(40,0,60,20)]
+    predicted = [box(20,0,27,8),box(40,0,60,20),box(80,0,84,4)]
+    metrics = object_metrics(predicted,truth,.5,pixel_size_breakdown=True)
+    sizes = metrics["size_breakdown"]
+    assert metrics["true_positive"]==2
+    assert sizes["small"]["reference_count"]==1 and sizes["small"]["recall"]==0
+    assert sizes["small"]["predicted_count"]==2 and sizes["small"]["precision"]==.5
+    assert sizes["medium"]["recall"]==1 and sizes["medium"]["precision"] is None
+    assert sizes["large"]["recall"]==sizes["large"]["precision"]==1
+    empty = object_metrics([],truth,.5,pixel_size_breakdown=True)["size_breakdown"]
+    assert empty["small"]["recall"]==0 and empty["small"]["precision"] is None

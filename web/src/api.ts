@@ -958,6 +958,7 @@ export interface GeoAIResult extends GeoJSON.FeatureCollection {
   provenance?:{source_sha256:Record<string,string>;
                 model_sha256?:string;model_id?:string;task_kind?:string};
   summary?:{candidate_count:number;total_area_m2:number;foreground_fraction:number};
+  ensemble?:{primary:string;secondary:string;secondary_weight:number;fusion:string;auxiliary_heads:string}|null;
   artifacts?:Record<string,{sha256:string;size_bytes:number}>;
 }
 export function getVisionModels():Promise<VisionModels>{

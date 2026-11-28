@@ -95,7 +95,7 @@ def score_fields(fields, row, threshold=.5, instance_mode="connected", seed_dist
     predicted_polygons = polygons_from_ids(predicted_ids, minimum_pixels=9)
     reference_polygons = polygons_from_ids(reference_ids)
     metrics = metrics_from_matrix(matrix, ["background", "building"])
-    metrics["objects_50"] = object_metrics(predicted_polygons, reference_polygons, .5)
+    metrics["objects_50"] = object_metrics(predicted_polygons, reference_polygons, .5, pixel_size_breakdown=True)
     metrics["objects_75"] = object_metrics(predicted_polygons, reference_polygons, .75)
     metrics["object_reference"] = reference_type
     metrics["boundary"] = boundary_scores(observed, truth & valid, valid)
@@ -124,6 +124,20 @@ def aggregate(records):
         result[key] = {"true_positive": tp, "false_positive": fp, "false_negative": fn,
             "precision": tp/(tp+fp) if tp+fp else 0., "recall": tp/(tp+fn) if tp+fn else 0.,
             "f1": 2*tp/(2*tp+fp+fn) if 2*tp+fp+fn else 0.}
+    # Sum supports rather than averaging undefined per-image size metrics.
+    breakdowns = [r["metrics"]["objects_50"]["size_breakdown"] for r in records
+                  if "size_breakdown" in r["metrics"]["objects_50"]]
+    if breakdowns:
+        size_summary = {}
+        for name in ("small", "medium", "large"):
+            rows = [b[name] for b in breakdowns]
+            values = {key: sum(row[key] for row in rows) for key in
+                      ("reference_count", "matched_reference", "predicted_count", "matched_predicted")}
+            size_summary[name] = {"minimum_pixels": rows[0]["minimum_pixels"],
+                "maximum_pixels_exclusive": rows[0]["maximum_pixels_exclusive"], **values,
+                "recall": values["matched_reference"]/values["reference_count"] if values["reference_count"] else None,
+                "precision": values["matched_predicted"]/values["predicted_count"] if values["predicted_count"] else None}
+        result["objects_50"]["size_breakdown"] = size_summary
     pixels = result["valid_pixels"]
     result["brier_score"] = sum(r["metrics"]["brier_score"]*r["metrics"]["valid_pixels"] for r in records
                                 if r["metrics"]["valid_pixels"])/pixels if pixels else None

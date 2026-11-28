@@ -428,6 +428,9 @@ export default function GeoAIAnalysisPanel(p:Props){
               onClick={()=>void run(save)}><Database size={14}/> Save candidates</button>
             <button onClick={()=>p.onPreview([])}>Clear preview</button>
           </div>
+          {result.ensemble&&<p className="raster-details" aria-label="Building ensemble summary">
+            {result.ensemble.primary} · {((1-result.ensemble.secondary_weight)*100).toFixed(0)}% / {result.ensemble.secondary} · {(result.ensemble.secondary_weight*100).toFixed(0)}%
+          </p>}
           {result.summary&&<p className="raster-details" aria-label="Building extraction summary">
             {result.summary.candidate_count} building candidates · {result.summary.total_area_m2.toFixed(1)} m² retained area
           </p>}
