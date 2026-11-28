@@ -510,3 +510,34 @@ def test_advanced_study_freezes_code_and_selection_before_test(dataset,models,mo
     result=advanced.run(dataset,models,tmp_path/"advanced-holdout","cpu",selection_path=receipt)
     assert result["test_evaluated"] and set(seen)=={"image-4.tif","image-5.tif"}
     assert result["qualification"]["status"]=="insufficient_evidence"
+
+
+def test_learning_study_grid_retains_fixed_dual_model_baseline():
+    from scripts.building_learning_study import grid
+    recipes=grid(["old","secondary"],["trained"])
+    assert len(recipes)==49
+    assert recipes[0]=={"models":["old","secondary"],"augmentation":"flips","fusion_mode":"fixed",
+                       "secondary_weight":.5,"probability_threshold":.35,"instance_mode":"adaptive","seed_distance":6}
+    assert all("trained" in r["models"] for r in recipes[1:])
+    assert all(r["secondary_weight"]==0 for r in recipes[1:] if len(r["models"])==1)
+
+
+def test_learning_study_rejects_holdout_when_baseline_wins(dataset,monkeypatch,tmp_path):
+    from scripts import building_learning_study as learning
+    from vision.building_study import score_fields
+    seen=[]
+    monkeypatch.setattr(learning,"_identity",lambda m:{"id":m,"model_sha256":"a"*64,"manifest_sha256":"b"*64})
+    def predict(path,model,**kw):
+        seen.append(path.name)
+        with rasterio.open(path) as src:
+            p=(src.read(1)>128).astype(np.float32)
+        return {"valid":np.ones(p.shape,bool),"probability":p}
+    monkeypatch.setattr(learning,"predict_image",predict)
+    out=tmp_path/"learning-selection"
+    r=learning.run(dataset,["old","secondary"],["trained"],out,"cpu")
+    assert r["selection"]["candidate"]==r["selection"]["baseline"]
+    assert set(seen)=={"image-2.tif","image-3.tif"}
+    seen.clear()
+    with pytest.raises(ValueError,match="No new candidate"):
+        learning.run(dataset,["old","secondary"],["trained"],tmp_path/"test","cpu",out/"selection.json")
+    assert not seen
