@@ -262,3 +262,22 @@ def test_real_multiscale_inference_keeps_source_nodata_and_matches_study_fields(
         np.testing.assert_array_equal(source.read(1) >= 0, study["valid"])
     with rasterio.open(out/"mask.tif") as source:
         np.testing.assert_array_equal(source.read(1)==255, ~study["valid"])
+
+
+@pytest.mark.parametrize("augmentation", ["none", "multiscale"])
+def test_aoi_probabilities_match_full_scene_source_aligned_tiles(setup, augmentation):
+    from rasterio.warp import transform_geom
+    path, out, _, transform = setup
+    extract_buildings(path, options(augmentation=augmentation), out)
+    # Deliberately choose a non-stride-aligned region.
+    aoi = transform_geom("EPSG:32617", "EPSG:4326", mapping(box(500017, 4499841, 500179, 4499967)))
+    clipped = out.with_name("clipped")
+    result = extract_buildings(path, options(aoi=aoi, augmentation=augmentation), clipped)
+    assert result["tile_alignment"] == "source_pixel_origin"
+    with rasterio.open(out/"probability.tif") as full, rasterio.open(clipped/"probability.tif") as subset:
+        x, y = (~transform)*(subset.transform.c, subset.transform.f)
+        values = full.read(1, window=rasterio.windows.Window(round(x), round(y), subset.width, subset.height))
+        actual = subset.read(1)
+        valid = actual >= 0
+        assert valid.any()
+        np.testing.assert_array_equal(actual[valid], values[valid])

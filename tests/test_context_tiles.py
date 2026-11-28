@@ -49,3 +49,21 @@ def test_streamed_inference_discards_artificial_tile_edge_predictions(tmp_path,m
     assert result["tile_count"]==6
     assert result["context_halo"]==16
     assert len(result["features"])==1
+
+
+@pytest.mark.parametrize("window", [(11, 17, 110, 91), (95, 96, 100, 60), (0, 0, 257, 139), (256, 138, 1, 1)])
+def test_window_tiles_match_full_scene_context_and_cover_once(window):
+    from vision.tiles import context_tiles_for_window
+    left, top, width, height = window
+    coverage = np.zeros((height, width), np.uint8)
+    full = list(context_tiles(257, 139, 128, 16))
+    for tile in context_tiles_for_window(257, 139, 128, 16, *window):
+        x, y, w, h = map(int, (tile.core.col_off, tile.core.row_off, tile.core.width, tile.core.height))
+        coverage[y:y+h, x:x+w] += 1
+        match = next(t for t in full if t.core.col_off <= x+left < t.core.col_off+t.core.width
+                     and t.core.row_off <= y+top < t.core.row_off+t.core.height)
+        assert tile.read == match.read
+        assert (tile.input_row, tile.input_col) == (match.input_row, match.input_col)
+        assert tile.crop[0].start == match.crop[0].start+y+top-match.core.row_off
+        assert tile.crop[1].start == match.crop[1].start+x+left-match.core.col_off
+    assert np.all(coverage == 1)

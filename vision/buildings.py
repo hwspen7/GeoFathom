@@ -20,9 +20,10 @@ from rasterio.windows import Window
 from geometry.measure import measure_geometry
 from imagery.raster import RasterError, _check
 from imagery.store import file_sha256
-from .semantic import _manifest, _predict_tile, predict_building_heads, fuse_building_heads
-from .tiles import context_tiles
-from .tiled import TilePlan, _tile_bands, _disk_features, _check_scratch
+from .semantic import _manifest, fuse_building_heads
+from .building_prediction import prepare_building_tile
+from .tiles import context_tiles_for_window
+from .tiled import TilePlan, _disk_features, _check_scratch
 from .runtime import tensor_budget_mb
 
 
@@ -172,9 +173,9 @@ def extract_buildings(path, options, output_dir, progress=None, cancelled=None):
                            blockxsize=128, blockysize=128, compress="deflate")
             halo = config["halo"]
             stride = plan.tile_size - 2 * halo
-            tile_count = math.ceil(width / stride) * math.ceil(height / stride)
-            mean = np.asarray(config["mean"], np.float32)[:, None, None]
-            std = np.asarray(config["std"], np.float32)[:, None, None]
+            crop_left, crop_top = int(crop.col_off), int(crop.row_off)
+            tile_count = ((math.ceil((crop_left+width)/stride)-crop_left//stride) *
+                          (math.ceil((crop_top+height)/stride)-crop_top//stride))
             valid_pixels = foreground_pixels = 0
             with ExitStack() as stack:
                 mask = stack.enter_context(rasterio.open(stage / "mask.tif", "w",
@@ -187,41 +188,14 @@ def extract_buildings(path, options, output_dir, progress=None, cancelled=None):
                         if config.get(name+"_channel") is not None:
                             auxiliary[name] = stack.enter_context(rasterio.open(stage / (name+".tif"), "w",
                                 **profile, dtype="float32", nodata=-9999.))
-                for number, tile in enumerate(context_tiles(width, height, plan.tile_size, halo)):
+                tiles = context_tiles_for_window(src.width, src.height, plan.tile_size, halo,
+                                                 crop_left, crop_top, width, height)
+                for number, tile in enumerate(tiles):
                     tick(.8 * number / tile_count)
-                    # Context comes from the original scene even when the AOI crops its
-                    # output extent; an AOI edge must not invent a new image boundary.
-                    top = int(crop.row_off + tile.core.row_off) - halo
-                    left = int(crop.col_off + tile.core.col_off) - halo
-                    start_y, start_x = max(0, top), max(0, left)
-                    source_window = Window(start_x, start_y,
-                        min(src.width, left + plan.tile_size) - start_x,
-                        min(src.height, top + plan.tile_size) - start_y)
-                    raw, valid = _tile_bands(src, config["bands"], source_window)
-                    if np.any(raw[:, valid] < 0) or np.any(raw[:, valid] > config["input_scale"]):
-                        raise RasterError("Source pixel range exceeds the model input scale; use the expected RGB encoding.")
-                    # Reflect scene-edge context rather than inventing black image borders.
-                    rows, cols = valid.shape
-                    y, x = start_y - top, start_x - left
-                    pad = ((0, 0), (y, plan.tile_size - rows - y),
-                           (x, plan.tile_size - cols - x))
-                    normalized = (np.nan_to_num(raw, nan=0., posinf=0., neginf=0.) /
-                                  config["input_scale"] - mean) / std
-                    tensor = np.pad(normalized, pad, mode="edge")[None].astype(np.float32)
-                    if options.augmentation != "none":
-                        heads = fuse_building_heads(tensor, config, device, augmentation=options.augmentation,
-                            check=cancelled)
-                        scores = heads["probability"][tile.crop]
-                    elif options.instance_mode == "watershed":
-                        heads = predict_building_heads(tensor, config, device)
-                        scores = heads["probability"][tile.crop]
-                    else:
-                        labels, confidence = _predict_tile(tensor, config, device)
-                        if labels.shape != (plan.tile_size, plan.tile_size):
-                            raise RasterError("Building model output grid does not match its input.")
-                        scores = np.where(labels == 1, confidence, 1 - confidence)[tile.crop]
-                    core_valid = valid[halo-y:halo-y+int(tile.core.height),
-                                       halo-x:halo-x+int(tile.core.width)].copy()
+                    tensor, core_valid = prepare_building_tile(src, tile, config)
+                    heads = fuse_building_heads(tensor, config, device, augmentation=options.augmentation,
+                                               check=cancelled)
+                    scores = heads["probability"][tile.crop]
                     if roi is not None:
                         core_valid &= geometry_mask([roi], scores.shape,
                             rasterio.windows.transform(tile.core, affine), invert=True)
@@ -283,6 +257,7 @@ def extract_buildings(path, options, output_dir, progress=None, cancelled=None):
                 "geometry_crs": "EPSG:4326", "pixel_grid": [width, height],
                 "valid_pixels": valid_pixels, "classified_pixels": foreground_pixels,
                 "tile_count": tile_count, "context_halo": halo, "truncated": truncated,
+                "tile_alignment": "source_pixel_origin",
                 "inference_passes_per_tile": {"none": 1, "flips": 4, "multiscale": 3}[options.augmentation],
                 "inference_scales": [1., 1.25, 1.5] if options.augmentation == "multiscale" else [1.],
                 "confidence_calibrated": False, "parameters": options.model_dump(),

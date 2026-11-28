@@ -222,3 +222,10 @@ or reused holdout cannot establish new blind qualification: the numerical gate
 is conditional on supplied regions, not an assertion that pretraining or prior
 experiments were independent. Neither the gate nor a successful comparison
 automatically installs or promotes any model.
+
+AOI extraction is source-tile anchored. Selecting an irregular or offset study
+area clips only the retained output pixels; source context, tile origin, RGB
+normalization and binary head decoding are shared with full-scene comparison.
+The same valid source pixel must have the same probability under identical
+model/inference settings, regardless of AOI. Component partitions can still
+change if an AOI cuts a building; this is not an instance identity guarantee.
