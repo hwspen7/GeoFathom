@@ -171,3 +171,14 @@ Seeded paired flips preserve every target head, decoder RGB receives bounded
 brightness/contrast jitter, and cosine learning-rate decay and early stopping
 use validation loss. The initial checkpoint remains eligible and validation
 and test images are never augmented for training. Use a fresh output directory.
+
+### Probability reliability
+
+Model comparison fits a bounded temperature grid by pooled validation negative
+log likelihood. A frozen selection receipt binds the temperature before any
+test image is scored. Raw and temperature-scaled reliability diagrams, pooled
+ECE, Brier score, NLL, and selective-error/coverage statistics are reported
+separately for validation and held-out data. Empty or single-class validation
+support cannot qualify calibration. Scaling does not change the extraction mask,
+geometry, or raw operating threshold; the deployed model remains explicitly
+uncalibrated until a matching calibration artifact is independently qualified.

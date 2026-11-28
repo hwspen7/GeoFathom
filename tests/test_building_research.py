@@ -165,6 +165,8 @@ def test_selection_receipt_is_frozen_before_any_test_image_is_predicted(dataset,
             assert len(files) == 1
             receipt = json.loads(files[0].read_text())
             assert receipt["test_used_for_selection"] is False
+            assert identifier in receipt["calibration"]
+            assert receipt["calibration"][identifier]["validation_pixels"] == 2*64*64
             receipts.append(receipt["sha256"])
         return original(path, identifier, **kwargs)
     monkeypatch.setattr(study, "predict_image", checked)
@@ -262,3 +264,35 @@ def test_training_augmentation_preserves_supervision_and_is_seeded():
     np.testing.assert_array_equal(first[0], second[0])
     assert first[0].flags.c_contiguous and first[1].flags.c_contiguous
     np.testing.assert_array_equal(x, y)
+
+
+def test_temperature_calibration_pools_validation_and_does_not_refit_test():
+    from vision.building_calibration import TemperatureFit, ProbabilityDiagnostics
+    # The intentionally overconfident model is correct on three out of four
+    # equally confident predictions. Smoothing should lower validation NLL.
+    p = np.array([.99, .99, .01, .01])
+    y = np.array([1, 0, 0, 0])
+    fit = TemperatureFit()
+    fit.update(p[:2], y[:2])
+    fit.update(p[2:], y[2:])
+    receipt = fit.result()
+    assert receipt["fitted"] and receipt["temperature"] > 1
+    assert receipt["selected_nll"] < receipt["raw_nll"]
+    raw, scaled = ProbabilityDiagnostics(), ProbabilityDiagnostics()
+    raw.update(p, y)
+    scaled.update(p, y, receipt["temperature"])
+    assert scaled.result()["negative_log_likelihood"] < raw.result()["negative_log_likelihood"]
+    assert scaled.result()["selective_error"][0]["error_rate"] == raw.result()["selective_error"][0]["error_rate"]
+    assert sum(b["pixels"] for b in scaled.result()["bins"]) == 4
+    assert fit.result() == receipt
+
+
+def test_pooled_calibration_handles_empty_support_and_no_positive_labels():
+    from vision.building_calibration import TemperatureFit, ProbabilityDiagnostics
+    fit, diagnostics = TemperatureFit(), ProbabilityDiagnostics()
+    assert fit.result()["fitted"] is False
+    assert diagnostics.result()["pooled_ece"] is None
+    fit.update(np.array([.2, .5]), np.array([0, 0]))
+    assert fit.result()["temperature"] == 1.
+    diagnostics.update(np.array([.2, .8]), np.array([0, 1]))
+    assert diagnostics.result()["pooled_ece"] == pytest.approx(.2)

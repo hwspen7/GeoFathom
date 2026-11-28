@@ -18,6 +18,7 @@ from .building_instances import separate_components
 from .building_evaluate import object_metrics
 from .quality import confusion_matrix, metrics_from_matrix
 from .semantic import _manifest
+from .building_calibration import TemperatureFit, ProbabilityDiagnostics
 
 
 def polygons_from_ids(ids, minimum_pixels=1):
@@ -109,7 +110,8 @@ def aggregate(records):
             "precision": tp/(tp+fp) if tp+fp else 0., "recall": tp/(tp+fn) if tp+fn else 0.,
             "f1": 2*tp/(2*tp+fp+fn) if 2*tp+fp+fn else 0.}
     pixels = result["valid_pixels"]
-    result["brier_score"] = sum(r["metrics"]["brier_score"]*r["metrics"]["valid_pixels"] for r in records)/pixels if pixels else None
+    result["brier_score"] = sum(r["metrics"]["brier_score"]*r["metrics"]["valid_pixels"] for r in records
+                                if r["metrics"]["valid_pixels"])/pixels if pixels else None
     result["ece"] = sum(r["metrics"]["calibration"]["ece"]*r["metrics"]["valid_pixels"] for r in records)/pixels if pixels else None
     result["ece_aggregation"] = "valid-pixel-weighted mean of per-image ECE; not pooled calibration bins"
     result["boundary_f1_image_mean"] = float(np.mean([r["metrics"]["boundary"]["f1"] for r in records])) if records else None
@@ -155,7 +157,7 @@ def compare_models(dataset_path, model_ids, destination, *, evaluate_test=True, 
         raise RasterError("Comparison run already exists; preserve its frozen selection receipt.")
     destination.parent.mkdir(parents=True, exist_ok=True)
     started = time.monotonic()
-    selections, validation, holdout = {}, {}, {}
+    selections, validation, holdout, calibrations = {}, {}, {}, {}
 
     reported_progress = 0.
 
@@ -181,6 +183,26 @@ def compare_models(dataset_path, model_ids, destination, *, evaluate_test=True, 
                 path = fields_root / f"validation-{model_index}-{index}.npz"
                 np.savez_compressed(path, **fields)
                 predictions.append(path)
+            # Fit only on validation pixels, before opening any test imagery.
+            fitter = TemperatureFit()
+            for row, path in zip(validation_rows, predictions):
+                tick(.4)
+                with np.load(path) as fields, rasterio.open(row["paths"]["labels"]) as source:
+                    truth = source.read(1, masked=True)
+                    valid = fields["valid"] & ~np.ma.getmaskarray(truth)
+                    fitter.update(fields["probability"][valid], truth.data[valid])
+            calibration = fitter.result()
+            if not calibration["validation_pixels"]:
+                raise RasterError("No jointly valid validation pixels for building model selection.")
+            calibrations[identifier] = calibration
+            raw_diagnostics, calibrated_diagnostics = ProbabilityDiagnostics(), ProbabilityDiagnostics()
+            for row, path in zip(validation_rows, predictions):
+                tick(.4)
+                with np.load(path) as fields, rasterio.open(row["paths"]["labels"]) as source:
+                    truth = source.read(1, masked=True)
+                    valid = fields["valid"] & ~np.ma.getmaskarray(truth)
+                    raw_diagnostics.update(fields["probability"][valid], truth.data[valid])
+                    calibrated_diagnostics.update(fields["probability"][valid], truth.data[valid], calibration["temperature"])
             threshold_scores = []
             for threshold in thresholds:
                 matrix = np.zeros((2, 2), np.int64)
@@ -209,6 +231,7 @@ def compare_models(dataset_path, model_ids, destination, *, evaluate_test=True, 
             selections[identifier] = {"probability_threshold": selected["probability_threshold"],
                 "instance_mode": selected["instance_mode"], "seed_distance": selected["seed_distance"]}
             validation[identifier] = {"threshold_search": threshold_scores, "selected": selected,
+                "probability_diagnostics": {"raw": raw_diagnostics.result(), "temperature_scaled": calibrated_diagnostics.result()},
                 "postprocess_search": [{k: v for k, v in item.items() if k != "records"} for item in alternatives]}
         best_model = max(model_ids, key=lambda identifier: (
             validation[identifier]["selected"]["balanced"]["balanced_f1"],
@@ -216,7 +239,8 @@ def compare_models(dataset_path, model_ids, destination, *, evaluate_test=True, 
             validation[identifier]["selected"]["aggregate"]["classes"][1]["f1"]))
         plan = {"dataset_fingerprint": dataset["fingerprint"], "models": identities, "parameters": selections,
             "selected_model_by_validation": best_model, "threshold_candidates": thresholds,
-            "augmentation": augmentation,
+            "augmentation": augmentation, "calibration": calibrations,
+            "calibration_scope": "Validation-only temperature fit; raw masks and thresholds unchanged.",
             "selection_rule": "Joint threshold/postprocessor search; pooled pixel F1 within 0.03 of best candidate; maximize harmonic mean of region-macro pixel and object F1; rank models by the same balanced score.",
             "test_used_for_selection": False}
         plan["sha256"] = canonical_sha(plan)
@@ -228,10 +252,17 @@ def compare_models(dataset_path, model_ids, destination, *, evaluate_test=True, 
         if evaluate_test:
             for model_index, identifier in enumerate(model_ids):
                 records = []
+                raw_diagnostics, calibrated_diagnostics = ProbabilityDiagnostics(), ProbabilityDiagnostics()
                 for index, row in enumerate(test_rows):
                     tick(.5+.45*(model_index+index/len(test_rows))/len(model_ids))
                     fields = predict_image(row["paths"]["image"], identifier, progress=lambda _: tick(reported_progress), augmentation=augmentation)
                     parameters = selections[identifier]
+                    with rasterio.open(row["paths"]["labels"]) as source:
+                        truth = source.read(1, masked=True)
+                        valid = fields["valid"] & ~np.ma.getmaskarray(truth)
+                        raw_diagnostics.update(fields["probability"][valid], truth.data[valid])
+                        calibrated_diagnostics.update(fields["probability"][valid], truth.data[valid],
+                                                      calibrations[identifier]["temperature"])
                     metrics, ids = score_fields(fields, row, parameters["probability_threshold"],
                                                 parameters["instance_mode"], parameters["seed_distance"])
                     # Keep per-scene evidence for both mask and object mistakes.
@@ -239,6 +270,7 @@ def compare_models(dataset_path, model_ids, destination, *, evaluate_test=True, 
                     np.savez_compressed(path, probability=fields["probability"], instances=ids, valid=fields["valid"])
                     records.append({"sample_id": row["id"], "region": row["region"], "group": row["group"], "metrics": metrics})
                 holdout[identifier] = {"aggregate": aggregate(records), "records": records,
+                    "probability_diagnostics": {"raw": raw_diagnostics.result(), "temperature_scaled": calibrated_diagnostics.result()},
                     "by_region": {region: aggregate([r for r in records if r["region"] == region]) for region in sorted({r["region"] for r in records})}}
         if load_dataset(dataset_path, verify_pixels=False)["fingerprint"] != dataset["fingerprint"] or [_identity(identifier) for identifier in model_ids] != identities:
             raise RasterError("Study source/model bytes changed before results were committed.")
