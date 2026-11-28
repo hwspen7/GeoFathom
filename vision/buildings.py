@@ -22,6 +22,7 @@ from imagery.raster import RasterError, _check
 from imagery.store import file_sha256
 from .semantic import _manifest, fuse_building_heads
 from .building_prediction import prepare_building_tile
+from .building_ensemble import compatible_members, fuse_probabilities
 from .tiles import context_tiles_for_window
 from .tiled import TilePlan, _disk_features, _check_scratch
 from .runtime import tensor_budget_mb
@@ -32,6 +33,8 @@ class BuildingInput(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     image_id: str = Field(min_length=1, max_length=100)
     model_id: str = Field(min_length=1, max_length=64)
+    secondary_model_id: str | None = Field(default=None, min_length=1, max_length=64)
+    secondary_weight: float = Field(default=.5, ge=.05, le=.95, allow_inf_nan=False)
     probability_threshold: float = Field(default=.5, gt=0, lt=1, allow_inf_nan=False)
     minimum_area_m2: float = Field(default=4., ge=0, le=100000, allow_inf_nan=False)
     minimum_pixels: int = Field(default=9, ge=1, le=10000)
@@ -48,6 +51,8 @@ class BuildingInput(BaseModel):
 
 def validate(payload):
     options = BuildingInput.model_validate(payload)
+    if options.secondary_model_id == options.model_id:
+        raise RasterError("Choose two distinct ensemble models.")
     if not options.full_resolution:
         raise RasterError("Building extraction requires native pixel resolution.")
     if options.aoi is not None:
@@ -114,6 +119,9 @@ def extract_buildings(path, options, output_dir, progress=None, cancelled=None):
     if (config["task"] != "building_extraction" or config["classes"] != ["background", "building"]
             or config["output_type"] not in ("binary_logits", "binary_probability")):
         raise RasterError("Select a building model declaring background and building classes.")
+    secondary = _manifest(options.secondary_model_id) if options.secondary_model_id else None
+    if secondary is not None:
+        compatible_members(config, secondary)
     device = os.getenv("GEOFATHOM_VISION_DEVICE", "cpu").lower()
     if device not in ("cpu", "cuda"):
         raise RasterError("Vision device must be cpu or cuda.")
@@ -151,19 +159,24 @@ def extract_buildings(path, options, output_dir, progress=None, cancelled=None):
             affine = src.window_transform(crop)
             plan = TilePlan(width, height, config["tile_size"], options.max_pixels,
                             options.memory_mb)
-            needed = plan.tile_size**2 * (len(config["bands"]) +
-                     4 * max(2, config["output_channels"]) + 12) * 4
-            if options.augmentation != "none":
-                # Sequential transforms retain native heads and additional host arrays.
-                needed += plan.tile_size**2 * (len(config["bands"])*8 + config["output_channels"]*16 + 32)
-            if needed > min(options.memory_mb, tensor_budget_mb()) * 1024**2:
-                raise RasterError("Building model exceeds the per-tile tensor allowance.")
+            for member in (config, secondary) if secondary is not None else (config,):
+                member_plan = TilePlan(width, height, member["tile_size"], options.max_pixels, options.memory_mb)
+                needed = member_plan.tile_size**2 * (len(member["bands"]) +
+                         4 * max(2, member["output_channels"]) + 12) * 4
+                if options.augmentation != "none":
+                    needed += member_plan.tile_size**2 * (len(member["bands"])*8 + member["output_channels"]*16 + 32)
+                if secondary is not None:
+                    needed += member_plan.tile_size**2 * 32
+                if needed > min(options.memory_mb, tensor_budget_mb()) * 1024**2:
+                    raise RasterError("Building model exceeds the per-tile tensor allowance.")
             # Probabilities plus mask need five uncompressed bytes per pixel.
             import shutil
             quota_mb = int(os.getenv("GEOFATHOM_BUILDING_ARTIFACT_MB", "512"))
             quota = quota_mb * 1024**2
             # Watershed may retain two auxiliary fields and a 32-bit instance grid.
             bytes_per_pixel = 17 if options.instance_mode == "watershed" else 5
+            if secondary is not None:
+                bytes_per_pixel += 4  # temporary native-grid secondary probability raster
             if not 16 <= quota_mb <= 4096 or width * height * bytes_per_pixel + 8 * 1024**2 > quota:
                 raise RasterError("Building artifact budget is insufficient for this study area.")
             if shutil.disk_usage(stage).free < width * height * bytes_per_pixel + 32 * 1024**2:
@@ -177,7 +190,27 @@ def extract_buildings(path, options, output_dir, progress=None, cancelled=None):
             tile_count = ((math.ceil((crop_left+width)/stride)-crop_left//stride) *
                           (math.ceil((crop_top+height)/stride)-crop_top//stride))
             valid_pixels = foreground_pixels = 0
+            secondary_tile_count = 0
+            if secondary is not None:
+                # Different model tile sizes and halos are allowed. Persist only
+                # the secondary probability field, not all member activations.
+                other_size, other_halo = secondary["tile_size"], secondary["halo"]
+                other_stride = other_size-2*other_halo
+                secondary_tile_count = ((math.ceil((crop_left+width)/other_stride)-crop_left//other_stride) *
+                                        (math.ceil((crop_top+height)/other_stride)-crop_top//other_stride))
+                with rasterio.open(stage/"secondary.tif", "w", **profile, dtype="float32", nodata=-1.) as other:
+                    for number, tile in enumerate(context_tiles_for_window(src.width, src.height, other_size, other_halo,
+                                                         crop_left, crop_top, width, height)):
+                        tick(.4*number/secondary_tile_count)
+                        tensor, valid = prepare_building_tile(src, tile, secondary)
+                        heads = fuse_building_heads(tensor, secondary, device, augmentation=options.augmentation, check=cancelled)
+                        scores = heads["probability"][tile.crop]
+                        if not np.isfinite(scores).all() or np.any((scores < 0) | (scores > 1)):
+                            raise RasterError("Secondary building model returned invalid probabilities.")
+                        other.write(np.where(valid, scores, -1.).astype(np.float32), 1, window=tile.core)
+                _check_scratch(stage/"secondary.tif", quota)
             with ExitStack() as stack:
+                other = stack.enter_context(rasterio.open(stage/"secondary.tif")) if secondary is not None else None
                 mask = stack.enter_context(rasterio.open(stage / "mask.tif", "w",
                     **profile, dtype="uint8", nodata=255))
                 probability = stack.enter_context(rasterio.open(stage / "probability.tif", "w",
@@ -191,7 +224,7 @@ def extract_buildings(path, options, output_dir, progress=None, cancelled=None):
                 tiles = context_tiles_for_window(src.width, src.height, plan.tile_size, halo,
                                                  crop_left, crop_top, width, height)
                 for number, tile in enumerate(tiles):
-                    tick(.8 * number / tile_count)
+                    tick((.4+.4*number/tile_count) if other is not None else .8*number/tile_count)
                     tensor, core_valid = prepare_building_tile(src, tile, config)
                     heads = fuse_building_heads(tensor, config, device, augmentation=options.augmentation,
                                                check=cancelled)
@@ -201,6 +234,11 @@ def extract_buildings(path, options, output_dir, progress=None, cancelled=None):
                             rasterio.windows.transform(tile.core, affine), invert=True)
                     if (not np.isfinite(scores).all() or np.any((scores < 0) | (scores > 1))):
                         raise RasterError("Building model returned invalid probabilities.")
+                    if other is not None:
+                        secondary_scores = other.read(1, window=tile.core)
+                        if np.any(core_valid & (secondary_scores < 0)):
+                            raise RasterError("Ensemble members have inconsistent source support.")
+                        scores = fuse_probabilities(scores, secondary_scores, options.secondary_weight, core_valid)
                     positive = core_valid & (scores >= options.probability_threshold)
                     mask.write(np.where(core_valid, positive, 255).astype(np.uint8),
                                1, window=tile.core)
@@ -211,6 +249,8 @@ def extract_buildings(path, options, output_dir, progress=None, cancelled=None):
                                      1, window=tile.core)
                     valid_pixels += int(core_valid.sum())
                     foreground_pixels += int(positive.sum())
+            if secondary is not None:
+                (stage/"secondary.tif").unlink()
             if not valid_pixels:
                 raise RasterError("The study area contains no valid source pixels.")
             for name in ("mask.tif", "probability.tif"):
@@ -241,6 +281,7 @@ def extract_buildings(path, options, output_dir, progress=None, cancelled=None):
                         props["class_id"] = 1
                     props.update({"image_id": options.image_id, "model_id": options.model_id,
                         "provider": "onnxruntime", "method": "building_extraction",
+                        "secondary_model_id": options.secondary_model_id,
                         "probability_threshold": options.probability_threshold,
                         "mean_building_probability": _region_probability(feature, str(src.crs), probability),
                         "confidence_calibrated": False,
@@ -258,6 +299,13 @@ def extract_buildings(path, options, output_dir, progress=None, cancelled=None):
                 "valid_pixels": valid_pixels, "classified_pixels": foreground_pixels,
                 "tile_count": tile_count, "context_halo": halo, "truncated": truncated,
                 "tile_alignment": "source_pixel_origin",
+                "secondary_tile_count": secondary_tile_count,
+                "ensemble": ({"primary": options.model_id, "secondary": options.secondary_model_id,
+                    "secondary_weight": options.secondary_weight, "fusion": "raw_probability_weighted_mean",
+                    "auxiliary_heads": "primary_only",
+                    "secondary_model_sha256": file_sha256(secondary["model_path"]),
+                    "secondary_manifest_sha256": file_sha256(secondary["model_path"].with_suffix(".json"))}
+                    if secondary is not None else None),
                 "inference_passes_per_tile": {"none": 1, "flips": 4, "multiscale": 3}[options.augmentation],
                 "inference_scales": [1., 1.25, 1.5] if options.augmentation == "multiscale" else [1.],
                 "confidence_calibrated": False, "parameters": options.model_dump(),

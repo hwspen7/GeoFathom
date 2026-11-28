@@ -63,9 +63,12 @@ def analysis_snapshot(kind,payload):
     originals={uid:image_file(uid) for uid in identifiers}
     models={}
     if kind in {"semantic_segmentation","building_extraction"}:
-        config=_manifest(payload["model_id"])
-        model=config["model_path"]
-        models={model.name:model,model.with_suffix(".json").name:model.with_suffix(".json")}
+        model_ids=[payload["model_id"]]
+        if kind=="building_extraction" and payload.get("secondary_model_id"):
+            model_ids.append(payload["secondary_model_id"])
+        for identifier in model_ids:
+            model=_manifest(identifier)["model_path"]
+            models.update({model.name:model,model.with_suffix(".json").name:model.with_suffix(".json")})
     root=Path(os.getenv("GEOFATHOM_SNAPSHOT_DIR") or
               os.getenv("GEOFATHOM_RASTER_TEMP_DIR") or __import__("tempfile").gettempdir())
     root.mkdir(parents=True,exist_ok=True)

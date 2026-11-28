@@ -241,3 +241,16 @@ initial checkpoint and trained checkpoints use the same chosen validation
 objective; loss values cannot be compared across different objectives. Test
 regions remain untouched during checkpoint selection. This objective is
 experimental until independent imagery demonstrates an improvement.
+
+### Two-model deployment ensemble
+
+An optional distinct secondary binary building model can contribute a fixed
+0.05–0.95 probability weight. Each member retains its own normalization,
+source-anchored tile size and halo. Secondary probabilities are staged in a
+bounded temporary native-grid raster, then fused during primary inference;
+no full-scene in-memory ensemble array is needed. Both models must use the
+same source band support. Both ONNX files and manifests enter execution
+snapshots and output provenance. The primary member supplies boundary and
+distance heads; fusion is of raw mask probabilities only. A manually chosen
+weight is experimental, not proof of improvement. Temporary fields are removed
+before publishing artifacts.

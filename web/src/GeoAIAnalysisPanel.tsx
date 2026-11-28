@@ -35,6 +35,8 @@ export default function GeoAIAnalysisPanel(p:Props){
   const [images,setImages]=useState<RasterAsset[]>([]);
   const [models,setModels]=useState<VisionModels|null>(null);
   const [modelId,setModelId]=useState('');
+  const [secondaryModelId,setSecondaryModelId]=useState('');
+  const [secondaryWeight,setSecondaryWeight]=useState(.5);
   const [index,setIndex]=useState<'ndvi'|'ndwi'>('ndvi');
   const [firstBand,setFirstBand]=useState(4);
   const [secondBand,setSecondBand]=useState(1);
@@ -114,6 +116,7 @@ export default function GeoAIAnalysisPanel(p:Props){
       throw new Error('Select a georeferenced image.');
     const payload:Record<string,unknown>=buildingMode?{
       image_id:p.image!.id,model_id:modelId,probability_threshold:buildingThreshold,
+      ...(secondaryModelId&&secondaryModelId!==modelId?{secondary_model_id:secondaryModelId,secondary_weight:secondaryWeight}:{}),
       minimum_area_m2:minimumArea,full_resolution:true,memory_mb:memoryBudget,
       instance_mode:instanceMode,seed_distance:seedDistance,
       ...(buildingAugmentation!=='none'?{augmentation:buildingAugmentation}:{}),
@@ -125,6 +128,9 @@ export default function GeoAIAnalysisPanel(p:Props){
       {image_id:p.image!.id,max_side:maxSide};
     if(buildingMode){
       if(selectedModel?.task!=='building_extraction')throw new Error('Choose an installed building extraction model.');
+      if(secondaryModelId&&(secondaryModelId===modelId||!visibleModels.some(m=>m.id===secondaryModelId)
+          ||!Number.isFinite(secondaryWeight)||secondaryWeight<.05||secondaryWeight>.95))
+        throw new Error('Choose a distinct secondary building model and weight from 0.05 to 0.95.');
       if(!(buildingThreshold>0&&buildingThreshold<1)||!Number.isFinite(minimumArea)||minimumArea<0)
         throw new Error('Check the building probability threshold and minimum area.');
       if(useStudyArea&&!polygonArea)throw new Error('Select a polygon study area on the map.');
@@ -304,6 +310,14 @@ export default function GeoAIAnalysisPanel(p:Props){
               </option>)}
           </select>
           {buildingMode?<>
+            {visibleModels.length>1&&<><label>Secondary model<select aria-label="Secondary building model" value={secondaryModelId}
+              onChange={e=>setSecondaryModelId(e.target.value)}>
+              <option value="">None (single model)</option>
+              {visibleModels.filter(m=>m.id!==modelId).map(m=><option key={m.id} value={m.id}>{m.id}</option>)}
+            </select></label>
+            {secondaryModelId&&<label>Secondary probability weight<input aria-label="Secondary building weight" type="number"
+              min={.05} max={.95} step={.05} value={secondaryWeight} onChange={e=>setSecondaryWeight(Number(e.target.value))}/></label>}
+            </>}
             <label>Building probability threshold
               <input aria-label="Building probability threshold" type="number" min={.01} max={.99}
                 step={.05} value={buildingThreshold} onChange={e=>setBuildingThreshold(Number(e.target.value))}/>

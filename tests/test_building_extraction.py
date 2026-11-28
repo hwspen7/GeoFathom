@@ -281,3 +281,37 @@ def test_aoi_probabilities_match_full_scene_source_aligned_tiles(setup, augmenta
         valid = actual >= 0
         assert valid.any()
         np.testing.assert_array_equal(actual[valid], values[valid])
+
+
+def test_two_real_onnx_members_with_distinct_tile_grids_fuse_native_probabilities(setup):
+    import onnx
+    from onnx import helper, numpy_helper, TensorProto
+    from vision.building_prediction import predict_image
+    from vision.building_ensemble import fuse_probabilities
+    path, out, _, transform = setup
+    root = _manifest("numerical")["model_path"].parent
+    weights = np.zeros((1, 3, 1, 1), np.float32)
+    weights[0, 0, 0, 0] = 8
+    graph = helper.make_graph([helper.make_node("Conv", ["x", "w", "b"], ["y"])],
+        "secondary-fixture", [helper.make_tensor_value_info("x", TensorProto.FLOAT, [1,3,256,256])],
+        [helper.make_tensor_value_info("y", TensorProto.FLOAT, [1,1,256,256])],
+        [numpy_helper.from_array(weights,"w"),numpy_helper.from_array(np.array([-3.],np.float32),"b")])
+    model = helper.make_model(graph, opset_imports=[helper.make_opsetid("",17)])
+    model.ir_version = 9
+    onnx.save(model, root/"secondary.onnx")
+    (root/"secondary.json").write_text(json.dumps({"classes":["background","building"],
+        "task":"building_extraction","tile_size":256,"halo":32,"output_type":"binary_logits",
+        "output_channels":1,"output_channel":0}))
+    result = extract_buildings(path, options(secondary_model_id="secondary", secondary_weight=.35), out)
+    first = predict_image(path,"numerical")
+    second = predict_image(path,"secondary")
+    expected = fuse_probabilities(first["probability"],second["probability"],.35,first["valid"])
+    with rasterio.open(out/"probability.tif") as src:
+        assert src.transform == transform
+        np.testing.assert_allclose(src.read(1),expected,atol=1e-7)
+    assert result["ensemble"]["secondary"] == "secondary"
+    assert result["secondary_tile_count"] == 2
+    assert not (out/"secondary.tif").exists()
+    assert result["ensemble"]["secondary_model_sha256"]
+    with pytest.raises(RasterError, match="distinct"):
+        validate(options(secondary_model_id="numerical"))

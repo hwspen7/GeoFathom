@@ -243,6 +243,7 @@ describe('GeoAI analysis controls',()=>{
     api.getVisionModels.mockResolvedValue({runtime_available:true,models:[
       {id:'generic',classes:['background','other']},
       {id:'buildings',task:'building_extraction',classes:['background','building']},
+      {id:'secondary',task:'building_extraction',classes:['background','building']},
     ]});
     api.queueGISJob.mockResolvedValue({id:'building-job',status:'completed',progress:100,result:{
       type:'FeatureCollection',features:[],analysis:'building_extraction',provider:'onnxruntime',
@@ -280,6 +281,13 @@ describe('GeoAI analysis controls',()=>{
       image_id:'scene',model_id:'buildings',probability_threshold:.6,minimum_area_m2:12,
       full_resolution:true,memory_mb:64,max_pixels:16777216,aoi:polygon,
       instance_mode:'connected',seed_distance:6,augmentation:'multiscale'},'admin'));
+    change('Secondary building model','secondary');
+    change('Secondary building weight','0.35');
+    click('Run georeferenced analysis');
+    await waitFor(()=>expect(api.queueGISJob).toHaveBeenLastCalledWith('p','building_extraction',{
+      image_id:'scene',model_id:'buildings',probability_threshold:.6,minimum_area_m2:12,
+      full_resolution:true,memory_mb:64,max_pixels:16777216,aoi:polygon,
+      instance_mode:'connected',seed_distance:6,augmentation:'multiscale',secondary_model_id:'secondary',secondary_weight:.35},'admin'));
   });
   it('keeps building extraction disabled until a dedicated model is installed',async()=>{
     const {container}=render(<GeoAIAnalysisPanel projectId="p" image={image}
