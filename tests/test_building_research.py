@@ -138,12 +138,13 @@ def test_real_decoder_adaptation_never_reads_test_samples_and_exports_verified_h
         return original(row, config)
     monkeypatch.setattr(training, "load_sample", checked)
     output = tmp_path/"fitted"
-    result = training.train_model(dataset, {"initial_model_id": models[0], "mode": "decoder", "epochs": 4, "enhanced_training": enhanced,
+    result = training.train_model(dataset, {"initial_model_id": models[0], "mode": "decoder", "epochs": 4, "enhanced_training": enhanced, "objective": "hard_examples" if enhanced else "standard",
         "batch_size": 2, "learning_rate": .01}, output)
     assert set(seen) == {"train", "validation"}
     assert result["test_used_for_training"] is False
     assert result["selected_validation_loss"] <= result["initial_validation_loss"]
     assert result["onnx_parity"]["passed"]
+    assert result["parameters"]["objective"] == ("hard_examples" if enhanced else "standard")
     assert result["trainable_parameters"] > 1000
     metadata = json.loads((output/"model.json").read_text())
     assert metadata["boundary_channel"] == 1 and metadata["distance_channel"] == 2
@@ -337,3 +338,46 @@ def test_paired_building_gate_uses_source_groups_and_rejects_regional_regression
     repeat_a = [record(r, 0, i, 6) for r in ("a", "b") for i in range(10)]
     repeat_b = [record(r, 0, i, 8) for r in ("a", "b") for i in range(10)]
     assert paired_gate(repeat_a, repeat_b)["status"] == "insufficient_evidence"
+
+
+@pytest.mark.parametrize('foreground', ['empty','full','mixed'])
+def test_objective_finite_and_all_heads_receive_gradient(foreground):
+    torch = pytest.importorskip("torch")
+    from vision.building_objective import hard_example_loss
+    torch.manual_seed(731)
+    raw=torch.randn(2,3,16,16,requires_grad=True)
+    y=torch.zeros_like(raw)
+    y[:,2]=-1
+    if foreground != 'empty':
+        sl=slice(None) if foreground=='full' else slice(4,12)
+        y[:,0,sl,sl]=1
+        y[:,1,sl,sl]=1
+        y[:,2,sl,sl]=.25
+    loss=hard_example_loss(raw,y,torch.tensor(2.))
+    loss.backward()
+    assert torch.isfinite(loss) and torch.isfinite(raw.grad).all()
+    assert (raw.grad.abs().sum(dim=(0,2,3))>0).all()
+
+
+def test_wrong_small_building_increases_objective():
+    torch = pytest.importorskip("torch")
+    from vision.building_objective import hard_example_loss
+    y=torch.zeros(1,3,32,32); y[:,2]=-1
+    y[:,0,10:13,10:13]=1; y[:,1,10:13,10:13]=1; y[:,2,10:13,10:13]=.1
+    correct=torch.where(y>0,torch.tensor(8.),torch.tensor(-8.))
+    missed=correct.clone(); missed[:,0,10:13,10:13]=-8
+    assert hard_example_loss(missed,y,torch.tensor(2.))>hard_example_loss(correct,y,torch.tensor(2.))
+
+
+def test_optimizer_decreases_objective_on_tiny_fixture():
+    torch = pytest.importorskip("torch")
+    from vision.building_objective import hard_example_loss
+    torch.manual_seed(731)
+    torch.set_num_threads(2)
+    y=torch.zeros(1,3,16,16); y[:,2]=-1
+    y[:,0,5:10,6:9]=1; y[:,1,5:10,6:9]=1; y[:,2,5:10,6:9]=.25
+    raw=torch.nn.Parameter(torch.zeros_like(y)); opt=torch.optim.Adam([raw],lr=.2)
+    initial=hard_example_loss(raw,y,torch.tensor(2.)).item()
+    for _ in range(25):
+        opt.zero_grad(); loss=hard_example_loss(raw,y,torch.tensor(2.)); loss.backward(); opt.step()
+    assert hard_example_loss(raw,y,torch.tensor(2.)).item()<initial*.5

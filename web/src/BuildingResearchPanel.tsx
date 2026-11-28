@@ -22,6 +22,7 @@ export default function BuildingResearchPanel(p:{projectId:string|null;token:str
   const [learningRate,setLearningRate]=useState(.001),[mode,setMode]=useState<'head'|'decoder'>('head');
   const [device,setDevice]=useState<'cpu'|'cuda'>('cpu'),[holdout,setHoldout]=useState(false);
   const [enhancedTraining,setEnhancedTraining]=useState(false);
+  const [objective,setObjective]=useState<'standard'|'hard_examples'>('standard');
   const [augmentation,setAugmentation]=useState<'none'|'flips'|'multiscale'>('none');
   const [job,setJob]=useState<GISJob|null>(null),[busy,setBusy]=useState(false);
   const [figures,setFigures]=useState(false);
@@ -57,7 +58,7 @@ export default function BuildingResearchPanel(p:{projectId:string|null;token:str
   async function run(work:()=>Promise<void>){setBusy(true);setError('');try{await work();}catch(e){setError(String((e as Error).message??e));}finally{setBusy(false);}}
   async function submit(kind:'building_train'|'building_compare'){
     const id=p.projectId;if(!id||!dataset)return;
-    const payload=kind==='building_train'?{dataset_id:dataset,training:{initial_model_id:initial,mode,epochs,learning_rate:learningRate,device,...(enhancedTraining?{enhanced_training:true}:{})}}:
+    const payload=kind==='building_train'?{dataset_id:dataset,training:{initial_model_id:initial,mode,epochs,learning_rate:learningRate,device,...(enhancedTraining?{enhanced_training:true}:{}),...(objective==='hard_examples'?{objective}:{})}}:
       {dataset_id:dataset,model_ids:selected,evaluate_test:holdout,...(augmentation!=='none'?{augmentation}:{})};
     const created=await queueGISJob(id,kind,payload,p.token);
     if(project.current===id)setJob(created);
@@ -91,6 +92,10 @@ export default function BuildingResearchPanel(p:{projectId:string|null;token:str
       <label>Learning rate<input aria-label="Building learning rate" type="number" min={.000001} max={.05} step={.0001} value={learningRate} onChange={e=>setLearningRate(Number(e.target.value))}/></label>
       <label>Training device<select aria-label="Building training device" value={device} onChange={e=>setDevice(e.target.value as typeof device)}>
         <option value="cpu">CPU</option><option value="cuda">CUDA GPU</option>
+      </select></label>
+      <label>Training objective<select aria-label="Building training objective" value={objective} disabled={processing}
+        onChange={e=>setObjective(e.target.value as typeof objective)}>
+        <option value="standard">Standard</option><option value="hard_examples">Hard pixels and narrow roofs (experimental)</option>
       </select></label>
       <label><input aria-label="Enhanced building training" type="checkbox" checked={enhancedTraining} disabled={processing}
         onChange={e=>setEnhancedTraining(e.target.checked)}/> Augmentation, learning-rate decay and early stopping</label>

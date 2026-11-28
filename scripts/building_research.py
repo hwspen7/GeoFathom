@@ -21,6 +21,7 @@ def main():
     parser.add_argument("--device", choices=("cpu", "cuda"), default="cpu")
     parser.add_argument("--install-as")
     parser.add_argument("--enhanced-training", action="store_true")
+    parser.add_argument("--objective", choices=("standard", "hard_examples"), default="standard")
     parser.add_argument("--max-samples", type=int, default=256)
     parser.add_argument("--cache-mb", type=int, default=2048)
     parser.add_argument("--early-stop-patience", type=int, default=5)
@@ -35,7 +36,7 @@ def main():
         from vision.building_training import train_model
         result = train_model(args.dataset, {"initial_model_id": args.initial_model, "mode": args.mode,
             "epochs": args.epochs, "learning_rate": args.learning_rate, "batch_size": args.batch_size,
-            "device": args.device, "enhanced_training": args.enhanced_training,
+            "device": args.device, "enhanced_training": args.enhanced_training, "objective": args.objective,
             "max_samples": args.max_samples, "cache_mb": args.cache_mb,
             "early_stop_patience": args.early_stop_patience}, args.output,
             progress=lambda value: print("training_progress", round(value, 3), flush=True) if value > .3 else None)

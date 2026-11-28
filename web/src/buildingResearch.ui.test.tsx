@@ -84,3 +84,14 @@ it('displays calibrated reliability separately from instance quality',async()=>{
   expect(screen.getByRole('table',{name:'Building instance quality'})).toBeTruthy();
   expect(screen.getByRole('cell',{name:'0.650'})).toBeTruthy();
 });
+
+
+it('sends the hard-example objective only when requested',async()=>{
+  api.queueGISJob.mockResolvedValue({id:'train',kind:'building_train',status:'completed',progress:100,result:{kind:'building_train'}});
+  render(<BuildingResearchPanel projectId="project" token="admin" models={models} onInstalled={vi.fn()}/>);
+  await screen.findByText(/Training: Austin, Vienna/);
+  fireEvent.click(screen.getByText('Train or fine-tune a model'));
+  change('Building training objective','hard_examples');
+  fireEvent.click(screen.getByRole('button',{name:'Train building model'}));
+  await waitFor(()=>expect(api.queueGISJob.mock.calls.at(-1)?.[2].training.objective).toBe('hard_examples'));
+});

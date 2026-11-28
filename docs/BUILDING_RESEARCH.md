@@ -229,3 +229,15 @@ normalization and binary head decoding are shared with full-scene comparison.
 The same valid source pixel must have the same probability under identical
 model/inference settings, regardless of AOI. Component partitions can still
 change if an AOI cuts a building; this is not an instance identity guarantee.
+
+### Hard-example training objective
+
+The opt-in `--objective hard_examples` combines class-weighted BCE, per-chip
+top-quartile hard-pixel loss, per-chip Dice, bounded interior-width weighting,
+class-balanced boundary BCE and foreground-weighted distance loss. It retains
+supervision on every pixel and all three heads. The distance target is a
+narrow-structure proxy, not an independent building-size measurement. The
+initial checkpoint and trained checkpoints use the same chosen validation
+objective; loss values cannot be compared across different objectives. Test
+regions remain untouched during checkpoint selection. This objective is
+experimental until independent imagery demonstrates an improvement.

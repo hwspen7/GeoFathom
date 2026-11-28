@@ -51,7 +51,7 @@ def test_streamed_inference_discards_artificial_tile_edge_predictions(tmp_path,m
     assert len(result["features"])==1
 
 
-@pytest.mark.parametrize("window", [(11, 17, 110, 91), (95, 96, 100, 60), (0, 0, 257, 139), (256, 138, 1, 1)])
+@pytest.mark.parametrize("window", [(11, 17, 110, 91), (95, 96, 100, 43), (0, 0, 257, 139), (256, 138, 1, 1)])
 def test_window_tiles_match_full_scene_context_and_cover_once(window):
     from vision.tiles import context_tiles_for_window
     left, top, width, height = window
@@ -67,3 +67,9 @@ def test_window_tiles_match_full_scene_context_and_cover_once(window):
         assert tile.crop[0].start == match.crop[0].start+y+top-match.core.row_off
         assert tile.crop[1].start == match.crop[1].start+x+left-match.core.col_off
     assert np.all(coverage == 1)
+
+
+def test_source_anchored_context_rejects_out_of_bounds_window():
+    from vision.tiles import context_tiles_for_window
+    with pytest.raises(ValueError, match="Invalid source-anchored context window"):
+        list(context_tiles_for_window(257, 139, 128, 16, 95, 96, 100, 60))

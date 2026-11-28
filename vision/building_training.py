@@ -29,6 +29,7 @@ class TrainingOptions(BaseModel):
     cache_mb: int = Field(default=2048, ge=32, le=8192)
     max_samples: int = Field(default=256, ge=3, le=1000)
     enhanced_training: bool = False
+    objective: Literal["standard", "hard_examples"] = "standard"
     early_stop_patience: int = Field(default=5, ge=1, le=30)
 
 
@@ -283,6 +284,9 @@ def train_model(dataset_path, options, destination, *, progress=None, cancelled=
                     loss = (F.binary_cross_entropy_with_logits(raw[:, 0], y[:, 0], pos_weight=weight)
                             + dice + .25*F.binary_cross_entropy_with_logits(raw[:, 1], y[:, 1])
                             + .25*F.smooth_l1_loss(torch.tanh(raw[:, 2]), y[:, 2]))
+                    if options.objective == "hard_examples":
+                        from .building_objective import hard_example_loss
+                        loss = hard_example_loss(raw, y, weight)
                     if not torch.isfinite(loss):
                         raise RasterError("Building training produced a nonfinite objective.")
                     if update:
@@ -323,6 +327,7 @@ def train_model(dataset_path, options, destination, *, progress=None, cancelled=
             "training": {"dataset_fingerprint": dataset["fingerprint"], "initial_model_id": options.initial_model_id,
                 "initial_checkpoint_sha256": file_sha256(checkpoint), "mode": options.mode, "seed": options.seed,
                 "enhanced_training": options.enhanced_training,
+                "objective": options.objective,
                 "selection": "minimum validation multi-head loss; test rows never used"}})
         output = stage / "output"
         parity = export_model(network, output, manifest)
