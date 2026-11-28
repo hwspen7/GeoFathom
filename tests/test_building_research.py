@@ -381,3 +381,39 @@ def test_optimizer_decreases_objective_on_tiny_fixture():
     for _ in range(25):
         opt.zero_grad(); loss=hard_example_loss(raw,y,torch.tensor(2.)); loss.backward(); opt.step()
     assert hard_example_loss(raw,y,torch.tensor(2.)).item()<initial*.5
+
+
+def test_ensemble_freezes_weights_before_test_and_returns_deployment_parameters(dataset, models, monkeypatch, tmp_path):
+    from vision import building_ensemble_study as study
+    original = study.predict_image
+    test_paths = {row["paths"]["image"] for row in load_dataset(dataset)["samples"] if row["split"]=="test"}
+    receipts = []
+    def checked(path, identifier, **kwargs):
+        if path in test_paths:
+            selection = list(tmp_path.glob(".ensemble-*/selection.json"))
+            assert len(selection)==1
+            receipt = json.loads(selection[0].read_text())
+            assert receipt["test_used_for_selection"] is False
+            receipts.append(receipt["sha256"])
+        return original(path, identifier, **kwargs)
+    monkeypatch.setattr(study,"predict_image",checked)
+    report=study.compare_ensemble(dataset,models,tmp_path/"ensemble",evaluate_test=True)
+    assert len(receipts)==4 and len(set(receipts))==1
+    assert report["selection"]["sha256"]==receipts[0]
+    assert report["deployment_parameters"]["secondary_weight"] in (.25,.5,.75)
+    assert report["holdout"]["qualification"]["status"]=="insufficient_evidence"
+    assert report["qualified"] is False
+
+
+def test_ensemble_probability_contract_rejects_invalid_values_and_support():
+    from vision.building_ensemble import fuse_probabilities
+    from vision.building_ensemble_study import ensemble_fields
+    a=np.array([[.1,.8,-1]],np.float32); b=np.array([[.7,.2,-1]],np.float32)
+    valid=a>=0
+    np.testing.assert_allclose(fuse_probabilities(a,b,.25,valid),[[.25,.65,-1]],atol=1e-7)
+    with pytest.raises(RasterError):
+        fuse_probabilities(a,b,1.2,valid)
+    with pytest.raises(RasterError):
+        fuse_probabilities(a,np.full_like(b,np.nan),.5,valid)
+    with pytest.raises(RasterError,match="inconsistent"):
+        ensemble_fields({"probability":a,"valid":valid},{"probability":b,"valid":~valid},.5)

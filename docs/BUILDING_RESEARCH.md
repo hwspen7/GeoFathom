@@ -254,3 +254,19 @@ snapshots and output provenance. The primary member supplies boundary and
 distance heads; fusion is of raw mask probabilities only. A manually chosen
 weight is experimental, not proof of improvement. Temporary fields are removed
 before publishing artifacts.
+
+Validation-only ensemble selection is available from the CLI:
+
+```bash
+python scripts/building_research.py ensemble --dataset <frozen-dataset.json> --models <primary> <secondary> --output <new-run-directory> --validation-only
+```
+
+This searches three interior weights plus both individual models, three mask
+thresholds and three instance settings. The best fused recipe and the strongest
+single-member recipe are separately selected on validation data, with the same
+pixel-F1 guard and regional balanced F1 criterion. Only `--evaluate-holdout`
+opens the frozen test prediction phase; both recipes and policy are hashed
+before that phase. The deployment parameters in ensemble.json can be manually
+applied in GeoAI. The primary supplies native auxiliary heads for fused recipes.
+No training or automatic promotion is performed. A gate pass is not evidence
+of independence from earlier experiments or model pretraining.

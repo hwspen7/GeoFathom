@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("operation", choices=("train", "compare"))
+    parser.add_argument("operation", choices=("train", "compare", "ensemble"))
     parser.add_argument("--dataset", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--models", nargs="+")
@@ -26,6 +26,7 @@ def main():
     parser.add_argument("--cache-mb", type=int, default=2048)
     parser.add_argument("--early-stop-patience", type=int, default=5)
     parser.add_argument("--validation-only", action="store_true")
+    parser.add_argument("--evaluate-holdout", action="store_true", help="Explicitly evaluate the ensemble's frozen holdout")
     parser.add_argument("--augmentation", choices=("none", "flips", "multiscale"), default="none", help="Comparison inference mode")
     parser.add_argument("--offline", action="store_true")
     args = parser.parse_args()
@@ -44,6 +45,15 @@ def main():
             from vision.building_research_store import install_training_model
             result["installed"] = install_training_model(args.output, args.install_as)
         print(json.dumps(result, indent=2))
+    elif args.operation == "ensemble":
+        from vision.building_ensemble_study import compare_ensemble
+        if not args.models or len(args.models) != 2:
+            raise SystemExit("Ensemble requires two distinct --models.")
+        result = compare_ensemble(args.dataset, args.models, args.output, augmentation=args.augmentation,
+            evaluate_test=args.evaluate_holdout and not args.validation_only,
+            progress=lambda value: print("ensemble_progress", round(value, 3), flush=True))
+        print(json.dumps({"selection": result["selection"], "deployment_parameters": result["deployment_parameters"],
+            "qualification": result["holdout"]["qualification"] if result["holdout"] else None}, indent=2))
     else:
         from vision.building_study import compare_models
         if not args.models:
