@@ -283,7 +283,7 @@ def test_aoi_probabilities_match_full_scene_source_aligned_tiles(setup, augmenta
         np.testing.assert_array_equal(actual[valid], values[valid])
 
 
-@pytest.mark.parametrize("mode", ["fixed", "confidence"])
+@pytest.mark.parametrize("mode", ["fixed", "confidence", "spatial"])
 def test_two_real_onnx_members_with_distinct_tile_grids_fuse_native_probabilities(setup, mode):
     import onnx
     from onnx import helper, numpy_helper, TensorProto
@@ -303,13 +303,18 @@ def test_two_real_onnx_members_with_distinct_tile_grids_fuse_native_probabilitie
     (root/"secondary.json").write_text(json.dumps({"classes":["background","building"],
         "task":"building_extraction","tile_size":256,"halo":32,"output_type":"binary_logits",
         "output_channels":1,"output_channel":0}))
-    result = extract_buildings(path, options(secondary_model_id="secondary", secondary_weight=.35, fusion_mode=mode), out)
-    first = predict_image(path,"numerical")
-    second = predict_image(path,"secondary")
-    expected = fuse_probabilities(first["probability"],second["probability"],.35,first["valid"],mode=mode)
+    augmentation="hybrid" if mode=="spatial" else "none"
+    result = extract_buildings(path, options(secondary_model_id="secondary", secondary_weight=.35, fusion_mode=mode,augmentation=augmentation), out)
+    first = predict_image(path,"numerical",augmentation=augmentation)
+    second = predict_image(path,"secondary",augmentation=augmentation)
+    if mode=="spatial":
+        from vision.building_reliability import fuse_reliability
+        expected=fuse_reliability(first["probability"],second["probability"],first["view_disagreement"],second["view_disagreement"],first["valid"],.35)
+    else:
+        expected = fuse_probabilities(first["probability"],second["probability"],.35,first["valid"],mode=mode)
     with rasterio.open(out/"probability.tif") as src:
         assert src.transform == transform
-        np.testing.assert_allclose(src.read(1),expected,atol=1e-7)
+        np.testing.assert_allclose(src.read(1),expected,atol=1e-6 if mode=="spatial" else 1e-7)
     from vision.building_ensemble import uncertainty_fields
     disagreement, entropy = uncertainty_fields(first["probability"],second["probability"],expected,first["valid"])
     for name, array in (("disagreement",disagreement),("entropy",entropy)):

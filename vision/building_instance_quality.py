@@ -92,3 +92,46 @@ def ranked_metrics(scenes):
                    "rq":float(tp/denom) if denom else None,"pq_matches":tp,
                    "reference_count":total,"prediction_count":len(predictions)})
     return result
+
+
+def crossfit_object_quality(scenes):
+    """Grouped Platt fit for best-overlap IoU >= .5; not one-to-one correctness."""
+    from scipy.special import expit
+    from scipy.optimize import minimize
+    rows=[]
+    for group,scene in scenes:
+        for p in scene["predictions"]:
+            target=float(bool(p["best_match"] and p["best_match"]["iou"]>=.5))
+            score=np.clip(float(p["score"]),1e-6,1-1e-6)
+            rows.append((group,float(np.log(score/(1-score))),target))
+    groups=sorted({r[0] for r in rows})
+    if len(groups)<2 or len({r[2] for r in rows})<2:
+        return {"evaluated":False,"reason":"Need two source groups and both outcome classes."}
+
+    def fit(data):
+        x=np.array([r[1] for r in data]); y=np.array([r[2] for r in data])
+        if len(np.unique(y))<2:
+            return None
+        def objective(beta):
+            z=beta[0]*x+beta[1]
+            return float(np.mean(np.logaddexp(0,z)-y*z)+.001*((beta[0]-1)**2+beta[1]**2))
+        result=minimize(objective,[1.,0.],bounds=[(0.,8.),(-8.,8.)],method="L-BFGS-B")
+        return result.x if result.success and np.isfinite(result.x).all() else None
+
+    raw=[];calibrated=[];truth=[]
+    for group in groups:
+        beta=fit([r for r in rows if r[0]!=group])
+        if beta is None:
+            return {"evaluated":False,"reason":"A source-group fold has insufficient outcomes or failed fit."}
+        for g,x,y in rows:
+            if g==group:
+                raw.append(float(expit(x)));calibrated.append(float(expit(beta[0]*x+beta[1])));truth.append(y)
+    beta=fit(rows)
+    if beta is None:
+        return {"evaluated":False,"reason":"Full validation fit failed."}
+    y=np.asarray(truth);a=np.asarray(raw);b=np.asarray(calibrated)
+    return {"evaluated":True,"groups":len(groups),"objects":len(y),
+            "raw_brier":float(np.mean((a-y)**2)),"crossfit_brier":float(np.mean((b-y)**2)),
+            "slope":float(beta[0]),"intercept":float(beta[1]),
+            "target":"best overlap IoU >= .5; not unique matching or surveyed quality",
+            "qualification":"validation only"}

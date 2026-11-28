@@ -484,3 +484,29 @@ def test_building_profile_binds_models_and_parameters(dataset,models,tmp_path):
     path.write_text(path.read_text()+"\n")
     with pytest.raises(RasterError,match="model bytes"):
         verify_profile(profile,parameters,manifests)
+
+
+def test_advanced_study_freezes_code_and_selection_before_test(dataset,models,monkeypatch,tmp_path):
+    from scripts import building_advanced_study as advanced
+    real=advanced.predict_image
+    seen=[]
+    def predict(path,*args,**kwargs):
+        seen.append(path.name)
+        return real(path,*args,**kwargs)
+    monkeypatch.setattr(advanced,"predict_image",predict)
+    out=tmp_path/"advanced-selection"
+    report=advanced.run(dataset,models,out,"cpu")
+    assert not report["test_evaluated"] and set(seen)=={"image-2.tif","image-3.tif"}
+    assert len(report["selection"]["grid"])==108
+    assert len(report["group_crossfit"]["folds"])==2
+    seen.clear()
+    receipt=out/"selection.json"
+    bad=json.loads(receipt.read_text())
+    bad["candidate"]["secondary_weight"]=.95
+    tampered=tmp_path/"tampered.json";tampered.write_text(json.dumps(bad))
+    with pytest.raises(ValueError,match="mismatch"):
+        advanced.run(dataset,models,tmp_path/"rejected","cpu",selection_path=tampered)
+    assert not seen
+    result=advanced.run(dataset,models,tmp_path/"advanced-holdout","cpu",selection_path=receipt)
+    assert result["test_evaluated"] and set(seen)=={"image-4.tif","image-5.tif"}
+    assert result["qualification"]["status"]=="insufficient_evidence"
