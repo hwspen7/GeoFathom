@@ -531,6 +531,9 @@ def test_learning_study_rejects_holdout_when_baseline_wins(dataset,monkeypatch,t
         seen.append(path.name)
         with rasterio.open(path) as src:
             p=(src.read(1)>128).astype(np.float32)
+        # The candidate cannot recover the mask even with the secondary
+        # teacher at maximum allowed weight: its foreground stays below .30.
+        p=p*(1. if model=="old" else .4 if model=="secondary" else 0.)
         return {"valid":np.ones(p.shape,bool),"probability":p}
     monkeypatch.setattr(learning,"predict_image",predict)
     out=tmp_path/"learning-selection"
