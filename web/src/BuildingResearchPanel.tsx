@@ -22,7 +22,7 @@ export default function BuildingResearchPanel(p:{projectId:string|null;token:str
   const [learningRate,setLearningRate]=useState(.001),[mode,setMode]=useState<'head'|'decoder'>('head');
   const [device,setDevice]=useState<'cpu'|'cuda'>('cpu'),[holdout,setHoldout]=useState(false);
   const [enhancedTraining,setEnhancedTraining]=useState(false);
-  const [augmentation,setAugmentation]=useState<'none'|'flips'>('none');
+  const [augmentation,setAugmentation]=useState<'none'|'flips'|'multiscale'>('none');
   const [job,setJob]=useState<GISJob|null>(null),[busy,setBusy]=useState(false);
   const [figures,setFigures]=useState(false);
   const [error,setError]=useState(''),[message,setMessage]=useState('');
@@ -58,7 +58,7 @@ export default function BuildingResearchPanel(p:{projectId:string|null;token:str
   async function submit(kind:'building_train'|'building_compare'){
     const id=p.projectId;if(!id||!dataset)return;
     const payload=kind==='building_train'?{dataset_id:dataset,training:{initial_model_id:initial,mode,epochs,learning_rate:learningRate,device,...(enhancedTraining?{enhanced_training:true}:{})}}:
-      {dataset_id:dataset,model_ids:selected,evaluate_test:holdout,...(augmentation==='flips'?{augmentation}:{})};
+      {dataset_id:dataset,model_ids:selected,evaluate_test:holdout,...(augmentation!=='none'?{augmentation}:{})};
     const created=await queueGISJob(id,kind,payload,p.token);
     if(project.current===id)setJob(created);
   }
@@ -105,6 +105,7 @@ export default function BuildingResearchPanel(p:{projectId:string|null;token:str
       <label>Inference mode<select aria-label="Building comparison inference mode" value={augmentation} disabled={processing}
         onChange={e=>setAugmentation(e.target.value as typeof augmentation)}>
         <option value="none">Standard</option><option value="flips">Four-view fusion (experimental)</option>
+        <option value="multiscale">Multi-scale fusion (experimental)</option>
       </select></label>
       <label><input aria-label="Evaluate frozen building test regions" type="checkbox" checked={holdout} disabled={processing}
         onChange={e=>setHoldout(e.target.checked)}/> Evaluate test regions after validation selection</label>

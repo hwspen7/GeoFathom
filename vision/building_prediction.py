@@ -15,6 +15,8 @@ from .tiles import context_tiles
 
 
 def predict_image(path, model_id, *, device=None, memory_mb=256, progress=None, augmentation="none"):
+    if augmentation not in ("none", "flips", "multiscale"):
+        raise RasterError("Unsupported building inference augmentation.")
     config = _manifest(model_id)
     if config["task"] != "building_extraction" or config["output_type"] == "logits":
         raise RasterError("Choose a building model with a declared binary head.")

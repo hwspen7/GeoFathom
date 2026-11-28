@@ -168,7 +168,7 @@ def _identity(identifier):
 
 
 def compare_models(dataset_path, model_ids, destination, *, evaluate_test=True, progress=None, cancelled=None, augmentation="none"):
-    if augmentation not in ("none", "flips"):
+    if augmentation not in ("none", "flips", "multiscale"):
         raise RasterError("Unsupported study inference augmentation.")
     if not isinstance(model_ids, list) or not 2 <= len(model_ids) <= 5 or len(set(model_ids)) != len(model_ids):
         raise RasterError("Compare two to five distinct installed building models.")

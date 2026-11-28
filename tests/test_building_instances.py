@@ -106,3 +106,35 @@ def test_four_view_fusion_checks_cancellation_between_passes(monkeypatch):
         semantic.fuse_building_heads(np.zeros((1, 3, 8, 8), np.float32), {}, "cpu",
                                      augmentation="flips", check=check)
     assert len(calls) == 2
+
+
+def test_multiscale_fusion_preserves_pixel_centers_and_native_auxiliary_heads(monkeypatch):
+    from vision import semantic
+    rows, cols = np.indices((48, 64), dtype=np.float32)
+    ramp = .1 + rows*.003 + cols*.004
+    tensor = np.stack([ramp, ramp, ramp])[None]
+    seen = []
+    def predict(value, config, device):
+        seen.append(value.copy())
+        return {"probability": value[0, 0].copy(), "boundary": value[0, 1].copy(),
+                "distance": value[0, 2].copy()}
+    monkeypatch.setattr(semantic, "predict_building_heads", predict)
+    result = semantic.fuse_building_heads(tensor, {}, "cpu", augmentation="multiscale")
+    assert len(seen) == 3 and not np.array_equal(seen[0], seen[1])
+    np.testing.assert_allclose(result["probability"], ramp, atol=2e-7)
+    np.testing.assert_array_equal(result["boundary"], ramp)
+    np.testing.assert_array_equal(result["distance"], ramp)
+
+
+def test_multiscale_fusion_has_native_fallback_outside_zoom_support(monkeypatch):
+    from vision import semantic
+    calls = []
+    def predict(value, config, device):
+        calls.append(1)
+        return {"probability": np.full(value.shape[-2:], .2 if len(calls)==1 else .8, np.float32)}
+    monkeypatch.setattr(semantic, "predict_building_heads", predict)
+    result = semantic.fuse_building_heads(np.zeros((1, 3, 64, 64), np.float32), {}, "cpu",
+                                          augmentation="multiscale")["probability"]
+    assert result[0, 0] == pytest.approx(.2)
+    assert result[32, 32] == pytest.approx(.5)
+    assert np.all((result >= .2-1e-7) & (result <= .5+1e-7))

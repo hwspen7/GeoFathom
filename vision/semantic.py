@@ -297,11 +297,13 @@ def predict_building_heads(tensor, config, device):
 
 
 def fuse_building_heads(tensor, config, device, *, augmentation="none", check=None):
-    """Invert spatial flips before averaging native-grid heads; no resampling."""
+    """Optional flip or magnification fusion; output always uses the source grid."""
     if augmentation == "none":
         if check is not None:
             check()
         return predict_building_heads(tensor, config, device)
+    if augmentation == "multiscale":
+        return multiscale_building_heads(tensor, config, device, check=check)
     if augmentation != "flips":
         raise RasterError("Unsupported building inference augmentation.")
     sums = {}
@@ -319,6 +321,47 @@ def fuse_building_heads(tensor, config, device, *, augmentation="none", check=No
             else:
                 sums[name] += aligned
     return {name: (value / 4).astype(np.float32) for name, value in sums.items()}
+
+
+def multiscale_building_heads(tensor, config, device, *, check=None):
+    """Native view plus 1.25x and 1.5x centered magnification.
+
+    Affine transforms act on pixel centers. Each magnified probability is
+    inverse-mapped and tapered to zero near the crop boundary. No extrapolated
+    prediction is used. Auxiliary heads stay native because their learned
+    distance/boundary semantics are not known to be scale invariant.
+    """
+    from scipy.ndimage import affine_transform
+    if tensor.ndim != 4 or tensor.shape[0] != 1 or min(tensor.shape[-2:]) < 2:
+        raise RasterError("Multi-scale building inference requires one image tile.")
+    if check is not None:
+        check()
+    native = predict_building_heads(tensor, config, device)
+    height, width = tensor.shape[-2:]
+    center = (np.array([height, width], dtype=np.float64)-1)/2
+    total = native["probability"].astype(np.float64)
+    weight = np.ones((height, width), np.float32)
+    for scale in (1.25, 1.5):
+        if check is not None:
+            check()
+        # Magnified input uses only pixels inside the original contextual tile.
+        inverse = 1./scale
+        zoomed = np.stack([affine_transform(channel, np.eye(2)*inverse,
+                            offset=center*(1-inverse), order=1, mode="nearest",
+                            prefilter=False) for channel in tensor[0]])[None]
+        heads = predict_building_heads(np.ascontiguousarray(zoomed, dtype=np.float32), config, device)
+        restored = affine_transform(heads["probability"], np.eye(2)*scale,
+                        offset=center*(1-scale), order=1, mode="constant",
+                        cval=0., prefilter=False)
+        y = center[0]+(np.arange(height)-center[0])*scale
+        x = center[1]+(np.arange(width)-center[1])*scale
+        margin = np.minimum(np.minimum(y, height-1-y)[:, None],
+                            np.minimum(x, width-1-x)[None, :])
+        # Keep native evidence dominant and smoothly reject crop-edge context.
+        taper = (.5*np.clip(margin/8., 0., 1.)).astype(np.float32)
+        total += restored*taper
+        weight += taper
+    return {**native, "probability": (total/weight).astype(np.float32)}
 
 
 def semantic_segmentation(path: Path, image_id: str, model_id: str,

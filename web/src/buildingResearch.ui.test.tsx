@@ -48,6 +48,9 @@ it('defaults comparison to validation and makes final test evaluation explicit',
   change('Building comparison inference mode','flips');
   fireEvent.click(screen.getByRole('button',{name:'Compare building models'}));
   await waitFor(()=>expect(api.queueGISJob.mock.calls.at(-1)?.[2].augmentation).toBe('flips'));
+  change('Building comparison inference mode','multiscale');
+  fireEvent.click(screen.getByRole('button',{name:'Compare building models'}));
+  await waitFor(()=>expect(api.queueGISJob.mock.calls.at(-1)?.[2].augmentation).toBe('multiscale'));
 });
 
 it('imports a verified frozen package and keeps training disabled without its dependencies',async()=>{

@@ -198,3 +198,13 @@ split. The downloaded research bundle retains complete reliability bins and
 coverage/error curves. CPU/CUDA partition acceptance uses the same local
 component processing as the deployed raster path. Enhanced training and fused
 inference remain opt-in until independent accuracy is demonstrated.
+
+### Multi-scale inference
+
+The experimental multi-scale mode evaluates native context and centered 1.25x
+and 1.5x magnifications. Each probability field is inverse-mapped by pixel
+center and tapered near its crop edge before fusion; native probabilities are
+always retained. Boundary and distance heads remain native-scale. Output CRS,
+validity mask and cell size do not change. Magnification does not recover missing
+source resolution. Use `--augmentation multiscale` for a separate frozen
+comparison. Three sequential model passes per tile are recorded and bounded.

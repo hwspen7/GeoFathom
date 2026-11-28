@@ -42,7 +42,7 @@ class BuildingInput(BaseModel):
     instance_mode: Literal["connected", "watershed"] = "connected"
     seed_distance: int = Field(default=6, ge=1, le=64)
     boundary_weight: float = Field(default=1., ge=0, le=4, allow_inf_nan=False)
-    augmentation: Literal["none", "flips"] = "none"
+    augmentation: Literal["none", "flips", "multiscale"] = "none"
 
 
 def validate(payload):
@@ -152,9 +152,9 @@ def extract_buildings(path, options, output_dir, progress=None, cancelled=None):
                             options.memory_mb)
             needed = plan.tile_size**2 * (len(config["bands"]) +
                      4 * max(2, config["output_channels"]) + 12) * 4
-            if options.augmentation == "flips":
-                # Extra contiguous transformed input and float64 head accumulators.
-                needed += plan.tile_size**2 * (len(config["bands"])*4 + config["output_channels"]*12)
+            if options.augmentation != "none":
+                # Sequential transforms retain native heads and additional host arrays.
+                needed += plan.tile_size**2 * (len(config["bands"])*8 + config["output_channels"]*16 + 32)
             if needed > min(options.memory_mb, tensor_budget_mb()) * 1024**2:
                 raise RasterError("Building model exceeds the per-tile tensor allowance.")
             # Probabilities plus mask need five uncompressed bytes per pixel.
@@ -283,7 +283,8 @@ def extract_buildings(path, options, output_dir, progress=None, cancelled=None):
                 "geometry_crs": "EPSG:4326", "pixel_grid": [width, height],
                 "valid_pixels": valid_pixels, "classified_pixels": foreground_pixels,
                 "tile_count": tile_count, "context_halo": halo, "truncated": truncated,
-                "inference_passes_per_tile": 4 if options.augmentation == "flips" else 1,
+                "inference_passes_per_tile": {"none": 1, "flips": 4, "multiscale": 3}[options.augmentation],
+                "inference_scales": [1., 1.25, 1.5] if options.augmentation == "multiscale" else [1.],
                 "confidence_calibrated": False, "parameters": options.model_dump(),
                 "outline_policy": "native pixel support; guarded inward-only simplification, otherwise original grid boundary",
                 "instance_separation": instance_summary,

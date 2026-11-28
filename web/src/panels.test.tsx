@@ -274,6 +274,12 @@ describe('GeoAI analysis controls',()=>{
       image_id:'scene',model_id:'buildings',probability_threshold:.6,minimum_area_m2:12,
       full_resolution:true,memory_mb:64,max_pixels:16777216,aoi:polygon,
       instance_mode:'connected',seed_distance:6,augmentation:'flips'},'admin'));
+    change('Building inference augmentation','multiscale');
+    click('Run georeferenced analysis');
+    await waitFor(()=>expect(api.queueGISJob).toHaveBeenLastCalledWith('p','building_extraction',{
+      image_id:'scene',model_id:'buildings',probability_threshold:.6,minimum_area_m2:12,
+      full_resolution:true,memory_mb:64,max_pixels:16777216,aoi:polygon,
+      instance_mode:'connected',seed_distance:6,augmentation:'multiscale'},'admin'));
   });
   it('keeps building extraction disabled until a dedicated model is installed',async()=>{
     const {container}=render(<GeoAIAnalysisPanel projectId="p" image={image}

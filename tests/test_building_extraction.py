@@ -247,3 +247,18 @@ def test_guarded_outline_does_not_fill_holes_or_change_pixel_support():
     result = rasterize([(mapping(refined), 1)], out_shape=mask.shape, transform=transform)
     np.testing.assert_array_equal(result, mask)
     assert meta["outline_status"] in {"native_grid_retained", "guarded_pixel_support_preserved"}
+
+
+def test_real_multiscale_inference_keeps_source_nodata_and_matches_study_fields(setup):
+    from vision.building_prediction import predict_image
+    path, out, _, transform = setup
+    result = extract_buildings(path, options(augmentation="multiscale"), out)
+    study = predict_image(path, "numerical", augmentation="multiscale")
+    assert result["inference_scales"] == [1., 1.25, 1.5]
+    assert result["inference_passes_per_tile"] == 3
+    with rasterio.open(out/"probability.tif") as source:
+        assert source.transform == transform
+        np.testing.assert_allclose(source.read(1), study["probability"], atol=1e-6)
+        np.testing.assert_array_equal(source.read(1) >= 0, study["valid"])
+    with rasterio.open(out/"mask.tif") as source:
+        np.testing.assert_array_equal(source.read(1)==255, ~study["valid"])

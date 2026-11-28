@@ -41,7 +41,7 @@ export default function GeoAIAnalysisPanel(p:Props){
   const [threshold,setThreshold]=useState(.2);
   const [confidence,setConfidence]=useState(.55);
   const [buildingThreshold,setBuildingThreshold]=useState(.5);
-  const [buildingAugmentation,setBuildingAugmentation]=useState<'none'|'flips'>('none');
+  const [buildingAugmentation,setBuildingAugmentation]=useState<'none'|'flips'|'multiscale'>('none');
   const [minimumArea,setMinimumArea]=useState(4);
   const [useStudyArea,setUseStudyArea]=useState(false);
   const [instanceMode,setInstanceMode]=useState<'connected'|'watershed'>('connected');
@@ -116,7 +116,7 @@ export default function GeoAIAnalysisPanel(p:Props){
       image_id:p.image!.id,model_id:modelId,probability_threshold:buildingThreshold,
       minimum_area_m2:minimumArea,full_resolution:true,memory_mb:memoryBudget,
       instance_mode:instanceMode,seed_distance:seedDistance,
-      ...(buildingAugmentation==='flips'?{augmentation:buildingAugmentation}:{}),
+      ...(buildingAugmentation!=='none'?{augmentation:buildingAugmentation}:{}),
       max_pixels:maxPixels,...(useStudyArea&&polygonArea?{aoi:polygonArea}:{}),
     }:operation==='stac_ndvi'?
       {collection:stacCollection,item_id:stacItemId,
@@ -316,6 +316,7 @@ export default function GeoAIAnalysisPanel(p:Props){
               onChange={e=>setBuildingAugmentation(e.target.value as typeof buildingAugmentation)}>
               <option value="none">Standard</option>
               <option value="flips">Four-view fusion (experimental)</option>
+              <option value="multiscale">Multi-scale fusion (experimental)</option>
             </select></label>
             <label>Building separation<select aria-label="Building instance separation" value={instanceMode}
               onChange={e=>setInstanceMode(e.target.value as typeof instanceMode)}>

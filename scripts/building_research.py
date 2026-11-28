@@ -25,7 +25,7 @@ def main():
     parser.add_argument("--cache-mb", type=int, default=2048)
     parser.add_argument("--early-stop-patience", type=int, default=5)
     parser.add_argument("--validation-only", action="store_true")
-    parser.add_argument("--augmentation", choices=("none", "flips"), default="none", help="Comparison inference mode")
+    parser.add_argument("--augmentation", choices=("none", "flips", "multiscale"), default="none", help="Comparison inference mode")
     parser.add_argument("--offline", action="store_true")
     args = parser.parse_args()
     if args.offline:
