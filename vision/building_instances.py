@@ -114,7 +114,7 @@ def separate_instances(foreground, probability, boundary=None, distance=None,
 
     
 def separate_components(foreground, probability, boundary=None, distance=None, *, seed_distance=6,
-                        boundary_weight=1., max_instances=20000, adaptive=False):
+                        boundary_weight=1., max_instances=20000, adaptive=False, graph=False):
     """Use component-local normalization, as in the production disk path."""
     foreground = np.asarray(foreground, bool)
     if foreground.ndim != 2 or any(np.shape(f) != foreground.shape for f in
@@ -129,8 +129,13 @@ def separate_components(foreground, probability, boundary=None, distance=None, *
         local = components[window] == index
         fields = [np.where(local, f[window], 0) if f is not None else None
                   for f in (probability, boundary, distance)]
-        labels = separate_instances(local, *fields, seed_distance=seed_distance,
-                                    boundary_weight=boundary_weight, max_instances=max_instances-total, adaptive=adaptive)
+        if graph:
+            from .building_graph import graph_partition
+            labels = graph_partition(local, *fields, seed_distance=seed_distance,
+                                     boundary_weight=boundary_weight, max_instances=max_instances-total)
+        else:
+            labels = separate_instances(local, *fields, seed_distance=seed_distance,
+                                        boundary_weight=boundary_weight, max_instances=max_instances-total, adaptive=adaptive)
         output[window][local] = labels[local] + total
         total += int(labels.max())
     return output
@@ -147,7 +152,7 @@ class InstanceClasses:
 
 def instance_raster(mask_path, probability_path, destination, *, boundary_path=None,
                     distance_path=None, seed_distance=6, boundary_weight=1., memory_mb=64,
-                    progress=None, adaptive=False):
+                    progress=None, adaptive=False, graph=False):
     """Separate one complete connected component at a time, across all tile seams."""
     total = 0
     with ExitStack() as stack:
@@ -179,7 +184,7 @@ def instance_raster(mask_path, probability_path, destination, *, boundary_path=N
             left, top, right, bottom = [int(round(value)) for value in polygon.bounds]
             pixels = (right-left) * (bottom-top)
             # Includes EDT, watershed queues, candidate coordinates and geometric masks.
-            if pixels * 160 > memory_mb * 1024**2:
+            if pixels * (320 if graph else 160) > memory_mb * 1024**2:
                 raise RasterError("A connected region exceeds instance memory; increase allowance or reduce AOI.")
             window = Window(left, top, right-left, bottom-top)
             foreground = geometry_mask([geometry], (bottom-top, right-left),
@@ -187,8 +192,12 @@ def instance_raster(mask_path, probability_path, destination, *, boundary_path=N
             fields = [s.read(1, window=window) if s is not None else None for s in (probability, boundary, distance)]
             # Auxiliary nodata lies outside the component and is excluded explicitly.
             fields = [np.where(foreground, field, 0) if field is not None else None for field in fields]
-            labels = separate_instances(foreground, fields[0], fields[1], fields[2], seed_distance, boundary_weight,
-                                        adaptive=adaptive)
+            if graph:
+                from .building_graph import graph_partition
+                labels = graph_partition(foreground, *fields, seed_distance=seed_distance, boundary_weight=boundary_weight)
+            else:
+                labels = separate_instances(foreground, fields[0], fields[1], fields[2], seed_distance, boundary_weight,
+                                            adaptive=adaptive)
             count = int(labels.max())
             if total + count > MAX_COMPONENTS:
                 raise RasterError("Too many building instances; reduce the study area.")
@@ -203,5 +212,5 @@ def instance_raster(mask_path, probability_path, destination, *, boundary_path=N
                 progress(.84)
     return {"instances": total, "connected_components": scanned,
             "adaptive": adaptive,
-            "method": ("adaptive_" if adaptive else "") + (
+            "method": ("graph_" if graph else "adaptive_" if adaptive else "") + (
                 "boundary_distance_watershed" if boundary_path or distance_path else "geometric_distance_watershed")}

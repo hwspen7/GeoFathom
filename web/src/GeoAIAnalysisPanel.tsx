@@ -46,10 +46,10 @@ export default function GeoAIAnalysisPanel(p:Props){
   const [threshold,setThreshold]=useState(.2);
   const [confidence,setConfidence]=useState(.55);
   const [buildingThreshold,setBuildingThreshold]=useState(.5);
-  const [buildingAugmentation,setBuildingAugmentation]=useState<'none'|'flips'|'multiscale'>('none');
+  const [buildingAugmentation,setBuildingAugmentation]=useState<'none'|'flips'|'multiscale'|'hybrid'>('none');
   const [minimumArea,setMinimumArea]=useState(4);
   const [useStudyArea,setUseStudyArea]=useState(false);
-  const [instanceMode,setInstanceMode]=useState<'connected'|'watershed'|'adaptive'>('connected');
+  const [instanceMode,setInstanceMode]=useState<'connected'|'watershed'|'adaptive'|'graph'>('connected');
   const [seedDistance,setSeedDistance]=useState(6);
   const [researchOpen,setResearchOpen]=useState(false);
   const [afterImageId,setAfterImageId]=useState('');
@@ -218,8 +218,8 @@ export default function GeoAIAnalysisPanel(p:Props){
       !visibleModels.some(m=>m.id===q.model_id)||!visibleModels.some(m=>m.id===q.secondary_model_id)||
       q.model_id===q.secondary_model_id||!Number.isFinite(q.secondary_weight)||q.secondary_weight<.05||q.secondary_weight>.95||
       !Number.isFinite(q.probability_threshold)||q.probability_threshold<=0||q.probability_threshold>=1||
-      !['fixed','confidence'].includes(q.fusion_mode)||!['connected','watershed','adaptive'].includes(q.instance_mode)||
-      !['none','flips','multiscale'].includes(q.augmentation)||!Number.isInteger(q.seed_distance)||q.seed_distance<1||q.seed_distance>64)
+      !['fixed','confidence'].includes(q.fusion_mode)||!['connected','watershed','adaptive','graph'].includes(q.instance_mode)||
+      !['none','flips','multiscale','hybrid'].includes(q.augmentation)||!Number.isInteger(q.seed_distance)||q.seed_distance<1||q.seed_distance>64)
       throw new Error('Invalid profile or missing installed building model.');
     setModelId(q.model_id);setSecondaryModelId(q.secondary_model_id);setSecondaryWeight(q.secondary_weight);
     setBuildingThreshold(q.probability_threshold);setFusionMode(q.fusion_mode);setInstanceMode(q.instance_mode);
@@ -362,14 +362,16 @@ export default function GeoAIAnalysisPanel(p:Props){
               <option value="none">Standard</option>
               <option value="flips">Four-view fusion (experimental)</option>
               <option value="multiscale">Multi-scale fusion (experimental)</option>
+              <option value="hybrid">Hybrid views (experimental)</option>
             </select></label>
             <label>Building separation<select aria-label="Building instance separation" value={instanceMode}
               onChange={e=>setInstanceMode(e.target.value as typeof instanceMode)}>
               <option value="watershed">Experimental instances · boundary / distance watershed</option>
               <option value="adaptive">Adaptive instances (experimental)</option>
+              <option value="graph">Graph instances (experimental)</option>
               <option value="connected">Connected foreground regions</option>
             </select></label>
-            {instanceMode!=='connected'&&<label>{instanceMode==='adaptive'?'Maximum adaptive seed spacing (pixels)':'Minimum seed spacing (pixels)'}
+            {instanceMode!=='connected'&&<label>{(instanceMode==='adaptive'||instanceMode==='graph')?'Maximum adaptive seed spacing (pixels)':'Minimum seed spacing (pixels)'}
               <input aria-label="Building instance seed spacing" type="number" min={1} max={64} value={seedDistance}
                 onChange={e=>setSeedDistance(Number(e.target.value))}/></label>}
             <label><input aria-label="Limit buildings to selected study area" type="checkbox"

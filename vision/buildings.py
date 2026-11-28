@@ -45,10 +45,10 @@ class BuildingInput(BaseModel):
     memory_mb: int = Field(default=64, ge=16, le=512)
     aoi: dict | None = None
     full_resolution: bool = True
-    instance_mode: Literal["connected", "watershed", "adaptive"] = "connected"
+    instance_mode: Literal["connected", "watershed", "adaptive", "graph"] = "connected"
     seed_distance: int = Field(default=6, ge=1, le=64)
     boundary_weight: float = Field(default=1., ge=0, le=4, allow_inf_nan=False)
-    augmentation: Literal["none", "flips", "multiscale"] = "none"
+    augmentation: Literal["none", "flips", "multiscale", "hybrid"] = "none"
 
 
 def validate(payload):
@@ -184,7 +184,7 @@ def extract_buildings(path, options, output_dir, progress=None, cancelled=None):
             quota_mb = int(os.getenv("GEOFATHOM_BUILDING_ARTIFACT_MB", "512"))
             quota = quota_mb * 1024**2
             # Watershed may retain two auxiliary fields and a 32-bit instance grid.
-            bytes_per_pixel = 17 if options.instance_mode in ("watershed", "adaptive") else 5
+            bytes_per_pixel = 17 if options.instance_mode in ("watershed", "adaptive", "graph") else 5
             if secondary is not None:
                 bytes_per_pixel += 12  # temporary secondary field and two diagnostic outputs
             if not 16 <= quota_mb <= 4096 or width * height * bytes_per_pixel + 8 * 1024**2 > quota:
@@ -233,7 +233,7 @@ def extract_buildings(path, options, output_dir, progress=None, cancelled=None):
                         diagnostics[name] = stack.enter_context(rasterio.open(stage/(name+".tif"), "w",
                             **profile, dtype="float32", nodata=-1.))
                 auxiliary = {}
-                if options.instance_mode in ("watershed", "adaptive"):
+                if options.instance_mode in ("watershed", "adaptive", "graph"):
                     for name in ("boundary", "distance"):
                         if config.get(name+"_channel") is not None:
                             auxiliary[name] = stack.enter_context(rasterio.open(stage / (name+".tif"), "w",
@@ -281,14 +281,14 @@ def extract_buildings(path, options, output_dir, progress=None, cancelled=None):
             for name in ("mask.tif", "probability.tif"):
                 _check_scratch(stage / name, quota)
             vector_source, classes, instance_summary = stage / "mask.tif", {1: "building"}, None
-            if options.instance_mode in ("watershed", "adaptive"):
+            if options.instance_mode in ("watershed", "adaptive", "graph"):
                 from .building_instances import instance_raster, InstanceClasses
                 vector_source = stage / "instances.tif"
                 instance_summary = instance_raster(stage / "mask.tif", stage / "probability.tif", vector_source,
                     boundary_path=stage / "boundary.tif" if "boundary" in auxiliary else None,
                     distance_path=stage / "distance.tif" if "distance" in auxiliary else None,
                     seed_distance=options.seed_distance, boundary_weight=options.boundary_weight,
-                    memory_mb=options.memory_mb, progress=lambda _: tick(.84), adaptive=options.instance_mode=="adaptive")
+                    memory_mb=options.memory_mb, progress=lambda _: tick(.84), adaptive=options.instance_mode=="adaptive", graph=options.instance_mode=="graph")
                 classes = InstanceClasses()
             features, truncated = _disk_features(vector_source, classes,
                 options.max_features, options.minimum_pixels, progress=lambda _: tick(.85),
@@ -314,7 +314,7 @@ def extract_buildings(path, options, output_dir, progress=None, cancelled=None):
                         "confidence_calibrated": False,
                         "perimeter_m": measurement["perimeter_m"],
                         "compactness": 4 * math.pi * measurement["area_m2"] / measurement["perimeter_m"]**2,
-                        "instance_status": "watershed_estimate_requires_review" if instance_summary else
+                        "instance_status": ("graph_estimate_requires_review" if options.instance_mode=="graph" else "watershed_estimate_requires_review") if instance_summary else
                                            "connected_region_may_contain_touching_buildings"})
                     feature["id"] = f"building-{len(retained)+1}"
                     retained.append(feature)
@@ -338,8 +338,8 @@ def extract_buildings(path, options, output_dir, progress=None, cancelled=None):
                     "secondary_model_sha256": file_sha256(secondary["model_path"]),
                     "secondary_manifest_sha256": file_sha256(secondary["model_path"].with_suffix(".json"))}
                     if secondary is not None else None),
-                "inference_passes_per_tile": {"none": 1, "flips": 4, "multiscale": 3}[options.augmentation],
-                "inference_scales": [1., 1.25, 1.5] if options.augmentation == "multiscale" else [1.],
+                "inference_passes_per_tile": {"none": 1, "flips": 4, "multiscale": 3, "hybrid": 7}[options.augmentation],
+                "inference_scales": [1., 1.25, 1.5] if options.augmentation in ("multiscale", "hybrid") else [1.],
                 "confidence_calibrated": False, "parameters": options.model_dump(),
                 "profile_receipt": profile_receipt,
                 "outline_policy": "native pixel support; guarded inward-only simplification, otherwise original grid boundary",

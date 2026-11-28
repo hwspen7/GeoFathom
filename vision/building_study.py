@@ -94,10 +94,10 @@ def score_fields(fields, row, threshold=.5, instance_mode="connected", seed_dist
         if (predicted_ids.shape != observed.shape or not np.issubdtype(predicted_ids.dtype, np.integer)
                 or np.any(predicted_ids < 0) or not np.array_equal(predicted_ids > 0, observed)):
             raise RasterError("Experimental partition must preserve the observed mask exactly.")
-    elif instance_mode in ("watershed", "adaptive"):
+    elif instance_mode in ("watershed", "adaptive", "graph"):
         predicted_ids = separate_components(observed, np.maximum(fields["probability"], 0),
             fields.get("boundary"), fields.get("distance"), seed_distance=seed_distance,
-            adaptive=instance_mode=="adaptive")
+            adaptive=instance_mode=="adaptive", graph=instance_mode=="graph")
     elif instance_mode == "connected":
         predicted_ids = ndi.label(observed)[0]
     else:

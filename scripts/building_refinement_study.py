@@ -63,6 +63,7 @@ def run(dataset_path, models, output, device):
             group = group_fits.setdefault(name, {}).setdefault(row["group"], TemperatureFit())
             group.update(f["probability"][valid], truth.data[valid])
             collect(name+"_adaptive", f, row, reference)
+            collect(name+"_graph", f, row, reference, mode="graph")
             collect(name+"_repair", f, row, reference, repair=True)
             guided = {**f, "boundary": joint_ridge(f["probability"], f.get("boundary"), f.get("distance"), valid)}
             collect(name+"_joint_ridge", guided, row, reference)

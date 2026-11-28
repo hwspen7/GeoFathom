@@ -33,7 +33,7 @@ def prepare_building_tile(source, tile, config):
 
 
 def predict_image(path, model_id, *, device=None, memory_mb=256, progress=None, augmentation="none"):
-    if augmentation not in ("none", "flips", "multiscale"):
+    if augmentation not in ("none", "flips", "multiscale", "hybrid"):
         raise RasterError("Unsupported building inference augmentation.")
     config = _manifest(model_id)
     if config["task"] != "building_extraction" or config["output_type"] == "logits":

@@ -164,3 +164,49 @@ def test_adaptive_instances_preserve_foreground_holes_and_separate_narrow_adjace
     assert labels[20,32] != labels[20,20]
     assert labels[20,32]>0
     np.testing.assert_array_equal(labels,separate_components(mask,p,boundary,seed_distance=16,adaptive=True))
+
+
+def test_graph_merges_weak_fragment_but_protects_wall_and_holes():
+    from vision.building_graph import optimize_regions
+    ids=np.zeros((24,32),np.int32)
+    ids[2:22,2:22]=1; ids[8:12,22:25]=2
+    ids[10:13,8:11]=0
+    p=(ids>0).astype(np.float32)*.9
+    weak=optimize_regions(ids,p,np.zeros_like(p))
+    assert weak[9,23]==weak[9,20]
+    wall=np.zeros_like(p); wall[:,21:23]=.95
+    strong=optimize_regions(ids,p,wall)
+    assert strong[9,23]!=strong[9,20]
+    np.testing.assert_array_equal(weak>0,ids>0)
+    np.testing.assert_array_equal(strong>0,ids>0)
+
+
+def test_graph_disk_and_memory_partition_agree(tmp_path):
+    from vision.building_instances import separate_components
+    mask=np.zeros((64,64),np.uint8); mask[4:32,4:56]=1
+    boundary=np.zeros_like(mask,np.float32); boundary[4:32,28:30]=.95
+    p=mask.astype(np.float32)*.9
+    profile=dict(driver="GTiff",height=64,width=64,count=1,crs="EPSG:32617",transform=from_origin(500000,4500000,1,1))
+    paths=[tmp_path/name for name in ("mask.tif","p.tif","b.tif","ids.tif")]
+    for path,array in zip(paths,(mask,p,boundary)):
+        with rasterio.open(path,"w",dtype=array.dtype,**profile) as dst:
+            dst.write(array,1)
+    expected=separate_components(mask,p,boundary,graph=True)
+    instance_raster(paths[0],paths[1],paths[3],boundary_path=paths[2],graph=True)
+    with rasterio.open(paths[3]) as src:
+        np.testing.assert_array_equal(src.read(1),expected)
+    assert expected[16,12]!=expected[16,42]
+
+
+def test_hybrid_uses_aligned_flip_heads(monkeypatch):
+    from vision import semantic
+    calls=[]
+    def predict(tensor,config,device):
+        calls.append(1)
+        return {"probability":tensor[0,0].copy(),"boundary":tensor[0,1].copy()}
+    monkeypatch.setattr(semantic,"predict_building_heads",predict)
+    tensor=np.full((1,3,32,32),.4,np.float32)
+    result=semantic.fuse_building_heads(tensor,{},"cpu",augmentation="hybrid")
+    assert len(calls)==7
+    np.testing.assert_allclose(result["probability"],.4,atol=1e-7)
+    np.testing.assert_allclose(result["boundary"],.4,atol=1e-7)

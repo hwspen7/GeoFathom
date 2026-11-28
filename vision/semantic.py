@@ -303,6 +303,10 @@ def fuse_building_heads(tensor, config, device, *, augmentation="none", check=No
         if check is not None:
             check()
         return predict_building_heads(tensor, config, device)
+    if augmentation == "hybrid":
+        flip = fuse_building_heads(tensor, config, device, augmentation="flips", check=check)
+        scale = multiscale_building_heads(tensor, config, device, check=check)
+        return {**flip, "probability": (.65*flip["probability"]+.35*scale["probability"]).astype(np.float32)}
     if augmentation == "multiscale":
         return multiscale_building_heads(tensor, config, device, check=check)
     if augmentation != "flips":
