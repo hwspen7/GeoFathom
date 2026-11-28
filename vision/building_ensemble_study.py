@@ -14,7 +14,7 @@ from .building_study import _identity, aggregate, balanced_validation_score, sco
 from .semantic import _manifest
 
 
-def ensemble_fields(primary, secondary, weight):
+def ensemble_fields(primary, secondary, weight, mode="fixed"):
     if not np.array_equal(primary["valid"], secondary["valid"]):
         raise RasterError("Ensemble members have inconsistent source support.")
     if weight == 0:
@@ -22,7 +22,7 @@ def ensemble_fields(primary, secondary, weight):
     if weight == 1:
         return secondary
     return {**primary, "probability": fuse_probabilities(
-        primary["probability"], secondary["probability"], weight, primary["valid"])}
+        primary["probability"], secondary["probability"], weight, primary["valid"], mode=mode)}
 
 
 def choose_recipe(candidates):
@@ -32,7 +32,8 @@ def choose_recipe(candidates):
     return max(eligible, key=lambda item: (
         item["balanced"]["balanced_f1"], item["balanced"]["region_macro_object_f1"],
         item["aggregate"]["objects_75"]["f1"], -abs(item["threshold"]-.5),
-        item["instance_mode"] == "connected", -abs(item["weight"]-.5), -item["seed_distance"]))
+        item["instance_mode"] == "connected", item.get("fusion_mode", "fixed") == "fixed",
+        -abs(item["weight"]-.5), -item["seed_distance"]))
 
 
 def compare_ensemble(dataset_path, model_ids, destination, *, augmentation="none",
@@ -48,8 +49,11 @@ def compare_ensemble(dataset_path, model_ids, destination, *, augmentation="none
     if destination.exists():
         raise RasterError("Ensemble study outputs already exist.")
     destination.parent.mkdir(parents=True, exist_ok=True)
-    recipes = [{"weight": weight, "threshold": threshold, "instance_mode": mode, "seed_distance": seed}
-               for weight in (0., .25, .5, .75, 1.) for threshold in (.35, .5, .65)
+    recipes = [{"weight": weight, "threshold": threshold, "instance_mode": mode,
+                "seed_distance": seed, "fusion_mode": fusion}
+               for weight in (0., .25, .5, .75, 1.)
+               for fusion in (("fixed",) if weight in (0., 1.) else ("fixed", "confidence"))
+               for threshold in (.35, .5, .65)
                for mode, seed in (("connected", 6), ("watershed", 6), ("watershed", 10))]
     validation = [[] for _ in recipes]
     rows = [r for r in dataset["samples"] if r["split"] == "validation"]
@@ -75,17 +79,17 @@ def compare_ensemble(dataset_path, model_ids, destination, *, augmentation="none
             value = .6*i/len(rows)
             tick(value)
             primary, secondary = predict_pair(row, value)
-            for weight in (0., .25, .5, .75, 1.):
-                fields = ensemble_fields(primary, secondary, weight)
+            for weight, fusion in sorted({(r["weight"], r["fusion_mode"]) for r in recipes}):
+                fields = ensemble_fields(primary, secondary, weight, fusion)
                 for j, recipe in enumerate(recipes):
-                    if recipe["weight"] == weight:
+                    if recipe["weight"] == weight and recipe["fusion_mode"] == fusion:
                         tick(value)
                         validation[j].append(score(fields, row, recipe))
         candidates = [{**recipe, "aggregate": aggregate(records), "balanced": balanced_validation_score(records)}
                       for recipe, records in zip(recipes, validation)]
         baseline = choose_recipe([item for item in candidates if item["weight"] in (0., 1.)])
         candidate = choose_recipe([item for item in candidates if 0 < item["weight"] < 1])
-        parameter_keys = ("weight", "threshold", "instance_mode", "seed_distance")
+        parameter_keys = ("weight", "threshold", "instance_mode", "seed_distance", "fusion_mode")
         plan = {"dataset_fingerprint": dataset["fingerprint"], "models": identities,
                 "augmentation": augmentation, "baseline": {k: baseline[k] for k in parameter_keys},
                 "candidate": {k: candidate[k] for k in parameter_keys},
@@ -104,7 +108,7 @@ def compare_ensemble(dataset_path, model_ids, destination, *, augmentation="none
                 tick(value)
                 primary, secondary = predict_pair(row, value)
                 base_records.append(score(ensemble_fields(primary, secondary, baseline["weight"]), row, baseline))
-                fused_records.append(score(ensemble_fields(primary, secondary, candidate["weight"]), row, candidate))
+                fused_records.append(score(ensemble_fields(primary, secondary, candidate["weight"], candidate["fusion_mode"]), row, candidate))
             holdout = {"baseline": aggregate(base_records), "candidate": aggregate(fused_records),
                        "baseline_records": base_records, "candidate_records": fused_records,
                        "qualification": paired_gate(base_records, fused_records)}
@@ -113,6 +117,7 @@ def compare_ensemble(dataset_path, model_ids, destination, *, augmentation="none
             raise RasterError("Ensemble study inputs changed before publication.")
         deployment = {"model_id": model_ids[0], "secondary_model_id": model_ids[1],
                       "secondary_weight": candidate["weight"], "probability_threshold": candidate["threshold"],
+                      "fusion_mode": candidate["fusion_mode"],
                       "instance_mode": candidate["instance_mode"], "seed_distance": candidate["seed_distance"],
                       "augmentation": augmentation}
         report = {"selection": plan, "validation": candidates, "holdout": holdout,

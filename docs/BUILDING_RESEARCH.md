@@ -277,3 +277,17 @@ least 256 source pixels. Recall is grouped by reference size, precision by
 predicted size. Cross-bin matches remain valid; undefined bin metrics are
 null and no invalid per-bin F1 is constructed. These are image-pixel sizes,
 not comparable ground areas across different ground sampling distances.
+
+### Confidence-adaptive ensemble and spatial uncertainty
+
+Fixed fusion remains the default. Confidence-adaptive fusion multiplies each
+member's prior weight by 1+abs(2p-1) before normalizing. The relative odds
+adjustment is bounded by two and depends only on the two probabilities at the
+same source pixel, so tile/AOI placement cannot affect this operation. Model
+confidence is not an independently measured reliability estimate; the optional
+heuristic must compete against fixed fusion using validation data. The ensemble
+search now includes both modes (72 recipes). For dual models, disagreement.tif
+stores |p1-p2|, entropy.tif stores normalized binary entropy of the fused score,
+both with source CRS, grid and -1 nodata. They are diagnostic layers, not
+calibrated error probabilities. High disagreement means >=0.3 raw probability
+difference, and its fraction is calculated over all valid pixels.

@@ -433,3 +433,22 @@ def test_size_stratification_uses_global_matching_and_reference_support():
     assert sizes["large"]["recall"]==sizes["large"]["precision"]==1
     empty = object_metrics([],truth,.5,pixel_size_breakdown=True)["size_breakdown"]
     assert empty["small"]["recall"]==0 and empty["small"]["precision"] is None
+
+
+def test_confidence_fusion_is_bounded_and_preserves_unanimity_and_nodata():
+    from vision.building_ensemble import fuse_probabilities, uncertainty_fields
+    a=np.array([[.1,.5,1.,0.,-1]],np.float32)
+    b=np.array([[.9,.9,1.,0.,-1]],np.float32)
+    valid=a>=0
+    fixed=fuse_probabilities(a,b,.5,valid)
+    adaptive=fuse_probabilities(a,b,.5,valid,mode="confidence")
+    assert adaptive[0,1]>fixed[0,1]
+    np.testing.assert_allclose(adaptive[0,[0,2,3,4]],fixed[0,[0,2,3,4]],atol=1e-7)
+    assert np.all(adaptive[valid]>=np.minimum(a,b)[valid])
+    assert np.all(adaptive[valid]<=np.maximum(a,b)[valid])
+    d,e=uncertainty_fields(a,b,adaptive,valid)
+    assert d[0,0]==pytest.approx(.8)
+    assert e[0,0]==pytest.approx(1.)
+    assert e[0,2]==e[0,3]==0 and d[0,4]==e[0,4]==-1
+    with pytest.raises(RasterError,match="Unsupported"):
+        fuse_probabilities(a,b,.5,valid,mode="unknown")

@@ -37,6 +37,7 @@ export default function GeoAIAnalysisPanel(p:Props){
   const [modelId,setModelId]=useState('');
   const [secondaryModelId,setSecondaryModelId]=useState('');
   const [secondaryWeight,setSecondaryWeight]=useState(.5);
+  const [fusionMode,setFusionMode]=useState<'fixed'|'confidence'>('fixed');
   const [index,setIndex]=useState<'ndvi'|'ndwi'>('ndvi');
   const [firstBand,setFirstBand]=useState(4);
   const [secondBand,setSecondBand]=useState(1);
@@ -116,7 +117,7 @@ export default function GeoAIAnalysisPanel(p:Props){
       throw new Error('Select a georeferenced image.');
     const payload:Record<string,unknown>=buildingMode?{
       image_id:p.image!.id,model_id:modelId,probability_threshold:buildingThreshold,
-      ...(secondaryModelId&&secondaryModelId!==modelId?{secondary_model_id:secondaryModelId,secondary_weight:secondaryWeight}:{}),
+      ...(secondaryModelId&&secondaryModelId!==modelId?{secondary_model_id:secondaryModelId,secondary_weight:secondaryWeight,...(fusionMode!=='fixed'?{fusion_mode:fusionMode}:{})}:{}),
       minimum_area_m2:minimumArea,full_resolution:true,memory_mb:memoryBudget,
       instance_mode:instanceMode,seed_distance:seedDistance,
       ...(buildingAugmentation!=='none'?{augmentation:buildingAugmentation}:{}),
@@ -315,8 +316,11 @@ export default function GeoAIAnalysisPanel(p:Props){
               <option value="">None (single model)</option>
               {visibleModels.filter(m=>m.id!==modelId).map(m=><option key={m.id} value={m.id}>{m.id}</option>)}
             </select></label>
-            {secondaryModelId&&<label>Secondary probability weight<input aria-label="Secondary building weight" type="number"
-              min={.05} max={.95} step={.05} value={secondaryWeight} onChange={e=>setSecondaryWeight(Number(e.target.value))}/></label>}
+            {secondaryModelId&&<><label>Secondary probability weight<input aria-label="Secondary building weight" type="number"
+              min={.05} max={.95} step={.05} value={secondaryWeight} onChange={e=>setSecondaryWeight(Number(e.target.value))}/></label>
+              <label>Fusion mode<select aria-label="Building fusion mode" value={fusionMode} onChange={e=>setFusionMode(e.target.value as typeof fusionMode)}>
+                <option value="fixed">Fixed weight</option><option value="confidence">Confidence-adaptive (experimental)</option>
+              </select></label></>}
             </>}
             <label>Building probability threshold
               <input aria-label="Building probability threshold" type="number" min={.01} max={.99}
@@ -430,6 +434,10 @@ export default function GeoAIAnalysisPanel(p:Props){
           </div>
           {result.ensemble&&<p className="raster-details" aria-label="Building ensemble summary">
             {result.ensemble.primary} · {((1-result.ensemble.secondary_weight)*100).toFixed(0)}% / {result.ensemble.secondary} · {(result.ensemble.secondary_weight*100).toFixed(0)}%
+          </p>}
+          {result.ensemble?.uncertainty&&<p className="raster-details" aria-label="Building uncertainty summary">
+            Mean disagreement {result.ensemble.uncertainty.mean_disagreement.toFixed(3)} · entropy {result.ensemble.uncertainty.mean_binary_entropy.toFixed(3)} ·
+            high disagreement {(result.ensemble.uncertainty.high_disagreement_fraction*100).toFixed(1)}%. Review diagnostic rasters; not calibrated error probabilities.
           </p>}
           {result.summary&&<p className="raster-details" aria-label="Building extraction summary">
             {result.summary.candidate_count} building candidates · {result.summary.total_area_m2.toFixed(1)} m² retained area

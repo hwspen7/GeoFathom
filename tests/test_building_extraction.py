@@ -283,7 +283,8 @@ def test_aoi_probabilities_match_full_scene_source_aligned_tiles(setup, augmenta
         np.testing.assert_array_equal(actual[valid], values[valid])
 
 
-def test_two_real_onnx_members_with_distinct_tile_grids_fuse_native_probabilities(setup):
+@pytest.mark.parametrize("mode", ["fixed", "confidence"])
+def test_two_real_onnx_members_with_distinct_tile_grids_fuse_native_probabilities(setup, mode):
     import onnx
     from onnx import helper, numpy_helper, TensorProto
     from vision.building_prediction import predict_image
@@ -302,13 +303,21 @@ def test_two_real_onnx_members_with_distinct_tile_grids_fuse_native_probabilitie
     (root/"secondary.json").write_text(json.dumps({"classes":["background","building"],
         "task":"building_extraction","tile_size":256,"halo":32,"output_type":"binary_logits",
         "output_channels":1,"output_channel":0}))
-    result = extract_buildings(path, options(secondary_model_id="secondary", secondary_weight=.35), out)
+    result = extract_buildings(path, options(secondary_model_id="secondary", secondary_weight=.35, fusion_mode=mode), out)
     first = predict_image(path,"numerical")
     second = predict_image(path,"secondary")
-    expected = fuse_probabilities(first["probability"],second["probability"],.35,first["valid"])
+    expected = fuse_probabilities(first["probability"],second["probability"],.35,first["valid"],mode=mode)
     with rasterio.open(out/"probability.tif") as src:
         assert src.transform == transform
         np.testing.assert_allclose(src.read(1),expected,atol=1e-7)
+    from vision.building_ensemble import uncertainty_fields
+    disagreement, entropy = uncertainty_fields(first["probability"],second["probability"],expected,first["valid"])
+    for name, array in (("disagreement",disagreement),("entropy",entropy)):
+        with rasterio.open(out/(name+".tif")) as src:
+            assert src.transform == transform and src.nodata == -1.
+            np.testing.assert_allclose(src.read(1),array,atol=1e-6)
+        assert name+".tif" in result["artifacts"]
+    assert result["ensemble"]["fusion"] == mode
     assert result["ensemble"]["secondary"] == "secondary"
     assert result["secondary_tile_count"] == 2
     assert not (out/"secondary.tif").exists()

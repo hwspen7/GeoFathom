@@ -22,7 +22,7 @@ from imagery.raster import RasterError, _check
 from imagery.store import file_sha256
 from .semantic import _manifest, fuse_building_heads
 from .building_prediction import prepare_building_tile
-from .building_ensemble import compatible_members, fuse_probabilities
+from .building_ensemble import compatible_members, fuse_probabilities, uncertainty_fields
 from .tiles import context_tiles_for_window
 from .tiled import TilePlan, _disk_features, _check_scratch
 from .runtime import tensor_budget_mb
@@ -35,6 +35,7 @@ class BuildingInput(BaseModel):
     model_id: str = Field(min_length=1, max_length=64)
     secondary_model_id: str | None = Field(default=None, min_length=1, max_length=64)
     secondary_weight: float = Field(default=.5, ge=.05, le=.95, allow_inf_nan=False)
+    fusion_mode: Literal["fixed", "confidence"] = "fixed"
     probability_threshold: float = Field(default=.5, gt=0, lt=1, allow_inf_nan=False)
     minimum_area_m2: float = Field(default=4., ge=0, le=100000, allow_inf_nan=False)
     minimum_pixels: int = Field(default=9, ge=1, le=10000)
@@ -53,6 +54,8 @@ def validate(payload):
     options = BuildingInput.model_validate(payload)
     if options.secondary_model_id == options.model_id:
         raise RasterError("Choose two distinct ensemble models.")
+    if options.fusion_mode != "fixed" and options.secondary_model_id is None:
+        raise RasterError("Dynamic fusion requires a secondary building model.")
     if not options.full_resolution:
         raise RasterError("Building extraction requires native pixel resolution.")
     if options.aoi is not None:
@@ -166,7 +169,7 @@ def extract_buildings(path, options, output_dir, progress=None, cancelled=None):
                 if options.augmentation != "none":
                     needed += member_plan.tile_size**2 * (len(member["bands"])*8 + member["output_channels"]*16 + 32)
                 if secondary is not None:
-                    needed += member_plan.tile_size**2 * 32
+                    needed += member_plan.tile_size**2 * 96
                 if needed > min(options.memory_mb, tensor_budget_mb()) * 1024**2:
                     raise RasterError("Building model exceeds the per-tile tensor allowance.")
             # Probabilities plus mask need five uncompressed bytes per pixel.
@@ -176,7 +179,7 @@ def extract_buildings(path, options, output_dir, progress=None, cancelled=None):
             # Watershed may retain two auxiliary fields and a 32-bit instance grid.
             bytes_per_pixel = 17 if options.instance_mode == "watershed" else 5
             if secondary is not None:
-                bytes_per_pixel += 4  # temporary native-grid secondary probability raster
+                bytes_per_pixel += 12  # temporary secondary field and two diagnostic outputs
             if not 16 <= quota_mb <= 4096 or width * height * bytes_per_pixel + 8 * 1024**2 > quota:
                 raise RasterError("Building artifact budget is insufficient for this study area.")
             if shutil.disk_usage(stage).free < width * height * bytes_per_pixel + 32 * 1024**2:
@@ -191,6 +194,8 @@ def extract_buildings(path, options, output_dir, progress=None, cancelled=None):
                           (math.ceil((crop_top+height)/stride)-crop_top//stride))
             valid_pixels = foreground_pixels = 0
             secondary_tile_count = 0
+            disagreement_sum = entropy_sum = 0.
+            high_disagreement_pixels = 0
             if secondary is not None:
                 # Different model tile sizes and halos are allowed. Persist only
                 # the secondary probability field, not all member activations.
@@ -215,6 +220,11 @@ def extract_buildings(path, options, output_dir, progress=None, cancelled=None):
                     **profile, dtype="uint8", nodata=255))
                 probability = stack.enter_context(rasterio.open(stage / "probability.tif", "w",
                     **profile, dtype="float32", nodata=-1.))
+                diagnostics = {}
+                if other is not None:
+                    for name in ("disagreement", "entropy"):
+                        diagnostics[name] = stack.enter_context(rasterio.open(stage/(name+".tif"), "w",
+                            **profile, dtype="float32", nodata=-1.))
                 auxiliary = {}
                 if options.instance_mode == "watershed":
                     for name in ("boundary", "distance"):
@@ -238,7 +248,15 @@ def extract_buildings(path, options, output_dir, progress=None, cancelled=None):
                         secondary_scores = other.read(1, window=tile.core)
                         if np.any(core_valid & (secondary_scores < 0)):
                             raise RasterError("Ensemble members have inconsistent source support.")
-                        scores = fuse_probabilities(scores, secondary_scores, options.secondary_weight, core_valid)
+                        primary_scores = scores
+                        scores = fuse_probabilities(primary_scores, secondary_scores, options.secondary_weight,
+                                                    core_valid, mode=options.fusion_mode)
+                        disagreement, entropy = uncertainty_fields(primary_scores, secondary_scores, scores, core_valid)
+                        diagnostics["disagreement"].write(disagreement, 1, window=tile.core)
+                        diagnostics["entropy"].write(entropy, 1, window=tile.core)
+                        disagreement_sum += float(disagreement[core_valid].sum(dtype=np.float64))
+                        entropy_sum += float(entropy[core_valid].sum(dtype=np.float64))
+                        high_disagreement_pixels += int(np.count_nonzero(core_valid & (disagreement >= .3)))
                     positive = core_valid & (scores >= options.probability_threshold)
                     mask.write(np.where(core_valid, positive, 255).astype(np.uint8),
                                1, window=tile.core)
@@ -283,6 +301,7 @@ def extract_buildings(path, options, output_dir, progress=None, cancelled=None):
                         "provider": "onnxruntime", "method": "building_extraction",
                         "secondary_model_id": options.secondary_model_id,
                         "secondary_weight": options.secondary_weight if secondary is not None else None,
+                        "fusion_mode": options.fusion_mode if secondary is not None else None,
                         "probability_threshold": options.probability_threshold,
                         "mean_building_probability": _region_probability(feature, str(src.crs), probability),
                         "confidence_calibrated": False,
@@ -302,7 +321,12 @@ def extract_buildings(path, options, output_dir, progress=None, cancelled=None):
                 "tile_alignment": "source_pixel_origin",
                 "secondary_tile_count": secondary_tile_count,
                 "ensemble": ({"primary": options.model_id, "secondary": options.secondary_model_id,
-                    "secondary_weight": options.secondary_weight, "fusion": "raw_probability_weighted_mean",
+                    "secondary_weight": options.secondary_weight, "fusion": options.fusion_mode,
+                    "uncertainty": {"mean_disagreement": disagreement_sum/valid_pixels,
+                        "mean_binary_entropy": entropy_sum/valid_pixels,
+                        "high_disagreement_fraction": high_disagreement_pixels/valid_pixels,
+                        "high_disagreement_threshold": .3,
+                        "interpretation": "Raw probability disagreement and entropy; not calibrated error probability."},
                     "auxiliary_heads": "primary_only",
                     "secondary_model_sha256": file_sha256(secondary["model_path"]),
                     "secondary_manifest_sha256": file_sha256(secondary["model_path"].with_suffix(".json"))}
@@ -332,6 +356,8 @@ def extract_buildings(path, options, output_dir, progress=None, cancelled=None):
         _figure(retained, stage / "areas.png")
         _figure(retained, stage / "areas.svg")
         names = ["mask.tif", "probability.tif", "footprints.geojson", "footprints.csv", "areas.png", "areas.svg"]
+        if secondary is not None:
+            names.extend(["disagreement.tif", "entropy.tif"])
         if instance_summary is not None:
             names.extend(["instances.tif", *(name+".tif" for name in auxiliary)])
         result["artifacts"] = {name: {"sha256": file_sha256(stage / name),
