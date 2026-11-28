@@ -49,3 +49,18 @@ def test_group_crossfit():
     b=SimpleNamespace(losses=np.array([3.,2.,1.]),count=10,positive=5)
     r=grouped_temperature_nll({"a":a,"b":b},(.5,1.,2.))
     assert r["evaluated"] and r["raw_nll"]==.2 and r["crossfit_nll"]==.3
+
+
+def test_spatial_consistency_fusion():
+    from vision.building_refinement import spatial_view_fusion
+    valid=np.ones((12,12),bool); valid[0]=False
+
+    def f(v):
+        return {"valid":valid,"probability":np.where(valid,v,-1).astype(np.float32)}
+
+    a=f(.9); z=f(.1); b=f(.8)
+    h=spatial_view_fusion(a,z,b,b)
+    equal=(.65*.9+.35*.1+.8)/2
+    assert np.all(h["probability"][valid]>equal)
+    assert np.all(h["probability"][valid]<=.8) and np.all(h["probability"][~valid]==-1)
+    np.testing.assert_allclose(spatial_view_fusion(a,a,b,b)["probability"][valid],.85,atol=1e-7)

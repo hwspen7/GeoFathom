@@ -152,3 +152,24 @@ def grouped_temperature_nll(groups, temperatures):
         folds.append({"held_out_group": name, "temperature": temperatures[idx], "pixels": group.count})
     return {"evaluated": True, "groups": len(folds), "raw_nll": float(losses[raw]/count),
             "crossfit_nll": selected_loss/count, "folds": folds}
+
+
+def spatial_view_fusion(primary_flips, primary_scale, secondary_flips, secondary_scale):
+    """Bounded local weighting by cross-view consistency, not correctness probability."""
+    from scipy import ndimage as ndi
+    a = hybrid_fields(primary_flips, primary_scale)
+    b = hybrid_fields(secondary_flips, secondary_scale)
+    valid = a["valid"]
+    if not np.array_equal(valid, b["valid"]):
+        raise ValueError("Spatial ensemble source supports differ.")
+    support = ndi.uniform_filter(valid.astype(np.float32), size=9, mode="constant")
+
+    def instability(flip, scale):
+        delta = np.where(valid, np.abs(flip["probability"]-scale["probability"]), 0)
+        return ndi.uniform_filter(delta, size=9, mode="constant")/np.maximum(support, 1e-6)
+
+    log_odds = np.clip(3*(instability(primary_flips, primary_scale)-instability(secondary_flips, secondary_scale)),
+                       -np.log(2.), np.log(2.))
+    weight = 1/(1+np.exp(-log_odds))
+    probability = (1-weight)*a["probability"]+weight*b["probability"]
+    return {**a, "probability": np.where(valid, probability, -1).astype(np.float32)}

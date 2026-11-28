@@ -14,7 +14,7 @@ from vision.building_dataset import load_dataset
 from vision.building_ensemble_study import ensemble_fields
 from vision.building_prediction import predict_image
 from vision.building_refinement import (merge_fragments, overlap_diagnostics, hybrid_fields,
-                                        joint_ridge, refine_mask, grouped_temperature_nll)
+                                        joint_ridge, refine_mask, grouped_temperature_nll, spatial_view_fusion)
 from vision.building_study import score_fields, aggregate, _identity
 from vision.building_calibration import TemperatureFit, TEMPERATURES
 
@@ -40,11 +40,15 @@ def run(dataset_path, models, output, device):
     for index, row in enumerate(rows):
         print(f"Validation {index+1}/{len(rows)}: {row['id']}", flush=True)
         fields = {}
+        views = {}
         for augmentation in ("flips", "multiscale"):
             a, b = [predict_image(row["paths"]["image"], m, device=device, augmentation=augmentation)
                     for m in models]
+            views[augmentation] = (a, b)
             fields[augmentation] = ensemble_fields(a, b, .5, "fixed")
         fields["hybrid"] = hybrid_fields(fields["flips"], fields["multiscale"])
+        fields["spatial"] = spatial_view_fusion(views["flips"][0], views["multiscale"][0],
+                                                views["flips"][1], views["multiscale"][1])
         with rasterio.open(row["paths"]["labels"]) as src:
             truth = src.read(1, masked=True)
         valid = fields["flips"]["valid"] & ~np.ma.getmaskarray(truth)
@@ -73,7 +77,8 @@ def run(dataset_path, models, output, device):
         raise ValueError("Experiment inputs changed.")
     report = {"dataset_fingerprint": dataset["fingerprint"], "models": identities, "device": device,
               "test_used": False, "parameters": {"weight": .5, "threshold": .35, "seed_distance": 6,
-                  "hybrid_scale_weight": .35, "fragment_fraction": .25, "ridge_limit": .35},
+                  "hybrid_scale_weight": .35, "fragment_fraction": .25, "ridge_limit": .35,
+                  "spatial_window_pixels": 9, "spatial_secondary_weight_range": [1/3, 2/3]},
               "calibration_validation_fit": {k: v.result() for k, v in calibration.items()},
               "calibration_group_crossfit": {k: grouped_temperature_nll(v, TEMPERATURES) for k, v in group_fits.items()},
               "results": {k: {"aggregate": aggregate(v), "records": v} for k, v in records.items()},
