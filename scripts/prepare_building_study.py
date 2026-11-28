@@ -17,7 +17,7 @@ from shapely.geometry import mapping
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from imagery.store import file_sha256
-from vision.building_dataset import freeze_dataset
+from vision.building_dataset import freeze_dataset, load_dataset
 
 SOURCE = "https://huggingface.co/datasets/PingL/PolyTopoBench"
 REVISION = "91319835ea7fcbdad25105cbe90af58258259250"
@@ -52,7 +52,7 @@ def download(relative, destination, expected=None, limit=32*1024**2):
     return destination
 
 
-def prepare(root, train_per_city=24, evaluation_per_city=8, train_patches_per_scene=1):
+def prepare(root, train_per_city=24, evaluation_per_city=8, train_patches_per_scene=1, *, preserve_evaluation=None):
     if not 1 <= train_patches_per_scene <= 12:
         raise ValueError("Choose 1–12 training chips per selected source scene.")
     if 2*train_per_city*train_patches_per_scene + 3*evaluation_per_city > 1000:
@@ -140,12 +140,19 @@ def prepare(root, train_per_city=24, evaluation_per_city=8, train_patches_per_sc
         for key, path in (("image", image), ("labels", labels), ("instances", instances)):
             sample[key+"_sha256"] = file_sha256(path)
         samples.append(sample)
+    if preserve_evaluation is not None:
+        previous=load_dataset(preserve_evaluation,verify_pixels=False)
+        def evaluation_identity(rows):
+            return {r["id"]:{k:r[k] for k in ("region","group","split","image_sha256","labels_sha256","instances_sha256")}
+                    for r in rows if r["split"]!="train"}
+        if evaluation_identity(samples)!=evaluation_identity(previous["samples"]):
+            raise ValueError("Expanded dataset would change the frozen evaluation chips.")
     return freeze_dataset(root, samples, provenance={"dataset": SOURCE, "revision": REVISION,
         "annotation_sha256": ANNOTATIONS, "index_sha256": file_sha256(index),
         "sampling": ("SHA-256 order seeded 731; one patch per source scene; labels not consulted"
                      if train_patches_per_scene == 1 else
                      f"SHA-256 order seeded 731; up to {train_patches_per_scene} training chips per scene; one evaluation chip per scene; labels not consulted"),
-        "split_policy": CITY_ROLES, "georeferencing": "Pixel coordinates only; no geographic area claim.",
+        "split_policy": CITY_ROLES, "preserved_evaluation_fingerprint": previous["fingerprint"] if preserve_evaluation is not None else None, "georeferencing": "Pixel coordinates only; no geographic area claim.",
         "annotation_policy": "Author WKB rings retain holes; last annotation wins on overlapping raster pixels.",
         "limitations": "Small cross-city study. Publisher removed empty patches from its train subset; source sampling reflects that availability.",
         "attribution": "Inria imagery: Maggiori et al. (2017). PolyTopoBench curation: Liu et al. (2026). Vector labels: OpenStreetMap contributors, ODbL-1.0."})
@@ -157,10 +164,14 @@ def main():
     parser.add_argument("--train-per-city", type=int, default=24)
     parser.add_argument("--evaluation-per-city", type=int, default=8)
     parser.add_argument("--train-patches-per-scene", type=int, default=1)
+    parser.add_argument("--preserve-evaluation",type=Path,help="Require validation and test bytes/assignments to match a prior frozen dataset.")
     args = parser.parse_args()
     if not 1 <= args.train_per_city <= 36 or not 1 <= args.evaluation_per_city <= 36:
         raise SystemExit("Choose 1–36 distinct source scenes per city.")
-    print(prepare(args.output, args.train_per_city, args.evaluation_per_city, args.train_patches_per_scene))
+    path=prepare(args.output, args.train_per_city, args.evaluation_per_city, args.train_patches_per_scene,preserve_evaluation=args.preserve_evaluation)
+    dataset=load_dataset(path,verify_pixels=False)
+    print(json.dumps({"dataset":str(path),"counts":dataset["counts"],"regions":dataset["regions"],
+                      "training_groups":{region:len({r["group"] for r in dataset["samples"] if r["split"]=="train" and r["region"]==region}) for region in dataset["regions"]["train"]}},indent=2))
 
 
 if __name__ == "__main__":

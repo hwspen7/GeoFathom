@@ -166,6 +166,8 @@ def export_model(network, directory, manifest, *, verify=True):
         with torch.inference_mode():
             expected = network(example).numpy()
         actual = session.run(None, {"image": example.numpy()})[0]
+        if not np.isfinite(expected).all() or not np.isfinite(actual).all():
+            raise RasterError("Exported building model produced nonfinite logits.")
         maximum = float(np.max(np.abs(expected-actual)))
         # Deep CPU convolution graphs accumulate small backend-dependent logit differences.
         # Gate the deployed probabilities/partition and distance field, and retain raw error.

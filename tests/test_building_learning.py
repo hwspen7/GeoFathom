@@ -64,3 +64,34 @@ def test_real_tiny_dinov3_pyramid_and_lora_gradient():
     expected=network(x).detach()
     merge_lora(network)
     torch.testing.assert_close(network(x),expected,atol=1e-5,rtol=1e-5)
+
+
+def test_crop_rotation_preserves_teacher_alignment():
+    from vision.building_dino_training import augment_crop, crop_origins, normalization
+    p=np.zeros((32,32),np.float32);p[4:12,8:20]=1
+    y=instance_targets(p,p.astype(np.int32))
+    t=np.stack([p,np.ones_like(p)])
+    x=np.stack([p,p,p])
+    _,out,teacher=augment_crop(x,y,t,np.random.default_rng(17),normalization())
+    np.testing.assert_array_equal(out[0],teacher[0])
+    assert crop_origins((70,80),64)==[(0,0),(0,16),(6,0),(6,16)]
+
+
+def test_support_gate_and_no_holdout_in_supervision():
+    from vision.building_dino_training import DinoOptions,audit_training_support
+    rows=[{"split":"train","region":region,"group":region+"-scene","paths":{"instances":"local"}} for region in ("a","b")]
+    rows.append({"split":"test","region":"c","group":"test-only","paths":{}})
+    with pytest.raises(ValueError,match="Insufficient training support"):
+        audit_training_support({"samples":rows},DinoOptions())
+    assert audit_training_support({"samples":rows},DinoOptions(min_train_groups_per_region=1,min_train_chips=2))=={"a":1,"b":1}
+
+
+def test_tiny_real_dino_onnx_export(tmp_path):
+    from transformers import DINOv3ViTConfig,DINOv3ViTModel
+    from vision.building_training import export_model
+    torch.set_num_threads(2)
+    config=DINOv3ViTConfig(hidden_size=32,intermediate_size=64,num_hidden_layers=4,num_attention_heads=4,
+        patch_size=16,image_size=64,num_register_tokens=2,attn_implementation="eager")
+    model=DinoBuilding(DINOv3ViTModel(config).eval(),width=32).eval()
+    parity=export_model(model,tmp_path,{"tile_size":64})
+    assert parity["passed"] and (tmp_path/"model.onnx").is_file()
