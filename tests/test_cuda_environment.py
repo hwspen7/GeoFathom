@@ -9,6 +9,8 @@ def isolated(monkeypatch):
     monkeypatch.delenv("GEOFATHOM_CUDA_BIN", raising=False)
     monkeypatch.delenv("CUDA_PATH", raising=False)
     monkeypatch.setattr(env, "_handles", {})
+    monkeypatch.setattr(env, "_wheel_handles", {})
+    monkeypatch.setattr(env, "_wheel_directories", lambda: ())
     monkeypatch.setattr(env, "_preloaded", set())
 
 
@@ -87,3 +89,19 @@ def test_loaded_toolkit_cannot_be_switched_in_place(monkeypatch,tmp_path):
     monkeypatch.setenv("GEOFATHOM_CUDA_BIN",str(second))
     with pytest.raises(RuntimeError,match="restart"):
         env.prepare_native_cuda()
+
+
+def test_active_wheel_dlls_registered_before_preload(monkeypatch,tmp_path):
+    a=tmp_path/"cuda"; b=tmp_path/"cudnn"
+    a.mkdir(); b.mkdir()
+    monkeypatch.setattr(env, "_wheel_directories", lambda: (a,b))
+    monkeypatch.setattr(env, "_is_windows", lambda: True)
+    monkeypatch.setenv("PATH", "original")
+    calls=[]
+    monkeypatch.setattr(env.os, "add_dll_directory", lambda path: calls.append(path) or object(), raising=False)
+    ort=SimpleNamespace(preload_dlls=lambda **kw: calls.append(kw))
+    env.prepare_onnx_cuda(ort)
+    env.prepare_onnx_cuda(ort)
+    assert calls == [str(a), str(b), {"directory": ""}]
+    assert env.os.environ["PATH"].split(env.os.pathsep) == [str(a), str(b), "original"]
+    assert set(env._wheel_handles)=={a,b}

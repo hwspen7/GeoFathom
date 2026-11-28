@@ -91,3 +91,64 @@ def hybrid_fields(flips, multiscale, *, scale_weight=.35):
         if not np.isfinite(f[valid]).all() or np.any((f[valid] < 0) | (f[valid] > 1)):
             raise ValueError("Invalid hybrid probabilities.")
     return {**flips, "probability": np.where(valid, (1-scale_weight)*a+scale_weight*b, -1).astype(np.float32)}
+
+
+def joint_ridge(probability, boundary, distance, valid):
+    """Weak local valleys complement the learned wall head without replacing it."""
+    from scipy import ndimage as ndi
+    p = np.asarray(probability, np.float32)
+    valid = np.asarray(valid, bool)
+    b = np.zeros(p.shape, np.float32) if boundary is None else np.asarray(boundary, np.float32)
+    d = np.zeros(p.shape, np.float32) if distance is None else np.asarray(distance, np.float32)
+    if (p.shape != valid.shape or b.shape != p.shape or d.shape != p.shape
+            or not all(np.isfinite(f[valid]).all() for f in (p,b,d))
+            or np.any((p[valid]<0)|(p[valid]>1)) or np.any((b[valid]<0)|(b[valid]>1))
+            or np.any((d[valid]<-1)|(d[valid]>1))):
+        raise ValueError("Invalid ridge fields.")
+    safe = np.where(valid, p, 0)
+    valley = np.maximum(ndi.maximum_filter(safe, size=3, mode="nearest")-safe, 0)
+    weak = np.minimum(.49, .7*valley + .25*np.maximum(-d, 0))
+    return np.where(valid, np.maximum(b, weak), 0).astype(np.float32)
+
+
+def refine_mask(probability, valid, threshold, boundary=None):
+    """One-pixel, confidence-gated edge correction; retain enclosed holes.
+
+    The raw probability remains unchanged for calibration. This is an opt-in
+    mask candidate, not a topology guarantee or polygon regularizer.
+    """
+    from scipy import ndimage as ndi
+    p = np.asarray(probability, np.float32)
+    valid = np.asarray(valid, bool)
+    b = np.zeros(p.shape, np.float32) if boundary is None else np.asarray(boundary, np.float32)
+    if (p.ndim != 2 or p.shape != valid.shape or b.shape != p.shape or not 0 < threshold < 1
+            or not np.isfinite(p[valid]).all() or not np.isfinite(b[valid]).all()
+            or np.any((p[valid]<0)|(p[valid]>1)) or np.any((b[valid]<0)|(b[valid]>1))):
+        raise ValueError("Invalid mask refinement fields.")
+    mask = valid & (p >= threshold)
+    kernel = np.ones((3,3), np.uint8); kernel[1,1] = 0
+    neighbors = ndi.convolve(mask.astype(np.uint8), kernel, mode="constant", cval=0)
+    enclosed = ndi.binary_fill_holes(mask) & ~mask
+    add = valid & ~mask & ~enclosed & (neighbors >= 6) & (p >= threshold-.08) & (b < .4)
+    remove = mask & (neighbors <= 2) & (p < threshold+.08) & (b >= .35)
+    return (mask | add) & ~remove
+
+
+def grouped_temperature_nll(groups, temperatures):
+    """Exact leave-one-source-group-out NLL from additive grid losses."""
+    if len(groups) < 2:
+        return {"evaluated": False, "reason": "At least two source groups required."}
+    losses = np.sum([g.losses for g in groups.values()], axis=0)
+    count = sum(g.count for g in groups.values())
+    positive = sum(g.positive for g in groups.values())
+    raw = temperatures.index(1.)
+    selected_loss = 0.; folds = []
+    for name, group in sorted(groups.items()):
+        if not 0 < positive-group.positive < count-group.count or not group.count:
+            return {"evaluated": False, "reason": "Each training fold must contain both classes."}
+        train = losses-group.losses
+        idx = min(range(len(temperatures)), key=lambda i: (train[i], abs(temperatures[i]-1.)))
+        selected_loss += float(group.losses[idx])
+        folds.append({"held_out_group": name, "temperature": temperatures[idx], "pixels": group.count})
+    return {"evaluated": True, "groups": len(folds), "raw_nll": float(losses[raw]/count),
+            "crossfit_nll": selected_loss/count, "folds": folds}

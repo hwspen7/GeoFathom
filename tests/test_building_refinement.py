@@ -29,3 +29,23 @@ def test_empty():
     a=np.zeros((4,4),np.int32)
     assert not merge_fragments(a,a).any()
     assert overlap_diagnostics(a,a)["reference"]==0
+
+
+def test_joint_ridge_and_mask():
+    from vision.building_refinement import joint_ridge, refine_mask
+    p=np.zeros((9,9),np.float32); p[2:7,2:7]=.9; p[4,4]=.3; p[1,4]=.3
+    valid=np.ones_like(p,bool); valid[0,:]=False
+    b=np.zeros_like(p); b[2,3]=.95
+    ridge=joint_ridge(p,b,None,valid)
+    assert ridge[2,3]==b[2,3] and 0<ridge[4,4]<.5 and not ridge[0].any()
+    m=refine_mask(p,valid,.35,b)
+    assert not m[4,4] and not m[0].any()
+
+
+def test_group_crossfit():
+    from vision.building_refinement import grouped_temperature_nll
+    from types import SimpleNamespace
+    a=SimpleNamespace(losses=np.array([1.,2.,3.]),count=10,positive=5)
+    b=SimpleNamespace(losses=np.array([3.,2.,1.]),count=10,positive=5)
+    r=grouped_temperature_nll({"a":a,"b":b},(.5,1.,2.))
+    assert r["evaluated"] and r["raw_nll"]==.2 and r["crossfit_nll"]==.3

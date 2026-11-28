@@ -1,6 +1,6 @@
 """Process-local CUDA DLL discovery for Windows native and ONNX execution.
 
-Only operator-configured absolute directories are registered. DLL directory
+The active environment's NVIDIA wheel directories or configured toolkit are registered. DLL directory
 handles stay alive for the life of the interpreter, including spawned workers.
 Linux/macOS retain their normal dynamic linker configuration.
 """
@@ -11,6 +11,7 @@ from threading import RLock
 
 _lock = RLock()
 _handles = {}
+_wheel_handles = {}
 _preloaded = set()
 
 
@@ -73,6 +74,39 @@ def prepare_native_cuda():
     return directory
 
 
+def _wheel_directories():
+    """Find a complete CUDA/cuDNN wheel family inside this interpreter only."""
+    root = Path(sys.prefix) / "Lib" / "site-packages" / "nvidia"
+    if not root.is_dir():
+        return ()
+    names = {}
+    for path in sorted(root.glob("*/bin/*.dll")):
+        if not path.is_file():
+            continue
+        key = path.name.lower()
+        if key in names and names[key] != path:
+            raise RuntimeError("Conflicting NVIDIA wheel DLLs in the active environment.")
+        names[key] = path
+    runtimes = [key for key in names if key.startswith("cudart64_")]
+    if len(runtimes) > 1:
+        raise RuntimeError("Conflicting CUDA wheel runtime versions.")
+    if not runtimes or "cudnn64_9.dll" not in names:
+        return ()
+    return tuple(sorted({p.parent.resolve() for p in names.values()}))
+
+
+def _prepare_wheel_cuda(directories):
+    with _lock:
+        if _wheel_handles and set(_wheel_handles) != set(directories):
+            raise RuntimeError("NVIDIA wheel directories changed; restart the process.")
+        if not _wheel_handles:
+            for path in directories:
+                _wheel_handles[path] = os.add_dll_directory(str(path))
+            # cuDNN loads some sublibraries by basename after session creation.
+            # Process-local PATH also covers that native loader, not just Python.
+            os.environ["PATH"] = os.pathsep.join([*(str(p) for p in directories), os.environ.get("PATH", "")])
+
+
 def prepare_onnx_cuda(ort):
     """Preload matching CUDA/cuDNN libraries when the ORT API supports it.
 
@@ -81,8 +115,17 @@ def prepare_onnx_cuda(ort):
     """
     if not _is_windows():
         return
-    directory = prepare_native_cuda()
     preload = getattr(ort, "preload_dlls", None)
+    wheels = () if os.getenv("GEOFATHOM_CUDA_BIN") else _wheel_directories()
+    if wheels:
+        _prepare_wheel_cuda(wheels)
+        with _lock:
+            key = (id(ort), wheels)
+            if preload is not None and key not in _preloaded:
+                preload(directory="")
+                _preloaded.add(key)
+        return
+    directory = prepare_native_cuda()
     if preload is None:
         return
     key = (id(ort), directory)

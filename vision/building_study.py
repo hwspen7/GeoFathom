@@ -68,11 +68,16 @@ def boundary_scores(predicted, reference, valid, tolerance=2, *, instances=False
         "f1": 2*precision*recall/(precision+recall) if precision+recall else 0.}
 
 
-def score_fields(fields, row, threshold=.5, instance_mode="connected", seed_distance=6, *, instance_override=None):
+def score_fields(fields, row, threshold=.5, instance_mode="connected", seed_distance=6, *, instance_override=None, mask_override=None):
     with rasterio.open(row["paths"]["labels"]) as source:
         reference = source.read(1, masked=True)
     valid = fields["valid"] & ~np.ma.getmaskarray(reference)
     observed = valid & (fields["probability"] >= threshold)
+    if mask_override is not None:
+        candidate = np.asarray(mask_override)
+        if candidate.shape != valid.shape or candidate.dtype != np.bool_ or np.any(candidate & ~valid):
+            raise RasterError("Experimental mask must respect valid source support.")
+        observed = candidate
     truth = reference.data == 1
     matrix = confusion_matrix(reference.data, observed.astype(np.uint8), 2, valid)
     if row["paths"].get("instances"):
@@ -84,7 +89,12 @@ def score_fields(fields, row, threshold=.5, instance_mode="connected", seed_dist
     else:
         reference_ids = ndi.label(truth & valid)[0]
         reference_type = "connected_semantic_reference_not_true_instances"
-    if instance_mode in ("watershed", "adaptive"):
+    if instance_override is not None:
+        predicted_ids = np.asarray(instance_override)
+        if (predicted_ids.shape != observed.shape or not np.issubdtype(predicted_ids.dtype, np.integer)
+                or np.any(predicted_ids < 0) or not np.array_equal(predicted_ids > 0, observed)):
+            raise RasterError("Experimental partition must preserve the observed mask exactly.")
+    elif instance_mode in ("watershed", "adaptive"):
         predicted_ids = separate_components(observed, np.maximum(fields["probability"], 0),
             fields.get("boundary"), fields.get("distance"), seed_distance=seed_distance,
             adaptive=instance_mode=="adaptive")
@@ -92,11 +102,6 @@ def score_fields(fields, row, threshold=.5, instance_mode="connected", seed_dist
         predicted_ids = ndi.label(observed)[0]
     else:
         raise RasterError("Unsupported study instance mode.")
-    if instance_override is not None:
-        predicted_ids = np.asarray(instance_override)
-        if (predicted_ids.shape != observed.shape or not np.issubdtype(predicted_ids.dtype, np.integer)
-                or np.any(predicted_ids < 0) or not np.array_equal(predicted_ids > 0, observed)):
-            raise RasterError("Experimental partition must preserve the observed mask exactly.")
     # The same minimum-pixel filter is fixed for both postprocessors.
     predicted_polygons = polygons_from_ids(predicted_ids, minimum_pixels=9)
     reference_polygons = polygons_from_ids(reference_ids)
