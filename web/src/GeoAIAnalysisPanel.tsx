@@ -1,4 +1,5 @@
 import {SectionIcon} from './SectionIcon';
+import EnglishFileInput from './EnglishFileInput';
 import {useEffect,useRef,useState} from 'react';
 import {Database} from 'lucide-react';
 import ScientificFigureStudio from './ScientificFigureStudio';
@@ -38,6 +39,7 @@ export default function GeoAIAnalysisPanel(p:Props){
   const [secondaryModelId,setSecondaryModelId]=useState('');
   const [secondaryWeight,setSecondaryWeight]=useState(.5);
   const [fusionMode,setFusionMode]=useState<'fixed'|'confidence'>('fixed');
+  const [buildingProfile,setBuildingProfile]=useState<Record<string,unknown>|null>(null);
   const [index,setIndex]=useState<'ndvi'|'ndwi'>('ndvi');
   const [firstBand,setFirstBand]=useState(4);
   const [secondBand,setSecondBand]=useState(1);
@@ -118,6 +120,7 @@ export default function GeoAIAnalysisPanel(p:Props){
     const payload:Record<string,unknown>=buildingMode?{
       image_id:p.image!.id,model_id:modelId,probability_threshold:buildingThreshold,
       ...(secondaryModelId&&secondaryModelId!==modelId?{secondary_model_id:secondaryModelId,secondary_weight:secondaryWeight,...(fusionMode!=='fixed'?{fusion_mode:fusionMode}:{})}:{}),
+      ...(buildingProfile?{profile:buildingProfile}:{}),
       minimum_area_m2:minimumArea,full_resolution:true,memory_mb:memoryBudget,
       instance_mode:instanceMode,seed_distance:seedDistance,
       ...(buildingAugmentation!=='none'?{augmentation:buildingAugmentation}:{}),
@@ -207,6 +210,23 @@ export default function GeoAIAnalysisPanel(p:Props){
     p.onSaved();
     setMessage('Saved '+saved.created+' candidates to project for review. You can edit their boundaries.');
   }
+  async function loadProfile(file:File){
+    if(file.size>65536)throw new Error('Building profile exceeds 64 KiB.');
+    const profile=JSON.parse(await file.text());
+    const q=profile?.parameters;
+    if(profile?.schema!=='geofathom-building-profile-1'||!q||
+      !visibleModels.some(m=>m.id===q.model_id)||!visibleModels.some(m=>m.id===q.secondary_model_id)||
+      q.model_id===q.secondary_model_id||!Number.isFinite(q.secondary_weight)||q.secondary_weight<.05||q.secondary_weight>.95||
+      !Number.isFinite(q.probability_threshold)||q.probability_threshold<=0||q.probability_threshold>=1||
+      !['fixed','confidence'].includes(q.fusion_mode)||!['connected','watershed','adaptive'].includes(q.instance_mode)||
+      !['none','flips','multiscale'].includes(q.augmentation)||!Number.isInteger(q.seed_distance)||q.seed_distance<1||q.seed_distance>64)
+      throw new Error('Invalid profile or missing installed building model.');
+    setModelId(q.model_id);setSecondaryModelId(q.secondary_model_id);setSecondaryWeight(q.secondary_weight);
+    setBuildingThreshold(q.probability_threshold);setFusionMode(q.fusion_mode);setInstanceMode(q.instance_mode);
+    setSeedDistance(q.seed_distance);setBuildingAugmentation(q.augmentation);
+    setBuildingProfile(profile);setMessage('Profile loaded. Model byte identity is checked on execution; reported qualification is not independently authenticated.');
+  }
+
   async function run(fn:()=>Promise<void>){
     setBusy(true);setError('');
     try{await fn();}
@@ -311,6 +331,13 @@ export default function GeoAIAnalysisPanel(p:Props){
               </option>)}
           </select>
           {buildingMode?<>
+            <label>Ensemble profile<EnglishFileInput aria-label="Import building profile" accept=".json,application/json"
+              disabled={processing} onChange={e=>{const file=e.target.files?.[0];if(file)void run(()=>loadProfile(file));e.target.value='';}}/></label>
+            {buildingProfile&&<div className="raster-details">
+              Profile loaded · {String(buildingProfile.reported_qualification||'unverified')}
+              <button onClick={()=>setBuildingProfile(null)}>Clear profile</button>
+              <p className="project-hint">Clear the profile before changing model parameters. The server rejects mismatches.</p>
+            </div>}
             {visibleModels.length>1&&<><label>Secondary model<select aria-label="Secondary building model" value={secondaryModelId}
               onChange={e=>setSecondaryModelId(e.target.value)}>
               <option value="">None (single model)</option>

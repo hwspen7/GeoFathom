@@ -462,3 +462,25 @@ def test_ensemble_candidate_grid_includes_adaptive_and_fixed_controls(dataset,mo
     assert {r["instance_mode"] for r in grid}=={"connected","watershed","adaptive"}
     assert {r["fusion_mode"] for r in grid}=={"fixed","confidence"}
     assert not report["test_evaluated"] and report["holdout"] is None
+
+
+def test_building_profile_binds_models_and_parameters(dataset,models,tmp_path):
+    from vision.building_ensemble_study import compare_ensemble
+    from vision.building_profile import verify_profile
+    from vision.semantic import _manifest
+    report=compare_ensemble(dataset,models,tmp_path/"profile-study")
+    profile=json.loads((tmp_path/"profile-study"/"profile.json").read_text())
+    parameters=report["deployment_parameters"]
+    manifests=[_manifest(identifier) for identifier in models]
+    assert profile["reported_qualification"]=="validation_only"
+    receipt=verify_profile(profile,parameters,manifests)
+    assert receipt["qualification_verified"] is False
+    with pytest.raises(RasterError,match="parameters changed"):
+        verify_profile(profile,{**parameters,"secondary_weight":.95},manifests)
+    modified={**profile,"reported_qualification":"passed_paired_gate"}
+    with pytest.raises(RasterError,match="digest mismatch"):
+        verify_profile(modified,parameters,manifests)
+    path=manifests[0]["model_path"].with_suffix(".json")
+    path.write_text(path.read_text()+"\n")
+    with pytest.raises(RasterError,match="model bytes"):
+        verify_profile(profile,parameters,manifests)

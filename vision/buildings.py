@@ -36,6 +36,7 @@ class BuildingInput(BaseModel):
     secondary_model_id: str | None = Field(default=None, min_length=1, max_length=64)
     secondary_weight: float = Field(default=.5, ge=.05, le=.95, allow_inf_nan=False)
     fusion_mode: Literal["fixed", "confidence"] = "fixed"
+    profile: dict | None = None
     probability_threshold: float = Field(default=.5, gt=0, lt=1, allow_inf_nan=False)
     minimum_area_m2: float = Field(default=4., ge=0, le=100000, allow_inf_nan=False)
     minimum_pixels: int = Field(default=9, ge=1, le=10000)
@@ -56,6 +57,8 @@ def validate(payload):
         raise RasterError("Choose two distinct ensemble models.")
     if options.fusion_mode != "fixed" and options.secondary_model_id is None:
         raise RasterError("Dynamic fusion requires a secondary building model.")
+    if options.profile is not None and options.secondary_model_id is None:
+        raise RasterError("An ensemble profile requires both building models.")
     if not options.full_resolution:
         raise RasterError("Building extraction requires native pixel resolution.")
     if options.aoi is not None:
@@ -125,6 +128,10 @@ def extract_buildings(path, options, output_dir, progress=None, cancelled=None):
     secondary = _manifest(options.secondary_model_id) if options.secondary_model_id else None
     if secondary is not None:
         compatible_members(config, secondary)
+    profile_receipt = None
+    if options.profile is not None:
+        from .building_profile import verify_profile
+        profile_receipt = verify_profile(options.profile, options.model_dump(), [config, secondary])
     device = os.getenv("GEOFATHOM_VISION_DEVICE", "cpu").lower()
     if device not in ("cpu", "cuda"):
         raise RasterError("Vision device must be cpu or cuda.")
@@ -334,6 +341,7 @@ def extract_buildings(path, options, output_dir, progress=None, cancelled=None):
                 "inference_passes_per_tile": {"none": 1, "flips": 4, "multiscale": 3}[options.augmentation],
                 "inference_scales": [1., 1.25, 1.5] if options.augmentation == "multiscale" else [1.],
                 "confidence_calibrated": False, "parameters": options.model_dump(),
+                "profile_receipt": profile_receipt,
                 "outline_policy": "native pixel support; guarded inward-only simplification, otherwise original grid boundary",
                 "instance_separation": instance_summary,
                 "summary": {"candidate_count": len(retained),

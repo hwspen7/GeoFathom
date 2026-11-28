@@ -124,6 +124,9 @@ def compare_ensemble(dataset_path, model_ids, destination, *, augmentation="none
                   "deployment_parameters": deployment, "test_evaluated": evaluate_test,
                   "qualified": bool(holdout and holdout["qualification"]["passed"]),
                   "note": "Validation-selected candidate only; never auto-promoted. Prior holdout use and pretraining overlap require separate audit."}
+        from .building_profile import create_profile
+        profile = create_profile(plan, deployment, holdout["qualification"] if holdout else None)
+        (stage/"profile.json").write_text(json.dumps(profile, indent=2, allow_nan=False)+"\n", encoding="utf-8")
         (stage/"ensemble.json").write_text(json.dumps(report, indent=2, allow_nan=False)+"\n", encoding="utf-8")
         tick(1.)
         stage.replace(destination)

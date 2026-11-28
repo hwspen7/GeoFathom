@@ -300,3 +300,12 @@ priority. All foreground pixels and holes remain unchanged; the partition
 is experimental. Both benchmark and disk execution use the same algorithm.
 The ensemble search now contains 120 recipes, including adaptive separation;
 validation determines whether this mode is preferable to the fixed baseline.
+
+Every ensemble comparison publishes profile.json with the selected parameters,
+model and manifest hashes, dataset fingerprint, frozen selection digest and
+reported gate status. Import this file in GeoAI to populate model and inference
+settings. Execution checks the profile digest, all recipe parameters and model
+bytes from its private snapshot. Clear the profile explicitly before changing
+recipe parameters. The portable digest is not an authenticity signature; the
+reported gate status is not independently authenticated by deployment and never
+promotes a model. Validation-only profiles remain experimental.
