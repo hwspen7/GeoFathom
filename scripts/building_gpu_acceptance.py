@@ -44,7 +44,7 @@ def accept(model_id, sample, repeats=5, *, output=None):
     import onnxruntime as ort
     from vision.semantic import _manifest
     from vision.building_prediction import predict_image
-    from vision.building_instances import separate_instances
+    from vision.building_instances import separate_components
     from imagery.store import file_sha256
     ort.disable_telemetry_events()
     providers = ort.get_available_providers()
@@ -66,8 +66,8 @@ def accept(model_id, sample, repeats=5, *, output=None):
         cpu_mask = common & (cpu["probability"] >= .5)
         gpu_mask = common & (gpu["probability"] >= .5)
         disagreement = float(np.mean(cpu_mask[common] != gpu_mask[common])) if common.any() else 1.
-        a = separate_instances(cpu_mask, np.maximum(cpu["probability"], 0), cpu.get("boundary"), cpu.get("distance"))
-        b = separate_instances(gpu_mask, np.maximum(gpu["probability"], 0), gpu.get("boundary"), gpu.get("distance"))
+        a = separate_components(cpu_mask, np.maximum(cpu["probability"], 0), cpu.get("boundary"), cpu.get("distance"))
+        b = separate_components(gpu_mask, np.maximum(gpu["probability"], 0), gpu.get("boundary"), gpu.get("distance"))
         partition = partition_agreement(a, b)
         # Profile the actual graph rather than trusting only an advertised provider name.
         options = ort.SessionOptions()

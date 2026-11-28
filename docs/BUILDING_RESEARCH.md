@@ -191,3 +191,10 @@ prevents unbounded rasterization. The raw inference mask remains authoritative;
 this is not a claim of subpixel ground truth. Instance boundary F1 additionally
 measures shared walls between adjacent labeled buildings, distinct from binary
 foreground boundary F1.
+
+The research panel now exposes object F1 at IoU 0.75, shared-wall boundary F1,
+and raw versus temperature-scaled ECE/Brier/NLL from the corresponding study
+split. The downloaded research bundle retains complete reliability bins and
+coverage/error curves. CPU/CUDA partition acceptance uses the same local
+component processing as the deployed raster path. Enhanced training and fused
+inference remain opt-in until independent accuracy is demonstrated.

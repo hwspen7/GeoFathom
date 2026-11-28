@@ -4,8 +4,13 @@ import ScientificFigureStudio from './ScientificFigureStudio';
 import {cancelGISJob,downloadBuildingArtifact,getBuildingResearch,getGISJob,installBuildingModel,
   queueGISJob,uploadBuildingStudy,type BuildingResearchCatalog,type GISJob,type VisionModel} from './api';
 
-type Metric={classes:Array<{name:string;f1:number;iou:number;precision:number;recall:number}>;objects_50?:{f1:number}};
+type Metric={classes:Array<{name:string;f1:number;iou:number;precision:number;recall:number}>;objects_50?:{f1:number};
+  objects_75?:{f1:number};instance_boundary_f1?:number};
+type Reliability={pixels:number;pooled_ece:number|null;brier_score:number|null;negative_log_likelihood:number|null};
+type ProbabilityDiagnostics={raw:Reliability;temperature_scaled:Reliability};
+const metricText=(value:number|null|undefined)=>value==null?'—':value.toFixed(3);
 type StudyResult={kind?:string;validation?:Record<string,Metric>;test?:Record<string,Metric>;test_evaluated?:boolean;
+  probability_diagnostics?:{validation:Record<string,ProbabilityDiagnostics>;test:Record<string,ProbabilityDiagnostics>};
   history?:Array<{epoch:number;training_loss:number|null;validation_loss:number}>;
   best_epoch?:number;initial_validation_loss?:number;selected_validation_loss?:number;test_used_for_training?:boolean;
   validation_improved?:boolean;device?:string;artifacts?:Record<string,unknown>;suggested_model_id?:string};
@@ -42,6 +47,8 @@ export default function BuildingResearchPanel(p:{projectId:string|null;token:str
   },[p.projectId,job?.id,job?.status]);
   const processing=busy||!!job&&['queued','running'].includes(job.status);
   const result=job?.status==='completed'?job.result as StudyResult:null;
+  const comparisons=result?.test_evaluated?result.test||{}:result?.validation||{};
+  const reliability=result?.test_evaluated?result.probability_diagnostics?.test:result?.probability_diagnostics?.validation;
   const figureCSV=result?.kind==='building_train'?['epoch,training_loss,validation_loss',
     ...(result.history||[]).filter(row=>row.training_loss!==null).map(row=>[row.epoch,row.training_loss,row.validation_loss].join(','))].join('\n'):
     ['model,pixel_f1,iou,recall,object_f1',...Object.entries(result?.test_evaluated?result.test||{}:result?.validation||{}).map(([id,metric])=>{
@@ -123,6 +130,24 @@ export default function BuildingResearchPanel(p:{projectId:string|null;token:str
           const building=metric.classes.find(c=>c.name==='building');return <tr key={id}><td>{id}</td>
             <td>{building?.f1.toFixed(3)}</td><td>{building?.iou.toFixed(3)}</td><td>{building?.recall.toFixed(3)}</td><td>{metric.objects_50?.f1.toFixed(3)}</td></tr>;
         })}</tbody></table>
+      {Object.values(comparisons).some(metric=>metric.instance_boundary_f1!==undefined)&&
+        <details><summary>Instance and boundary quality</summary>
+          <table aria-label="Building instance quality"><thead><tr><th>Model</th><th>Object F1 @ 0.75</th><th>Boundary F1</th></tr></thead>
+            <tbody>{Object.entries(comparisons).map(([id,metric])=><tr key={id}><td>{id}</td>
+              <td>{metricText(metric.objects_75?.f1)}</td><td>{metricText(metric.instance_boundary_f1)}</td></tr>)}</tbody>
+          </table>
+          <p className="project-hint">Instance boundaries include shared walls; tolerance is two source pixels.</p>
+        </details>}
+      {reliability&&Object.keys(reliability).length>0&&<details><summary>Probability reliability</summary>
+        {Object.entries(reliability).map(([id,metric])=><div key={id}>
+          <h4>{id}</h4>
+          <table aria-label={id+' probability reliability'}><thead><tr><th>Metric</th><th>Raw</th><th>Scaled</th></tr></thead>
+            <tbody>{([['ECE','pooled_ece'],['Brier','brier_score'],['NLL','negative_log_likelihood']] as const).map(([title,key])=>
+              <tr key={key}><td>{title}</td><td>{metricText(metric.raw[key])}</td><td>{metricText(metric.temperature_scaled[key])}</td></tr>)}</tbody>
+          </table>
+        </div>)}
+        <p className="project-hint">Temperature fitted on validation pixels only. Smaller is better. Extraction masks and raw probabilities are unchanged.</p>
+      </details>}
       <p className="project-hint">Model ranking uses validation data. Test scores describe the frozen study and do not guarantee accuracy in other regions.</p>
     </div>}
     {result&&p.projectId&&job&&<button disabled={busy} onClick={()=>void run(()=>downloadBuildingArtifact(p.projectId!,job.id,'research.zip'))}>Download building research bundle</button>}

@@ -127,7 +127,8 @@ def test_dataset_package_rejects_zip_traversal_and_preserves_fingerprint(dataset
     assert not (tmp_path/"escaped").exists()
 
 
-def test_real_decoder_adaptation_never_reads_test_samples_and_exports_verified_heads(dataset, models, monkeypatch, tmp_path):
+@pytest.mark.parametrize("enhanced", [False, True])
+def test_real_decoder_adaptation_never_reads_test_samples_and_exports_verified_heads(dataset, models, monkeypatch, tmp_path, enhanced):
     from vision import building_training as training
     original = training.load_sample
     seen = []
@@ -137,7 +138,7 @@ def test_real_decoder_adaptation_never_reads_test_samples_and_exports_verified_h
         return original(row, config)
     monkeypatch.setattr(training, "load_sample", checked)
     output = tmp_path/"fitted"
-    result = training.train_model(dataset, {"initial_model_id": models[0], "mode": "decoder", "epochs": 4,
+    result = training.train_model(dataset, {"initial_model_id": models[0], "mode": "decoder", "epochs": 4, "enhanced_training": enhanced,
         "batch_size": 2, "learning_rate": .01}, output)
     assert set(seen) == {"train", "validation"}
     assert result["test_used_for_training"] is False

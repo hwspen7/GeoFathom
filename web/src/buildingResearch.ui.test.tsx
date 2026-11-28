@@ -45,6 +45,9 @@ it('defaults comparison to validation and makes final test evaluation explicit',
   fireEvent.click(screen.getByLabelText('Evaluate frozen building test regions'));
   fireEvent.click(screen.getByRole('button',{name:'Compare building models'}));
   await waitFor(()=>expect(api.queueGISJob.mock.calls.at(-1)?.[2].evaluate_test).toBe(true));
+  change('Building comparison inference mode','flips');
+  fireEvent.click(screen.getByRole('button',{name:'Compare building models'}));
+  await waitFor(()=>expect(api.queueGISJob.mock.calls.at(-1)?.[2].augmentation).toBe('flips'));
 });
 
 it('imports a verified frozen package and keeps training disabled without its dependencies',async()=>{
@@ -58,4 +61,23 @@ it('imports a verified frozen package and keeps training disabled without its de
   expect(api.uploadBuildingStudy).toHaveBeenCalledWith(file,'admin');
   fireEvent.click(screen.getByText('Train or fine-tune a model'));
   expect((screen.getByRole('button',{name:'Train building model'}) as HTMLButtonElement).disabled).toBe(true);
+});
+
+
+it('displays calibrated reliability separately from instance quality',async()=>{
+  const raw={pixels:100,pooled_ece:.18,brier_score:.12,negative_log_likelihood:.45};
+  api.queueGISJob.mockResolvedValue({id:'compare',kind:'building_compare',status:'completed',progress:100,result:{
+    kind:'building_compare',test_evaluated:false,validation:{base:{classes:[{name:'building',f1:.8,iou:.7,recall:.9}],
+      objects_50:{f1:.6},objects_75:{f1:.4},instance_boundary_f1:.65}},
+    probability_diagnostics:{validation:{base:{raw,temperature_scaled:{...raw,pooled_ece:.07}}},test:{}}}});
+  render(<BuildingResearchPanel projectId="project" token="admin" models={models} onInstalled={vi.fn()}/>);
+  await screen.findByText(/Training: Austin, Vienna/);
+  fireEvent.click(screen.getByText('Compare models and validate instances'));
+  fireEvent.click(screen.getByRole('button',{name:'Compare building models'}));
+  fireEvent.click(await screen.findByText('Probability reliability'));
+  expect(screen.getByRole('table',{name:'base probability reliability'})).toBeTruthy();
+  expect(screen.getByRole('cell',{name:'0.070'})).toBeTruthy();
+  fireEvent.click(screen.getByText('Instance and boundary quality'));
+  expect(screen.getByRole('table',{name:'Building instance quality'})).toBeTruthy();
+  expect(screen.getByRole('cell',{name:'0.650'})).toBeTruthy();
 });

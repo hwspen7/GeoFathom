@@ -179,7 +179,11 @@ def run_managed(kind, payload, job_id, progress=None, cancelled=None):
         result = {"dataset_fingerprint": report["dataset_fingerprint"], "selection": report["selection"],
             "test_evaluated": report["test_evaluated"],
             "validation": {key: value["selected"]["aggregate"] for key, value in report["validation"].items()},
-            "test": {key: value["aggregate"] for key, value in report["test"].items()}, "seconds": report["seconds"]}
+            "test": {key: value["aggregate"] for key, value in report["test"].items()},
+            "probability_diagnostics": {
+                split: {key: value["probability_diagnostics"] for key, value in report[split].items()}
+                for split in ("validation", "test")},
+            "seconds": report["seconds"]}
     else:
         raise RasterError("Unsupported building research task.")
     package = destination / "research.zip"
