@@ -257,3 +257,34 @@ def vector_consensus(primary,secondary,semantic,*,agreement=.5,support=.5):
             continue
         region[owned]=next_id;next_id+=1;added+=1
     return result,{"matched":len(matches),"added":added,"conflicting_secondary":conflict}
+
+
+def additive_instances(primary,secondary,semantic,*,support=.65,minimum_pixels=9):
+    """Preserve every primary pixel/ID; admit only wholly disjoint secondary objects.
+
+    A semantic support threshold is applied only to additions, never to the
+    primary. No candidate is clipped into a misleading fragment.
+    """
+    if (primary.shape!=secondary.shape or primary.shape!=semantic["valid"].shape
+            or primary.ndim!=2 or np.any(primary<0) or np.any(secondary<0)
+            or np.any(((primary>0)|(secondary>0))&~semantic["valid"])):
+        raise RasterError("Invalid additive instance supports.")
+    from scipy import ndimage as ndi
+    result=primary.copy().astype(np.int32);next_id=int(result.max())+1
+    accepted=0;overlap=0;unsupported=0;small=0
+    eligible=supported_instances(secondary,semantic,threshold=support)
+    for j,window in enumerate(ndi.find_objects(secondary),1):
+        if window is None:
+            continue
+        shape=secondary[window]==j
+        region=result[window]
+        if int(shape.sum())<minimum_pixels:
+            small+=1;continue
+        if np.any(shape&(region>0)):
+            overlap+=1;continue
+        if not np.all(eligible[window][shape]==j):
+            unsupported+=1;continue
+        region[shape]=next_id;next_id+=1;accepted+=1
+    return result,{"added":accepted,"overlap_rejected":overlap,
+                   "unsupported":unsupported,"small":small,
+                   "primary_preserved":bool(np.array_equal(result[primary>0],primary[primary>0]))}

@@ -27,3 +27,11 @@ This is only validation ranking. INRIA and WHU may overlap pretraining. Do not o
 ## Optional UniBuild production conversion candidate
 
 After authorized native inference, use `python scripts/building_unibuild_export.py --upstream LOCAL_REPO --checkpoint LOCAL_CHECKPOINT --sample VALIDATION_IMAGE --output NEW_EXPORT --authorized`. It exports one fixed 512×512 binary-probability head, checks the self-contained graph and CPU parity on up to two real native crops. It does not install the model. After review, copy model.onnx/model.json to the configured local model directory under a new matching identifier (never overwrite). Re-run building_gpu_acceptance.py and the full-image validation grid. The upstream overlap blend and GeoFathom halo-core tiler differ; CPU tile parity alone cannot establish deployment accuracy. Actual upstream export success is untested until real weights are available.
+
+## Pix2Poly checkpoint transfer and encoder caching
+
+Use --pix-variant inria, spacenet or whu (WHU requires 144 vertices instead of 192); default remains INRIA-compatible. --encoder-cache is opt-in: one encoder call per tile, same upstream autoregressive decoder and permutation assignment. Compare identical original and optimized runs using `python scripts/building_pix2poly_parity.py --dataset DATASET --original ORIGINAL --optimized CACHED`. Require byte-identical polygon payloads and exact instance partitions; this is chip-local numerical parity, not a universal speed guarantee.
+
+`python scripts/building_transfer_study.py --dataset DATASET --baseline hotosm-dinov3s-buildings-fp32 whu-unetplusplus-efficientnet-b4 --bundles inria=INRIA_FULL spacenet=SPACENET_FULL whu=WHU_FULL --output NEW_TRANSFER --device cuda`
+
+Multiple checkpoints of the same model can now be ranked in one run, with per-region metrics and explicit noninferiority rejection reasons. Native candidates remain included, and additive experiments preserve every primary pixel; only nonoverlapping whole secondary instances with enough semantic support may be added. No hard semantic filtering of the primary. Cross-checkpoint transfer on INRIA remains validation-only; use separately sourced imagery with documented provenance before deployment.

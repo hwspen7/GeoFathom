@@ -146,3 +146,22 @@ def test_pix_variant_config_capacity():
     assert (c.N_VERTICES,c.MAX_LEN,c.generation_steps)==(144,290,289)
     configure_variant(c,"spacenet")
     assert (c.N_VERTICES,c.MAX_LEN,c.generation_steps)==(192,386,385)
+
+
+def test_additive_fusion_never_filters_primary_or_clips_secondary():
+    from vision.building_external import additive_instances
+    a=np.zeros((32,32),np.int32);b=a.copy()
+    a[1:8,1:8]=1;b[5:12,5:12]=1;b[16:22,16:22]=2;b[24:28,24:28]=3
+    fields={"valid":np.ones(a.shape,bool),"probability":np.zeros(a.shape,np.float32)}
+    fields["probability"][b==1]=.9;fields["probability"][b==2]=.9
+    ids,diag=additive_instances(a,b,fields)
+    assert np.array_equal(ids[a>0],a[a>0])
+    assert diag=={"added":1,"overlap_rejected":1,"unsupported":1,"small":0,"primary_preserved":True}
+    assert (ids==2).sum()==36 and ids[10,10]==0
+
+
+def test_transfer_grid_keeps_same_architecture_checkpoints_distinct():
+    from scripts.building_transfer_study import recipe_grid
+    grid=recipe_grid(["pix-inria","pix-spacenet","pix-whu"])
+    assert len(grid)==22 and grid[0]["name"]=="baseline"
+    assert {r["name"] for r in grid if r["kind"]=="native_instances"}=={"pix-inria","pix-spacenet","pix-whu"}
