@@ -249,3 +249,16 @@ def test_joint_operating_point_balances_objects_without_large_pixel_loss():
     balanced = candidate(.5, .80, .65, .72)
     unacceptable = candidate(.75, .70, .90, .79)
     assert choose_operating_point([highest_pixel, balanced, unacceptable]) is balanced
+
+
+def test_training_augmentation_preserves_supervision_and_is_seeded():
+    from vision.building_training import augment_training_pair
+    import numpy as np
+    x = np.arange(24, dtype=np.float32).reshape(3, 2, 4)
+    y = x.copy()
+    first = augment_training_pair(x, y, np.random.default_rng(731))
+    second = augment_training_pair(x, y, np.random.default_rng(731))
+    np.testing.assert_array_equal(first[0], first[1])
+    np.testing.assert_array_equal(first[0], second[0])
+    assert first[0].flags.c_contiguous and first[1].flags.c_contiguous
+    np.testing.assert_array_equal(x, y)

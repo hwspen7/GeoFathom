@@ -20,6 +20,10 @@ def main():
     parser.add_argument("--batch-size", type=int, default=4)
     parser.add_argument("--device", choices=("cpu", "cuda"), default="cpu")
     parser.add_argument("--install-as")
+    parser.add_argument("--enhanced-training", action="store_true")
+    parser.add_argument("--max-samples", type=int, default=256)
+    parser.add_argument("--cache-mb", type=int, default=2048)
+    parser.add_argument("--early-stop-patience", type=int, default=5)
     parser.add_argument("--validation-only", action="store_true")
     parser.add_argument("--augmentation", choices=("none", "flips"), default="none", help="Comparison inference mode")
     parser.add_argument("--offline", action="store_true")
@@ -31,7 +35,9 @@ def main():
         from vision.building_training import train_model
         result = train_model(args.dataset, {"initial_model_id": args.initial_model, "mode": args.mode,
             "epochs": args.epochs, "learning_rate": args.learning_rate, "batch_size": args.batch_size,
-            "device": args.device}, args.output,
+            "device": args.device, "enhanced_training": args.enhanced_training,
+            "max_samples": args.max_samples, "cache_mb": args.cache_mb,
+            "early_stop_patience": args.early_stop_patience}, args.output,
             progress=lambda value: print("training_progress", round(value, 3), flush=True) if value > .3 else None)
         if args.install_as:
             from vision.building_research_store import install_training_model

@@ -52,7 +52,11 @@ def download(relative, destination, expected=None, limit=32*1024**2):
     return destination
 
 
-def prepare(root, train_per_city=24, evaluation_per_city=8):
+def prepare(root, train_per_city=24, evaluation_per_city=8, train_patches_per_scene=1):
+    if not 1 <= train_patches_per_scene <= 12:
+        raise ValueError("Choose 1–12 training chips per selected source scene.")
+    if 2*train_per_city*train_patches_per_scene + 3*evaluation_per_city > 1000:
+        raise ValueError("Study exceeds the 1000-sample dataset allowance.")
     import pyarrow.parquet as pq
     root = Path(root).resolve()
     if (root / "dataset.json").exists():
@@ -77,6 +81,17 @@ def prepare(root, train_per_city=24, evaluation_per_city=8):
         if len(selected) != count:
             raise ValueError("Not enough distinct source scenes in a study city.")
         chosen.extend(selected)
+        # Additional chips remain in the same source scene and split. They are
+        # training observations, not independent validation or test sites.
+        if role == "train" and train_patches_per_scene > 1:
+            counts = {row["source_tile"]: 1 for row in selected}
+            selected_names = {row["file_name"] for row in selected}
+            for row in pool:
+                group = row["source_tile"]
+                if (group in counts and counts[group] < train_patches_per_scene
+                        and row["file_name"] not in selected_names):
+                    chosen.append(row)
+                    counts[group] += 1
     lookup = {(r["split"], r["file_name"]): r for r in chosen}
     polygons = {key: [] for key in lookup}
     for split in ("train", "val"):
@@ -127,7 +142,9 @@ def prepare(root, train_per_city=24, evaluation_per_city=8):
         samples.append(sample)
     return freeze_dataset(root, samples, provenance={"dataset": SOURCE, "revision": REVISION,
         "annotation_sha256": ANNOTATIONS, "index_sha256": file_sha256(index),
-        "sampling": "SHA-256 order seeded 731; one patch per source scene; labels not consulted",
+        "sampling": ("SHA-256 order seeded 731; one patch per source scene; labels not consulted"
+                     if train_patches_per_scene == 1 else
+                     f"SHA-256 order seeded 731; up to {train_patches_per_scene} training chips per scene; one evaluation chip per scene; labels not consulted"),
         "split_policy": CITY_ROLES, "georeferencing": "Pixel coordinates only; no geographic area claim.",
         "annotation_policy": "Author WKB rings retain holes; last annotation wins on overlapping raster pixels.",
         "limitations": "Small cross-city study. Publisher removed empty patches from its train subset; source sampling reflects that availability.",
@@ -139,10 +156,11 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--train-per-city", type=int, default=24)
     parser.add_argument("--evaluation-per-city", type=int, default=8)
+    parser.add_argument("--train-patches-per-scene", type=int, default=1)
     args = parser.parse_args()
     if not 1 <= args.train_per_city <= 36 or not 1 <= args.evaluation_per_city <= 36:
         raise SystemExit("Choose 1–36 distinct source scenes per city.")
-    print(prepare(args.output, args.train_per_city, args.evaluation_per_city))
+    print(prepare(args.output, args.train_per_city, args.evaluation_per_city, args.train_patches_per_scene))
 
 
 if __name__ == "__main__":

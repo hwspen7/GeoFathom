@@ -165,3 +165,9 @@ separate validation-only comparison with `--augmentation flips`. Inference
 averages spatially restored probability, boundary and signed-distance heads;
 no source resampling is performed. It uses four sequential model passes per
 tile and is experimental until independent data demonstrate an improvement.
+
+Enhanced training is opt-in in the research panel or via `--enhanced-training`.
+Seeded paired flips preserve every target head, decoder RGB receives bounded
+brightness/contrast jitter, and cosine learning-rate decay and early stopping
+use validation loss. The initial checkpoint remains eligible and validation
+and test images are never augmented for training. Use a fresh output directory.

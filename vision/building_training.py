@@ -28,6 +28,8 @@ class TrainingOptions(BaseModel):
     device: Literal["cpu", "cuda"] = "cpu"
     cache_mb: int = Field(default=2048, ge=32, le=8192)
     max_samples: int = Field(default=256, ge=3, le=1000)
+    enhanced_training: bool = False
+    early_stop_patience: int = Field(default=5, ge=1, le=30)
 
 
 def make_network(architecture):
@@ -124,6 +126,19 @@ def load_sample(row, config):
                 ids = source.read(1)
         x = (rgb/config["input_scale"] - np.array(config["mean"], np.float32)[:, None, None]) / np.array(config["std"], np.float32)[:, None, None]
         return x, targets(truth.data, ids)
+
+
+def augment_training_pair(features, truth, rng, *, rgb_config=None):
+    """Deterministic paired flips; only decoder RGB receives photometric jitter."""
+    axes = tuple(axis for axis in (-2, -1) if rng.random() < .5)
+    x, y = np.flip(features, axis=axes), np.flip(truth, axis=axes)
+    if rgb_config is not None:
+        mean = np.asarray(rgb_config["mean"], np.float32)[:, None, None]
+        std = np.asarray(rgb_config["std"], np.float32)[:, None, None]
+        gain = np.float32(rng.uniform(.9, 1.1))
+        offset = np.float32(rng.uniform(-.04, .04))
+        x = (np.clip((x*std+mean)*gain+offset, 0., 1.)-mean)/std
+    return np.ascontiguousarray(x), np.ascontiguousarray(y)
 
 
 def export_model(network, directory, manifest, *, verify=True):
@@ -244,13 +259,21 @@ def train_model(dataset_path, options, destination, *, progress=None, cancelled=
             raise RasterError("Training requires both building and background labels.")
         weight = torch.tensor(min(6., max(1., (population-positive)/positive)), device=device)
 
+        rng = np.random.default_rng(options.seed)
+        scheduler = (torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=options.epochs,
+                    eta_min=options.learning_rate*.05) if options.enhanced_training else None)
+
         def loss_for(entries, update=False):
             total, observations = 0., 0
             for first in range(0, len(entries), options.batch_size):
                 tick(.3)
                 group = entries[first:first+options.batch_size]
-                x = torch.from_numpy(np.stack([np.load(r[1], mmap_mode="r") for r in group])).to(device)
-                y = torch.from_numpy(np.stack([np.load(r[2], mmap_mode="r") for r in group])).to(device)
+                pairs = [(np.load(r[1], mmap_mode="r"), np.load(r[2], mmap_mode="r")) for r in group]
+                if update and options.enhanced_training:
+                    pairs = [augment_training_pair(x, y, rng, rgb_config=config if options.mode == "decoder" else None)
+                             for x, y in pairs]
+                x = torch.from_numpy(np.stack([pair[0] for pair in pairs])).to(device)
+                y = torch.from_numpy(np.stack([pair[1] for pair in pairs])).to(device)
                 if x.numel()*x.element_size()*8 > 768*1024**2:
                     raise RasterError("Training batch exceeds the working tensor allowance.")
                 with torch.set_grad_enabled(update):
@@ -279,22 +302,27 @@ def train_model(dataset_path, options, destination, *, progress=None, cancelled=
             save_file({key: value.detach().cpu().contiguous() for key, value in network.state_dict().items()}, str(best))
         save_best()
         history = [{"epoch": 0, "training_loss": None, "validation_loss": best_loss}]
-        rng = np.random.default_rng(options.seed)
         for epoch in range(1, options.epochs+1):
             ordered = [train[i] for i in rng.permutation(len(train))]
             training_loss = loss_for(ordered, update=True)
             validation_loss = loss_for(validation)
-            history.append({"epoch": epoch, "training_loss": training_loss, "validation_loss": validation_loss})
+            history.append({"epoch": epoch, "training_loss": training_loss, "validation_loss": validation_loss,
+                            "learning_rate": optimizer.param_groups[0]["lr"]})
             if validation_loss < best_loss:
                 best_loss, best_epoch = validation_loss, epoch
                 save_best()
             tick(.3 + .6*epoch/options.epochs)
+            if scheduler is not None:
+                scheduler.step()
+                if epoch-best_epoch >= options.early_stop_patience:
+                    break
         network.load_state_dict(load_file(str(best)), strict=True)
         manifest = {key: value for key, value in config.items() if key not in ("model_path", "id", "runtime")}
         manifest.update({"boundary_channel": 1, "distance_channel": 2, "output_channels": 3,
             "description": "Locally adapted building mask, boundary and distance heads; validation-selected checkpoint.",
             "training": {"dataset_fingerprint": dataset["fingerprint"], "initial_model_id": options.initial_model_id,
                 "initial_checkpoint_sha256": file_sha256(checkpoint), "mode": options.mode, "seed": options.seed,
+                "enhanced_training": options.enhanced_training,
                 "selection": "minimum validation multi-head loss; test rows never used"}})
         output = stage / "output"
         parity = export_model(network, output, manifest)
