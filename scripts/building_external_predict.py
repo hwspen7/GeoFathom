@@ -29,14 +29,19 @@ def safe_load(torch):
     os.environ["TORCH_FORCE_WEIGHTS_ONLY_LOAD"]="1"
 
 
-def unibuild_loader(checkpoint,device):
+def unibuild_model(checkpoint,device):
     import torch
     from models.segmentation_model import SegmentationModel
     model=SegmentationModel({"backbone":{"name":"dinov3","variant":"base","pretrained":None},
                              "decoder":{"name":"hlrdpt"}},nclass=2)
     data=torch.load(str(checkpoint),map_location="cpu",weights_only=True)
     model.load_state_dict(data.get("state_dict",data),strict=True)
-    model.to(device).eval()
+    return model.to(device).float().eval()
+
+
+def unibuild_loader(checkpoint,device):
+    import torch
+    model=unibuild_model(checkpoint,device)
     def predict(rgb):
         size=512
         weight=np.maximum(np.outer(np.hanning(size),np.hanning(size)),1e-6).astype(np.float32)

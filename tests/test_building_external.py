@@ -71,3 +71,33 @@ def test_candidate_grid_no_fake_model():
     assert r[0]["name"]=="baseline" and len(r)==51
     assert any(x["kind"]=="consensus" for x in r)
     assert all(x["name"] in ("baseline","unibuild") for x in recipes(["unibuild"]))
+
+
+def test_unibuild_export_probability_gate():
+    from scripts.building_unibuild_export import parity
+    p=np.full((1,1,512,512),.8,np.float32)
+    assert parity(p,p+.0001)["passed"]
+    with pytest.raises(ValueError,match="parity"):
+        parity(p,p-.01)
+    p[0,0,0,0]=np.nan
+    with pytest.raises(ValueError,match="Invalid"):
+        parity(p,p)
+
+
+def test_native_export_keeps_original_grid(tmp_path):
+    from scripts.building_external_study import export_native
+    src=tmp_path/"source.tif"
+    transform=from_origin(500000,4500000,2,2)
+    with rasterio.open(src,"w",driver="GTiff",width=32,height=24,count=3,dtype="uint8",
+                       crs="EPSG:32617",transform=transform) as dst:
+        dst.write(np.ones((3,24,32),np.uint8))
+    ids=np.zeros((24,32),np.int32);ids[2:8,4:10]=1
+    fields={"valid":np.ones(ids.shape,bool),"probability":(ids>0).astype(np.float32)}
+    path=tmp_path/"result"
+    export_native(path,{"paths":{"image":src}},ids,fields,{"kind":"native_instances"})
+    with rasterio.open(path/"instances.tif") as ds:
+        assert ds.transform==transform and ds.crs.to_epsg()==32617
+        np.testing.assert_array_equal(ds.read(1),ids)
+    assert not (path/"probability.tif").exists()
+    data=json.loads((path/"footprints.json").read_text())
+    assert data["coordinate_space"]=="native_crs" and data["features"][0]["properties"]["instance_id"]==1
