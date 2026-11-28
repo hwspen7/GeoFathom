@@ -296,14 +296,18 @@ def predict_building_heads(tensor, config, device):
     return {name: value[0] for name, value in heads.items()}
 
 
-def fuse_building_heads(tensor, config, device, *, augmentation="none"):
+def fuse_building_heads(tensor, config, device, *, augmentation="none", check=None):
     """Invert spatial flips before averaging native-grid heads; no resampling."""
     if augmentation == "none":
+        if check is not None:
+            check()
         return predict_building_heads(tensor, config, device)
     if augmentation != "flips":
         raise RasterError("Unsupported building inference augmentation.")
     sums = {}
     for axes in ((), (-1,), (-2,), (-2, -1)):
+        if check is not None:
+            check()
         transformed = np.ascontiguousarray(np.flip(tensor, axis=axes))
         heads = predict_building_heads(transformed, config, device)
         if sums and heads.keys() != sums.keys():

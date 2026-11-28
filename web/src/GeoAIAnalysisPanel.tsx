@@ -115,7 +115,8 @@ export default function GeoAIAnalysisPanel(p:Props){
     const payload:Record<string,unknown>=buildingMode?{
       image_id:p.image!.id,model_id:modelId,probability_threshold:buildingThreshold,
       minimum_area_m2:minimumArea,full_resolution:true,memory_mb:memoryBudget,
-      instance_mode:instanceMode,seed_distance:seedDistance,augmentation:buildingAugmentation,
+      instance_mode:instanceMode,seed_distance:seedDistance,
+      ...(buildingAugmentation==='flips'?{augmentation:buildingAugmentation}:{}),
       max_pixels:maxPixels,...(useStudyArea&&polygonArea?{aoi:polygonArea}:{}),
     }:operation==='stac_ndvi'?
       {collection:stacCollection,item_id:stacItemId,

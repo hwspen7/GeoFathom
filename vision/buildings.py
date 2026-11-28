@@ -152,6 +152,9 @@ def extract_buildings(path, options, output_dir, progress=None, cancelled=None):
                             options.memory_mb)
             needed = plan.tile_size**2 * (len(config["bands"]) +
                      4 * max(2, config["output_channels"]) + 12) * 4
+            if options.augmentation == "flips":
+                # Extra contiguous transformed input and float64 head accumulators.
+                needed += plan.tile_size**2 * (len(config["bands"])*4 + config["output_channels"]*12)
             if needed > min(options.memory_mb, tensor_budget_mb()) * 1024**2:
                 raise RasterError("Building model exceeds the per-tile tensor allowance.")
             # Probabilities plus mask need five uncompressed bytes per pixel.
@@ -206,7 +209,8 @@ def extract_buildings(path, options, output_dir, progress=None, cancelled=None):
                                   config["input_scale"] - mean) / std
                     tensor = np.pad(normalized, pad, mode="edge")[None].astype(np.float32)
                     if options.augmentation != "none":
-                        heads = fuse_building_heads(tensor, config, device, augmentation=options.augmentation)
+                        heads = fuse_building_heads(tensor, config, device, augmentation=options.augmentation,
+                            check=cancelled)
                         scores = heads["probability"][tile.crop]
                     elif options.instance_mode == "watershed":
                         heads = predict_building_heads(tensor, config, device)

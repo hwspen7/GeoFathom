@@ -212,3 +212,19 @@ def test_instance_extraction_exports_real_auxiliary_fields_and_exact_support(set
         assert instances.transform == transform
         np.testing.assert_array_equal(instances.read(1) > 0, mask.read(1) == 1)
     assert all(f["properties"]["instance_id"] > 0 for f in result["features"])
+
+
+def test_real_four_view_inference_preserves_grid_nodata_and_aoi_contract(setup):
+    path, out, _, transform = setup
+    single = extract_buildings(path, options(), out)
+    fused = extract_buildings(path, options(augmentation="flips"), out.with_name("fused"))
+    assert single["inference_passes_per_tile"] == 1
+    assert fused["inference_passes_per_tile"] == 4
+    assert fused["parameters"]["augmentation"] == "flips"
+    assert fused["summary"]["candidate_count"] == single["summary"]["candidate_count"]
+    for name in ("mask.tif", "probability.tif"):
+        with rasterio.open(out / name) as a, rasterio.open(out.with_name("fused") / name) as b:
+            assert a.transform == b.transform == transform
+            assert a.nodata == b.nodata
+            np.testing.assert_allclose(a.read(1), b.read(1), rtol=1e-6, atol=1e-7)
+    assert fused["classified_pixels"] == single["classified_pixels"]

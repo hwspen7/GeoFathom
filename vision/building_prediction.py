@@ -47,7 +47,8 @@ def predict_image(path, model_id, *, device=None, memory_mb=256, progress=None, 
             h, w = valid.shape
             tensor = np.pad(normalized, ((0, 0), (y, size-h-y), (x, size-w-x)), mode="edge")[None]
             heads = (predict_building_heads(tensor.astype(np.float32), config, device)
-                     if augmentation == "none" else fuse_building_heads(tensor.astype(np.float32), config, device, augmentation=augmentation))
+                     if augmentation == "none" else fuse_building_heads(tensor.astype(np.float32), config, device, augmentation=augmentation,
+                        check=(lambda: progress(index/count)) if progress is not None else None))
             rows = slice(int(tile.core.row_off), int(tile.core.row_off+tile.core.height))
             cols = slice(int(tile.core.col_off), int(tile.core.col_off+tile.core.width))
             core_valid = valid[halo-y:halo-y+int(tile.core.height), halo-x:halo-x+int(tile.core.width)]

@@ -90,3 +90,19 @@ def test_four_view_fusion_inverts_all_heads_without_shifting_pixels(monkeypatch)
     for name, expected in zip(("probability", "boundary", "distance"),
                               (tensor[0, 0], tensor[0, 1], tensor[0, 2]*2-1)):
         np.testing.assert_array_equal(result[name], expected)
+
+
+def test_four_view_fusion_checks_cancellation_between_passes(monkeypatch):
+    from vision import semantic
+    calls = []
+    def predict(value, config, device):
+        calls.append(1)
+        return {"probability": value[0, 0]}
+    def check():
+        if len(calls) == 2:
+            raise RuntimeError("cancelled")
+    monkeypatch.setattr(semantic, "predict_building_heads", predict)
+    with pytest.raises(RuntimeError, match="cancelled"):
+        semantic.fuse_building_heads(np.zeros((1, 3, 8, 8), np.float32), {}, "cpu",
+                                     augmentation="flips", check=check)
+    assert len(calls) == 2
