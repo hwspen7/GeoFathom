@@ -36,9 +36,22 @@ def polygons_from_ids(ids, minimum_pixels=1):
     return result
 
 
-def boundary_scores(predicted, reference, valid, tolerance=2):
-    p = predicted & ~ndi.binary_erosion(predicted)
-    t = reference & ~ndi.binary_erosion(reference)
+def _instance_edges(ids):
+    ids = np.asarray(ids)
+    padded = np.pad(ids, 1)
+    edge = np.zeros(ids.shape, bool)
+    h, w = ids.shape
+    for dy, dx in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+        edge |= (ids > 0) & (padded[1+dy:1+dy+h, 1+dx:1+dx+w] != ids)
+    return edge
+
+
+def boundary_scores(predicted, reference, valid, tolerance=2, *, instances=False):
+    if instances:
+        p, t = _instance_edges(predicted), _instance_edges(reference)
+    else:
+        p = predicted & ~ndi.binary_erosion(predicted)
+        t = reference & ~ndi.binary_erosion(reference)
     # Exclude unknown labels and their tolerance neighborhood from boundary scoring.
     eligible = ndi.binary_erosion(valid, iterations=tolerance, border_value=1)
     p &= eligible
@@ -85,6 +98,7 @@ def score_fields(fields, row, threshold=.5, instance_mode="connected", seed_dist
     metrics["objects_75"] = object_metrics(predicted_polygons, reference_polygons, .75)
     metrics["object_reference"] = reference_type
     metrics["boundary"] = boundary_scores(observed, truth & valid, valid)
+    metrics["instance_boundary"] = boundary_scores(predicted_ids, reference_ids, valid, instances=True)
     p = fields["probability"][valid].astype(np.float64)
     y = truth[valid].astype(np.float64)
     metrics["brier_score"] = float(np.mean((p-y)**2)) if len(p) else None
@@ -115,6 +129,14 @@ def aggregate(records):
     result["ece"] = sum(r["metrics"]["calibration"]["ece"]*r["metrics"]["valid_pixels"] for r in records)/pixels if pixels else None
     result["ece_aggregation"] = "valid-pixel-weighted mean of per-image ECE; not pooled calibration bins"
     result["boundary_f1_image_mean"] = float(np.mean([r["metrics"]["boundary"]["f1"] for r in records])) if records else None
+    # Pool shared-wall and exterior boundary matches separately from semantic F1.
+    edges = [r["metrics"]["instance_boundary"] for r in records if "instance_boundary" in r["metrics"]]
+    predicted = sum(e["predicted_boundary_pixels"] for e in edges)
+    reference = sum(e["reference_boundary_pixels"] for e in edges)
+    precision = sum(e["matched_predicted_pixels"] for e in edges)/predicted if predicted else 0.
+    recall = sum(e["matched_reference_pixels"] for e in edges)/reference if reference else 0.
+    result["instance_boundary_f1"] = 2*precision*recall/(precision+recall) if precision+recall else 0.
+    result["instance_boundary_support"] = {"predicted": predicted, "reference": reference, "tolerance_pixels": 2}
     return result
 
 

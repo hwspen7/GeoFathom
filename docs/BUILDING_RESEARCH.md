@@ -182,3 +182,12 @@ separately for validation and held-out data. Empty or single-class validation
 support cannot qualify calibration. Scaling does not change the extraction mask,
 geometry, or raw operating threshold; the deployed model remains explicitly
 uncalibrated until a matching calibration artifact is independently qualified.
+
+Building footprints now use a conservative pixel-grid outline guard. Candidate
+simplification must keep component and hole counts, add no measurable outward
+area, change at most 0.25 source pixel and 0.5% area, and rasterize to identical
+pixel centers. Otherwise the original boundary is retained. A bounded window
+prevents unbounded rasterization. The raw inference mask remains authoritative;
+this is not a claim of subpixel ground truth. Instance boundary F1 additionally
+measures shared walls between adjacent labeled buildings, distinct from binary
+foreground boundary F1.

@@ -252,7 +252,8 @@ def extract_buildings(path, options, output_dir, progress=None, cancelled=None):
                     memory_mb=options.memory_mb, progress=lambda _: tick(.84))
                 classes = InstanceClasses()
             features, truncated = _disk_features(vector_source, classes,
-                options.max_features, options.minimum_pixels, progress=lambda _: tick(.85))
+                options.max_features, options.minimum_pixels, progress=lambda _: tick(.85),
+                guarded_building_outlines=True)
             retained = []
             with rasterio.open(stage / "probability.tif") as probability:
                 for feature in features:
@@ -284,6 +285,7 @@ def extract_buildings(path, options, output_dir, progress=None, cancelled=None):
                 "tile_count": tile_count, "context_halo": halo, "truncated": truncated,
                 "inference_passes_per_tile": 4 if options.augmentation == "flips" else 1,
                 "confidence_calibrated": False, "parameters": options.model_dump(),
+                "outline_policy": "native pixel support; guarded inward-only simplification, otherwise original grid boundary",
                 "instance_separation": instance_summary,
                 "summary": {"candidate_count": len(retained),
                     "total_area_m2": sum(f["properties"]["area_m2"] for f in retained),

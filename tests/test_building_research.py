@@ -296,3 +296,15 @@ def test_pooled_calibration_handles_empty_support_and_no_positive_labels():
     assert fit.result()["temperature"] == 1.
     diagnostics.update(np.array([.2, .8]), np.array([0, 1]))
     assert diagnostics.result()["pooled_ece"] == pytest.approx(.2)
+
+
+def test_instance_boundary_metric_penalizes_missed_shared_wall():
+    from vision.building_study import boundary_scores
+    reference = np.zeros((48, 48), np.int32)
+    reference[4:44, 4:24] = 1
+    reference[4:44, 24:44] = 2
+    merged = (reference > 0).astype(np.int32)
+    valid = np.ones(reference.shape, bool)
+    assert boundary_scores(merged > 0, reference > 0, valid)["f1"] == 1.
+    assert boundary_scores(merged, reference, valid, instances=True)["f1"] < 1.
+    assert boundary_scores(reference, reference, valid, instances=True)["f1"] == 1.

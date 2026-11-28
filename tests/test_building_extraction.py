@@ -91,6 +91,7 @@ def test_native_grid_seams_holes_diagonal_neighbors_and_nodata(setup):
         np.testing.assert_array_equal(actual[actual != 255], expected[actual != 255])
     largest = result["features"][0]
     assert len(largest["geometry"]["coordinates"]) == 2
+    assert largest["properties"]["outline_status"] in {"native_grid_retained", "guarded_pixel_support_preserved"}
     assert largest["properties"]["mean_building_probability"] > .999
     assert largest["properties"]["perimeter_m"] > 0
     assert largest["properties"]["confidence_calibrated"] is False
@@ -228,3 +229,21 @@ def test_real_four_view_inference_preserves_grid_nodata_and_aoi_contract(setup):
             assert a.nodata == b.nodata
             np.testing.assert_allclose(a.read(1), b.read(1), rtol=1e-6, atol=1e-7)
     assert fused["classified_pixels"] == single["classified_pixels"]
+
+
+def test_guarded_outline_does_not_fill_holes_or_change_pixel_support():
+    from rasterio.features import shapes
+    from rasterio.transform import Affine
+    from vision.building_outline import guarded_outline
+    mask = np.zeros((20, 24), np.uint8)
+    mask[2:18, 3:21] = 1
+    mask[6:12, 9:15] = 0
+    mask[2:6, 3:6] = 0
+    transform = Affine.translation(500000, 4500000)*Affine.rotation(17)*Affine.scale(1, -1)
+    geometry = next(shape(g) for g, v in shapes(mask, mask=mask.astype(bool), transform=transform) if v == 1)
+    refined, meta = guarded_outline(geometry, transform)
+    assert refined.is_valid and len(refined.interiors) == len(geometry.interiors)
+    assert refined.difference(geometry).area < 1e-6
+    result = rasterize([(mapping(refined), 1)], out_shape=mask.shape, transform=transform)
+    np.testing.assert_array_equal(result, mask)
+    assert meta["outline_status"] in {"native_grid_retained", "guarded_pixel_support_preserved"}

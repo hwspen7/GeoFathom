@@ -138,7 +138,7 @@ def _preflight_mask(src, progress):
 
 
 def _disk_features(path, classes, max_features=MAX_RESULTS, min_pixels=9,
-                   progress=None):
+                   progress=None, *, guarded_building_outlines=False):
     """GDAL stitches connected regions across disk blocks before polygonization."""
     heap = []
     count = 0
@@ -185,11 +185,16 @@ def _disk_features(path, classes, max_features=MAX_RESULTS, min_pixels=9,
             elif pixels > heap[0][0]:
                 heapreplace(heap, item)
         source_crs = str(src.crs)
+        source_transform = src.transform
         xsize = min(abs(src.transform.a) + abs(src.transform.d),
                     abs(src.transform.e) + abs(src.transform.b))
     results = []
     for pixels, _, klass, polygon in sorted(heap, reverse=True):
-        if pixels > 100:
+        outline_metadata = {}
+        if guarded_building_outlines:
+            from .building_outline import guarded_outline
+            polygon, outline_metadata = guarded_outline(polygon, source_transform)
+        elif pixels > 100:
             polygon = polygon.simplify(xsize * .35, preserve_topology=True)
         geom = transform_geom(source_crs, "EPSG:4326", mapping(polygon),
                               antimeridian_cutting=True, precision=8)
@@ -202,6 +207,7 @@ def _disk_features(path, classes, max_features=MAX_RESULTS, min_pixels=9,
             "pixel_count": pixels, "area_m2": area,
             "boundary_status": "estimated_from_imagery",
             "quality": "requires_user_review",
+            **outline_metadata,
         }})
     return results, found > max_features
 
