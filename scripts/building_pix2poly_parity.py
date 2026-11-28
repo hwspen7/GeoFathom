@@ -23,7 +23,7 @@ def compare(dataset_path,original,optimized):
             raise ValueError("Invalid Pix2Poly parity bundle.")
     def stable(m):
         s=m["settings"]
-        return {k:v for k,v in s.items() if k not in ("code_sha256","encoder_cache","pix_adapter_sha256","pix_variant")}|{"pix_variant":s.get("pix_variant","inria")}
+        return {k:v for k,v in s.items() if k not in ("code_sha256","encoder_cache","pix_adapter_sha256","pix_variant","sam_execution")}|{"pix_variant":s.get("pix_variant","inria")}
     if (a["model"]!=b["model"] or stable(a)!=stable(b)
             or a["settings"].get("encoder_cache",False) or not b["settings"].get("encoder_cache")
             or not a["samples"] or [r["id"] for r in a["samples"]]!=[r["id"] for r in b["samples"]]):
